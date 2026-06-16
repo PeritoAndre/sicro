@@ -1,0 +1,167 @@
+/* Barra de título custom — escura, sem nome/ícone, controles à direita. */
+.bar {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  display: flex;
+  align-items: stretch;
+  /* Mesma cor do rail/sidebar → a title bar funde com a área da marca abaixo
+   * (sem linha divisória, visual integrado). */
+  background: var(--sicro-surface-1);
+  /* impede seleção de texto acidental ao arrastar */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Linha divisória APENAS no trecho do conteúdo (da largura da sidebar pra
+ * direita) — separa a title bar do cabeçalho "Início". Sobre a sidebar
+ * (esquerda) NÃO há linha, pra a marca ficar integrada à barra. */
+.bar::after {
+  content: "";
+  position: absolute;
+  left: var(--activity-rail-width);
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: var(--sicro-divider);
+  pointer-events: none;
+}
+
+/* Slot da marca (esquerda) — ocupa exatamente a coluna da sidebar; a marca
+ * fica centralizada nele e alinhada vertical com os botões da janela. */
+.brandSlot {
+  flex: 0 0 var(--activity-rail-width);
+  width: var(--activity-rail-width);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  /* Alinha o logo no mesmo x dos ícones dos módulos:
+   * padding-esquerdo do rail (--space-2) + padding-esquerdo do item (--space-3). */
+  padding-left: calc(var(--space-2) + var(--space-3));
+}
+/* Filhos da marca não capturam clique → arrastar a janela funciona a partir
+ * da área da marca também (o clique "cai" no .brandSlot, que é drag-region). */
+.brandSlot > * {
+  pointer-events: none;
+}
+
+/* Área arrastável do meio (ocupa o espaço livre até os botões). */
+.drag {
+  flex: 1 1 auto;
+  height: 100%;
+  /* o data-tauri-drag-region cuida do mover/maximizar */
+}
+
+.controls {
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+}
+
+/* Botões estilo Windows: 46×altura, ícone central, hover sutil. */
+.btn {
+  width: 46px;
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--sicro-fg-dim, #c8d0dc);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--sicro-fg, #fff);
+}
+.btn:active {
+  background: rgba(255, 255, 255, 0.04);
+}
+/* Fechar: vermelho do Windows no hover. */
+.close:hover {
+  background: #e81123;
+  color: #fff;
+}
+.close:active {
+  background: #c50f1f;
+  color: #fff;
+}
+
+/* ---- Alças de redimensionamento (janela frameless) ----
+ * Acima do chrome (z maior que a barra) pra pegar o pixel da borda; abaixo de
+ * modais. `pointer-events` só nas alças (a camada é transparente). */
+.resizeLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+}
+.handle {
+  position: fixed;
+  pointer-events: auto;
+  z-index: 51;
+}
+.rN {
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+.rS {
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  cursor: ns-resize;
+}
+.rE {
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+.rW {
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+}
+/* Cantos (depois das bordas no DOM → ficam por cima nos vértices). */
+.rNW {
+  top: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+  z-index: 52;
+}
+.rNE {
+  top: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+  z-index: 52;
+}
+.rSW {
+  bottom: 0;
+  left: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nesw-resize;
+  z-index: 52;
+}
+.rSE {
+  bottom: 0;
+  right: 0;
+  width: 10px;
+  height: 10px;
+  cursor: nwse-resize;
+  z-index: 52;
+}

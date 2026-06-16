@@ -1,0 +1,94 @@
+/* O4 — PhotoDropOverlay styles. Cobre o editor inteiro com um véu
+ * azul tracejado e mostra um card central. */
+
+.overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  pointer-events: none;
+  user-select: none;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+.hover {
+  background: rgba(31, 111, 235, 0.08);
+  border: 3px dashed #1f6feb;
+  box-sizing: border-box;
+  animation: dropPulse 1.2s ease-in-out infinite;
+}
+
+.uploading {
+  background: rgba(31, 111, 235, 0.12);
+  border: 3px solid #1f6feb;
+  box-sizing: border-box;
+}
+
+.error {
+  background: rgba(220, 53, 69, 0.10);
+  border: 3px solid #dc3545;
+  box-sizing: border-box;
+  /* Erros desaparecem em ~2s — o caller chama reset(). Enquanto aparece,
+   * deve sobrepor cliques pra não confundir o user. */
+  pointer-events: auto;
+}
+
+@keyframes dropPulse {
+  0% {
+    background: rgba(31, 111, 235, 0.06);
+  }
+  50% {
+    background: rgba(31, 111, 235, 0.14);
+  }
+  100% {
+    background: rgba(31, 111, 235, 0.06);
+  }
+}
+
+.card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 8px 24px rgba(31, 111, 235, 0.25), 0 2px 6px rgba(0, 0, 0, 0.1);
+  max-width: 380px;
+  text-align: center;
+}
+
+.icon {
+  color: #1f6feb;
+  margin-bottom: 4px;
+}
+
+.spinner {
+  color: #1f6feb;
+  margin-bottom: 4px;
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a2a4a;
+}
+
+.errorTitle {
+  color: #b53939;
+}
+
+.subtitle {
+  font-size: 12px;
+  color: #5b6b8b;
+  font-style: italic;
+}

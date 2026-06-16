@@ -1,0 +1,188 @@
+/*
+ * ColorPickerPro — estilos do seletor de cor completo.
+ *
+ * Layout em coluna: pad S/V, slider de hue, inputs, paleta, recentes,
+ * remover. Largura fixa pra caber confortavelmente como popover do
+ * EditorToolbar.
+ */
+
+.pickerRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  width: 252px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  color: var(--sicro-fg);
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+/* ---- S/V pad ---- */
+.svPad {
+  position: relative;
+  width: 100%;
+  height: 140px;
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  overflow: hidden;
+  /* a cor é setada inline via style={{ background: hueHex }} */
+}
+.svPadWhite,
+.svPadBlack {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.svPadWhite {
+  background: linear-gradient(to right, #fff 0%, transparent 100%);
+}
+.svPadBlack {
+  background: linear-gradient(to top, #000 0%, transparent 100%);
+}
+.svCursor {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ---- Hue slider ---- */
+.hueSlider {
+  position: relative;
+  width: 100%;
+  height: 14px;
+  border-radius: 7px;
+  background: linear-gradient(
+    to right,
+    #ff0000 0%,
+    #ffff00 17%,
+    #00ff00 33%,
+    #00ffff 50%,
+    #0000ff 67%,
+    #ff00ff 83%,
+    #ff0000 100%
+  );
+  cursor: pointer;
+}
+.hueCursor {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.6);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+/* ---- Inputs (hex + RGB readout + Aplicar) ---- */
+.inputRow {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+.hexLabel {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--sicro-fg-muted);
+  text-transform: uppercase;
+}
+.hexInput {
+  width: 78px;
+  height: 26px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 0 6px;
+  text-transform: uppercase;
+}
+.hexInput:focus {
+  outline: none;
+  border-color: var(--sicro-accent);
+}
+.rgbReadout {
+  display: flex;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--sicro-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.applyBtn {
+  height: 26px;
+  padding: 0 10px;
+  background: var(--sicro-accent);
+  color: #1a1305;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.applyBtn:hover {
+  filter: brightness(1.05);
+}
+
+/* ---- Sections (paleta padrão + recentes) ---- */
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.sectionLabel {
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--sicro-fg-muted);
+}
+.swatchGrid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+}
+.swatch {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+  padding: 0;
+}
+.swatch:hover {
+  transform: scale(1.15);
+  z-index: 1;
+  border-color: rgba(255, 255, 255, 0.4);
+}
+
+/* ---- Remover ---- */
+.clearBtn {
+  height: 28px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  cursor: pointer;
+}
+.clearBtn:hover {
+  background: var(--sicro-surface-3);
+  color: var(--sicro-fg);
+}

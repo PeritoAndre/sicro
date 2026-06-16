@@ -1,0 +1,70 @@
+.empty {
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+  font-style: italic;
+  margin: var(--space-2) 0;
+}
+
+.sectionTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--sicro-fg);
+  margin: 0 0 var(--space-2);
+}
+
+.intro {
+  font-size: 11px;
+  color: var(--sicro-fg-muted);
+  line-height: 1.4;
+  margin: 0 0 var(--space-2);
+}
+
+.actionRow {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+
+.action:hover {
+  background: var(--sicro-surface-3);
+  border-color: var(--sicro-accent);
+}
+
+.action svg {
+  flex-shrink: 0;
+  color: var(--sicro-accent);
+}
+
+.action div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.action strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.action span {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+}

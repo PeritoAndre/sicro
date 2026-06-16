@@ -1,0 +1,23 @@
+.wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-bg);
+  overflow: hidden;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--sicro-fg-muted);
+}
+.empty p {
+  margin: 0;
+  font-size: var(--text-sm);
+}

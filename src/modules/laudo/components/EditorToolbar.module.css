@@ -1,0 +1,354 @@
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  background: var(--sicro-surface-1);
+  border-bottom: 1px solid var(--sicro-divider);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.group {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 var(--space-2);
+  border-right: 1px solid var(--sicro-divider);
+}
+.group:last-child {
+  border-right: none;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  transition: background var(--t-fast), color var(--t-fast);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+.btn:focus-visible {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: 1px;
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.active {
+  background: var(--sicro-accent-soft);
+  color: var(--sicro-accent);
+}
+
+.select {
+  height: 30px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  padding: 0 var(--space-2);
+  font-family: var(--font-ui);
+  cursor: pointer;
+}
+.select:focus {
+  outline: none;
+  border-color: var(--sicro-accent);
+}
+
+/* Combobox de tamanho de fonte (digitável + dropdown custom).
+ *
+ * `.sizeCombo` é o wrapper relativo que ancora o popover. Dentro vivem o
+ * `<input>` digitável e o botão de caret (▼); o popover (`.sizeMenu`) abre
+ * logo abaixo. O input + caret formam um único controle visual (borda
+ * compartilhada, caret colado à direita). */
+.sizeCombo {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Input numérico estreito. Mesmo visual do .select; borda direita removida
+ * pra encostar no caret e formar um controle só. */
+.sizeInput {
+  height: 30px;
+  width: 46px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-right: none;
+  border-radius: var(--radius-sm) 0 0 var(--radius-sm);
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  padding: 0 var(--space-1);
+}
+.sizeInput:focus {
+  outline: none;
+  border-color: var(--sicro-accent);
+  position: relative;
+  z-index: 1;
+}
+
+/* Botão de caret (▼) que abre o dropdown. Colado à direita do input. */
+.sizeCaret {
+  height: 30px;
+  width: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  color: var(--sicro-fg-muted);
+  font-size: 9px;
+  line-height: 1;
+  cursor: pointer;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.sizeCaret:hover {
+  background: var(--sicro-surface-3, #334155);
+  color: var(--sicro-fg);
+}
+
+/* Popover do dropdown — espelha o visual dos outros menus da toolbar
+ * (mesma superfície/sombra do .colorMenu / menu de formas). Lista rolável
+ * com os tamanhos padrão. */
+.sizeMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 50;
+  min-width: 64px;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--sicro-surface-1, #fff);
+  border: 1px solid var(--sicro-border, #c9d2e6);
+  border-radius: var(--radius-md, 6px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.sizeMenuItem {
+  display: block;
+  width: 100%;
+  text-align: center;
+  padding: 5px 10px;
+  border: none;
+  background: transparent;
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+  font-family: var(--font-ui);
+  font-variant-numeric: tabular-nums;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.sizeMenuItem:hover {
+  background: var(--sicro-accent-soft);
+  color: var(--sicro-accent);
+}
+.sizeMenuItemActive {
+  background: var(--sicro-accent-soft);
+  color: var(--sicro-accent);
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Cor do texto — swatch quadrado ao lado do tamanho. Espelha o visual do
+ * swatch de cor do TextBox/Shape (label 22px com <input type="color">
+ * sobreposto), com um "A" sobre a cor e um botão "×" para limpar.
+ */
+.textColorWrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: 4px;
+}
+.textColorSwatch {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* Estado "sem cor" → fundo quadriculado discreto. */
+  background-image:
+    linear-gradient(45deg, var(--sicro-surface-3, #cbd5e1) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--sicro-surface-3, #cbd5e1) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--sicro-surface-3, #cbd5e1) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--sicro-surface-3, #cbd5e1) 75%);
+  background-size: 8px 8px;
+  background-position: 0 0, 0 4px, 4px -4px, -4px 0;
+}
+.textColorSwatch input[type="color"] {
+  position: absolute;
+  inset: -4px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  opacity: 0;
+}
+.textColorGlyph {
+  position: relative;
+  z-index: 1;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  text-shadow:
+    0 0 2px rgba(0, 0, 0, 0.65),
+    0 1px 1px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.textColorClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 24px;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--sicro-fg-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.textColorClear:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+
+.btnLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 30px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.btnLabel:hover:not(:disabled) {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.primary {
+  height: 30px;
+  padding: 0 var(--space-3);
+  background: var(--sicro-accent);
+  color: #1a1305;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.primary:hover:not(:disabled) {
+  background: var(--sicro-accent-hover);
+}
+.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---------------------------------------------------------------------------
+ * F2 — Cor de texto + marca-texto (ColorPickerBtn).
+ *
+ * Cada botão mostra o ícone (palette / highlighter) e abaixo uma faixa fina
+ * com a cor atualmente selecionada. Ao clicar, abre uma grade compacta de
+ * cores + um botão "Remover" para limpar a marca.
+ */
+.colorWrap {
+  position: relative;
+  display: inline-block;
+}
+
+.colorSwatch {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 4px;
+  height: 3px;
+  border-radius: 1.5px;
+  background: transparent;
+  pointer-events: none;
+}
+
+/* Popover do ColorPickerPro: o próprio componente cuida do background,
+ * borda, padding e tamanho fixo (252px). Aqui só posicionamos. */
+.colorMenu {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 50;
+}
+
+.colorGrid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 4px;
+}
+
+.colorChip {
+  width: 18px;
+  height: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 3px;
+  cursor: pointer;
+  padding: 0;
+  transition: transform var(--t-fast);
+}
+.colorChip:hover {
+  transform: scale(1.08);
+  border-color: var(--sicro-fg, #e2e8f0);
+}
+
+.colorReset {
+  font-size: 11px;
+  font-family: inherit;
+  padding: 4px 6px;
+  background: transparent;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+}
+.colorReset:hover {
+  background: var(--sicro-surface-3, #334155);
+  color: var(--sicro-fg);
+}
+
+/* Permite que o destaque criado pela extension Highlight apareça com o
+ * background correto dentro do editor. */
+:global(.sicro-highlight) {
+  padding: 0 2px;
+  border-radius: 2px;
+}

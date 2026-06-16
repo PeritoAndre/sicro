@@ -1,0 +1,876 @@
+/**
+ * Estilos documentais do laudo — CSS dos presets do catálogo.
+ *
+ * Cada regra `[data-laudo-style="<id>"]` é a face visual do estilo.
+ * Alterar a aparência de "Quesito" no futuro = alterar esta classe. Os
+ * documentos `.sicrodoc` continuam idênticos porque carregam apenas
+ * o ID do estilo, não o CSS.
+ *
+ * Importado pelo `EditorPage` como `?inline` (sem CSS modules) porque
+ * os atributos `data-laudo-style` ficam diretamente nos nós TipTap
+ * renderizados, fora de qualquer escopo CSS module.
+ *
+ * Convenção das cores: paleta SICRO 2.0 com matiz de função:
+ *   - Azul        → quesito + título principal
+ *   - Verde       → conclusão
+ *   - Vermelho    → advertência
+ *   - Âmbar       → observação
+ *   - Cinza       → citação, legenda
+ */
+
+/* ===========================================================================
+ * ESTRUTURA
+ * =========================================================================== */
+
+.sicro-laudo-style--titulo_1 {
+  text-align: center;
+  font-size: 18pt;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0.4cm;
+  margin-bottom: 0.6cm;
+  letter-spacing: 0.01em;
+}
+
+.sicro-laudo-style--titulo_2 {
+  font-size: 14pt;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-top: 0.6cm;
+  margin-bottom: 0.3cm;
+  border-bottom: 1px solid #cbd5e1;
+  padding-bottom: 2px;
+}
+
+.sicro-laudo-style--titulo_3 {
+  font-size: 12.5pt;
+  font-weight: 600;
+  color: #334155;
+  margin-top: 0.4cm;
+  margin-bottom: 0.2cm;
+}
+
+.sicro-laudo-style--subtitulo {
+  text-align: center;
+  font-size: 13pt;
+  font-style: italic;
+  color: #475569;
+  margin-top: -0.2cm;
+  margin-bottom: 0.6cm;
+  font-weight: normal;
+}
+
+.sicro-laudo-style--secao_tecnica {
+  font-size: 11.5pt;
+  font-weight: 600;
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  margin-top: 0.4cm;
+  margin-bottom: 0.2cm;
+  border-radius: 2px;
+}
+
+/* ===========================================================================
+ * PERICIAL
+ * =========================================================================== */
+
+.sicro-laudo-style--quesito {
+  font-size: 12pt;
+  font-weight: 600;
+  color: #1e3a8a;
+  background: rgba(59, 130, 246, 0.06);
+  border-left: 3px solid #3b82f6;
+  padding: 6px 10px;
+  margin-top: 0.3cm;
+  margin-bottom: 0.1cm;
+  border-radius: 0 2px 2px 0;
+}
+
+.sicro-laudo-style--resposta {
+  font-size: 12pt;
+  color: #1a1a1a;
+  border-left: 3px solid #94a3b8;
+  padding: 4px 10px;
+  margin-top: 0;
+  margin-bottom: 0.3cm;
+  margin-left: 0.4cm;
+}
+
+.sicro-laudo-style--legenda {
+  font-size: 10pt;
+  font-style: italic;
+  text-align: center;
+  color: #475569;
+  margin-top: 0.05cm;
+  margin-bottom: 0.4cm;
+}
+
+.sicro-laudo-style--citacao {
+  font-size: 11pt;
+  font-style: italic;
+  color: #334155;
+  border-left: 3px solid #cbd5e1;
+  padding: 4px 12px;
+  margin: 0.3cm 0 0.3cm 0.6cm;
+  text-align: justify;
+}
+
+.sicro-laudo-style--observacao {
+  font-size: 10.5pt;
+  color: #78350f;
+  background: #fef3c7;
+  border-left: 3px solid #f59e0b;
+  padding: 6px 10px;
+  margin: 0.3cm 0;
+  border-radius: 0 2px 2px 0;
+}
+
+.sicro-laudo-style--conclusao {
+  font-size: 12pt;
+  font-weight: 600;
+  color: #14532d;
+  background: #f0fdf4;
+  border-left: 3px solid #16a34a;
+  padding: 8px 12px;
+  margin: 0.4cm 0;
+  border-radius: 0 2px 2px 0;
+  text-align: justify;
+}
+
+.sicro-laudo-style--advertencia {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #7f1d1d;
+  background: #fee2e2;
+  border-left: 3px solid #dc2626;
+  padding: 6px 12px;
+  margin: 0.3cm 0;
+  border-radius: 0 2px 2px 0;
+}
+
+.sicro-laudo-style--assinatura {
+  font-size: 11pt;
+  text-align: center;
+  color: #1a1a1a;
+  margin-top: 1.2cm;
+  margin-bottom: 0.3cm;
+  border-top: 1px solid #1a1a1a;
+  padding-top: 0.2cm;
+  max-width: 9cm;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ===========================================================================
+ * Helpers — chip indicador no painel + dropdown.
+ *
+ * Estas classes são usadas APENAS pela UI do painel/dropdown de estilos,
+ * NÃO pelo conteúdo renderizado. Mantidas neste arquivo para que o
+ * "preview" do painel acompanhe qualquer mudança visual feita aos estilos
+ * reais (se preciso).
+ * =========================================================================== */
+
+.sicro-laudo-style-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border-radius: 999px;
+  background: rgba(90, 169, 230, 0.18);
+  color: var(--sicro-accent, #5aa9e6);
+  text-transform: uppercase;
+}
+
+/* ===========================================================================
+ * F5 — FieldPlaceholder `{{var}}`.
+ *
+ * Cada `{{key}}` vira uma "pílula" visível dentro do texto editável.
+ * Cor amarelada para destacar que é AUTOMÁTICO e não conteúdo digitado.
+ * Quando o campo está RESOLVIDO (tem valor), opcionalmente o renderer
+ * pode substituir o nó pelo valor real — esta classe estiliza o estado
+ * pendente (mostrando `{{key}}` literal).
+ * =========================================================================== */
+/* As classes abaixo só aparecem NO EDITOR (a pílula vira NodeView). No
+ * export PDF/HTML o renderer já substitui pelo VALOR (texto puro). Por isso
+ * a pílula deve SEGUIR a cor/fonte do texto ao redor — nada de verde/laranja
+ * forçado. O único enfeite é um sublinhado pontilhado discreto que sinaliza
+ * "isto é um campo automático" sem alterar a cor. */
+.sicro-field {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  white-space: nowrap;
+  cursor: default;
+}
+
+/* Campo COM valor: lê como texto normal do documento + hint pontilhado. */
+.sicro-field-resolved {
+  color: inherit;
+  background: transparent;
+  border-bottom: 1px dotted rgba(120, 120, 120, 0.45);
+}
+
+/* Campo SEM valor ainda (ex.: {page}/{pages} no editor, ou campo vazio):
+ * herda a cor, mas com um fundo bem leve pra o perito ver a pendência. */
+.sicro-field-placeholder {
+  color: inherit;
+  background: rgba(224, 163, 58, 0.12);
+  border-bottom: 1px dotted rgba(184, 111, 8, 0.6);
+  border-radius: 2px;
+  padding: 0 2px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Autocomplete de campos automáticos (FieldSuggestion). Dropdown estilo IDE
+ * disparado por `{`. Renderizado num portal no document.body — por isso o CSS
+ * é global (não escopo do editor). Posição (left/top) vem inline do plugin.
+ * ------------------------------------------------------------------------- */
+.sicro-field-suggest-portal {
+  /* posição definida inline (position:fixed); container só agrupa. */
+}
+.sicro-field-suggest {
+  width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, 0.22);
+  padding: 4px;
+  font-family:
+    system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+.sicro-field-suggest-empty {
+  padding: 10px 12px;
+  color: #64748b;
+  font-size: 13px;
+}
+.sicro-field-suggest-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "label key"
+    "group key";
+  align-items: center;
+  gap: 0 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+.sicro-field-suggest-item.is-active {
+  background: rgba(224, 163, 58, 0.16);
+}
+.sicro-field-suggest-label {
+  grid-area: label;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.sicro-field-suggest-key {
+  grid-area: key;
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: 11.5px;
+  color: #b86f08;
+  white-space: nowrap;
+}
+.sicro-field-suggest-group {
+  grid-area: group;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* ===========================================================================
+ * F6 — Prancha fotográfica.
+ *
+ * Layout pericial padrão: título opcional + grid de fotos. Cada cell é
+ * uma `figure` com `figcaption`. Print-friendly:
+ *   - cada cell `page-break-inside: avoid` para não quebrar foto;
+ *   - o título acompanha o grid (não pode ser separado).
+ * =========================================================================== */
+.sicro-photoplate {
+  margin: 0.4cm 0;
+  page-break-inside: avoid;
+}
+
+.sicro-photoplate-title {
+  font-size: 11pt;
+  font-weight: 600;
+  color: #0f172a;
+  background: #f1f5f9;
+  padding: 4px 8px;
+  margin-bottom: 6px;
+  border-radius: 2px;
+}
+
+.sicro-photoplate-grid {
+  /* `grid-template-columns` é setado inline pelo node via repeat(N, 1fr). */
+}
+
+.sicro-photoplate-cell {
+  margin: 0;
+  padding: 0;
+  page-break-inside: avoid;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 140px;
+}
+
+.sicro-photoplate-cell img {
+  width: 100%;
+  height: 100%;
+  min-height: 100px;
+  object-fit: cover;
+  display: block;
+}
+
+.sicro-photoplate-cell figcaption {
+  font-size: 9pt;
+  font-style: italic;
+  text-align: center;
+  color: #334155;
+  padding: 4px 6px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+.sicro-photoplate-cell--empty {
+  /* Mantém o slot vazio visível durante edição. */
+  min-height: 120px;
+}
+
+/* ===========================================================================
+ * F6 — Figura individual com largura/alinhamento via atributos.
+ *
+ * O Figure node injeta `style="width: X; margin: Y"` inline; este bloco
+ * só ajusta tipografia da legenda e quebra de página.
+ * =========================================================================== */
+figure[data-sicro-figure] {
+  page-break-inside: avoid;
+  margin-top: 0.3cm;
+  margin-bottom: 0.3cm;
+}
+
+figure[data-sicro-figure] figcaption {
+  font-size: 10pt;
+  font-style: italic;
+  text-align: center;
+  color: #475569;
+  margin-top: 4px;
+}
+
+/* Pós-laudo T — Quando a legenda é apagada, o `<figcaption>` continua
+ * existindo (PM exige content="inline*") mas o user quer a foto colada
+ * no próximo texto, sem o espaço fantasma. Colapsa a figcaption se:
+ *   - `:empty` (truly empty)
+ *   - contém só o `<br class="ProseMirror-trailingBreak">` que o PM
+ *     insere pra inline contents sem texto
+ *   - é só whitespace ou só um <br>
+ * `:has()` é suportado em WebView2/Edge moderno (Chromium 105+). */
+figure[data-sicro-figure] figcaption:empty,
+figure[data-sicro-figure] figcaption:has(> br:only-child) {
+  display: none;
+  margin: 0;
+  padding: 0;
+  line-height: 0;
+}
+
+/* ===========================================================================
+ * F12.1 — Auto-numeração visual.
+ *
+ * O plugin AutoNumbering insere widgets antes do figcaption (figuras) e
+ * antes da tabela. Renderizados com cor de destaque sutil para não
+ * competir com o texto principal.
+ * =========================================================================== */
+.sicro-auto-number {
+  font-weight: 600;
+  color: #1e293b;
+  margin-right: 4px;
+  user-select: none;
+}
+
+.sicro-auto-number-table {
+  font-size: 10pt;
+  font-weight: 600;
+  font-style: italic;
+  color: #1e293b;
+  user-select: none;
+}
+
+/* F4 — Legenda da tabela (NodeView + clone estático). Espelha o figcaption
+ * do Figure: itálico, menor, abaixo da tabela. A linha tem o prefixo
+ * numerado ("Tabela N — ", não-editável) + o texto livre editável. */
+.sicro-table-caption-row {
+  font-size: 10pt;
+  font-style: italic;
+  color: #334155;
+  margin: 0.1cm 0 0.3cm;
+  text-align: left;
+  line-height: 1.3;
+  /* A linha inteira foca o texto editável no clique (vide SicroTableView). */
+  cursor: text;
+}
+.sicro-table-caption {
+  font-style: italic;
+  outline: none;
+}
+.sicro-table-caption--editable {
+  cursor: text;
+}
+/* Alvo de clique decente SÓ quando vazia (um span inline vazio teria largura
+ * 0 e seria inclicável). Com texto, fica inline pra legenda LONGA fluir na
+ * mesma linha do prefixo — igual ao <caption> do export (inline-block não
+ * quebra e desceria o bloco inteiro pra linha de baixo). */
+.sicro-table-caption--editable.sicro-table-caption--empty {
+  display: inline-block;
+  min-width: 8ch;
+}
+/* Placeholder visual quando a legenda está vazia (só o prefixo aparece). */
+.sicro-table-caption--empty::after {
+  content: "descreva a tabela…";
+  color: #94a3b8;
+  font-style: italic;
+}
+/* F4.1 — Botão ✕ de remover a legenda (aparece no hover da linha). */
+.sicro-table-caption-remove {
+  appearance: none;
+  border: none;
+  background: transparent;
+  margin-left: 8px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1;
+  color: #94a3b8;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease, color 0.12s ease;
+  vertical-align: middle;
+}
+.sicro-table-caption-row:hover .sicro-table-caption-remove,
+.sicro-table-caption-remove:focus-visible {
+  opacity: 1;
+}
+.sicro-table-caption-remove:hover {
+  color: #dc2626;
+}
+/* Legenda renderizada no clone estático / export (elemento <caption>). */
+.sicro-editor-content table > caption,
+table[data-sicro-table] > caption,
+caption.sicro-table-caption {
+  caption-side: bottom;
+  font-size: 10pt;
+  font-style: italic;
+  color: #334155;
+  text-align: left;
+  padding: 0.1cm 0 0;
+}
+
+/* F12.2 — CrossReference visual: pequeno badge azul inline indicando
+ * que é uma referência cruzada. */
+.sicro-cross-ref {
+  display: inline;
+  padding: 1px 6px;
+  background: rgba(59, 130, 246, 0.10);
+  color: #1e40af;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  border-radius: 3px;
+  font-size: 0.92em;
+  font-weight: 500;
+  cursor: default;
+}
+
+.sicro-cross-ref--missing {
+  background: rgba(220, 38, 38, 0.10);
+  color: #b91c1c;
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+/* F12.3 — Dynamic Lists (sumário, lista figuras, lista tabelas). */
+.sicro-dynamic-list {
+  margin: 0.6cm 0;
+  padding: 8px 12px;
+  background: rgba(15, 23, 42, 0.03);
+  border-left: 3px solid #94a3b8;
+  border-radius: 0 2px 2px 0;
+  page-break-inside: avoid;
+}
+
+.sicro-dynamic-list-title {
+  font-size: 13pt;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.2cm;
+  padding-bottom: 2px;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.sicro-dynamic-list-items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sicro-dynamic-list-item {
+  padding: 2px 0;
+  font-size: 11pt;
+  color: #334155;
+}
+
+.sicro-dynamic-list-item--level-1 {
+  font-weight: 600;
+  padding-top: 4px;
+}
+.sicro-dynamic-list-item--level-2 {
+  padding-left: 1em;
+}
+.sicro-dynamic-list-item--level-3 {
+  padding-left: 2em;
+  font-size: 10pt;
+  color: #64748b;
+}
+
+.sicro-dynamic-list-placeholder {
+  font-style: italic;
+  color: #94a3b8;
+  font-size: 10pt;
+  padding: 4px 0;
+}
+
+/* ===========================================================================
+ * F8 — CommentMark visual.
+ *
+ * Anchors: span com data-comment-id. Estilo: background amarelo translúcido
+ * + sublinhado pontilhado dourado. Cursor pointer para indicar interatividade
+ * (CommentsPanel resolverá o ponteiro mais detalhado).
+ *
+ * Variante resolvida (data-resolved="true"): tom verde-cinza, indicando
+ * que a discussão foi encerrada mas o anchor permanece para histórico.
+ * =========================================================================== */
+.sicro-comment-anchor {
+  background: rgba(251, 191, 36, 0.18);
+  border-bottom: 2px dotted #d97706;
+  padding: 0 1px;
+  cursor: pointer;
+  transition: background 100ms ease;
+}
+.sicro-comment-anchor:hover {
+  background: rgba(251, 191, 36, 0.35);
+}
+.sicro-comment-anchor[data-resolved="true"] {
+  background: rgba(132, 204, 22, 0.10);
+  border-bottom-color: #65a30d;
+  border-bottom-style: dashed;
+}
+
+/* ===========================================================================
+ * F8 — RevisionMark (track-changes lite).
+ *
+ * insertion → verde claro com sublinhado;
+ * deletion  → vermelho com strikethrough (texto mantido até o aceite).
+ *
+ * O modo "revisao" do editor já dá um chrome visual diferente; aqui só
+ * tratamos a aparência dos trechos marcados.
+ * =========================================================================== */
+.sicro-revision-mark[data-revision-type="insertion"] {
+  background: rgba(34, 197, 94, 0.12);
+  border-bottom: 1px solid #16a34a;
+  color: #166534;
+}
+.sicro-revision-mark[data-revision-type="deletion"] {
+  background: rgba(220, 38, 38, 0.10);
+  color: #991b1b;
+  text-decoration: line-through;
+  text-decoration-color: #b91c1c;
+  text-decoration-thickness: 1.5px;
+}
+
+/* ===========================================================================
+ * F7 — Tabela do laudo.
+ *
+ * F7.1 — Atualizado: bordas PRETAS visíveis (relatório de bug "tabelas
+ * estão invisíveis").
+ *
+ * F7.2 (bug fix) — Aplica bordas a TODA tabela dentro do contenteditable,
+ * independente de `data-sicro-table`. O atributo HTMLAttributes do TipTap
+ * 3 nem sempre é renderizado em produção; depender dele é frágil. Estes
+ * seletores funcionam mesmo se o TipTap renderizar `<table>` puro.
+ *
+ * Os atributos `data-*` ainda são úteis para sobrescrever estilos via
+ * `TablePropertiesDialog` (largura, cor de borda, alinhamento, valign).
+ * =========================================================================== */
+.sicro-editor-content table,
+table[data-sicro-table] {
+  width: 100%;
+  border-collapse: collapse !important;
+  border-spacing: 0;
+  margin: 0.3cm 0;
+  font-size: 10.5pt;
+  page-break-inside: avoid;
+  /* F1.2 — O prosemirror-tables EXIGE `table-layout: fixed` pro resize de
+   * coluna (arrastar a borda) funcionar. As larguras vêm do <colgroup> (no
+   * editor) ou de `data-colwidth` nas células (clone estático/export). */
+  table-layout: fixed;
+}
+
+/* F1.2 — Wrapper do prosemirror-tables (permite scroll horizontal se a
+ * tabela ficar mais larga que a página) + variáveis padrão de borda/padding
+ * que as células herdam (sobrescritas por --sicro-table-* no NodeView/F4). */
+.sicro-editor-content .tableWrapper,
+.sicro-editor-content .sicro-table-wrapper {
+  overflow-x: auto;
+}
+.sicro-table-block {
+  margin: 0.3cm 0;
+}
+
+.sicro-editor-content table th,
+.sicro-editor-content table td,
+table[data-sicro-table] th,
+table[data-sicro-table] td {
+  border: var(--sicro-table-border-width, 1px) solid
+    var(--sicro-table-border-color, #1a1a1a);
+  padding: var(--sicro-table-cell-padding, 5px) 8px;
+  vertical-align: top;
+  text-align: left;
+  /* F1.2 — com table-layout:fixed a largura vem do colgroup; o box-sizing
+   * border-box garante que padding/borda não estourem a coluna. */
+  box-sizing: border-box;
+  position: relative;
+  /* Palavra maior que a coluna QUEBRA dentro da célula. No editor o
+   * .ProseMirror já faz isto (word-wrap do prosemirror-view); o CLONE
+   * ESTÁTICO do cabeçalho/rodapé e o export não têm essa classe — sem esta
+   * regra a palavra longa vazava pra fora da tabela ao sair da edição. */
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Célula de cabeçalho (th): SEM negrito imposto pelo navegador — o peso da
+ * fonte é decisão do perito (negrito do UA não é removível pela toolbar, o
+ * que travava o usuário). O fundo cinza continua marcando a linha de
+ * cabeçalho quando ela é intencional ("Alternar cabeçalho"). */
+.sicro-editor-content table th,
+table[data-sicro-table] th {
+  font-weight: inherit;
+}
+
+/* F4 — Toggle de bordas: "none" remove a grade (estilo bloco de registro).
+ * Sobrepõe a regra geral via especificidade (atributo na <table>). */
+table[data-border-style="none"] td,
+table[data-border-style="none"] th,
+.sicro-editor-content table[data-border-style="none"] td,
+.sicro-editor-content table[data-border-style="none"] th {
+  border: none;
+}
+
+/* F1.2 — Handle de resize de coluna (prosemirror-tables). O plugin insere
+ * `<div class="column-resize-handle">` na célula sob o cursor da borda. */
+.sicro-editor-content .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  z-index: 20;
+  background-color: #1f6feb;
+  pointer-events: none;
+}
+/* Cursor de redimensionamento quando o mouse paira sobre a borda. */
+.sicro-editor-content.resize-cursor,
+.sicro-editor-content .resize-cursor {
+  cursor: col-resize;
+}
+
+/* Cabeçalho de tabela: SÓ negrito/cor de texto — SEM fundo cinza automático.
+ *
+ * BUG FIX — Antes, este seletor pintava TODA `<th>` de cinza (#e5e7eb). Como
+ * a 1ª linha das tabelas inseridas (templates / "Inserir tabela" com cabeçalho)
+ * usa nós `tableHeader` e o corpo usa `tableCell`, a tabela nascia com a 1ª
+ * linha cinza e o resto branco — um sombreado que o usuário NÃO pediu e que
+ * parecia aleatório. O sombreado de célula agora é OPCIONAL e explícito
+ * (attr `backgroundColor`, via `[data-cell-bg]` / style inline), aplicável a
+ * qualquer célula. Sem isso, toda tabela recém-inserida + bloco de registro +
+ * templates ficam VISUALMENTE CONSISTENTES (fundo transparente por padrão). */
+.sicro-editor-content table th,
+table[data-sicro-table] th {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.sicro-editor-content table tr,
+table[data-sicro-table] tr {
+  page-break-inside: avoid;
+}
+
+/* V2 — Bloco de registro do CABEÇALHO: SÓ o retângulo externo (a "forma"
+ * do timbre), SEM as divisórias internas entre as 3 colunas. Vale tanto no
+ * editor do cabeçalho (.sicro-editor-content) quanto no clone estático da
+ * visualização normal, e casa com o renderer (PDF).
+ *
+ * F4 — Agora o "sem grade interna" é dirigido por `data-border-style="none"`
+ * (uniforme corpo+cabeçalho). O `data-sicro-header-table` (clone estático/
+ * docs legados) preserva o RETÂNGULO EXTERNO mesmo sem bordas de célula. */
+table[data-sicro-header-table],
+.sicro-editor-content table[data-sicro-header-table] {
+  border: 1px solid #1a1a1a;
+  border-collapse: collapse;
+}
+table[data-border-style="none"],
+.sicro-editor-content table[data-border-style="none"] {
+  /* Tabela sem grade: mantém só o retângulo externo (útil pro bloco de
+   * registro mesmo quando vier por data-border-style, não só legado). */
+  border: 1px solid var(--sicro-table-border-color, #1a1a1a);
+}
+
+/* F7.1 — Alinhamento vertical do conteúdo da célula via data-valign. */
+table th[data-valign="middle"],
+table td[data-valign="middle"] {
+  vertical-align: middle;
+}
+table th[data-valign="bottom"],
+table td[data-valign="bottom"] {
+  vertical-align: bottom;
+}
+
+/* F7.1 — Alinhamento horizontal da tabela inteira via data-align. */
+table[data-align="center"] {
+  margin-left: auto;
+  margin-right: auto;
+}
+table[data-align="right"] {
+  margin-left: auto;
+  margin-right: 0;
+}
+
+/* Tabela vazia / célula de placeholder no editor — força altura mínima
+ * para que a borda fique visível mesmo sem conteúdo. */
+.sicro-editor-content table td p:only-child:empty,
+.sicro-editor-content table th p:only-child:empty,
+table[data-sicro-table] td p:only-child:empty,
+table[data-sicro-table] th p:only-child:empty {
+  min-height: 1.2em;
+}
+
+.sicro-editor-content table td p,
+.sicro-editor-content table th p,
+table[data-sicro-table] td p,
+table[data-sicro-table] th p {
+  margin: 0;
+}
+
+/* F3 — Altura de linha: o <tr data-row-height-cm> recebe `height` inline
+ * (do renderHTML do SicroTableRow). Com border-collapse, height no <tr>
+ * funciona como min-height. Reforçamos garantindo que as células herdem. */
+.sicro-editor-content table tr[data-row-height-cm] td,
+.sicro-editor-content table tr[data-row-height-cm] th,
+table[data-sicro-table] tr[data-row-height-cm] td,
+table[data-sicro-table] tr[data-row-height-cm] th {
+  height: inherit;
+}
+
+/* prosemirror-tables: selectedCell highlight.
+ *
+ * Usa um overlay via `box-shadow: inset` em vez de `background` porque a
+ * célula pode ter um `background-color` INLINE (attr `backgroundColor` / F-bg)
+ * — e estilo inline venceria a regra de `background` aqui, escondendo o
+ * realce de seleção. O inset shadow fica POR CIMA do fundo da célula, então
+ * a seleção é sempre visível, com ou sem cor de fundo. */
+.sicro-editor-content table td.selectedCell,
+.sicro-editor-content table th.selectedCell {
+  box-shadow: inset 0 0 0 1000px rgba(59, 130, 246, 0.18);
+}
+
+/* ===========================================================================
+ * F12.7 — Print/PDF
+ *
+ * Quando o usuário aciona o print nativo do browser, ocultamos chrome do
+ * editor (toolbar, statusbar, réguas, inspector, controles) e deixamos
+ * apenas as páginas A4 com seu conteúdo, formatadas para tinta.
+ * O pipeline preferencial é Ctrl+P → export Edge headless (Rust), que
+ * usa o renderer.ts com @page/@top/@bottom. As regras aqui são fallback
+ * para Ctrl+P do browser dentro do app desktop.
+ * ===========================================================================
+ */
+
+@media print {
+  /* Reseta o fundo da janela e tira backgrounds dark. */
+  html,
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  /* Esconde chrome geral do app. Pages e EditorPage rendem visualmente
+     o paper canvas em A4 — manter visível. */
+  .activity-rail,
+  .sicro-toolbar,
+  .sicro-status-bar,
+  .sicro-find-replace,
+  .sicro-inspector,
+  .sicro-page-controls,
+  .sicro-ruler-h,
+  .sicro-ruler-v,
+  aside[role="complementary"] {
+    display: none !important;
+  }
+
+  /* Os cards de página viram um fluxo simples sem sombra. */
+  .sicro-page-stack,
+  .sicro-page-card {
+    box-shadow: none !important;
+    border: none !important;
+    margin: 0 !important;
+    page-break-after: always;
+  }
+  .sicro-page-card:last-child {
+    page-break-after: auto;
+  }
+
+  /* Spacers de paginação não devem aparecer no print — o browser quebra
+     páginas via @page. */
+  .sicro-page-spacer,
+  .sicro-page-spacer--top,
+  .sicro-page-spacer--middle,
+  .sicro-page-spacer--bottom {
+    display: none !important;
+  }
+
+  /* Cross-refs e auto-numbering ficam pretos (sem cor azul). */
+  .sicro-cross-ref,
+  .sicro-auto-number,
+  .sicro-auto-number-table {
+    color: #000 !important;
+  }
+
+  /* Lista dinâmica (sumário / figuras / tabelas) sem caixa. */
+  .sicro-dynamic-list,
+  .sicro-dynamic-summary,
+  .sicro-dynamic-figure-list,
+  .sicro-dynamic-table-list {
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  /* Comentários e marcas de revisão não devem ir para o PDF/print. */
+  .sicro-comment-mark,
+  .sicro-revision-add,
+  .sicro-revision-del {
+    background: transparent !important;
+    border: none !important;
+    text-decoration: none !important;
+  }
+}

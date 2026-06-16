@@ -1,0 +1,50 @@
+.panel {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--sicro-divider);
+}
+.title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sicro-fg-dim);
+  font-weight: 500;
+}
+.grid {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 2px var(--space-2);
+  font-size: var(--text-xs);
+  margin: 0;
+}
+.grid dt {
+  color: var(--sicro-fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  padding-top: 2px;
+}
+.grid dd {
+  color: var(--sicro-fg);
+  margin: 0;
+  word-break: break-all;
+}
+.mono {
+  font-family: var(--font-mono);
+}
+.warnings {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--sicro-warning);
+}
+.warnings summary {
+  cursor: pointer;
+}
+.warnings ul {
+  margin: 4px 0 0;
+  padding-left: var(--space-3);
+  color: var(--sicro-fg);
+}
+.warnings li {
+  margin-bottom: 2px;
+}

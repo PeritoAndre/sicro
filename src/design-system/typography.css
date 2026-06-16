@@ -1,0 +1,50 @@
+/*
+ * Typography utility classes. Do not couple components to these — they are
+ * convenience classes for static layout (StatusBar, TopBar, EmptyState, etc.).
+ */
+
+.font-ui {
+  font-family: var(--font-ui);
+}
+.font-mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.font-doc {
+  font-family: var(--font-doc);
+}
+
+.text-xs {
+  font-size: var(--text-xs);
+}
+.text-sm {
+  font-size: var(--text-sm);
+}
+.text-md {
+  font-size: var(--text-md);
+}
+.text-lg {
+  font-size: var(--text-lg);
+}
+.text-xl {
+  font-size: var(--text-xl);
+}
+.text-2xl {
+  font-size: var(--text-2xl);
+}
+
+.text-fg {
+  color: var(--sicro-fg);
+}
+.text-muted {
+  color: var(--sicro-fg-muted);
+}
+.text-dim {
+  color: var(--sicro-fg-dim);
+}
+.text-faint {
+  color: var(--sicro-fg-faint);
+}
+.text-accent {
+  color: var(--sicro-accent);
+}

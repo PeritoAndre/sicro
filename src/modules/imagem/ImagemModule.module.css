@@ -1,0 +1,233 @@
+/* ImagemModule — MVP 7 */
+
+.wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-bg);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--sicro-divider);
+  background: var(--sicro-surface-1);
+  flex-shrink: 0;
+}
+.title h1 {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--sicro-fg);
+  font-weight: 600;
+}
+.subtitle {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+.topActions {
+  display: flex;
+  gap: var(--space-2);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--sicro-fg-muted);
+}
+
+.errorBanner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(220, 60, 60, 0.08);
+  border: 1px solid rgba(220, 60, 60, 0.3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--sicro-danger);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-3);
+}
+
+/* ----- Lista ----- */
+.listWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 1200px;
+}
+.listGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: var(--space-3);
+}
+.card {
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  color: var(--sicro-fg);
+  padding: 0;
+}
+.card:hover {
+  border-color: var(--sicro-accent);
+}
+.cardThumb {
+  width: 100%;
+  height: 140px;
+  background: var(--sicro-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sicro-fg-dim);
+}
+.cardThumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cardBody {
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.cardBody strong {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cardBody small {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+}
+
+/* ----- Source picker dialog ----- */
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.dialog {
+  width: 600px;
+  max-width: 95vw;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--sicro-surface-2);
+  border-bottom: 1px solid var(--sicro-divider);
+}
+.dialogTabs {
+  display: flex;
+  border-bottom: 1px solid var(--sicro-divider);
+  background: var(--sicro-surface-1);
+}
+.dialogTab {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg-muted);
+  padding: var(--space-2);
+  cursor: pointer;
+  font-family: inherit;
+  border-bottom: 2px solid transparent;
+}
+.dialogTab:hover {
+  color: var(--sicro-fg);
+}
+.dialogTabActive {
+  color: var(--sicro-accent);
+  border-bottom-color: var(--sicro-accent);
+}
+.dialogBody {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.pickerItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  color: var(--sicro-fg);
+}
+.pickerItem:hover {
+  background: var(--sicro-surface-3);
+}
+.pickerThumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 3px;
+  background: var(--sicro-surface-1);
+}
+.pickerInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.pickerInfo strong {
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pickerInfo code {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dim {
+  color: var(--sicro-fg-dim);
+  font-size: var(--text-xs);
+}

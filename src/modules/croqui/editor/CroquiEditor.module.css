@@ -1,0 +1,152 @@
+.wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  min-height: 0;
+}
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-sm);
+}
+
+.canvasArea {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: #1a2030;
+}
+
+/* Konva Stage renders a div container with absolute-positioned canvases.
+ * To keep the status bar pinned at the bottom we let the Stage div fill the
+ * remaining height via flex. */
+.canvasArea > div:first-child {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.statusBar {
+  background: var(--sicro-surface-2);
+  border-top: 1px solid var(--sicro-divider);
+  padding: 4px var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+}
+.statusBar code {
+  background: var(--sicro-surface-1);
+  padding: 0 4px;
+  border-radius: 2px;
+  color: var(--sicro-fg);
+}
+.statusTitle {
+  color: var(--sicro-fg);
+  font-family: var(--font-ui);
+  font-weight: 600;
+}
+.statusFeedback {
+  margin-left: auto;
+  color: var(--sicro-accent);
+  font-family: var(--font-ui);
+}
+.statusCounts {
+  color: var(--sicro-fg-dim);
+  font-size: 10px;
+}
+
+/* ----- Dossiê photo picker overlay (MVP 6) ----- */
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.dialog {
+  width: 520px;
+  max-width: 95vw;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.dialogHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-4);
+  background: var(--sicro-surface-2);
+  border-bottom: 1px solid var(--sicro-divider);
+  color: var(--sicro-fg);
+}
+.dialogClose {
+  background: transparent;
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.dialogClose:hover {
+  color: var(--sicro-fg);
+  border-color: var(--sicro-fg-muted);
+}
+.dialogList {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.dialogItem {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--sicro-fg);
+  padding: 6px 8px;
+  text-align: left;
+  font-family: inherit;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.dialogItem:hover {
+  background: var(--sicro-surface-2);
+  border-color: var(--sicro-border);
+}
+.dialogItem code {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+}
+.dim {
+  color: var(--sicro-fg-dim);
+  padding: var(--space-3);
+}
+.danger {
+  color: var(--sicro-danger);
+  padding: var(--space-3);
+}

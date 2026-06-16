@@ -1,0 +1,104 @@
+.wrap {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--sicro-bg);
+  /* Coluna flex: deixa o ModuleLanding (flex:1) centralizar verticalmente no
+     estado vazio — mesmo padrão de Áudio/Imagens/Documentoscopia. A lista
+     (.container) segue alinhada ao topo, centrada na horizontal. */
+  display: flex;
+  flex-direction: column;
+}
+.container {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.title {
+  margin: 0;
+  font-size: var(--text-xl);
+  color: var(--sicro-fg);
+}
+.subtitle {
+  margin: 4px 0 0;
+  font-size: var(--text-sm);
+  color: var(--sicro-fg-muted);
+  max-width: 78ch;
+  line-height: 1.5;
+}
+.subtitle code {
+  font-family: var(--font-mono);
+  background: var(--sicro-surface-2);
+  padding: 0 4px;
+  border-radius: 2px;
+}
+.sectionTitle {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sicro-fg-dim);
+  margin: 0 0 var(--space-2);
+  font-weight: 500;
+}
+.error {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-danger);
+  background: rgba(220, 60, 60, 0.08);
+  border: 1px solid rgba(220, 60, 60, 0.3);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+}
+.dim {
+  color: var(--sicro-fg-dim);
+  font-size: var(--text-sm);
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+}
+.rowMain {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rowTitle {
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+}
+.rowMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: 11px;
+  color: var(--sicro-fg-dim);
+  align-items: center;
+}
+.rowMeta code {
+  font-family: var(--font-mono);
+}

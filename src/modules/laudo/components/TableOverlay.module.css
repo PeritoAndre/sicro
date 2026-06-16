@@ -1,0 +1,228 @@
+/* F2/F3 — TableOverlay: toolbar flutuante + handles pra tabela com cursor.
+ * Visual idêntico ao TextBoxOverlay (consistência), com adições pra mover
+ * (grip no canto sup-esq) e altura de linha (calha na borda inferior). */
+
+.overlay {
+  position: absolute;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* Borda de seleção sutil ao redor da tabela (não captura cliques pra não
+ * atrapalhar a edição das células). */
+.selectionFrame {
+  position: absolute;
+  inset: 0;
+  border: 1.5px dashed #1f6feb;
+  border-radius: 2px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.6);
+}
+
+/* Grip de "mover bloco" no canto superior-esquerdo (estilo Notion). */
+.moveGrip {
+  position: absolute;
+  left: -22px;
+  top: -2px;
+  width: 18px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border: 1px solid #c9d2e6;
+  border-radius: 4px;
+  color: #5b6b8b;
+  cursor: grab;
+  pointer-events: auto;
+  z-index: 12;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+}
+.moveGrip:hover {
+  background: #eef2fb;
+  color: #1a2a4a;
+}
+.moveGrip:active {
+  cursor: grabbing;
+}
+
+/* Calha de redimensionamento de ALTURA de linha (borda inferior de cada
+ * linha). Posicionada inline via style; aparece no hover. */
+.rowResizeHandle {
+  position: absolute;
+  left: 0;
+  height: 6px;
+  margin-top: -3px;
+  cursor: row-resize;
+  pointer-events: auto;
+  z-index: 11;
+  background: transparent;
+}
+.rowResizeHandle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 2px;
+  height: 2px;
+  background: transparent;
+  transition: background 0.1s;
+}
+.rowResizeHandle:hover::after {
+  background: #1f6feb;
+}
+
+.toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: #fff;
+  border: 1px solid #c9d2e6;
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  pointer-events: auto;
+  z-index: 12;
+  user-select: none;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 11px;
+  color: #1a2a4a;
+  white-space: nowrap;
+  max-width: 92vw;
+  flex-wrap: nowrap;
+}
+
+.toolBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: #5b6b8b;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+.toolBtn:hover {
+  background: #eef2fb;
+  color: #1a2a4a;
+}
+.toolBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.toolBtnActive {
+  background: #1f6feb;
+  color: #fff;
+}
+.toolBtnActive:hover {
+  background: #1a5dc6;
+  color: #fff;
+}
+.toolBtnDanger {
+  color: #b53939;
+}
+.toolBtnDanger:hover {
+  background: #fff0f0;
+  color: #b53939;
+}
+
+.toolDivider {
+  width: 1px;
+  height: 16px;
+  background: #d6d9e3;
+  margin: 0 4px;
+}
+
+/* Swatch de cor de fundo de célula — espelha o .colorSwatch do TextBox/Shape
+ * (mesmo visual): quadradinho com o input[type=color] cobrindo toda a área. */
+.colorSwatch {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #c9d2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  background: transparent;
+  position: relative;
+  overflow: hidden;
+}
+.colorSwatch input[type="color"] {
+  position: absolute;
+  inset: -4px;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: transparent;
+}
+
+.dragTooltip {
+  position: fixed;
+  z-index: 9999;
+  padding: 3px 8px;
+  background: #1f2937;
+  color: #fff;
+  border-radius: 4px;
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+  white-space: nowrap;
+  user-select: none;
+}
+
+/* ---- Menu de contexto (botão direito) ---- */
+.contextMenu {
+  position: fixed;
+  z-index: 9998;
+  min-width: 210px;
+  padding: 4px;
+  background: #fff;
+  border: 1px solid #c9d2e6;
+  border-radius: 8px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  font-family: system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  color: #1a2a4a;
+  user-select: none;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  color: #1a2a4a;
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+}
+.menuItem:hover {
+  background: #eef2fb;
+}
+.menuItem:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.menuItemDanger {
+  color: #b53939;
+}
+.menuItemDanger:hover {
+  background: #fff0f0;
+}
+.menuDivider {
+  height: 1px;
+  margin: 4px 6px;
+  background: #e3e7ef;
+}
+.menuLabel {
+  flex: 1;
+}

@@ -1,0 +1,83 @@
+.wrap {
+  background: var(--sicro-surface-1);
+  padding: var(--space-3) var(--space-3) var(--space-4);
+  border-top: 1px solid var(--sicro-divider);
+}
+.rail {
+  position: relative;
+  height: 36px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  cursor: crosshair;
+  user-select: none;
+}
+.rail:focus {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: 1px;
+}
+.tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--sicro-divider);
+  pointer-events: none;
+}
+.tickMajor {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--sicro-fg-dim);
+  pointer-events: none;
+}
+.tickLabel {
+  position: absolute;
+  bottom: -16px;
+  left: 0;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--sicro-fg-dim);
+  white-space: nowrap;
+}
+
+.marker {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 8px;
+  margin-left: -4px;
+  border: 1px solid #fff;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--sicro-accent);
+  transition: transform var(--t-fast);
+}
+.marker:hover {
+  transform: scaleY(1.15);
+}
+.markerActive {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+/* category palette */
+.cat-colisao { background: #dc2626; }
+.cat-frenagem { background: #d97706; }
+.cat-impacto { background: #be185d; }
+.cat-reacao { background: #2563eb; }
+.cat-semaforo { background: #059669; }
+.cat-mudanca_faixa { background: #7c3aed; }
+.cat-outro { background: #6b7280; }
+
+.playhead {
+  position: absolute;
+  top: -4px;
+  bottom: -4px;
+  width: 2px;
+  background: #ffffff;
+  pointer-events: none;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+}

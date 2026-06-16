@@ -1,0 +1,42 @@
+.bar {
+  height: var(--topbar-height);
+  background: var(--sicro-surface-1);
+  border-bottom: 1px solid var(--sicro-divider);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-4);
+  gap: var(--space-4);
+  flex-shrink: 0;
+}
+
+.breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--sicro-fg-muted);
+  min-width: 0;
+}
+
+.separator {
+  color: var(--sicro-fg-faint);
+  font-size: var(--text-xs);
+}
+
+.module {
+  color: var(--sicro-fg);
+  font-weight: 600;
+}
+
+.occurrenceLabel {
+  color: var(--sicro-fg-muted);
+  font-weight: 400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 520px;
+}
+
+.spacer {
+  flex: 1;
+}

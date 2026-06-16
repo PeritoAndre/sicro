@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 170" width="50" height="170">
+  <!-- vista de cima: pessoa caída / decúbito (corpo inteiro) — placeholder -->
+  <rect x="15" y="34" width="20" height="86" rx="9" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <rect x="16" y="116" width="7" height="46" rx="3" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <rect x="27" y="116" width="7" height="46" rx="3" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <rect x="3" y="44" width="9" height="44" rx="4" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <rect x="38" y="44" width="9" height="44" rx="4" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <circle cx="25" cy="19" r="13" fill="#94a3b8" stroke="#334155" stroke-width="2"/>
+</svg>

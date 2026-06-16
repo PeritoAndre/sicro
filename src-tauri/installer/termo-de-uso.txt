@@ -1,0 +1,25 @@
+TERMO DE USO — SICRO 2.0
+Suíte Pericial Forense · Polícia Científica do Amapá
+
+1. NATUREZA DA FERRAMENTA
+O SICRO 2.0 é uma ferramenta de APOIO ao trabalho pericial. Suas funções são
+determinísticas e auxiliares: organizar evidências, elaborar laudos, croquis e
+análises técnicas. O sistema NÃO produz conclusões periciais nem substitui o
+julgamento do perito — o perito criminal tem sempre a palavra final.
+
+2. INTEGRIDADE DA PROVA
+O SICRO opera de forma offline e local. As evidências originais NUNCA são
+alteradas: o sistema trabalha sobre cópias e registra a origem de cada
+resultado, de modo reprodutível e auditável.
+
+3. RESPONSABILIDADE
+A interpretação dos dados, a elaboração das peças técnicas e as conclusões são
+de responsabilidade exclusiva do perito signatário. O uso da ferramenta não
+transfere ao SICRO qualquer responsabilidade sobre as decisões periciais.
+
+4. PRIVACIDADE E SIGILO
+Os dados periciais permanecem na máquina do usuário. Cabe ao perito observar o
+sigilo legal e as normas institucionais aplicáveis ao tratamento das informações.
+
+Ao prosseguir com a instalação, você declara estar ciente e de acordo com este
+Termo de Uso.

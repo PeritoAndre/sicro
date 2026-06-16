@@ -1,0 +1,293 @@
+/* DossieModule shell — MVP 3 */
+
+.wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-bg);
+}
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--sicro-divider);
+  background: var(--sicro-surface-1);
+  flex-shrink: 0;
+  gap: var(--space-3);
+}
+
+.title h1 {
+  margin: 0;
+  font-size: var(--text-md);
+  color: var(--sicro-fg);
+  font-weight: 600;
+}
+.subtitle {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+
+.topActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* Seletor de modo (Operacional / Integridade) — segmented control */
+.modeToggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+.modeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  padding: 4px var(--space-3);
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color var(--t-fast),
+    background var(--t-fast);
+}
+.modeBtn:hover {
+  color: var(--sicro-fg);
+}
+.modeBtnActive {
+  background: var(--sicro-surface-1);
+  color: var(--sicro-accent);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+}
+.feedback {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  max-width: 420px;
+  text-align: right;
+  line-height: 1.4;
+}
+
+.tabStrip {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--sicro-divider);
+  background: var(--sicro-surface-2);
+  padding: 0 var(--space-3);
+  overflow-x: auto;
+  flex-shrink: 0;
+  scrollbar-width: thin;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-sm);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.tab:hover {
+  color: var(--sicro-fg);
+}
+.tabActive {
+  color: var(--sicro-accent);
+  border-bottom-color: var(--sicro-accent);
+}
+.badge {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 10px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-dim);
+}
+.tabActive .badge {
+  border-color: rgba(90, 169, 230, 0.4);
+  color: var(--sicro-accent);
+}
+
+.content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-5);
+}
+
+.errorBanner {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: rgba(220, 60, 60, 0.08);
+  border: 1px solid rgba(220, 60, 60, 0.3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--sicro-danger);
+  font-size: var(--text-xs);
+  margin-bottom: var(--space-3);
+}
+
+.loading {
+  color: var(--sicro-fg-dim);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+
+.empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  color: var(--sicro-fg-muted);
+}
+.empty p {
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+/* ----- Cabeçalho do caso (identificação SEMPRE editável) ----- */
+.caseHeader {
+  flex-shrink: 0;
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--sicro-divider);
+  background: var(--sicro-surface-1);
+}
+.chHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+.chTitle {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-fg-dim);
+  font-weight: 600;
+}
+.chActions {
+  display: inline-flex;
+  gap: var(--space-2);
+}
+.chGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-2) var(--space-4);
+}
+.chField {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.chLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sicro-fg-muted);
+}
+.chValue {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chDim {
+  color: var(--sicro-fg-muted);
+}
+.chInput {
+  font-family: inherit;
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 5px 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.chInput:focus {
+  outline: none;
+  border-color: var(--sicro-accent);
+  box-shadow: 0 0 0 2px rgba(90, 169, 230, 0.18);
+}
+
+/* ----- Seletor de lente em destaque (SICRO Operacional / Central de Provas) ----- */
+.lensBand {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) var(--space-5);
+  background: var(--sicro-surface-2);
+  border-bottom: 1px solid var(--sicro-divider);
+}
+.lensToggle {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 680px;
+}
+.lensBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  text-align: left;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  color: var(--sicro-fg-muted);
+  font-family: inherit;
+  padding: var(--space-3) var(--space-4);
+  cursor: pointer;
+  transition:
+    color var(--t-fast),
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+.lensBtn:hover {
+  color: var(--sicro-fg);
+  border-color: var(--sicro-fg-muted);
+}
+.lensBtnActive {
+  color: var(--sicro-accent);
+  border-color: var(--sicro-accent);
+  background: rgba(90, 169, 230, 0.08);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.18);
+}
+.lensBtnText {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+.lensBtnText strong {
+  font-size: var(--text-sm);
+  font-weight: 600;
+}
+.lensBtnText small {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}

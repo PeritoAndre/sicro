@@ -1,0 +1,618 @@
+.panel {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  /* W15.3 — preenche a altura da aba dedicada "Filtros" para a galeria ir
+     até o fundo do painel. */
+  flex: 1;
+  min-height: 0;
+}
+
+.head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.head strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-fg-dim);
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  font-style: italic;
+}
+
+.empty {
+  color: var(--sicro-fg-dim);
+  font-size: 11px;
+  text-align: center;
+  padding: 14px 6px;
+  font-style: italic;
+  border: 1px dashed var(--sicro-border);
+  border-radius: 4px;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.item {
+  background: var(--sicro-surface);
+  border: 1px solid var(--sicro-border);
+  border-left-width: 3px;
+  border-left-color: var(--sicro-accent);
+  border-radius: 4px;
+  padding: 6px 8px;
+}
+
+.item.disabled {
+  border-left-color: var(--sicro-border);
+  opacity: 0.55;
+}
+
+.itemHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.itemIndex {
+  font-size: 9.5px;
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+}
+
+.itemLabel {
+  flex: 1;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sicro-fg);
+}
+
+.itemActions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.itemActions button {
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--sicro-fg-dim);
+  cursor: pointer;
+}
+.itemActions button:hover:not(:disabled) {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  border-color: var(--sicro-border);
+}
+.itemActions button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+.itemDanger:hover {
+  color: #f87171 !important;
+  border-color: rgba(248, 113, 113, 0.4) !important;
+}
+
+.controls {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.control {
+  display: grid;
+  grid-template-columns: 80px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  color: var(--sicro-fg-dim);
+}
+.control span {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 9.5px;
+}
+.control input[type="range"] {
+  width: 100%;
+  accent-color: var(--sicro-accent);
+}
+.control input[type="number"] {
+  width: 100%;
+  padding: 2px 4px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+  color: var(--sicro-fg);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+.control output {
+  text-align: right;
+  color: var(--sicro-fg);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.adder {
+  position: relative;
+}
+
+.addBtn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.addBtn:hover {
+  border-color: var(--sicro-accent);
+  color: var(--sicro-accent);
+}
+
+.picker {
+  position: absolute;
+  bottom: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 320px;
+  overflow-y: auto;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: 4px;
+  padding: 6px;
+  z-index: 100;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
+.pickerGroup {
+  padding: 4px 0;
+}
+.pickerGroup h4 {
+  margin: 0 0 4px;
+  font-size: 9.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sicro-fg-dim);
+  padding-bottom: 3px;
+  border-bottom: 1px solid var(--sicro-divider);
+}
+.pickerGroup ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pickerGroup li {
+  display: block;
+}
+.pickerGroup button {
+  width: 100%;
+  text-align: left;
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg);
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+.pickerGroup button:hover {
+  background: var(--sicro-surface-2);
+}
+
+/* W14.3 — galeria de filtros SEMPRE visível (filtros = diferencial).
+   W18 — agora ocupa a aba "Filtros" inteira (a pilha foi p/ o dock fixo),
+   então cresce do topo até o fundo, sem borda separadora. */
+.galleryWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Cresce para ocupar o resto do painel (galeria vai até o fundo). */
+  flex: 1;
+  min-height: 0;
+}
+.galleryHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.galleryHead strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-accent);
+  flex: 1;
+}
+.galleryCount {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--sicro-fg-dim);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.galleryScroll {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  /* Ocupa toda a altura restante do painel e rola internamente — sem teto
+     fixo, mostrando o máximo de filtros possível. */
+  flex: 1;
+  min-height: 120px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+/* W13.5 — campo de busca da galeria */
+.search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--sicro-fg-dim);
+}
+.search input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--sicro-fg);
+  font-family: inherit;
+  font-size: 12px;
+}
+.search input::placeholder {
+  color: var(--sicro-fg-dim);
+}
+.searchClear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg-dim);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: 3px;
+}
+.searchClear:hover {
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+}
+.gallery {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  padding: 5px 8px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.card:hover {
+  background: var(--sicro-surface-2);
+  border-color: var(--sicro-border);
+}
+.cardLabel {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sicro-fg);
+}
+.cardLabel svg {
+  color: var(--sicro-accent);
+  flex-shrink: 0;
+}
+.cardNote {
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--sicro-fg-dim);
+}
+.galleryEmpty {
+  margin: 8px 4px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--sicro-fg-dim);
+  text-align: center;
+}
+
+/* W12 — controle checkbox inline + nota forense por operação. */
+.controlCheck {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.controlCheck input {
+  width: auto;
+}
+.opNote {
+  margin: 4px 0 0;
+  padding: 4px 6px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-secondary, #9aa4b2);
+  background: rgba(127, 127, 127, 0.08);
+  border-radius: 4px;
+}
+
+/* W18 — dock da pilha ATIVA (sempre visível, separada da galeria). Preenche
+   o contêiner que o editor reserva no rodapé do painel direito; a lista rola
+   internamente quando há muitos filtros, sem comer o espaço da galeria. */
+.dock {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+  gap: 6px;
+  padding: 8px;
+}
+.dockHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.dockToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--sicro-fg);
+  font-family: inherit;
+  padding: 0;
+}
+.dockToggle strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-accent);
+}
+.dockToggle svg {
+  color: var(--sicro-accent);
+  flex-shrink: 0;
+}
+.dockCount {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--sicro-fg-dim);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+.dockClear {
+  font-size: 10px;
+  background: transparent;
+  border: 1px solid var(--sicro-border);
+  border-radius: 4px;
+  color: var(--sicro-fg-dim);
+  padding: 2px 8px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.dockClear:hover {
+  color: #f87171;
+  border-color: rgba(248, 113, 113, 0.4);
+}
+.dockList {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  padding-right: 2px;
+}
+.dockEmpty {
+  margin: 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--sicro-fg-dim);
+  font-style: italic;
+  padding: 8px 6px;
+  border: 1px dashed var(--sicro-border);
+  border-radius: 4px;
+}
+
+/* W19 — barra de CAMADAS horizontal, embaixo do canvas. */
+.layersBar {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 10px 8px;
+  background: var(--sicro-surface-1);
+  border-top: 1px solid var(--sicro-divider);
+}
+.layersBarHead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.layersBarToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--sicro-fg);
+  font-family: inherit;
+  padding: 0;
+}
+.layersBarToggle strong {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-accent);
+}
+.layersBarToggle svg {
+  color: var(--sicro-accent);
+  flex-shrink: 0;
+}
+.layersHint {
+  font-size: 10px;
+  color: var(--sicro-fg-faint, var(--sicro-fg-dim));
+  font-variant: small-caps;
+  letter-spacing: 0.04em;
+}
+.layersBarHead .dockClear {
+  margin-left: auto;
+}
+.layersTrack {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.layersEmpty {
+  font-size: 11px;
+  font-style: italic;
+  color: var(--sicro-fg-dim);
+  padding: 4px 2px;
+}
+.layerCard {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+  background: var(--sicro-surface);
+  border: 1px solid var(--sicro-border);
+  border-left: 3px solid var(--sicro-accent);
+  border-radius: 4px;
+  padding: 2px 4px 2px 6px;
+}
+.layerCardActive {
+  box-shadow: 0 0 0 1px var(--sicro-accent);
+}
+.layerCardOff {
+  opacity: 0.5;
+  border-left-color: var(--sicro-border);
+}
+.layerEye {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--sicro-fg-dim);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.layerEye:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+.layerCardBody {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--sicro-fg);
+  font-family: inherit;
+  white-space: nowrap;
+}
+.layerIndex {
+  font-size: 9.5px;
+  font-family: var(--font-mono, monospace);
+  color: var(--sicro-fg-dim);
+}
+.layerName {
+  font-size: 12px;
+  font-weight: 600;
+}
+.layerPopover {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 10px;
+  width: min(330px, calc(100% - 20px));
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 8px 10px 10px;
+  z-index: 50;
+}
+.layerPopoverHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.layerPopoverHead strong {
+  flex: 1;
+  font-size: 12px;
+  color: var(--sicro-fg);
+}
+.layerPopoverActions {
+  display: inline-flex;
+  gap: 2px;
+}
+.layerPopoverActions button {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  color: var(--sicro-fg-dim);
+  cursor: pointer;
+}
+.layerPopoverActions button:hover:not(:disabled) {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  border-color: var(--sicro-border);
+}
+.layerPopoverActions button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}

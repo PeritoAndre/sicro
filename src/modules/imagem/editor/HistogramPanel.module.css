@@ -1,0 +1,113 @@
+.panel {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-fg-dim);
+}
+
+.refreshBtn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.refreshBtn:hover:not(:disabled) {
+  border-color: var(--sicro-accent);
+}
+.refreshBtn:disabled {
+  opacity: 0.5;
+  cursor: progress;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  height: 110px;
+  background: #0b0d11;
+  border: 1px solid var(--sicro-border);
+  border-radius: 4px;
+}
+
+.spin {
+  animation: histoSpin 1.2s linear infinite;
+}
+@keyframes histoSpin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  color: #f87171;
+  font-size: 11px;
+  background: rgba(248, 113, 113, 0.1);
+  padding: 6px;
+  border-radius: 4px;
+}
+
+.empty {
+  color: var(--sicro-fg-dim);
+  font-size: 11px;
+  font-style: italic;
+}
+
+.stats {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.stats th,
+.stats td {
+  padding: 3px 6px;
+  border-bottom: 1px solid var(--sicro-border);
+  text-align: right;
+}
+.stats th {
+  color: var(--sicro-fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 10px;
+  text-align: left;
+}
+.stats th:first-child,
+.stats td:first-child {
+  text-align: left;
+}
+
+.dotR,
+.dotG,
+.dotB,
+.dotL {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.dotR { background: #ef4444; }
+.dotG { background: #22c55e; }
+.dotB { background: #3b82f6; }
+.dotL { background: rgba(255, 255, 255, 0.55); }
+
+.foot {
+  text-align: left !important;
+  color: var(--sicro-fg-dim);
+  padding-top: 6px !important;
+  font-size: 10.5px;
+}

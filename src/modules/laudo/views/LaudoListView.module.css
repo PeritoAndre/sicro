@@ -1,0 +1,117 @@
+.wrap {
+  height: 100%;
+  overflow-y: auto;
+  padding: var(--space-8);
+  background: var(--sicro-bg);
+  /* Coluna flex: deixa o ModuleLanding (flex:1) centralizar verticalmente no
+     estado vazio — mesmo padrão de Áudio/Imagens/Documentoscopia. A lista
+     (.container) segue alinhada ao topo, centrada na horizontal. */
+  display: flex;
+  flex-direction: column;
+}
+
+.container {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+.header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  gap: var(--space-4);
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.title {
+  font-size: var(--text-xl);
+  font-weight: 600;
+  color: var(--sicro-fg);
+  margin: 0;
+}
+
+.subtitle {
+  color: var(--sicro-fg-muted);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--space-4);
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 120px;
+}
+
+.cardTitle {
+  font-size: var(--text-md);
+  font-weight: 500;
+  color: var(--sicro-fg);
+  margin: 0;
+}
+
+.cardMeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  margin-top: auto;
+}
+
+.path {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-faint);
+  word-break: break-all;
+}
+
+.error {
+  color: var(--sicro-danger);
+  margin-top: var(--space-3);
+}
+
+/* Botão "lixeira" no canto superior direito de cada card de laudo.
+   `stopPropagation` no handler evita abrir o laudo ao clicar.        */
+.deleteBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+}
+
+.deleteBtn:hover:not(:disabled) {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-danger);
+  border-color: var(--sicro-danger);
+}
+
+.deleteBtn:focus-visible {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: 1px;
+}
+
+.deleteBtn:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}

@@ -1,0 +1,125 @@
+.bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--sicro-surface-2, #1f2937);
+  border-bottom: 1px solid var(--sicro-border, #334155);
+  font-size: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  background: var(--sicro-surface, #0f172a);
+  border: 1px solid var(--sicro-border, #334155);
+  border-radius: 4px;
+}
+
+.field:focus-within {
+  border-color: var(--sicro-accent, #5aa9e6);
+}
+
+.icon {
+  color: var(--sicro-fg-dim, #94a3b8);
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--sicro-fg, #e2e8f0);
+  font: inherit;
+  font-family: inherit;
+}
+
+.counter {
+  font-size: 11px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.toggle {
+  padding: 4px 8px;
+  background: var(--sicro-surface, #0f172a);
+  border: 1px solid var(--sicro-border, #334155);
+  border-radius: 4px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  user-select: none;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.toggle:hover {
+  background: var(--sicro-surface-3, #334155);
+}
+
+.toggleOn {
+  background: rgba(90, 169, 230, 0.18);
+  color: var(--sicro-accent, #5aa9e6);
+  border-color: var(--sicro-accent, #5aa9e6);
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  cursor: pointer;
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: var(--sicro-surface, #0f172a);
+  color: var(--sicro-fg, #e2e8f0);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.action {
+  padding: 5px 12px;
+  background: var(--sicro-surface, #0f172a);
+  border: 1px solid var(--sicro-border, #334155);
+  border-radius: 4px;
+  color: var(--sicro-fg, #e2e8f0);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.action:hover:not(:disabled) {
+  background: rgba(90, 169, 230, 0.12);
+  border-color: var(--sicro-accent, #5aa9e6);
+  color: var(--sicro-accent, #5aa9e6);
+}
+
+.action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

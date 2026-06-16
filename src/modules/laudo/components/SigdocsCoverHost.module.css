@@ -1,0 +1,66 @@
+.host {
+  position: absolute;
+  inset: 0;
+  z-index: 9000;
+  display: flex;
+  flex-direction: column;
+  background: #1a1f2b;
+  /* O webview do SIGDOC cobre a `.coverArea` programaticamente
+     (window borderless do Tauri por cima). */
+}
+
+.head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 12px;
+  background: var(--sicro-surface-1, #1f2937);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.4);
+  font-size: 12px;
+  color: var(--sicro-fg, #e2e8f0);
+}
+
+.title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  color: #fbbf24;
+  white-space: nowrap;
+}
+
+.hint {
+  flex: 1;
+  font-size: 11px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.closeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: rgba(248, 113, 113, 0.12);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 4px;
+  color: #fca5a5;
+  font-size: 11px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.closeBtn:hover {
+  background: rgba(248, 113, 113, 0.22);
+  color: #fff;
+}
+
+.coverArea {
+  flex: 1;
+  background: #0b0d11;
+  /* Quando o webview ainda não foi posicionado pelo backend, o user
+     vê um fundo escuro neutro (sem flash branco). */
+}

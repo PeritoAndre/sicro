@@ -1,0 +1,316 @@
+/* Evidence insertion panel — sub-tabs of the Inspector "Evidências" tab.
+ * Keeps the same dense, workbench-style language used by the Dossiê tabs. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.subTabs {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  background: var(--sicro-surface-2);
+  padding: 3px;
+  border-radius: var(--radius-sm);
+}
+.subTab {
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  font-size: 11px;
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.02em;
+  text-align: center;
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.subTab:hover {
+  color: var(--sicro-fg);
+}
+.subTabActive {
+  background: var(--sicro-surface-3);
+  color: var(--sicro-accent);
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.item {
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.itemHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.itemTitle {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  font-weight: 500;
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.itemMeta {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+}
+.itemPreview {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+.thumb {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--sicro-surface-2);
+  flex-shrink: 0;
+}
+.thumbPlaceholder {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  background: var(--sicro-surface-2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--sicro-fg-dim);
+  flex-shrink: 0;
+}
+.itemBody {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  flex: 1;
+  min-width: 0;
+}
+.itemBody strong {
+  color: var(--sicro-fg);
+  font-weight: 500;
+}
+.itemHint {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+}
+
+.actions {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.insertBtn {
+  background: var(--sicro-accent);
+  color: #fff;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: filter var(--t-fast), opacity var(--t-fast);
+}
+.insertBtn:hover {
+  filter: brightness(1.08);
+}
+.insertBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.insertBtnGhost {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.insertBtnGhost:hover:not(:disabled) {
+  background: var(--sicro-surface-3);
+  border-color: var(--sicro-fg-muted);
+}
+.insertBtnGhost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.feedback {
+  font-size: var(--text-xs);
+  color: var(--sicro-success);
+  margin: 0;
+}
+.feedbackError {
+  color: var(--sicro-danger);
+}
+
+.empty {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg-dim);
+  font-style: italic;
+  padding: var(--space-3) 0;
+  text-align: center;
+}
+
+.hint {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 6px var(--space-2);
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-sm);
+}
+.fieldRow > div {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.fieldLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sicro-fg-dim);
+}
+.fieldValue {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.bundle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2);
+}
+.bundleHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+.bundleHeader strong {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+}
+.closeBtn {
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-dim);
+  cursor: pointer;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+}
+.closeBtn:hover {
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+}
+
+.frameList {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.frameItem {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  padding: 4px;
+  background: var(--sicro-surface-2);
+  border-radius: var(--radius-sm);
+}
+.frameItem img {
+  width: 40px;
+  height: 24px;
+  object-fit: cover;
+  border-radius: 2px;
+  background: #0a0a0a;
+}
+.frameInfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-width: 0;
+}
+.frameInfo small {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+}
+.frameInfo strong {
+  font-size: 11px;
+  color: var(--sicro-fg);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.frameBtn {
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 2px 6px;
+  font-size: 10px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.frameBtn:hover:not(:disabled) {
+  color: var(--sicro-fg);
+  border-color: var(--sicro-fg-muted);
+  background: var(--sicro-surface-3);
+}
+
+.tableButtons {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

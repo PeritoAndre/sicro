@@ -1,0 +1,50 @@
+/* Marca SICRO (logo + nome) — usada na barra de título. */
+.brand {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.logo {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  object-fit: cover;
+  box-shadow: var(--shadow-sm);
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.logoFallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--sicro-accent), #b8862e);
+  color: #1a1305;
+  box-shadow: var(--shadow-sm);
+}
+.text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  min-width: 0;
+}
+.name {
+  font-size: var(--text-md);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--sicro-fg);
+}
+.name b {
+  color: var(--sicro-accent);
+  font-weight: 700;
+}
+.tag {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--sicro-fg-faint);
+}

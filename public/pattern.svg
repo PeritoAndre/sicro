@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
+  <rect width="100" height="100" fill="#f5f6f8"/>
+  <!-- snap fino a cada 0,1 m (10 px) — onde o snap realmente acontece -->
+  <path d="M10 0V100 M20 0V100 M30 0V100 M40 0V100 M60 0V100 M70 0V100 M80 0V100 M90 0V100 M0 10H100 M0 20H100 M0 30H100 M0 40H100 M0 60H100 M0 70H100 M0 80H100 M0 90H100"
+        stroke="#b9c3d2" stroke-width="0.8"/>
+  <!-- subdivisão a cada 0,5 m (50 px) — divide o metro em 4 -->
+  <path d="M50 0V100 M0 50H100" stroke="#8e9cb0" stroke-width="1.1"/>
+  <!-- linha principal a cada 1 m (100 px) -->
+  <path d="M0 0V100 M0 0H100" stroke="#5f6e85" stroke-width="1.7"/>
+</svg>

@@ -1,0 +1,155 @@
+.panel {
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-fg-dim);
+}
+
+.copyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+  font-size: 10.5px;
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.copyBtn:hover {
+  border-color: var(--sicro-accent);
+}
+
+.summary {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 3px 8px;
+  margin: 0;
+}
+.summary dt {
+  color: var(--sicro-fg-dim);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.summary dd {
+  margin: 0;
+  color: var(--sicro-fg);
+  word-break: break-word;
+}
+
+.gps {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.gps small {
+  color: var(--sicro-fg-dim);
+}
+
+.expandBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--sicro-fg);
+  cursor: pointer;
+  align-self: flex-start;
+}
+.expandBtn:hover {
+  border-color: var(--sicro-accent);
+}
+
+.tagsBox {
+  max-height: 260px;
+  overflow-y: auto;
+  background: var(--sicro-surface);
+  border: 1px solid var(--sicro-border);
+  border-radius: 4px;
+  padding: 6px;
+}
+.tags {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+}
+.tags th {
+  text-align: left;
+  color: var(--sicro-fg-dim);
+  padding: 2px 6px 2px 0;
+  font-weight: 500;
+  width: 38%;
+  vertical-align: top;
+}
+.tags td {
+  color: var(--sicro-fg);
+  padding: 2px 0;
+  word-break: break-all;
+}
+
+.hashes {
+  background: var(--sicro-surface);
+  border: 1px solid var(--sicro-border);
+  border-radius: 4px;
+  padding: 8px;
+}
+.hashes strong {
+  display: block;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--sicro-fg-dim);
+  margin-bottom: 6px;
+}
+.hashes dl {
+  display: grid;
+  grid-template-columns: 70px 1fr;
+  gap: 3px 8px;
+  margin: 0;
+  font-size: 10.5px;
+  font-family: var(--font-mono);
+}
+.hashes dt {
+  color: var(--sicro-fg-dim);
+  font-weight: 500;
+}
+.hashes dd {
+  margin: 0;
+  word-break: break-all;
+  color: var(--sicro-fg);
+}
+
+.spin {
+  animation: exifSpin 1.2s linear infinite;
+}
+@keyframes exifSpin {
+  to { transform: rotate(360deg); }
+}
+
+.error {
+  color: #f87171;
+  font-size: 11px;
+}
+
+.empty {
+  color: var(--sicro-fg-dim);
+  font-size: 11px;
+  font-style: italic;
+}

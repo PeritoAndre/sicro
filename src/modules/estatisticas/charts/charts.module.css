@@ -1,0 +1,272 @@
+/* Kit de gráficos das Estatísticas. */
+
+.empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--sicro-fg-faint);
+  font-size: var(--text-xs);
+  font-style: italic;
+}
+
+/* ---- Cartão ---- */
+.card {
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-lg);
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cardWide {
+  grid-column: span 2;
+}
+.cardFull {
+  grid-column: 1 / -1;
+}
+.cardHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--sicro-fg);
+}
+.cardSub {
+  margin: 2px 0 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+.cardActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-shrink: 0;
+}
+.cardBody {
+  flex: 1;
+  min-width: 0;
+}
+.cardFoot {
+  margin: var(--space-3) 0 0;
+  font-size: 10px;
+  color: var(--sicro-fg-faint);
+  line-height: 1.5;
+}
+
+/* ---- KPI ---- */
+.kpi {
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-left: 3px solid var(--sicro-border-strong);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.kpiAccent {
+  border-left-color: var(--sicro-accent);
+}
+.kpiOk {
+  border-left-color: var(--sicro-success);
+}
+.kpiWarn {
+  border-left-color: var(--sicro-warning);
+}
+.kpiCrit {
+  border-left-color: var(--sicro-danger);
+}
+.kpiValue {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--sicro-fg);
+  line-height: 1.1;
+}
+.kpiLabel {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.kpiSub {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+}
+
+/* ---- SVG comum ---- */
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.axis {
+  stroke: var(--sicro-divider);
+  stroke-width: 1;
+}
+.axisLabel {
+  fill: var(--sicro-fg-dim);
+  font-size: 9px;
+  font-family: var(--font-ui);
+}
+.barValue {
+  fill: var(--sicro-fg-muted);
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+.barLabel {
+  fill: var(--sicro-fg-dim);
+  font-size: 9px;
+  font-family: var(--font-ui);
+}
+.binLabel {
+  fill: var(--sicro-fg-faint);
+  font-size: 8px;
+  font-family: var(--font-mono);
+}
+.hbarLabel {
+  fill: var(--sicro-fg-muted);
+  font-size: 11px;
+  font-family: var(--font-ui);
+}
+.hbarValue {
+  fill: var(--sicro-fg);
+  font-size: 11px;
+  font-family: var(--font-mono);
+}
+
+/* ---- Linha / área ---- */
+.line {
+  fill: none;
+  stroke: var(--sicro-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.areaFill {
+  fill: var(--sicro-accent-soft);
+  stroke: none;
+}
+.dot {
+  fill: var(--sicro-accent);
+}
+
+/* ---- Rosca ---- */
+.donutWrap {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+.donutSvg {
+  width: 150px;
+  height: 150px;
+  flex-shrink: 0;
+}
+.donutTotal {
+  fill: var(--sicro-fg);
+  font-size: 24px;
+  font-weight: 600;
+  font-family: var(--font-mono);
+}
+.donutTotalLabel {
+  fill: var(--sicro-fg-dim);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+  min-width: 140px;
+}
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-xs);
+}
+.legendDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+.legendLabel {
+  color: var(--sicro-fg-muted);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.legendValue {
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* ---- Progresso ---- */
+.progressWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.progressLabel {
+  display: flex;
+  justify-content: space-between;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
+.progressTrack {
+  height: 10px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  border-radius: var(--radius-full);
+  transition: width var(--t-base);
+}
+
+/* ---- Tabela ---- */
+.tableWrap {
+  overflow-x: auto;
+}
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-xs);
+}
+.table th {
+  text-align: left;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sicro-fg-dim);
+  border-bottom: 1px solid var(--sicro-divider);
+  padding: 5px var(--space-2);
+}
+.table td {
+  padding: 5px var(--space-2);
+  border-bottom: 1px solid var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  vertical-align: top;
+}
+.table tr:hover td {
+  background: var(--sicro-surface-2);
+}

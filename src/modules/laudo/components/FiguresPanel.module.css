@@ -1,0 +1,277 @@
+.empty {
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+  font-style: italic;
+}
+
+/* F6.1 — Inserir imagem do arquivo */
+.imageInserter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: var(--space-3);
+  padding: 10px;
+  background: rgba(90, 169, 230, 0.08);
+  border: 1px solid rgba(90, 169, 230, 0.3);
+  border-radius: var(--radius-sm);
+}
+
+.primaryAction {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: var(--sicro-accent);
+  color: #1a1305;
+  border: 1px solid var(--sicro-accent);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  width: 100%;
+  transition: background var(--t-fast);
+}
+
+.primaryAction:hover {
+  background: var(--sicro-accent-hover);
+}
+
+.hint {
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.feedback {
+  padding: 3px 8px;
+  background: rgba(34, 197, 94, 0.10);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: var(--radius-sm);
+  color: #166534;
+  font-size: 11px;
+}
+
+.sectionTitle {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--sicro-fg);
+  margin: 0 0 var(--space-2);
+}
+
+.intro {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  line-height: 1.5;
+  margin: 0 0 var(--space-2);
+}
+
+.countsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: var(--space-3);
+}
+
+.countChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 999px;
+  font-size: 10px;
+  color: var(--sicro-fg-muted);
+}
+.countChip strong {
+  color: var(--sicro-fg);
+  font-weight: 600;
+}
+
+/* ===========================================================================
+ * Inserir prancha fotográfica
+ * =========================================================================== */
+.plateInserter {
+  background: rgba(90, 169, 230, 0.08);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 8px;
+  margin-bottom: var(--space-3);
+}
+
+.plateInserterTitle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sicro-fg);
+  margin-bottom: 6px;
+}
+
+.layoutGroup {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.layoutBtn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px;
+  background: var(--sicro-surface);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.layoutBtn:hover:not(.layoutBtnActive) {
+  background: var(--sicro-surface-2);
+  border-color: var(--sicro-fg-muted);
+}
+.layoutBtnActive {
+  background: rgba(90, 169, 230, 0.18);
+  border-color: var(--sicro-accent);
+}
+
+.layoutBtnLabel {
+  font-size: 10px;
+  color: var(--sicro-fg-muted);
+}
+.layoutBtnActive .layoutBtnLabel {
+  color: var(--sicro-accent);
+  font-weight: 600;
+}
+
+/* SVG mini-preview do layout via background. */
+.layoutBtnIcon {
+  display: block;
+  width: 28px;
+  height: 24px;
+  background-color: var(--sicro-fg-dim);
+  border-radius: 2px;
+  position: relative;
+}
+.layoutBtnIcon[data-layout="1x1"] {
+  background:
+    linear-gradient(white, white) center/calc(100% - 4px) calc(100% - 4px) no-repeat,
+    var(--sicro-fg-dim);
+}
+.layoutBtnIcon[data-layout="1x2"] {
+  background:
+    linear-gradient(white, white) center top 2px/calc(100% - 4px) calc(50% - 3px) no-repeat,
+    linear-gradient(white, white) center bottom 2px/calc(100% - 4px) calc(50% - 3px) no-repeat,
+    var(--sicro-fg-dim);
+}
+.layoutBtnIcon[data-layout="2x2"] {
+  background:
+    linear-gradient(white, white) 2px 2px/calc(50% - 3px) calc(50% - 3px) no-repeat,
+    linear-gradient(white, white) calc(50% + 1px) 2px/calc(50% - 3px) calc(50% - 3px) no-repeat,
+    linear-gradient(white, white) 2px calc(50% + 1px)/calc(50% - 3px) calc(50% - 3px) no-repeat,
+    linear-gradient(white, white) calc(50% + 1px) calc(50% + 1px)/calc(50% - 3px) calc(50% - 3px) no-repeat,
+    var(--sicro-fg-dim);
+}
+.layoutBtnIcon[data-layout="2x3"] {
+  background:
+    linear-gradient(white, white) 2px 2px/calc(50% - 3px) calc(33% - 3px) no-repeat,
+    linear-gradient(white, white) calc(50% + 1px) 2px/calc(50% - 3px) calc(33% - 3px) no-repeat,
+    linear-gradient(white, white) 2px calc(33% + 1px)/calc(50% - 3px) calc(33% - 3px) no-repeat,
+    linear-gradient(white, white) calc(50% + 1px) calc(33% + 1px)/calc(50% - 3px) calc(33% - 3px) no-repeat,
+    linear-gradient(white, white) 2px calc(66% + 1px)/calc(50% - 3px) calc(33% - 3px) no-repeat,
+    linear-gradient(white, white) calc(50% + 1px) calc(66% + 1px)/calc(50% - 3px) calc(33% - 3px) no-repeat,
+    var(--sicro-fg-dim);
+}
+
+.insertBtn {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--sicro-accent);
+  color: #1a1305;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background var(--t-fast);
+}
+.insertBtn:hover {
+  background: var(--sicro-accent-hover);
+}
+
+/* ===========================================================================
+ * Lista de figuras
+ * =========================================================================== */
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background var(--t-fast), border-color var(--t-fast);
+}
+.item:hover {
+  background: var(--sicro-surface-3);
+  border-color: var(--sicro-accent);
+}
+
+.item_image { border-left-color: #3b82f6; }
+.item_croqui { border-left-color: #16a34a; }
+.item_video_frame { border-left-color: #a855f7; }
+.item_photoplate { border-left-color: #f59e0b; }
+
+.itemHeader {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.itemLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--sicro-fg);
+}
+
+.itemCell {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--sicro-fg-dim);
+}
+
+.itemCaption {
+  display: flex;
+  align-items: flex-start;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--sicro-fg-muted);
+}
+
+.itemCaptionIcon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--sicro-fg-dim);
+}
+
+.itemEmpty {
+  font-style: italic;
+}

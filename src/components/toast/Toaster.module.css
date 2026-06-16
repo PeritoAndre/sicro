@@ -1,0 +1,128 @@
+.container {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 8px;
+  z-index: 9300;
+  pointer-events: none;
+  max-width: min(380px, calc(100vw - 32px));
+}
+
+.toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-left-width: 3px;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  font-size: 13px;
+  color: var(--sicro-fg);
+  animation: toastSlideIn 0.22s ease-out;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(20px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+  }
+}
+
+.icon {
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.title {
+  font-weight: 600;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.message {
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+.close {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--sicro-fg-dim);
+  cursor: pointer;
+  margin-top: -2px;
+  margin-right: -4px;
+}
+.close:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+
+/* Variantes coloridas — só border-left muda; ícone também colorido. */
+.info {
+  border-left-color: var(--sicro-accent, #5aa9e6);
+}
+.info .icon {
+  color: var(--sicro-accent, #5aa9e6);
+}
+
+.success {
+  border-left-color: #4ade80;
+}
+.success .icon {
+  color: #4ade80;
+}
+
+.warn {
+  border-left-color: #fbbf24;
+}
+.warn .icon {
+  color: #fbbf24;
+}
+
+.error {
+  border-left-color: #f87171;
+}
+.error .icon {
+  color: #f87171;
+}
+
+.progress {
+  border-left-color: var(--sicro-accent, #5aa9e6);
+}
+.progress .icon {
+  color: var(--sicro-accent, #5aa9e6);
+}
+
+.spin {
+  animation: toastSpin 1.1s linear infinite;
+}
+
+@keyframes toastSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

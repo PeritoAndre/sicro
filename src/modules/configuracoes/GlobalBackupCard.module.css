@@ -1,0 +1,210 @@
+/* GlobalBackupCard — específicos do "Backup geral". O chrome do card vem de
+   ConfiguracoesModule.module.css (.card/.cardHead/.cardTitle/.cardDesc). */
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+/* Bloco "Restaurar backup" — separado do backup por uma divisória. */
+.restoreBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+  padding-top: var(--space-4);
+  border-top: 1px dashed var(--sicro-divider);
+}
+
+.destRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding: var(--space-3);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-md);
+}
+.destInfo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  flex: 1;
+}
+.destLabel {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 700;
+  color: var(--sicro-fg-dim);
+}
+.destPath {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+.destEmpty {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg-faint);
+}
+.destActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+
+/* Progresso */
+.progressWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.progressTrack {
+  height: 8px;
+  background: var(--sicro-surface-2);
+  border-radius: var(--radius-full);
+  overflow: hidden;
+}
+.progressFill {
+  height: 100%;
+  background: var(--sicro-accent);
+  border-radius: var(--radius-full);
+  transition: width 0.2s ease;
+}
+.progressLabel {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--sicro-danger);
+}
+
+/* Relatório */
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--sicro-fg-muted);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+}
+.chipOk {
+  color: var(--sicro-success);
+  background: rgba(53, 196, 122, 0.12);
+  border-color: rgba(53, 196, 122, 0.35);
+}
+.chipWarn {
+  color: var(--sicro-warning);
+  background: rgba(224, 163, 58, 0.12);
+  border-color: rgba(224, 163, 58, 0.35);
+}
+.chipErr {
+  color: var(--sicro-danger);
+  background: rgba(229, 72, 77, 0.12);
+  border-color: rgba(229, 72, 77, 0.4);
+}
+.chipSize {
+  color: var(--sicro-fg);
+}
+
+.caseList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-md);
+}
+.caseRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px var(--space-3);
+  border-bottom: 1px solid var(--sicro-divider);
+}
+.caseRow:last-child {
+  border-bottom: none;
+}
+.caseName {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.caseInfo {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-faint);
+  font-variant-numeric: tabular-nums;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.caseStatus {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 8px;
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg-dim);
+}
+.stOk {
+  color: var(--sicro-success);
+  background: rgba(53, 196, 122, 0.12);
+}
+.stSkip {
+  color: var(--sicro-fg-muted);
+}
+.stWarn {
+  color: var(--sicro-warning);
+  background: rgba(224, 163, 58, 0.12);
+}
+.stErr {
+  color: var(--sicro-danger);
+  background: rgba(229, 72, 77, 0.12);
+}

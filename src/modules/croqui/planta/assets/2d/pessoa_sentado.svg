@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 60" width="50" height="60">
+  <!-- vista de cima: pessoa sentada (corpo recolhido) — placeholder -->
+  <ellipse cx="25" cy="40" rx="15" ry="15" fill="#cbd5e1" stroke="#334155" stroke-width="2"/>
+  <circle cx="25" cy="20" r="11" fill="#94a3b8" stroke="#334155" stroke-width="2"/>
+</svg>

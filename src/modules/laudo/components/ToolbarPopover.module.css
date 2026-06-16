@@ -1,0 +1,73 @@
+.wrap {
+  position: relative;
+  display: inline-block;
+}
+
+.triggerBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  position: relative;
+  height: 30px;
+  padding: 0 10px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: var(--text-sm);
+  transition: background var(--t-fast), color var(--t-fast), border-color var(--t-fast);
+}
+
+.triggerBtn:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+
+.triggerActive {
+  background: rgba(90, 169, 230, 0.18);
+  color: var(--sicro-accent);
+  border-color: var(--sicro-accent);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  background: var(--sicro-danger, #dc2626);
+  color: #ffffff;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.popover {
+  position: absolute;
+  top: 100%;
+  margin-top: 4px;
+  z-index: 50;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  /* Layout interno: header + body. */
+  display: flex;
+  flex-direction: column;
+  /* Painéis com mais conteúdo (ex.: "Página" com margens + numeração) cabem
+   *  sem scroll na maioria das janelas; o overflow-y do body fica de rede de
+   *  segurança em telas baixas. */
+  max-height: 88vh;
+  overflow: hidden;
+}
+
+.popoverBody {
+  padding: 12px 14px;
+  overflow-y: auto;
+  flex: 1 1 auto;
+}

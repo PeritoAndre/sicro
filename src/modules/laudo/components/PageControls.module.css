@@ -1,0 +1,177 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modeGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px;
+  background: var(--sicro-surface, #0f172a);
+  border: 1px solid var(--sicro-border, #334155);
+  border-radius: 999px;
+}
+
+.modeBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 3px 9px;
+  background: transparent;
+  border: none;
+  border-radius: 999px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  transition: background 100ms ease, color 100ms ease;
+}
+
+.modeBtn:hover:not(.modeBtnActive) {
+  background: rgba(90, 169, 230, 0.08);
+  color: var(--sicro-fg, #e2e8f0);
+}
+
+.modeBtnActive {
+  background: rgba(90, 169, 230, 0.18);
+  color: var(--sicro-accent, #5aa9e6);
+}
+
+.modeLabel {
+  /* Em telas pequenas o label some, restando apenas o ícone. */
+}
+
+.divider {
+  width: 1px;
+  height: 16px;
+  background: var(--sicro-border, #334155);
+}
+
+.zoomGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  cursor: pointer;
+}
+
+.iconBtn:hover:not(:disabled) {
+  background: var(--sicro-surface-3, #334155);
+  color: var(--sicro-fg, #e2e8f0);
+}
+
+.iconBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* F3.1 — Estado ativo para botões de orientação (retrato/paisagem). */
+.orientActive {
+  background: rgba(90, 169, 230, 0.18) !important;
+  color: var(--sicro-accent, #5aa9e6) !important;
+}
+
+.slider {
+  width: 80px;
+  height: 4px;
+  background: var(--sicro-surface-3, #334155);
+  border-radius: 2px;
+  appearance: none;
+  -webkit-appearance: none;
+  outline: none;
+  cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sicro-accent, #5aa9e6);
+  cursor: pointer;
+  border: none;
+}
+
+.slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sicro-accent, #5aa9e6);
+  cursor: pointer;
+  border: none;
+}
+
+.zoomLabel {
+  min-width: 38px;
+  padding: 2px 6px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--sicro-fg, #e2e8f0);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.zoomLabel:hover {
+  border-color: var(--sicro-border, #334155);
+  background: var(--sicro-surface-3, #334155);
+}
+
+.fitWrap {
+  position: relative;
+  display: inline-block;
+}
+
+.fitMenu {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 6px;
+  background: var(--sicro-surface-2, #1f2937);
+  border: 1px solid var(--sicro-border, #334155);
+  border-radius: 4px;
+  padding: 4px;
+  min-width: 140px;
+  z-index: 60;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+
+.fitItem {
+  display: block;
+  width: 100%;
+  padding: 5px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  text-align: left;
+  color: var(--sicro-fg, #e2e8f0);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+}
+
+.fitItem:hover {
+  background: rgba(90, 169, 230, 0.15);
+  color: var(--sicro-accent, #5aa9e6);
+}

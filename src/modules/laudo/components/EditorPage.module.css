@@ -1,0 +1,841 @@
+/*
+ * EditorPage — F7.1 — múltiplos cards A4 visualmente independentes (estilo Word).
+ *
+ * Layout:
+ *   .scroll                              ← gray office workspace, scroll container
+ *     .workspace                          ← center column, holds rulers + page stack
+ *       .topRow                            ← cornerSpacer + HorizontalRuler
+ *       .midRow                            ← VerticalRuler + .pageStack
+ *         .pageStack (relative)             ← container, height = N pages + gaps
+ *           .pageCard (absolute, top=i*(pageH+gap))  ← N cards brancos com sombra
+ *             .pageNumber                    ← contador "N" no canto inferior direito
+ *           aside.sideMark                  ← absolute, first virtual page only
+ *           header.docHeader                 ← absolute, first virtual page only
+ *           .editorWrap (relative)           ← contenteditable em cima dos cards
+ *           footer.docFooter                 ← absolute, ancorado ao ÚLTIMO card
+ */
+
+.scroll {
+  position: absolute;
+  inset: 0;
+  overflow-y: auto;
+  background: var(--doc-workspace-bg);
+  display: flex;
+  justify-content: center;
+  padding: var(--space-6) var(--space-6) var(--space-12);
+}
+
+/* F3 — Modo foco. */
+.focoMode {
+  background: #f5f0e6;
+  padding: var(--space-3) var(--space-2) var(--space-8);
+}
+
+/* F3 — Modo leitura. */
+.leituraMode {
+  background: #e8e8e8;
+  cursor: default;
+}
+.leituraMode :global(.sicro-editor-content) {
+  cursor: default;
+}
+
+/* F3.1 — Botão flutuante "Sair do Foco". */
+.exitFocoBtn {
+  position: fixed;
+  top: 16px;
+  right: 24px;
+  z-index: 100;
+  padding: 6px 14px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.5);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+  transition: background 100ms ease, transform 100ms ease;
+}
+.exitFocoBtn:hover {
+  background: rgba(15, 23, 42, 1);
+  transform: translateY(-1px);
+}
+.exitFocoBtn:active {
+  transform: translateY(0);
+}
+
+/* ===========================================================================
+ * F11 — Multi-page view (zoom out → cards lado a lado, estilo Word).
+ *
+ * O `.scroll` ganha layout flex pra centralizar o `.multipageGrid`.
+ * O grid é flex-wrap: cards fluem da esquerda pra direita e quebram pra
+ * próxima linha conforme o viewport. Cada `.thumbCard` tem dimensões
+ * escaladas por `zoom` (transform aplicado em `.thumbInner`).
+ *
+ * Dentro de cada thumb, um clone do `editor.view.dom` é posicionado com
+ * `top: -i*(pageH+gap)cm` pra mostrar só a "fatia" da página i. O
+ * overflow: hidden no `.thumbInner` corta o resto.
+ * =========================================================================== */
+.multipageScroll {
+  padding: var(--space-5) var(--space-6) var(--space-12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* CRÍTICO: o `.scroll` base usa `justify-content: center` (centra na
+   * horizontal no modo row). Aqui viramos `flex-direction: column`, então esse
+   * `center` passava a centrar na VERTICAL — com o grid mais alto que a tela o
+   * conteúdo transbordava IGUAL em cima e embaixo, deixando o topo da 1ª fileira
+   * (e o fundo da última) INALCANÇÁVEIS pelo scroll (parecia que as margens
+   * superior/inferior das páginas sumiam; esquerda/direita ficavam ok).
+   * `flex-start` ancora no topo → o scroll alcança tudo. */
+  justify-content: flex-start;
+}
+
+/* F11.3 — Top row do multipage: corner + horizontal ruler. */
+.multipageTopRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  flex-shrink: 0;
+  padding-top: var(--space-3);
+}
+
+.multipageCornerSpacer {
+  background: #2a3a52;
+  border-bottom-right-radius: 2px;
+  flex-shrink: 0;
+}
+
+/* F11.3 — Mid row: vertical ruler + grid. Alinhamento à esquerda
+ * (justifyContent: flex-start) para a régua ficar grudada na primeira
+ * página do grid. */
+.multipageMidRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  width: 100%;
+  justify-content: center;
+}
+
+.multipageVerticalRulerWrap {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.multipageGrid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-content: flex-start;
+  gap: var(--space-4);
+  width: 100%;
+  max-width: 100%;
+}
+
+.thumbCard {
+  position: relative;
+  background: var(--doc-page-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), 0 4px 14px rgba(0, 0, 0, 0.22);
+  border-radius: 2px;
+  overflow: hidden;
+  flex-shrink: 0;
+  /* F11.2 — Cursor pointer (não mais zoom-in que parecia bug). */
+  cursor: pointer;
+  transition: box-shadow var(--t-fast), transform var(--t-fast),
+    outline var(--t-fast);
+  outline: 1px solid transparent;
+}
+
+.thumbCard:hover {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.3);
+  outline-color: rgba(90, 169, 230, 0.5);
+}
+
+.thumbCard:focus-visible {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: 2px;
+}
+
+/* F11.2 — Régua horizontal estática no topo do grid multipage. Mostra
+ * marcações de UMA página A4 (largura 21cm). Não tem handles draggables
+ * — drag de margem só funciona no modo single-page. */
+.multipageRulerWrap {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-3) 0 0;
+  width: 100%;
+  flex-shrink: 0;
+}
+
+/* F11.2 — Hint informativo abaixo da régua com botão "Voltar para edição". */
+.multipageHint {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0 var(--space-3);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  flex-shrink: 0;
+}
+
+.multipageEditBtn {
+  padding: 4px 12px;
+  background: var(--sicro-accent);
+  color: #1a1305;
+  border: 1px solid var(--sicro-accent);
+  border-radius: 999px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  transition: background var(--t-fast);
+}
+
+.multipageEditBtn:hover {
+  background: var(--sicro-accent-hover);
+}
+
+.thumbInner {
+  position: relative;
+  overflow: hidden;
+  background: var(--doc-page-bg);
+  font-family: var(--font-doc);
+  font-size: 12pt;
+  /* Entrelinha SIMPLES (≈ single do Word) para a paginação da tela bater com
+   * o export DOCX/PDF-LibreOffice (que usa single). Antes era 1.5 e o editor
+   * mostrava ~2× as páginas do arquivo gerado. */
+  line-height: 1.15;
+  color: var(--doc-page-fg);
+}
+
+.thumbCloneContainer {
+  /* O clone do editor é posicionado absolute aqui com translateY negativo. */
+}
+
+/* Hide spacers globalmente dentro dos clones — eles ocupam altura mas
+ * são invisíveis (transparente). Ajuda a confirmar visualmente que cada
+ * thumb mostra a página correta. */
+.thumbCloneContainer :global(.sicro-page-spacer) {
+  background: transparent;
+  margin: 0;
+  pointer-events: none;
+}
+
+.thumbPageLabel {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  padding: 2px 8px;
+  background: rgba(15, 23, 42, 0.7);
+  color: #f8fafc;
+  border-radius: 999px;
+  font-size: 9pt;
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  pointer-events: none;
+  user-select: none;
+  z-index: 2;
+}
+
+/* F11.1 — Guia visual de margens dentro do thumbnail: retângulo
+ * tracejado sutil delimitando a área útil (entre as margens). Ajuda o
+ * usuário a visualizar onde o texto começa/termina em cada página. */
+.thumbMarginGuide {
+  position: absolute;
+  border: 1px dashed rgba(15, 23, 42, 0.15);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* F9 — Banner "LAUDO FINAL" visível quando doc.status === "final". */
+.finalBanner {
+  position: fixed;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 90;
+  padding: 4px 16px;
+  background: #16a34a;
+  color: #f0fdf4;
+  border-radius: 0 0 6px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.4);
+  user-select: none;
+  pointer-events: none;
+}
+
+/* F3.1 — Cor de seleção de texto (azul Word/Docs). F7.4: agora usa
+ * `.pageStack` que é o container do editor (substituiu `.sheet` no
+ * refactor de paginação real). */
+.pageStack ::selection,
+.pageStack::selection {
+  background: #3b82f6;
+  color: #ffffff;
+  text-shadow: none;
+}
+.pageStack ::-moz-selection,
+.pageStack::-moz-selection {
+  background: #3b82f6;
+  color: #ffffff;
+  text-shadow: none;
+}
+
+.workspace {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* F7.9 — Revertido `will-change: transform`. O zoom usa transform mas
+   * o navegador já promove sob demanda durante a transição; declarar
+   * `will-change` mantém a layer GPU PERMANENTEMENTE e causa artefatos
+   * de compositing em interação com o editorWrap. */
+}
+
+.topRow {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+}
+
+/* M — Spacer no topo do workspace. Substitui o topRow (régua global)
+   que foi removido; reserva ~30px de espaço pra que a régua da
+   PRIMEIRA página não fique colada na toolbar. */
+.topSpacer {
+  height: 30px;
+  flex-shrink: 0;
+}
+
+.cornerSpacer {
+  background: #2a3a52;
+  border-bottom-right-radius: 2px;
+}
+
+.midRow {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+}
+
+/* ===========================================================================
+ * F7.3 — Paginação REAL via plugin ProseMirror.
+ *
+ * Estrutura:
+ *   .pageStack            position: relative, sem altura fixa.
+ *     .pageCard           absolute, atrás de tudo (z-index 0), uma por página.
+ *     .editorWrap         relative (z-index 1), padding = margens, cresce
+ *                          naturalmente com o conteúdo (incluindo spacers
+ *                          que o plugin de paginação injeta).
+ *
+ * O plugin insere `.sicro-page-spacer` no fluxo do contenteditable para
+ * empurrar blocos de uma página para a próxima. A altura do spacer = gap
+ * visual + marginBottom (pg atual) + marginTop (próxima pg). Assim, o
+ * conteúdo da próxima página sempre cai exatamente onde a margem superior
+ * da pg2 começa.
+ * =========================================================================== */
+.pageStack {
+  position: relative;
+  font-family: var(--font-doc);
+  font-size: 12pt;
+  /* Entrelinha SIMPLES (≈ single do Word) para a paginação da tela bater com
+   * o export DOCX/PDF-LibreOffice (que usa single). Antes era 1.5 e o editor
+   * mostrava ~2× as páginas do arquivo gerado. */
+  line-height: 1.15;
+  color: var(--doc-page-fg);
+  /* Background transparente — entre cards aparece o workspace cinza. */
+  background: transparent;
+  /* F7.8 — `isolation: isolate` cria um stacking context dedicado para o
+   * pageStack. Resolve "texto fantasma" causado por composite layers
+   * antigas que sobreviviam após inserção/remoção de spacers. */
+  isolation: isolate;
+}
+
+/* Cada card A4 branco, absolute. */
+.pageCard {
+  position: absolute;
+  left: 0;
+  background: var(--doc-page-bg);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15), 0 4px 14px rgba(0, 0, 0, 0.22);
+  border-radius: 2px;
+  pointer-events: none;
+  z-index: 0;
+  /* F7.9 — Revertido `contain: paint`. Interferia com a renderização do
+   * conteúdo do editor sobreposto, causando duplicação visual. */
+}
+
+.pageNumber {
+  position: absolute;
+  bottom: 8px;
+  right: 14px;
+  font-size: 8pt;
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  color: rgba(15, 23, 42, 0.35);
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+
+/* M — Régua horizontal POR PÁGINA. Posicionada IMEDIATAMENTE ACIMA
+   do top-edge do pageCard, com pointer-events: auto pra que os
+   handles draggables funcionem. Layer alta (z-index 4) acima do
+   editorWrap (1) e header institucional (3) — drag de margem
+   precisa pegar precedência sobre tudo. */
+.perPageRuler {
+  position: absolute;
+  left: 0;
+  /* `top` é definido inline pelo EditorPage; subtraímos a altura da
+     régua (22px do RULER_THICKNESS) pra a régua ficar GRUDADA na
+     borda superior do card, fora dele. */
+  transform: translateY(-22px);
+  pointer-events: auto;
+  z-index: 4;
+}
+
+
+/* F7.3 — Spacer do plugin de paginação. Renderizado como child do
+ * contenteditable; sua background é transparente, expondo o workspace
+ * cinza que está atrás (entre cards). */
+.editorWrap :global(.sicro-page-spacer) {
+  background: transparent;
+  margin: 0;
+  pointer-events: none;
+  user-select: none;
+  /* F7.9 — Revertido o `transform: translateZ(0)` / `contain: layout
+   * paint`. Promover spacer a GPU layer dedicada causava artifacts
+   * estranhos no compositing. Sem promotion, browser pinta normalmente. */
+}
+
+/* ---- Side mark (first virtual page only) ---- */
+
+.sideMark {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1.5cm;
+  height: 29.7cm;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+  pointer-events: none;
+  color: #888;
+  font-size: 8pt;
+  letter-spacing: 4px;
+  user-select: none;
+}
+.sideMarkText {
+  transform: rotate(-90deg);
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+/* ---- N — Institutional header (hardcoded) REMOVIDO ----
+ *
+ * As classes .docHeader, .docBrandRow, .brandImagePca, .brandImageEstado,
+ * .brandLines, .brandLine, .docMeta, .docMetaRow eram do antigo `DocHeader`
+ * (componente que injetava banda institucional fixa na página 1).
+ *
+ * O cabeçalho agora é uma região Word-style com instância TipTap separada,
+ * replicada visualmente em todas as páginas, e seu estilo vive nas classes
+ * `.pageHeaderRegion*` (introduzidas em N7). Os assets institucionais que
+ * antes eram fixos viram ImageNodes editáveis dentro de `doc.header.content`.
+ */
+
+/* ---- Footer (bottom of last virtual page) ---- */
+
+.docFooter {
+  position: absolute;
+  z-index: 3;
+  user-select: none;
+  border-top: 1px solid #aaa;
+  padding-top: 0.3em;
+  font-size: 9pt;
+  color: #444;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+/* ---- Editor (the contenteditable area) ---- */
+
+.editorWrap {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  transition: color 0.2s ease;
+  /* padding is set inline by EditorPage using effective margins. */
+  /* F7.9 — Revertido o `transform: translateZ(0)` / `will-change` que
+   * a iteração anterior tinha introduzido. Promover o editorWrap a uma
+   * GPU layer dedicada na verdade PIORAVA o compositing — cada
+   * keystroke deixava um "s fantasma" embaixo do real. O Edge WebView
+   * mantém a layer GPU "viva" entre atualizações sem repintar
+   * corretamente.
+   *
+   * Sem GPU layer dedicada o conteúdo é repintado normalmente em CPU
+   * e não há resíduo. */
+}
+
+/* N17 — Quando o modo ativo é "header", o body do laudo fica esmaecido
+ * (texto cinza claro) pra deixar claro qual região está sob edição.
+ * O cinza tem preferência sobre cores inline do conteúdo via !important
+ * porque o texto pode ter cor própria definida via TextStyle/Color. */
+.editorWrapDimmed,
+.editorWrapDimmed :global(.sicro-editor-content),
+.editorWrapDimmed :global(.sicro-editor-content *) {
+  color: #a8b0c0 !important;
+}
+.editorWrapDimmed :global(.sicro-editor-content) {
+  pointer-events: none;
+  user-select: none;
+}
+/* Objetos com cor/imagem PRÓPRIA (forma SVG, caixa de texto, foto) não
+ * respondem ao `color` cinza acima — então ficavam em destaque total enquanto
+ * o texto esmaecia. Esmaece-os por `opacity` pra acompanharem o mesmo
+ * "apagamento leve" quando o corpo está sob o modo cabeçalho. */
+.editorWrapDimmed :global([data-sicro-shape]),
+.editorWrapDimmed :global([data-sicro-textbox]),
+.editorWrapDimmed :global(figure[data-sicro-figure]) {
+  opacity: 0.4 !important;
+}
+
+.editorWrap :global(.sicro-editor-content) {
+  outline: none;
+  min-height: 18cm;
+  /* F7.4 — Position relative GARANTE que .sicro-editor-content é o
+   * offsetParent dos blocos top-level dentro dele. O plugin de paginação
+   * usa `child.offsetTop` que precisa de um offsetParent estável e
+   * imune ao transform:scale do workspace (zoom). */
+  position: relative;
+}
+
+.editorWrap :global(.sicro-editor-content > *:first-child) {
+  margin-top: 0;
+}
+
+.editorWrap :global(.sicro-editor-content h1) {
+  font-size: 18pt;
+  text-align: center;
+  font-weight: 700;
+  margin: 1em 0 0.8em;
+}
+.editorWrap :global(.sicro-editor-content h2) {
+  font-size: 14pt;
+  font-weight: 700;
+  margin: 1.2em 0 0.5em;
+}
+.editorWrap :global(.sicro-editor-content h3) {
+  font-size: 12pt;
+  font-weight: 700;
+  margin: 1em 0 0.4em;
+}
+.editorWrap :global(.sicro-editor-content p) {
+  /* Sem espaço entre parágrafos (Word usa space-after 0). A separação vem do
+   * recuo/linhas em branco — mantém a paginação da tela igual ao export. */
+  margin: 0;
+  text-align: justify;
+}
+.editorWrap :global(.sicro-editor-content ul),
+.editorWrap :global(.sicro-editor-content ol) {
+  padding-left: 1.5em;
+  margin: 0 0 0.6em;
+}
+
+/* Figure */
+.editorWrap :global(figure[data-sicro-figure]) {
+  margin: 1.4em auto;
+  text-align: center;
+}
+.editorWrap :global(figure[data-sicro-figure] img) {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--doc-border);
+}
+/* P15 — Floating figures (Em frente / Atrás do texto). Estas regras
+ * garantem o z-index correto e cursor: move mesmo se o inline style
+ * for sobreposto por algum estilo do PM ou outro selector. !important
+ * é necessário porque o PM pode mexer no atributo style em update. */
+.editorWrap :global(figure[data-sicro-figure][data-wrap-mode="in_front"]) {
+  position: absolute !important;
+  z-index: 100 !important;
+  cursor: move !important;
+  pointer-events: auto !important;
+  margin: 0 !important;
+  /* P18 — Bloqueia drag&drop nativo HTML5 que o `draggable="true"` do
+   * schema do PM ativaria. Sem isso, o browser interfere com o drag
+   * manual que implementamos via mousedown/mousemove/mouseup. */
+  -webkit-user-drag: none;
+  user-select: none;
+}
+.editorWrap :global(figure[data-sicro-figure][data-wrap-mode="behind"]) {
+  position: absolute !important;
+  z-index: -1 !important;
+  cursor: move !important;
+  pointer-events: auto !important;
+  margin: 0 !important;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+/* P22 — REMOVIDO o override de z-index quando selecionada.
+ * Atrás do texto = SEMPRE atrás do texto, mesmo selecionada.
+ * Manipulação é feita via overlay (handles + toolbar) que vive em
+ * .editorRegion com z-index 10, acima do texto. Pra drag livre,
+ * usuário precisa clicar numa parte VISÍVEL da foto (não coberta
+ * por texto). Comportamento estilo Word. */
+/* Em modo flutuante, a img/figcaption herdam o cursor: move pra
+ * indicar visualmente que toda a área é arrastável. */
+.editorWrap :global(figure[data-sicro-figure][data-wrap-mode="in_front"] img),
+.editorWrap :global(figure[data-sicro-figure][data-wrap-mode="behind"] img),
+.editorWrap :global(figure[data-sicro-figure][data-wrap-mode="in_front"] figcaption),
+.editorWrap :global(figure[data-sicro-figure][data-wrap-mode="behind"] figcaption) {
+  cursor: inherit !important;
+}
+.editorWrap :global(figure[data-sicro-figure] figcaption) {
+  font-size: 10pt;
+  color: var(--doc-caption-fg);
+  font-style: italic;
+  margin-top: 0.4em;
+  text-align: center;
+}
+
+/* Pós-laudo T — Legenda apagada não pode ocupar espaço. Quando o
+ * conteúdo da figcaption está vazio (truly :empty) ou contém só o
+ * `<br class="ProseMirror-trailingBreak">` placeholder do PM, colapsa
+ * pra zero altura. Escopada via `.editorWrap` pra atingir o que vê o
+ * user no editor TipTap. `:has()` é suportado em WebView2/Edge
+ * moderno (Chromium 105+).
+ *
+ * UX: quando a figure ESTÁ selecionada (.ProseMirror-selectednode),
+ * mostramos a figcaption mesmo vazia, como uma linha fina centralizada
+ * com placeholder visual. Assim o user consegue clicar pra re-digitar.
+ * Quando NÃO selecionada (fluxo normal de leitura/edição do texto),
+ * legenda vazia some — foto fica colada no próximo bloco. */
+.editorWrap :global(figure[data-sicro-figure]:not(.ProseMirror-selectednode) figcaption:empty),
+.editorWrap :global(figure[data-sicro-figure]:not(.ProseMirror-selectednode) figcaption:has(> br:only-child)) {
+  display: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 0 !important;
+}
+/* Figcaption vazia em figure selecionada — fininha e discreta pra dar
+ * affordance de clique sem competir com o caption preenchido. */
+.editorWrap :global(figure[data-sicro-figure].ProseMirror-selectednode figcaption:empty),
+.editorWrap :global(figure[data-sicro-figure].ProseMirror-selectednode figcaption:has(> br:only-child)) {
+  min-height: 1.2em;
+  opacity: 0.5;
+  margin-top: 0.2em !important;
+}
+
+/* Pós-laudo U — TextBox com borda transparente precisa de affordance
+ * visual NO EDITOR (não no export). Sem isso, uma textbox vazia + sem
+ * borda + sem fill é invisível e o user não acha onde clicar. Outline
+ * pontilhado bem suave aparece SÓ no editor, SÓ quando a borda está
+ * desligada (transparente) e a caixa não está selecionada (o overlay
+ * cobre o caso selected). */
+.editorWrap :global(div[data-sicro-textbox][data-border-enabled="false"]:not(.ProseMirror-selectednode)) {
+  outline: 1px dashed rgba(120, 120, 120, 0.35);
+  outline-offset: -1px;
+}
+
+/* Pós-laudo U — Texto da TextBox sumia quando selecionada.
+ *
+ * Causa raiz: o ProseMirror, ao aplicar NodeSelection, define a DOM
+ * Selection range cobrindo o node inteiro. O browser (WebView2/Edge)
+ * pinta o highlight nativo (azul, opaco) sobre toda a área — em fundo
+ * claro com texto escuro, isso COBRE o texto e dá efeito de "sumiu".
+ *
+ * Fix em duas camadas:
+ *   1. NodeView sobrescreve `selectNode`/`deselectNode` pra NÃO
+ *      adicionar a classe `.ProseMirror-selectednode` (que disparava
+ *      outline + ::after default do PM). Usa atributo nosso
+ *      `data-textbox-selected="true"` em vez.
+ *   2. CSS zera o `::selection` quando esse atributo está set —
+ *      remove o highlight nativo do browser que cobria o texto.
+ *
+ * Em modo de edição de texto (TextSelection dentro do textbox), o
+ * `selectNode` do PM não é chamado, então o atributo não está set, e
+ * o user vê normalmente o highlight azul ao arrastar pra selecionar
+ * palavras. */
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"]::selection),
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"] ::selection),
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"] *::selection) {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+/* Pós-laudo U — user-select: none no contentDOM quando o textbox tá
+ * NodeSelected impede o browser de renderizar QUALQUER highlight de
+ * seleção dentro dele. Isso é o golpe final caso a limpeza da DOM
+ * Selection no selectNode não pegue (PM pode re-aplicar em transações
+ * subsequentes). Em modo edição de texto, o atributo `data-textbox-
+ * selected` não está set, então o user-select volta a "auto" e o
+ * user consegue arrastar pra selecionar texto normalmente. */
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"] div[data-sicro-textbox-content]),
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"] div[data-sicro-textbox-content] *) {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+/* Defensiva — força visibilidade absoluta do conteúdo. Se sobrar
+ * qualquer regra do PM/TipTap/browser/CSS-da-vida que esteja
+ * escondendo o texto via opacity, visibility ou color, isso vence. */
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"] div[data-sicro-textbox-content]),
+.editorWrap :global(div[data-sicro-textbox][data-textbox-selected="true"] div[data-sicro-textbox-content] *) {
+  visibility: visible !important;
+  opacity: 1 !important;
+  color: #1a1a1a !important;
+}
+/* Fallback — caso a classe do PM seja adicionada por algum caminho
+ * (e.g., via outro plugin, transição de selecionamento), o atributo
+ * abaixo cobre o caso. As mesmas regras com a classe original. */
+.editorWrap :global(div[data-sicro-textbox].ProseMirror-selectednode) {
+  outline: none !important;
+}
+.editorWrap :global(div[data-sicro-textbox].ProseMirror-selectednode::after),
+.editorWrap :global(div[data-sicro-textbox].ProseMirror-selectednode::before) {
+  display: none !important;
+  background: transparent !important;
+  content: none !important;
+}
+.editorWrap :global(div[data-sicro-textbox].ProseMirror-selectednode ::selection),
+.editorWrap :global(div[data-sicro-textbox].ProseMirror-selectednode *::selection) {
+  background-color: transparent !important;
+  color: inherit !important;
+}
+
+/* Table — F7.2 bug fix: aplica em TODAS as tables dentro do editor
+ * (sem depender de data-sicro-table que pode não aparecer). */
+.editorWrap :global(.sicro-editor-content table) {
+  border-collapse: collapse !important;
+  border-spacing: 0;
+  width: 100%;
+  font-size: 11pt;
+  margin: 1em 0;
+  table-layout: fixed;
+}
+.editorWrap :global(.sicro-editor-content table td),
+.editorWrap :global(.sicro-editor-content table th) {
+  border: 1px solid #1a1a1a !important;
+  padding: 4px 8px;
+  vertical-align: top;
+  min-width: 32px;
+}
+.editorWrap :global(.sicro-editor-content table th) {
+  background: #e5e7eb;
+  font-weight: 600;
+}
+.editorWrap :global(.sicro-editor-content table td p),
+.editorWrap :global(.sicro-editor-content table th p) {
+  margin: 0;
+}
+.editorWrap :global(.sicro-editor-content table td.selectedCell),
+.editorWrap :global(.sicro-editor-content table th.selectedCell) {
+  background: rgba(59, 130, 246, 0.18);
+}
+
+/* Storyboard */
+.editorWrap :global(section[data-sicro-storyboard]) {
+  border: 1px dashed #c0c0c0;
+  padding: 8px 12px;
+  margin: 1em 0;
+}
+.editorWrap :global(article[data-sicro-storyboard-item]) {
+  display: grid;
+  grid-template-columns: 5cm 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+}
+.editorWrap :global(article[data-sicro-storyboard-item]:last-child) {
+  border-bottom: none;
+}
+.editorWrap :global(article[data-sicro-storyboard-item] img) {
+  width: 100%;
+  border: 1px solid var(--doc-border);
+}
+.editorWrap :global([data-sicro-storyboard-time]) {
+  font-family: var(--font-mono);
+  font-size: 11pt;
+  font-weight: 600;
+}
+.editorWrap :global([data-sicro-storyboard-frame]) {
+  font-family: var(--font-mono);
+  font-size: 10pt;
+  color: var(--doc-page-muted);
+  margin-bottom: 4px;
+}
+.editorWrap :global([data-sicro-storyboard-description] p) {
+  margin: 0;
+  font-size: 11pt;
+}
+
+/* System data inline */
+.editorWrap :global(span[data-sicro-system-data]) {
+  background: rgba(230, 180, 80, 0.18);
+  border-bottom: 1px dotted #b07c20;
+  padding: 0 2px;
+  cursor: pointer;
+}
+.editorWrap :global(span[data-sicro-system-data][data-review-status="reviewed"]) {
+  background: rgba(53, 196, 122, 0.12);
+  border-bottom-color: #1f7a44;
+}
+
+/* Quesitos */
+.editorWrap :global(section[data-sicro-quesito-list]) {
+  margin: 1em 0;
+  counter-reset: quesito;
+}
+.editorWrap :global(article[data-sicro-quesito-item]) {
+  margin: 0.8em 0 1em;
+}
+.editorWrap :global(div[data-sicro-quesito-question]) {
+  font-weight: 700;
+  margin-bottom: 0.2em;
+}
+.editorWrap :global(div[data-sicro-quesito-question])::before {
+  content: "Quesito " counter(quesito) ": ";
+  counter-increment: quesito;
+}
+.editorWrap :global(div[data-sicro-quesito-answer]) {
+  margin-left: 1em;
+  text-align: justify;
+}
+.editorWrap :global(div[data-sicro-quesito-answer])::before {
+  content: "Resposta: ";
+  font-weight: 700;
+}
+
+/* Signature */
+.editorWrap :global(section[data-sicro-signature]) {
+  margin: 2em 0 1em;
+  text-align: center;
+}
+.editorWrap :global(section[data-sicro-signature] [data-sicro-signature-place]) {
+  margin-bottom: 2em;
+  text-align: right;
+}
+.editorWrap :global(section[data-sicro-signature] [data-sicro-signature-rule]) {
+  letter-spacing: 1px;
+}
+.editorWrap :global(section[data-sicro-signature] [data-sicro-signature-name]) {
+  font-weight: 700;
+  margin-top: 0.2em;
+}
+.editorWrap :global(section[data-sicro-signature] [data-sicro-signature-role]) {
+  font-style: italic;
+  font-size: 11pt;
+}
+
+/* Placeholder */
+.editorWrap :global(.sicro-editor-content p.is-editor-empty:first-child::before) {
+  content: attr(data-placeholder);
+  float: left;
+  color: #9aa3b1;
+  pointer-events: none;
+  height: 0;
+}

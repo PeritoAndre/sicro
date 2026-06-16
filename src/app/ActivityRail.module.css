@@ -1,0 +1,238 @@
+/* ActivityRail — sidebar institucional rotulada. */
+
+.rail {
+  width: var(--activity-rail-width);
+  height: 100%;
+  background: var(--sicro-surface-1);
+  border-right: 1px solid var(--sicro-divider);
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-2) var(--space-2);
+  gap: var(--space-1);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* A marca SICRO (logo + nome) migrou para a barra de título (Brand.tsx /
+ * Brand.module.css). A sidebar começa direto na navegação. */
+
+/* ---- Navegação ---- */
+.nav {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.navLabel {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--sicro-fg-faint);
+  font-weight: 600;
+  padding: var(--space-3) var(--space-2) var(--space-1);
+}
+.navSep {
+  height: 1px;
+  background: var(--sicro-divider);
+  margin: var(--space-2) var(--space-2);
+}
+
+.item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 42px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--sicro-fg-muted);
+  text-decoration: none;
+  transition:
+    background var(--t-base, 180ms) ease,
+    color var(--t-fast) ease,
+    box-shadow var(--t-base, 180ms) ease;
+}
+.item:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+.item:focus-visible {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: -2px;
+}
+.itemIcon {
+  flex-shrink: 0;
+  transition: transform var(--t-fast) ease;
+}
+.item:hover .itemIcon {
+  transform: scale(1.08);
+}
+.itemLabel {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Seta que desliza/aparece (efeito de seleção animado, sem dependências) */
+.itemArrow {
+  margin-left: auto;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateX(-6px);
+  transition:
+    opacity var(--t-base, 180ms) ease,
+    transform var(--t-base, 180ms) ease;
+}
+.item:hover .itemArrow {
+  opacity: 0.45;
+  transform: translateX(0);
+}
+
+.itemActive {
+  background: linear-gradient(
+    90deg,
+    var(--sicro-accent-soft) 0%,
+    rgba(215, 168, 79, 0.05) 70%,
+    transparent 100%
+  );
+  color: var(--sicro-accent);
+  font-weight: 600;
+  box-shadow: inset 0 0 0 1px rgba(215, 168, 79, 0.18);
+}
+.itemActive .itemLabel {
+  font-weight: 600;
+}
+.itemActive .itemArrow {
+  opacity: 1;
+  transform: translateX(0);
+  color: var(--sicro-accent);
+}
+/* Barra de destaque à esquerda — cresce verticalmente ao ativar */
+.itemActive::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 22px;
+  background: var(--sicro-accent);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  box-shadow: 0 0 8px rgba(215, 168, 79, 0.5);
+  animation: railActiveBar var(--t-base, 180ms) ease;
+}
+@keyframes railActiveBar {
+  from {
+    height: 0;
+    opacity: 0;
+  }
+  to {
+    height: 22px;
+    opacity: 1;
+  }
+}
+
+.spacer {
+  flex: 1 1 auto;
+  min-height: var(--space-2);
+}
+
+/* ---- Card do perito ---- */
+.profile {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-2);
+  margin-top: var(--space-2);
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    border-color var(--t-fast),
+    background var(--t-fast);
+}
+.profile:hover {
+  border-color: var(--sicro-border-strong);
+  background: var(--sicro-surface-1);
+}
+.avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border-radius: var(--radius-full);
+  background: linear-gradient(135deg, var(--sicro-accent), #b8862e);
+  color: #1a1305;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  overflow: hidden;
+}
+/* Quando há foto do perito, ela preenche o círculo do avatar. */
+.avatarImg {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: inherit;
+  display: block;
+}
+.profileText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+.profileName {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--sicro-fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.profileRole {
+  font-size: 11px;
+  color: var(--sicro-fg-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- Rodapé ---- */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) 0;
+}
+.modeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--sicro-fg-dim);
+}
+.modeDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--sicro-success);
+  box-shadow: 0 0 0 2px rgba(53, 196, 122, 0.2);
+}
+.version {
+  font-size: 10px;
+  font-family: var(--font-mono);
+  color: var(--sicro-fg-faint);
+}

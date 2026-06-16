@@ -1,0 +1,44 @@
+.bar {
+  height: var(--statusbar-height);
+  background: var(--sicro-surface-1);
+  border-top: 1px solid var(--sicro-divider);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--space-3);
+  gap: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+  flex-shrink: 0;
+}
+
+.item {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.error {
+  color: var(--sicro-danger);
+  font-family: var(--font-ui);
+}
+
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--radius-full);
+  background: currentColor;
+  display: inline-block;
+}
+
+.dotOk {
+  color: var(--sicro-success);
+}
+.dotIdle {
+  color: var(--sicro-fg-faint);
+}

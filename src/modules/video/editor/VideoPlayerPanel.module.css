@@ -1,0 +1,130 @@
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.errorBanner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(220, 60, 60, 0.12);
+  border-bottom: 1px solid rgba(220, 60, 60, 0.4);
+  color: var(--sicro-danger);
+  font-size: var(--text-xs);
+  padding: 4px var(--space-3);
+}
+
+.videoWrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  min-height: 0;
+  overflow: hidden;
+}
+.video {
+  max-width: 100%;
+  max-height: 100%;
+  background: #000;
+}
+.placeholder {
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-sm);
+  padding: var(--space-4);
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px var(--space-3);
+  background: var(--sicro-surface-1);
+  border-top: 1px solid var(--sicro-divider);
+}
+.controls button {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.controls button:hover {
+  color: var(--sicro-fg);
+  border-color: var(--sicro-fg-muted);
+}
+.primary {
+  background: var(--sicro-accent) !important;
+  color: #fff !important;
+  width: 38px !important;
+  height: 38px !important;
+  border-color: var(--sicro-accent) !important;
+}
+
+.rateGroup {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: auto;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+.rate {
+  background: transparent !important;
+  border: none !important;
+  width: auto !important;
+  height: 22px !important;
+  padding: 0 6px !important;
+  font-family: var(--font-mono);
+  font-size: 11px !important;
+  border-radius: 2px !important;
+}
+.rateActive {
+  background: var(--sicro-accent) !important;
+  color: #fff !important;
+}
+
+.reverseActive {
+  background: var(--sicro-accent) !important;
+  color: #fff !important;
+  border-color: var(--sicro-accent) !important;
+}
+
+/* ----- shortcuts legend ----- */
+.shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  padding: 5px var(--space-3);
+  background: var(--sicro-surface-1);
+  border-top: 1px solid var(--sicro-divider);
+  font-size: 11px;
+  color: var(--sicro-fg-dim);
+  line-height: 1.6;
+}
+.shortcutStrong {
+  color: var(--sicro-fg-muted);
+  font-weight: 600;
+}
+.shortcuts kbd {
+  display: inline-block;
+  min-width: 14px;
+  padding: 1px 4px;
+  margin: 0 1px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-align: center;
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+}

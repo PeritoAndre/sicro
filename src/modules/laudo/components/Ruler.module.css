@@ -1,0 +1,128 @@
+/*
+ * Réguas horizontal e vertical estilo Word, em SVG.
+ *
+ * Escala: 96 dpi (1 cm = 37,7952 px). As réguas usam pixels para alinhar com
+ * o CSS da folha (`width: 21cm`).
+ */
+
+.horizontal {
+  display: block;
+  /* No background here — let the SVG paint everything. */
+}
+
+.vertical {
+  display: block;
+}
+
+/* F7.3 — Container da régua vertical com N segmentos por página. Cada
+ * segmento é um SVG absolute. O fundo do container fica transparente
+ * para que o gap entre páginas mostre o workspace.
+ *
+ * F7.4 — `align-self: flex-start` garante que o flex `.midRow` (que tem
+ * `align-items: stretch`) NÃO estica a régua além da altura definida em
+ * cm. Mantém alinhamento pixel-perfect com o pageStack. */
+.verticalContainer {
+  position: relative;
+  background: transparent;
+  align-self: flex-start;
+}
+
+.segment {
+  display: block;
+}
+
+.dragGuideHorizontal {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  border-top: 1px dashed #fbbf24;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.bg {
+  fill: #2a3a52;
+}
+
+.usable {
+  fill: #3d4f6c;
+}
+
+.tick {
+  stroke: #b8c2cf;
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.label {
+  fill: #d8dde6;
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 9px;
+  dominant-baseline: middle;
+  user-select: none;
+}
+
+.handle {
+  fill: var(--sicro-accent);
+  stroke: rgba(0, 0, 0, 0.2);
+  stroke-width: 0.5;
+  transition: transform 80ms ease;
+  /* CRÍTICO: faz `transform-origin: center` referenciar o centro do
+   * polígono (fill-box), não o centro do viewBox da régua (default
+   * `view-box`). Sem isso, o `scale(1.25)` no estado `.handleActive`
+   * empurrava o handle vários cm em direção ao centro da régua — bug
+   * visível depois que paramos de mover o handle durante o drag. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+/* F7.1 — Handle ativo durante drag: cresce + sombra dourada. */
+.handleActive {
+  fill: #fbbf24;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 1;
+  transform: scale(1.25);
+}
+
+/* F7.1 — Linha guia que aparece durante o drag pra reforçar feedback. */
+.dragLine {
+  stroke: #fbbf24;
+  stroke-width: 1;
+  stroke-dasharray: 2 2;
+  pointer-events: none;
+}
+
+/* R — Handle do recuo da primeira linha. Triângulo que aponta PRA BAIXO
+ * no topo da régua. Cor diferente das margens (azul) pra distinguir. */
+.indentHandle {
+  fill: #1f6feb;
+  stroke: rgba(0, 0, 0, 0.2);
+  stroke-width: 0.5;
+  transition: transform 0.1s ease;
+  /* Mesma razão do .handle: fill-box pra `transform-origin: center`
+   * escalar em torno do próprio triângulo, não do viewBox da régua. */
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.indentHandleActive {
+  fill: #3b82f6;
+  stroke: rgba(0, 0, 0, 0.45);
+  stroke-width: 1;
+  filter: drop-shadow(0 0 3px rgba(31, 111, 235, 0.7));
+}
+
+.pageMark {
+  stroke: var(--sicro-accent);
+  stroke-width: 1;
+  stroke-dasharray: 3 2;
+  opacity: 0.75;
+}
+
+.pageLabel {
+  fill: var(--sicro-accent);
+  font-family: var(--font-mono, "JetBrains Mono", Consolas, monospace);
+  font-size: 9px;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}

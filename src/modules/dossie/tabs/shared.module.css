@@ -1,0 +1,207 @@
+/* Shared styles for every Dossiê tab.
+ * The pattern: cards with section titles, dense definition lists, simple
+ * list rows. No dashboard kitsch — this is a perito's workbench. */
+
+.tab {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  max-width: 1080px;
+}
+
+.card {
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.cardHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.cardTitle {
+  margin: 0;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sicro-fg-dim);
+  font-weight: 500;
+}
+.cardSubtitle {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+  margin: 0;
+}
+
+.metaGrid {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 4px var(--space-3);
+  font-size: var(--text-sm);
+  margin: 0;
+}
+.metaGrid dt {
+  color: var(--sicro-fg-dim);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 2px;
+}
+.metaGrid dd {
+  color: var(--sicro-fg);
+  margin: 0;
+  word-break: break-word;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.dim {
+  color: var(--sicro-fg-dim);
+}
+
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-6) var(--space-4);
+  border: 1px dashed var(--sicro-border);
+  border-radius: var(--radius-md);
+  color: var(--sicro-fg-muted);
+  text-align: center;
+  font-size: var(--text-sm);
+}
+.empty svg {
+  color: var(--sicro-fg-dim);
+}
+
+.error {
+  background: rgba(220, 60, 60, 0.08);
+  border: 1px solid rgba(220, 60, 60, 0.3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  color: var(--sicro-danger);
+  font-size: var(--text-xs);
+}
+
+/* Generic table look, used by checklist/traces/measurements/timeline. */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--text-sm);
+}
+.table th {
+  text-align: left;
+  font-weight: 500;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sicro-fg-dim);
+  border-bottom: 1px solid var(--sicro-divider);
+  padding: 6px var(--space-2);
+}
+.table td {
+  padding: 6px var(--space-2);
+  border-bottom: 1px solid var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  vertical-align: top;
+}
+.table tr:hover td {
+  background: var(--sicro-surface-2);
+}
+
+/* Chip used for checklist answer, priority, etc. */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+}
+.chipOk {
+  background: rgba(53, 196, 122, 0.12);
+  border-color: rgba(53, 196, 122, 0.35);
+  color: var(--sicro-success);
+}
+.chipBad {
+  background: rgba(220, 60, 60, 0.12);
+  border-color: rgba(220, 60, 60, 0.35);
+  color: var(--sicro-danger);
+}
+.chipWarn {
+  background: rgba(230, 180, 80, 0.12);
+  border-color: rgba(230, 180, 80, 0.35);
+  color: var(--sicro-warning);
+}
+.chipMuted {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg-dim);
+}
+
+/* Toolbar used at the top of list tabs. */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.toolbar select,
+.toolbar input[type="search"] {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+  height: 28px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+}
+.toolbar label {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+.summary > div {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 92px;
+}
+.summary strong {
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  color: var(--sicro-fg);
+}
+.summary span {
+  font-size: 10px;
+  color: var(--sicro-fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}

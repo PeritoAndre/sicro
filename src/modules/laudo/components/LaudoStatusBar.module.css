@@ -1,0 +1,137 @@
+.bar {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 14px;
+  background: var(--sicro-surface-2, #1f2937);
+  border-top: 1px solid var(--sicro-border, #334155);
+  font-size: 11px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  user-select: none;
+}
+
+.left,
+.right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 24px;
+}
+
+.right {
+  justify-content: flex-end;
+}
+
+.center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.modeChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: rgba(90, 169, 230, 0.14);
+  color: var(--sicro-accent, #5aa9e6);
+  border: 1px solid rgba(90, 169, 230, 0.4);
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.modeChip[data-mode="leitura"] {
+  background: rgba(99, 102, 241, 0.14);
+  color: #818cf8;
+  border-color: rgba(99, 102, 241, 0.4);
+}
+
+.modeChip[data-mode="foco"] {
+  background: rgba(245, 158, 11, 0.14);
+  color: #fbbf24;
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+.modeChip[data-mode="revisao"] {
+  background: rgba(244, 114, 182, 0.14);
+  color: #f472b6;
+  border-color: rgba(244, 114, 182, 0.4);
+}
+
+.counter {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.counter strong {
+  color: var(--sicro-fg, #e2e8f0);
+  font-weight: 600;
+}
+
+.separator {
+  color: var(--sicro-border, #334155);
+}
+
+.save {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.saveOk {
+  color: #4ade80;
+}
+
+.saveBusy {
+  color: #fbbf24;
+}
+
+.saveDirty {
+  color: #fbbf24;
+}
+
+.saveError {
+  color: #f87171;
+}
+
+.spin {
+  animation: laudoSpin 1.2s linear infinite;
+}
+
+.helpBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--sicro-fg-dim, #94a3b8);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  transition: all 0.12s ease;
+}
+
+.helpBtn:hover {
+  background: rgba(90, 169, 230, 0.14);
+  border-color: rgba(90, 169, 230, 0.4);
+  color: var(--sicro-accent, #5aa9e6);
+}
+
+@keyframes laudoSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}

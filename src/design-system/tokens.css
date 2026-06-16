@@ -1,0 +1,158 @@
+/*
+ * SICRO 2.0 — Design System tokens
+ * Fonte: docs/03 Sicro 2 Design System.pdf, seção 31.
+ *
+ * Convenções:
+ *   --sicro-*    : superfície/UI escura do shell.
+ *   --doc-*      : superfície clara, usada no módulo Laudo.
+ *   --font-*     : famílias tipográficas.
+ *   --space-*    : escala de espaçamento (base 4px).
+ *   --radius-*   : escala de raios.
+ *   --text-*     : escala tipográfica de UI.
+ *   --icon-*     : tamanhos de ícone.
+ */
+
+:root {
+  color-scheme: dark;
+
+  /* ---- Core colors ---- */
+  --sicro-bg: #07111f;
+  --sicro-surface-1: #0b1628;
+  --sicro-surface-2: #111f35;
+  --sicro-surface-3: #182842;
+  --sicro-surface-hi: #203452;
+
+  --sicro-border: #24364f;
+  --sicro-border-strong: #36506f;
+  --sicro-divider: #1b2d45;
+
+  --sicro-fg: #f4f7fb;
+  --sicro-fg-muted: #a9b6c7;
+  --sicro-fg-dim: #718096;
+  --sicro-fg-faint: #46566c;
+
+  --sicro-accent: #d7a84f;
+  --sicro-accent-hover: #e6bd68;
+  --sicro-accent-soft: rgba(215, 168, 79, 0.15);
+
+  /* ---- Functional colors ---- */
+  --sicro-success: #35c47a;
+  --sicro-warning: #e6b450;
+  --sicro-danger: #ef5f5f;
+  --sicro-info: #5aa9e6;
+
+  /* ---- Technical mark colors (croqui/vídeo) ---- */
+  --sicro-mark-r1: #4ea1ff;
+  --sicro-mark-r2: #ff6b6b;
+  --sicro-mark-dim: #f2c94c;
+  --sicro-mark-collision: #ff4d4d;
+  --sicro-mark-selection: #d7a84f;
+
+  /* ---- Document colors (módulo Laudo) ---- */
+  --doc-workspace-bg: #8f9398;
+  --doc-page-bg: #ffffff;
+  --doc-page-fg: #111111;
+  --doc-page-muted: #555555;
+  --doc-border: #d8d8d8;
+  --doc-shadow: rgba(0, 0, 0, 0.28);
+  --doc-selection: #bcd7ff;
+  --doc-header-fg: #111111;
+  --doc-caption-fg: #222222;
+
+  /* ---- Fonts ---- */
+  --font-ui: Inter, "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Geist Mono", Consolas, monospace;
+  --font-doc: Arial, "Helvetica Neue", Helvetica, sans-serif;
+
+  /* ---- Spacing (base 4px) ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radius ---- */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 999px;
+
+  /* ---- Shadow / elevation ---- */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.18);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.22);
+  --shadow-lg: 0 16px 48px rgba(0, 0, 0, 0.32);
+  --doc-shadow-elev: 0 12px 36px rgba(0, 0, 0, 0.28);
+
+  /* ---- Type scale (UI) ---- */
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 20px;
+  --text-2xl: 24px;
+
+  /* ---- Line heights ---- */
+  --leading-tight: 1.2;
+  --leading-snug: 1.35;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  /* ---- Icon sizes ---- */
+  --icon-sm: 14px;
+  --icon-md: 18px;
+  --icon-lg: 22px;
+  --icon-xl: 28px;
+
+  /* ---- App shell dimensions ---- */
+  --activity-rail-width: 232px;
+  --titlebar-height: 44px;
+  --topbar-height: 48px;
+  --statusbar-height: 26px;
+
+  /* ---- Transitions ---- */
+  --t-fast: 120ms ease-out;
+  --t-base: 180ms ease-out;
+  --t-slow: 280ms ease-out;
+}
+
+/*
+ * Tema CLARO — aplicado via `data-theme="light"` no <html> (ver
+ * settingsStore.applyAppearance). Só sobrescreve as superfícies/texto do
+ * shell; as cores funcionais, as marcas técnicas e as cores de documento
+ * (--doc-*) permanecem. A cor de destaque (--sicro-accent*) é setada inline
+ * pelo settingsStore e vale nos dois temas.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --sicro-bg: #eef1f6;
+  --sicro-surface-1: #ffffff;
+  --sicro-surface-2: #f4f6fa;
+  --sicro-surface-3: #e9edf3;
+  --sicro-surface-hi: #dde3ec;
+
+  /* Bordas/divisores DEFINIDOS — antes (#d3dae4/#e3e8ef) quase sumiam contra o
+     fundo claro e os cards brancos, dando aquele efeito de "canvas único". Agora
+     contornam cada superfície (tom ardósia, não preto puro — preto literal num
+     tema claro fica pesado; se quiser mais escuro, é só baixar estes valores). */
+  --sicro-border: #9aa6b6;
+  --sicro-border-strong: #586677;
+  --sicro-divider: #c5ced9;
+
+  --sicro-fg: #16202c;
+  --sicro-fg-muted: #44546a;
+  --sicro-fg-dim: #66758c;
+  --sicro-fg-faint: #97a4b6;
+
+  /* Sombra um pouco mais presente para os cards "descolarem" do fundo. */
+  --shadow-sm: 0 1px 2px rgba(15, 30, 50, 0.14);
+  --shadow-md: 0 8px 24px rgba(15, 30, 50, 0.14);
+  --shadow-lg: 0 16px 48px rgba(15, 30, 50, 0.16);
+}

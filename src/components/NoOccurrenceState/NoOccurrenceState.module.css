@@ -1,0 +1,17 @@
+/* Centraliza o card EmptyState no viewport do módulo (mesmo enquadramento do
+   módulo Laudo, que era o padrão "certo"). O slot do módulo no AppShell é
+   posicionado, então `position:absolute; inset:0` preenche a área toda. */
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-8);
+  overflow: auto;
+}
+
+/* Limita a largura do card para o texto não esticar em telas largas. */
+.center > * {
+  max-width: 520px;
+}

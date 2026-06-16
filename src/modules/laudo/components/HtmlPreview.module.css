@@ -1,0 +1,79 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(7, 17, 31, 0.78);
+  backdrop-filter: blur(2px);
+  display: flex;
+  flex-direction: column;
+  z-index: 20;
+}
+
+.bar {
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--space-4);
+  background: var(--sicro-surface-1);
+  border-bottom: 1px solid var(--sicro-divider);
+  flex-shrink: 0;
+}
+
+.title {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.iframeWrap {
+  flex: 1;
+  overflow: hidden;
+  background: var(--doc-workspace-bg);
+}
+
+.iframe {
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: var(--doc-workspace-bg);
+}
+
+.copyBtn {
+  height: 30px;
+  padding: 0 var(--space-3);
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  border: 1px solid var(--sicro-border);
+}
+.copyBtn:hover {
+  background: var(--sicro-surface-3);
+}
+
+.closeBtn {
+  height: 30px;
+  padding: 0 var(--space-3);
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.closeBtn:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}

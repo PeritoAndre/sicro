@@ -1,0 +1,217 @@
+/* ImportSicroappDialog — styles for each phase. */
+
+.idle, .running, .errorPanel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+}
+
+.icon {
+  color: var(--sicro-accent);
+}
+
+.idleHeading {
+  font-size: var(--text-md);
+  color: var(--sicro-fg);
+  margin: 0;
+  max-width: 36ch;
+}
+.idleHeading code,
+.idleSub code {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 0 4px;
+  font-family: var(--font-mono);
+  font-size: 0.9em;
+}
+.idleSub {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg-muted);
+  margin: 0 0 var(--space-2);
+  max-width: 48ch;
+  line-height: 1.5;
+}
+
+.spinner {
+  color: var(--sicro-accent);
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.runningHeading {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--sicro-fg);
+  margin: 0;
+}
+.runningSub {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--sicro-fg-muted);
+  margin: 0;
+  word-break: break-all;
+}
+.runningHint {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+  margin: 0;
+  max-width: 42ch;
+}
+
+.errorIcon {
+  color: var(--sicro-danger);
+}
+.errorHeading {
+  font-size: var(--text-md);
+  font-weight: 600;
+  margin: 0;
+  color: var(--sicro-fg);
+}
+.errorMessage {
+  background: rgba(220, 60, 60, 0.08);
+  border: 1px solid rgba(220, 60, 60, 0.3);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg);
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 100%;
+  text-align: left;
+}
+
+/* ---- Done panel ---- */
+
+.done {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.statusBannerOk,
+.statusBannerWarn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.statusBannerOk {
+  background: rgba(53, 196, 122, 0.10);
+  border: 1px solid rgba(53, 196, 122, 0.35);
+  color: var(--sicro-success);
+}
+.statusBannerWarn {
+  background: rgba(230, 180, 80, 0.10);
+  border: 1px solid rgba(230, 180, 80, 0.35);
+  color: var(--sicro-warning);
+}
+
+.summaryGrid {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 2px var(--space-3);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.summaryGrid dt {
+  color: var(--sicro-fg-dim);
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding-top: 2px;
+}
+.summaryGrid dd {
+  margin: 0;
+  color: var(--sicro-fg);
+  word-break: break-word;
+}
+.mono { font-family: var(--font-mono); font-size: var(--text-xs); }
+
+.countsRow {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.chip, .chipWarn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sicro-border);
+  background: var(--sicro-surface-2);
+}
+.chipWarn {
+  border-color: rgba(230, 180, 80, 0.45);
+  background: rgba(230, 180, 80, 0.08);
+}
+.chipValue {
+  font-size: var(--text-lg);
+  font-weight: 700;
+  color: var(--sicro-fg);
+  font-family: var(--font-mono);
+}
+.chipLabel {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  margin-top: 2px;
+  text-align: center;
+}
+
+.detailsBlock {
+  border-top: 1px solid var(--sicro-divider);
+  padding-top: var(--space-2);
+}
+.detailsBlock summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  padding: var(--space-1) 0;
+  user-select: none;
+}
+.warningList, .errorList {
+  margin: var(--space-2) 0 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.warningList li {
+  color: var(--sicro-fg);
+  margin-bottom: 2px;
+}
+.errorList li {
+  color: var(--sicro-danger);
+}
+.warningList code,
+.errorList code {
+  font-family: var(--font-mono);
+  background: var(--sicro-surface-2);
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
+.workspacePath {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+  margin: var(--space-2) 0 0;
+  word-break: break-all;
+}
+.workspacePath code {
+  font-family: var(--font-mono);
+  background: var(--sicro-surface-2);
+  padding: 2px 6px;
+  border-radius: 2px;
+}
