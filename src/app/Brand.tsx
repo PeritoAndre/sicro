@@ -1,5 +1,5 @@
 /**
- * Brand — marca SICRO (logo + nome "SICRO 2.0 / Suíte Pericial").
+ * Brand — marca SICRO (logo + nome "SICRO 3.0 / Suíte Pericial").
  *
  * Vive na barra de título (app bar), canto superior esquerdo. Logo de
  * `public/branding/sicro-logo.png` com fallback gracioso pro escudo se o
@@ -31,7 +31,7 @@ export function Brand() {
       )}
       <span className={styles.text}>
         <span className={styles.name}>
-          SICRO <b>2.0</b>
+          SICRO <b>3.0</b>
         </span>
         <span className={styles.tag}>Suíte Pericial</span>
       </span>

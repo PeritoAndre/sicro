@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SICRO 2.0",
+        "title": "SICRO 3.0",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
@@ -46,7 +46,7 @@
     "publisher": "Polícia Científica do Amapá",
     "copyright": "© 2026 Polícia Científica do Amapá",
     "licenseFile": "installer/termo-de-uso.txt",
-    "shortDescription": "Suíte pericial SICRO 2.0",
+    "shortDescription": "Suíte pericial SICRO 3.0",
     "longDescription": "Sistema Integrado de Criminalística e Operações — workspace pericial do perito criminal.",
     "windows": {
       "nsis": {
