@@ -1,9 +1,10 @@
 /**
- * LaudoListView — landing screen of the Laudo module.
+ * LaudoListView — landing screen / registro do módulo Laudo (SICRO 3.0).
  *
- * Lists every laudo of the active workspace and offers a "Novo laudo"
- * button. Opening or creating a laudo flips the module into
- * `LaudoEditorView`.
+ * Lista os laudos `.docx` da ocorrência. "Novo laudo" cria um `.docx` a partir
+ * de um template; "Registrar .docx existente" importa um documento já escrito.
+ * Clicar num card abre a BridgeView; "Abrir no Word" abre o `.docx` no editor
+ * externo (Word/LibreOffice).
  */
 
 import { useEffect, useState } from "react";
@@ -11,13 +12,13 @@ import type { MouseEvent } from "react";
 import {
   FileOutput,
   FileText,
+  FileUp,
   Images,
   LayoutTemplate,
-  MessageSquare,
   PenLine,
   Plus,
+  SquareArrowOutUpRight,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Button } from "@components/Button/Button";
@@ -47,33 +48,33 @@ interface LaudoListViewProps {
 const LAUDO_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <FileText size={18} />,
-    title: "Editor rico A4",
-    desc: "Estilos documentais, paginação real, zoom e visão de múltiplas páginas.",
+    title: "Laudo em .docx",
+    desc: "O laudo é um documento do Word/LibreOffice, editado no seu editor de sempre.",
   },
   {
     icon: <LayoutTemplate size={18} />,
     title: "Templates institucionais",
-    desc: "Cabeçalho, brasões, campos automáticos e variáveis da ocorrência.",
+    desc: "Cabeçalho/timbre e campos da ocorrência já preenchidos no esqueleto inicial.",
   },
   {
     icon: <Images size={18} />,
     title: "Evidências no laudo",
-    desc: "Fotos, croqui e pranchas fotográficas com proveniência e hash.",
+    desc: "Copie fotos, croqui exportado e frames direto para o documento (Ctrl+V).",
   },
   {
     icon: <PenLine size={18} />,
-    title: "Quesitos e assinatura",
-    desc: "Blocos de quesito e assinatura digital (gov.br / A1 / A3).",
+    title: "Consulta do caso",
+    desc: "Os dados da ocorrência sempre à mão enquanto você redige.",
   },
   {
-    icon: <MessageSquare size={18} />,
-    title: "Revisão e histórico",
-    desc: "Comentários, modo de revisão e versões (snapshots) do documento.",
+    icon: <FileUp size={18} />,
+    title: "Registrar existente",
+    desc: "Já tem o .docx pronto? Registre-o no caso sem reescrever nada.",
   },
   {
     icon: <FileOutput size={18} />,
-    title: "Exportação",
-    desc: "PDF e DOCX fiéis, com QR de verificação e abertura da pasta.",
+    title: "Abertura externa",
+    desc: "Um clique abre o .docx no Word/LibreOffice instalado.",
   },
 ];
 
@@ -88,7 +89,8 @@ export function LaudoListView({
   const error = useLaudoStore((s) => s.lastError);
   const loadList = useLaudoStore((s) => s.loadList);
   const deleteLaudo = useLaudoStore((s) => s.deleteLaudo);
-  const importDocx = useLaudoStore((s) => s.importDocx);
+  const registerExistingDocx = useLaudoStore((s) => s.registerExistingDocx);
+  const openExternal = useLaudoStore((s) => s.openExternal);
   const activeOccurrence = useWorkspaceStore((s) => s.activeOccurrence);
 
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -131,9 +133,10 @@ export function LaudoListView({
     ? toOccurrenceContext(activeOccurrence)
     : null;
 
-  // POC — Importar laudo do Word (.docx): escolhe o arquivo, converte no
-  // backend (melhor-esforço) e abre o laudo resultante no editor.
-  const handleImportDocx = async () => {
+  // SICRO 3.0 — Registrar um `.docx` que o perito já escreveu por fora:
+  // escolhe o arquivo, copia pro workspace + registra a linha. O store já
+  // seleciona o laudo (mostra a BridgeView).
+  const handleRegisterDocx = async () => {
     let selected: string | string[] | null = null;
     try {
       selected = await openFileDialog({
@@ -146,7 +149,8 @@ export function LaudoListView({
     if (!selected || typeof selected !== "string") return;
     setIsImporting(true);
     try {
-      const laudo = await importDocx(workspacePath, selected);
+      // Título derivado do nome do arquivo no backend quando vazio.
+      const laudo = await registerExistingDocx("", selected);
       onOpen(laudo);
     } catch {
       // O erro fica visível no banner geral via `lastError` do store.
@@ -155,22 +159,28 @@ export function LaudoListView({
     }
   };
 
+  // Abre o `.docx` no Word/LibreOffice direto do card (sem entrar na ponte).
+  const handleOpenExternal = (e: MouseEvent<HTMLButtonElement>, laudo: Laudo) => {
+    e.stopPropagation();
+    void openExternal(laudo.id);
+  };
+
   if (list.length === 0 && !isLoading) {
     return (
       <div className={styles.wrap}>
         <ModuleLanding
           icon={<FileText size={44} strokeWidth={1.2} />}
           title="Laudos da Ocorrência"
-          subtitle="Redija o laudo pericial num editor rico (A4, estilos, paginação), com evidências (fotos, croqui, pranchas), quesitos, assinatura digital e exportação PDF/DOCX — tudo ligado à ocorrência."
+          subtitle="O laudo pericial é um documento .docx editado no Word ou LibreOffice. Crie um a partir de um template, registre um já pronto, e use a ponte para consultar o caso e enviar imagens ao documento."
           actions={
             <>
               <Button
                 variant="ghost"
-                leftIcon={<Upload size={15} />}
-                onClick={() => void handleImportDocx()}
+                leftIcon={<FileUp size={15} />}
+                onClick={() => void handleRegisterDocx()}
                 disabled={isMutating || isImporting}
               >
-                {isImporting ? "Importando…" : "Importar do Word"}
+                {isImporting ? "Registrando…" : "Registrar .docx existente"}
               </Button>
               <Button
                 variant="primary"
@@ -183,7 +193,7 @@ export function LaudoListView({
             </>
           }
           features={LAUDO_FEATURES}
-          note="O editor é apoio à redação. O conteúdo técnico, as conclusões e a assinatura são de responsabilidade do perito."
+          note="O SICRO é apoio à redação. O conteúdo técnico, as conclusões e a assinatura são de responsabilidade do perito."
         />
         {error && (
           <p className={styles.error} style={{ textAlign: "center" }}>
@@ -217,11 +227,11 @@ export function LaudoListView({
           <div style={{ display: "flex", gap: 8 }}>
             <Button
               variant="ghost"
-              leftIcon={<Upload size={16} />}
-              onClick={() => void handleImportDocx()}
+              leftIcon={<FileUp size={16} />}
+              onClick={() => void handleRegisterDocx()}
               disabled={isMutating || isImporting}
             >
-              {isImporting ? "Importando…" : "Importar do Word"}
+              {isImporting ? "Registrando…" : "Registrar .docx existente"}
             </Button>
             <Button
               variant="primary"
@@ -254,6 +264,16 @@ export function LaudoListView({
                       {/* H — Badge de assinatura digital (gov.br/A1/A3/mock) */}
                       <SignatureBadge type={laudo.signature_type ?? null} />
                       <StatusPill status={mapLaudoStatus(laudo.status)} />
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        title="Abrir no Word"
+                        aria-label={`Abrir ${laudo.title} no Word`}
+                        disabled={isMutating}
+                        onClick={(e) => handleOpenExternal(e, laudo)}
+                      >
+                        <SquareArrowOutUpRight size={14} />
+                      </button>
                       <button
                         type="button"
                         className={styles.deleteBtn}

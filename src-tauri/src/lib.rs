@@ -75,6 +75,11 @@ pub fn run() {
             commands::laudo_commands::read_laudo,
             commands::laudo_commands::save_laudo,
             commands::laudo_commands::delete_laudo,
+            // SICRO 3.0 — laudo COMO .docx (registra + abre no Word/LibreOffice)
+            commands::laudo_commands::create_laudo_docx,
+            commands::laudo_commands::open_laudo_external,
+            commands::laudo_commands::register_existing_docx,
+            commands::laudo_commands::copy_image_to_clipboard,
             // H — Fluxo gov.br externo
             commands::laudo_commands::import_signed_pdf,
             // O — Drag & drop de fotos no editor de laudo

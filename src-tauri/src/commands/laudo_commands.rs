@@ -10,10 +10,12 @@
 //! The schema of `doc` (TipTap-based) is owned by the front-end Document
 //! Engine. The Rust side treats it as opaque JSON.
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use tauri_plugin_clipboard_manager::ClipboardExt;
 use uuid::Uuid;
 
 use crate::database::connection::open_connection;
@@ -87,6 +89,251 @@ pub async fn create_laudo(
         doc: envelope,
         opened_with_newer_version: None,
     })
+}
+
+// ---------------------------------------------------------------------------
+// SICRO 3.0 — laudo COMO `.docx` (editado no Word/LibreOffice).
+//
+// O laudo deixa de ser um `.sicrodoc` interno e passa a ser um `.docx` que o
+// perito edita no Word. O SICRO apenas REGISTRA + ABRE o arquivo. Os comandos
+// abaixo são ADITIVOS: o `create_laudo`/`save_laudo` etc. acima continuam
+// servindo o editor antigo enquanto o front migra.
+// ---------------------------------------------------------------------------
+
+/// SICRO 3.0 — Cria um novo laudo já materializado como `.docx`.
+///
+/// O FRONT monta o `envelope` (ProseMirror JSON: cabeçalho institucional +
+/// parágrafos de campos + tabela de evidências) e o mapa `field_values`
+/// ({campo: valor}). Aqui apenas injetamos os valores, renderizamos o `.docx`
+/// via o mesmo walker do export (`render_doc_to_docx`, figuras embutidas a
+/// partir da raiz do workspace) e persistimos a linha do laudo apontando para
+/// `laudos/laudo_<id>.docx`.
+#[tauri::command]
+pub async fn create_laudo_docx(
+    workspace_path: String,
+    title: String,
+    template_id: String,
+    mut envelope: serde_json::Value,
+    field_values: Option<HashMap<String, String>>,
+) -> Result<Laudo> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    let now = Utc::now();
+    let id = Uuid::new_v4();
+    let relative_path = format!("{LAUDOS_SUBDIR}/laudo_{}.docx", id);
+    let abs_target = ws.join(&relative_path);
+    if let Some(parent) = abs_target.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            SicroError::Filesystem(format!("cannot create laudos/ directory: {e}"))
+        })?;
+    }
+
+    // Espelha o export: injeta o mapa {campo: valor} resolvido pelo front em
+    // `envelope.__field_values` (só em memória) para o walker trocar as pílulas.
+    inject_field_values(&mut envelope, field_values);
+
+    // Mesmo motor do export: figuras com `relative_path` viram imagens reais a
+    // partir da raiz do workspace; ausentes degradam para placeholder.
+    crate::exporters::docx::render_doc_to_docx(&envelope, &abs_target, Some(&ws))?;
+
+    let laudo = Laudo {
+        id,
+        occurrence_id: manifest.occurrence_id,
+        title: if title.trim().is_empty() {
+            "Laudo sem título".to_string()
+        } else {
+            title.trim().to_string()
+        },
+        template_id: if template_id.trim().is_empty() {
+            "documento_em_branco".to_string()
+        } else {
+            template_id.trim().to_string()
+        },
+        relative_path: relative_path.clone(),
+        status: LaudoStatus::Rascunho,
+        created_at: now,
+        updated_at: now,
+        last_export_pdf: None,
+        last_export_docx: None,
+        signature_type: None,
+    };
+
+    laudo_repo::insert(&conn, &laudo)?;
+    occurrence_repo::record_audit(
+        &conn,
+        Some(&laudo.occurrence_id),
+        "laudo.created_docx",
+        Some("laudo"),
+        Some("laudo"),
+        Some(&laudo.id),
+        None,
+    )?;
+
+    Ok(laudo)
+}
+
+/// SICRO 3.0 — Abre o `.docx` do laudo no aplicativo padrão do SO (Word /
+/// LibreOffice). Resolve o caminho absoluto a partir do `relative_path`
+/// gravado no banco; erro se o arquivo não existir mais no disco.
+#[tauri::command]
+pub async fn open_laudo_external(
+    workspace_path: String,
+    laudo_id: String,
+) -> Result<()> {
+    let ws = PathBuf::from(&workspace_path);
+    let _ = Manifest::read(&ws)?;
+    let id = Uuid::parse_str(&laudo_id)
+        .map_err(|e| SicroError::Validation(format!("invalid laudo id: {e}")))?;
+
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    let laudo = laudo_repo::find_by_id(&conn, &id)?
+        .ok_or_else(|| SicroError::Validation(format!("laudo {} not found", id)))?;
+
+    let abs = ws.join(&laudo.relative_path);
+    if !abs.is_file() {
+        return Err(SicroError::Filesystem(format!(
+            "arquivo do laudo não encontrado: {}",
+            abs.display()
+        )));
+    }
+    crate::commands::os_open::open_with_os(&abs)
+}
+
+/// SICRO 3.0 — Registra um `.docx` que o perito já escreveu por fora,
+/// copiando-o para dentro do workspace como `laudos/laudo_<id>.docx` e criando
+/// a linha do laudo (template_id `"externo"`, status Rascunho).
+#[tauri::command]
+pub async fn register_existing_docx(
+    workspace_path: String,
+    title: String,
+    source_absolute_path: String,
+) -> Result<Laudo> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+
+    let src = PathBuf::from(&source_absolute_path);
+    if !src.is_file() {
+        return Err(SicroError::Filesystem(format!(
+            ".docx não encontrado: {}",
+            src.display()
+        )));
+    }
+
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    let now = Utc::now();
+    let id = Uuid::new_v4();
+    let relative_path = format!("{LAUDOS_SUBDIR}/laudo_{}.docx", id);
+    let abs_target = ws.join(&relative_path);
+    if let Some(parent) = abs_target.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            SicroError::Filesystem(format!("cannot create laudos/ directory: {e}"))
+        })?;
+    }
+    std::fs::copy(&src, &abs_target).map_err(|e| {
+        SicroError::Filesystem(format!(
+            "falha ao copiar o .docx para o workspace: {e}"
+        ))
+    })?;
+
+    let resolved_title = {
+        let t = title.trim();
+        if !t.is_empty() {
+            t.to_string()
+        } else {
+            src.file_stem()
+                .and_then(|s| s.to_str())
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .unwrap_or_else(|| "Laudo registrado".to_string())
+        }
+    };
+
+    let laudo = Laudo {
+        id,
+        occurrence_id: manifest.occurrence_id,
+        title: resolved_title,
+        template_id: "externo".to_string(),
+        relative_path: relative_path.clone(),
+        status: LaudoStatus::Rascunho,
+        created_at: now,
+        updated_at: now,
+        last_export_pdf: None,
+        last_export_docx: None,
+        signature_type: None,
+    };
+
+    laudo_repo::insert(&conn, &laudo)?;
+    occurrence_repo::record_audit(
+        &conn,
+        Some(&laudo.occurrence_id),
+        "laudo.registered_docx",
+        Some("laudo"),
+        Some("laudo"),
+        Some(&laudo.id),
+        Some(&source_absolute_path),
+    )?;
+
+    Ok(laudo)
+}
+
+/// SICRO 3.0 — Copia uma imagem do workspace (PNG/JPEG/etc.) para a área de
+/// transferência como BITMAP, para o perito colar (Ctrl+V) direto no `.docx`
+/// aberto no Word/LibreOffice. Decodifica para RGBA e escreve via o
+/// clipboard-manager (requer a permissão `clipboard-manager:allow-write-image`).
+#[tauri::command]
+pub async fn copy_image_to_clipboard(
+    app: tauri::AppHandle,
+    workspace_path: String,
+    relative_path: String,
+) -> Result<()> {
+    let ws = PathBuf::from(&workspace_path);
+    let _ = Manifest::read(&ws)?;
+    let abs = resolve_workspace_relative(&ws, &relative_path)?;
+    if !abs.is_file() {
+        return Err(SicroError::Filesystem(format!(
+            "imagem não encontrada: {}",
+            abs.display()
+        )));
+    }
+
+    // Decodifica para RGBA8 (o clipboard espera bytes RGBA + dimensões).
+    let img = image::open(&abs)
+        .map_err(|e| SicroError::Validation(format!("não consegui decodificar a imagem: {e}")))?
+        .to_rgba8();
+    let (width, height) = img.dimensions();
+    let rgba = img.into_raw();
+
+    let clip_image = tauri::image::Image::new_owned(rgba, width, height);
+    app.clipboard()
+        .write_image(&clip_image)
+        .map_err(|e| SicroError::Filesystem(format!("falha ao copiar a imagem: {e}")))?;
+    Ok(())
+}
+
+/// Injeta `__field_values` no envelope (somente em memória, nunca gravado de
+/// volta) — espelha `export_commands::inject_field_values`. O mapa {campo:
+/// valor} é resolvido pelo FRONT; o walker DOCX o usa para trocar as pílulas
+/// `{numero_laudo}` etc. pelo valor real. `None` → walker mantém o fallback.
+fn inject_field_values(
+    envelope: &mut serde_json::Value,
+    field_values: Option<HashMap<String, String>>,
+) {
+    if let Some(map) = field_values {
+        if let Some(obj) = envelope.as_object_mut() {
+            obj.insert(
+                "__field_values".to_string(),
+                serde_json::to_value(map).unwrap_or(serde_json::Value::Null),
+            );
+        }
+    }
 }
 
 /// POC — Importa um `.docx` do Word como um novo laudo (mão única,

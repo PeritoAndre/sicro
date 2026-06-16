@@ -23,6 +23,7 @@ pub mod libreoffice_commands;
 pub mod laudo_commands;
 pub mod laudo_photo_drop;
 pub mod ocr_commands;
+pub mod os_open;
 pub mod registry_commands;
 pub mod settings_commands;
 pub mod sigdocs_commands;

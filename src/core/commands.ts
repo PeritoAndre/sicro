@@ -2030,6 +2030,69 @@ export const commands = {
   downloadLibreofficeInstaller(): Promise<void> {
     return safeInvoke<void>("download_libreoffice_installer", {});
   },
+
+  // ----- SICRO 3.0 — Laudo como `.docx` (registro + ponte com o Word) -----
+
+  /**
+   * Cria um novo laudo já materializado como `.docx`. O FRONT monta o
+   * `envelope` (JSON estilo `.sicrodoc`: `content`/`layout`/`header`/`footer`
+   * opcional) e o mapa `fieldValues` ({campo: valor} já resolvido). O backend
+   * injeta os valores, renderiza o `.docx` via `render_doc_to_docx` e registra
+   * a linha do laudo. Retorna o `Laudo`.
+   */
+  createLaudoDocx(
+    workspacePath: string,
+    title: string,
+    templateId: string,
+    envelope: unknown,
+    fieldValues?: Record<string, string>,
+  ): Promise<Laudo> {
+    return safeInvoke<Laudo>("create_laudo_docx", {
+      workspacePath,
+      title,
+      templateId,
+      envelope,
+      fieldValues: fieldValues ?? null,
+    });
+  },
+
+  /** Abre o `.docx` do laudo no aplicativo padrão do SO (Word / LibreOffice). */
+  openLaudoExternal(workspacePath: string, laudoId: string): Promise<void> {
+    return safeInvoke<void>("open_laudo_external", {
+      workspacePath,
+      laudoId,
+    });
+  },
+
+  /**
+   * Registra um `.docx` que o perito já escreveu por fora: copia-o para dentro
+   * do workspace + cria a linha do laudo. `sourceAbsolutePath` é absoluto.
+   */
+  registerExistingDocx(
+    workspacePath: string,
+    title: string,
+    sourceAbsolutePath: string,
+  ): Promise<Laudo> {
+    return safeInvoke<Laudo>("register_existing_docx", {
+      workspacePath,
+      title,
+      sourceAbsolutePath,
+    });
+  },
+
+  /**
+   * Copia uma imagem do workspace (caminho relativo) para a área de
+   * transferência como bitmap, para o perito colar (Ctrl+V) no `.docx` aberto.
+   */
+  copyImageToClipboard(
+    workspacePath: string,
+    relativePath: string,
+  ): Promise<void> {
+    return safeInvoke<void>("copy_image_to_clipboard", {
+      workspacePath,
+      relativePath,
+    });
+  },
 } as const;
 
 export type { SicroError };

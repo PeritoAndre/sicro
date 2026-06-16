@@ -104,7 +104,7 @@ pub async fn open_evidence_file(
             abs.display()
         )));
     }
-    open_with_os(&abs)
+    crate::commands::os_open::open_with_os(&abs)
 }
 
 /// Reveal an evidence file in the platform's file explorer.
@@ -167,33 +167,11 @@ pub async fn generate_workspace_integrity_report(
 
 // ---------------------------------------------------------------------------
 // OS integration helpers
-
-#[cfg(target_os = "windows")]
-fn open_with_os(path: &std::path::Path) -> Result<()> {
-    Command::new("cmd")
-        .args(["/C", "start", "", &path.to_string_lossy()])
-        .spawn()
-        .map_err(|e| SicroError::Filesystem(format!("falha ao abrir: {e}")))?;
-    Ok(())
-}
-
-#[cfg(target_os = "macos")]
-fn open_with_os(path: &std::path::Path) -> Result<()> {
-    Command::new("open")
-        .arg(path)
-        .spawn()
-        .map_err(|e| SicroError::Filesystem(format!("falha ao abrir: {e}")))?;
-    Ok(())
-}
-
-#[cfg(all(unix, not(target_os = "macos")))]
-fn open_with_os(path: &std::path::Path) -> Result<()> {
-    Command::new("xdg-open")
-        .arg(path)
-        .spawn()
-        .map_err(|e| SicroError::Filesystem(format!("falha ao abrir: {e}")))?;
-    Ok(())
-}
+//
+// NOTE: o "abrir com o app padrão" (`open_with_os`) foi extraído para
+// `crate::commands::os_open` e é reutilizado aqui e no módulo de laudos
+// (`open_laudo_external`). Só o "revelar na pasta" (`reveal_with_os`)
+// permanece local — é específico da Central de Evidências.
 
 #[cfg(target_os = "windows")]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {

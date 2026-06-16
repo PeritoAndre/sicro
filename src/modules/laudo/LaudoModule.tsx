@@ -1,7 +1,12 @@
 /**
- * LaudoModule — module root. Decides between list and editor views based on
- * laudoStore state, and gates everything behind the requirement of an
- * active workspace (no occurrence → empty state explaining what to do).
+ * LaudoModule — module root (SICRO 3.0). Decides between the laudo registry
+ * (list) and the BRIDGE view (consult the occurrence + push artifacts to the
+ * `.docx` opened in Word). Gates everything behind an active workspace.
+ *
+ * SICRO 3.0 pivot: a laudo IS a `.docx` edited in Word/LibreOffice — there is
+ * no in-app text editor anymore. Selecting a laudo opens the BridgeView; the
+ * old `LaudoEditorView` is intentionally NOT routed (files kept for a later
+ * cleanup pass).
  */
 
 import { useEffect } from "react";
@@ -10,28 +15,20 @@ import { NoOccurrenceState } from "@components/NoOccurrenceState/NoOccurrenceSta
 import { useWorkspaceStore } from "@stores/workspaceStore";
 import { useLaudoStore } from "./store/laudoStore";
 import { LaudoListView } from "./views/LaudoListView";
-import { LaudoEditorView } from "./views/LaudoEditorView";
+import { LaudoBridgeView } from "./views/LaudoBridgeView";
 import { loadBrandingAssets } from "./document-engine";
-import { toSicroError } from "@core/errors";
 
 export function LaudoModule() {
   const workspacePath = useWorkspaceStore((s) => s.activeWorkspacePath);
   const currentLaudo = useLaudoStore((s) => s.currentLaudo);
   const clearCurrent = useLaudoStore((s) => s.clearCurrent);
+  const selectLaudo = useLaudoStore((s) => s.selectLaudo);
 
-  // Pre-load institutional branding assets so the first export doesn't pay
+  // Pre-load institutional branding assets so the first DOCX render doesn't pay
   // the fetch/data-URI conversion cost on the user's critical path.
   useEffect(() => {
     void loadBrandingAssets();
   }, []);
-
-  // Reset transient editor state when switching workspaces.
-  useEffect(() => {
-    return () => {
-      // intentional: leave currentLaudo as-is if user just navigates away
-      // and back; only Voltar clears it explicitly.
-    };
-  }, [workspacePath]);
 
   if (!workspacePath) {
     return (
@@ -43,26 +40,23 @@ export function LaudoModule() {
   }
 
   if (currentLaudo) {
-    return <LaudoEditorView workspacePath={workspacePath} onBack={clearCurrent} />;
+    return (
+      <LaudoBridgeView
+        workspacePath={workspacePath}
+        laudo={currentLaudo}
+        onBack={clearCurrent}
+      />
+    );
   }
 
   return (
     <LaudoListView
       workspacePath={workspacePath}
-      onOpen={async (laudo) => {
-        const path = workspacePath;
-        try {
-          // Use the store's openLaudo which fetches the document + sets it as current.
-          // Importing the store action via getState() to avoid re-rendering this component.
-          await useLaudoStore.getState().openLaudo(path, laudo.id);
-        } catch (err) {
-          // Errors are already on the store's lastError; just log here for the spike.
-          // eslint-disable-next-line no-console
-          console.warn("openLaudo failed", toSicroError(err));
-        }
-      }}
+      // SICRO 3.0 — abrir um laudo só seleciona a linha (mostra a BridgeView).
+      // NÃO carrega `.sicrodoc` para edição (o editor in-app foi aposentado).
+      onOpen={(laudo) => selectLaudo(laudo)}
       onCreate={() => {
-        /* createLaudo in the store already sets currentLaudo as a side effect */
+        /* createLaudoDocx no store já seta currentLaudo como efeito colateral */
       }}
     />
   );
