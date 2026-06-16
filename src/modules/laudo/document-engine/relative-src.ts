@@ -29,6 +29,7 @@
 
 import type { JSONContent } from "@tiptap/core";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { joinWorkspace } from "@core/paths";
 
 export function resolveEvidenceSrcsForEditor(
   content: JSONContent,
@@ -68,19 +69,6 @@ export function normalizeEvidenceSrcsForSave(
 }
 
 // ---------------------------------------------------------------------------
-
-/** O — Exportado pra ser reusado pelo pipeline de drag-and-drop de fotos.
- *  Cuidado importante: em Windows mistura de `\` e `/` em path absoluto
- *  quebra o asset protocol do Tauri (`convertFileSrc` aceita mas a
- *  resolução do <img> falha). Esta função normaliza tudo pro separador
- *  do host. */
-export function joinWorkspace(workspacePath: string, rel: string): string {
-  const isWin = workspacePath.includes("\\");
-  const sep = isWin ? "\\" : "/";
-  const trimmed = workspacePath.replace(/[\\/]+$/, "");
-  const normRel = isWin ? rel.replace(/\//g, "\\") : rel.replace(/\\/g, "/");
-  return `${trimmed}${sep}${normRel}`;
-}
 
 function rewrite(node: JSONContent, fn: (n: JSONContent) => JSONContent): JSONContent {
   const next = fn(node);

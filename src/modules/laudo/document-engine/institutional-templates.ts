@@ -201,10 +201,8 @@ export function resolveHeaderField(
  * quando NÃO há nada para migrar (doc novo, sem template, ou doc que
  * já foi migrado e tem conteúdo no header).
  *
- * O caller (laudoStore.openLaudo) é quem decide quando aplicar — só
- * deve chamar quando o `doc.header.content` está vazio e há template.
- * Após aplicar, persiste via `save_laudo` pra a próxima abertura não
- * re-migrar.
+ * O caller (`buildStarterEnvelope`) é quem decide quando aplicar — semeia o
+ * cabeçalho do laudo `.docx` recém-criado a partir do template institucional.
  *
  * Não importa schema dependencies aqui — retorna ProseMirror JSON puro
  * pra evitar ciclos com schema.ts.

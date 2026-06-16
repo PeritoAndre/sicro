@@ -34,6 +34,12 @@
   background: var(--sicro-surface-3);
 }
 
+.hint {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  line-height: var(--leading-relaxed);
+}
+
 .templateList {
   display: flex;
   flex-direction: column;

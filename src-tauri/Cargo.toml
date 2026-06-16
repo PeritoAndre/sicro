@@ -1,7 +1,7 @@
 [package]
 name = "sicro-desktop"
-version = "2.0.4"
-description = "SICRO 2.0 — Sistema Integrado de Criminalística e Operações"
+version = "3.0.0"
+description = "SICRO 3.0 — Sistema Integrado de Criminalística e Operações"
 authors = ["André Ricardo Barroso"]
 edition = "2021"
 rust-version = "1.77"

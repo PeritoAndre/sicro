@@ -43,7 +43,7 @@ import { useImagemStore } from "./store/imagemStore";
 import { ImageEditor } from "./editor/ImageEditor";
 import { assetUrl, formatDateTime } from "./editor/shared";
 import { useImageEditRoundtripStore } from "@stores/imageEditRoundtripStore";
-import { joinWorkspace } from "@modules/laudo/document-engine";
+import { joinWorkspace } from "@core/paths";
 import styles from "./ImagemModule.module.css";
 
 type PickerTab = "dossie" | "frames" | "file";

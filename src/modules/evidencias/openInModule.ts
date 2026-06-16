@@ -63,7 +63,11 @@ export async function openInModule(
       navigate("/video");
       return;
     case "laudo":
-      await useLaudoStore.getState().openLaudo(workspacePath, sourceId(item));
+      // SICRO 3.0 — laudo é `.docx`: só seleciona a linha (mostra a
+      // BridgeView). NÃO carrega `.sicrodoc` para edição (editor aposentado).
+      await useLaudoStore
+        .getState()
+        .selectLaudoById(workspacePath, sourceId(item));
       navigate("/laudo");
       return;
     case "croqui":

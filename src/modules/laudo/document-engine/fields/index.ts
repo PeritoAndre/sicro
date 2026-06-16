@@ -24,5 +24,3 @@ export {
   findMissingRequiredFields,
   type FieldResolveContext,
 } from "./resolver";
-export { FieldPlaceholder } from "./FieldPlaceholder";
-export { FieldSuggestion } from "./FieldSuggestion";

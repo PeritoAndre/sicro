@@ -47,6 +47,7 @@ export function NewLaudoDialog({
 
   const [title, setTitle] = useState(suggestedTitle);
   const [templateId, setTemplateId] = useState<string>(DEFAULT_TEMPLATE_ID);
+  const [numeroLaudo, setNumeroLaudo] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   // Quando só há um template institucional registrado, o seletor visual fica
@@ -57,6 +58,7 @@ export function NewLaudoDialog({
     setError(null);
     setTitle(suggestedTitle);
     setTemplateId(DEFAULT_TEMPLATE_ID);
+    setNumeroLaudo("");
     onClose();
   };
 
@@ -68,6 +70,7 @@ export function NewLaudoDialog({
     if (open) {
       setTitle(suggestedTitle);
       setTemplateId(DEFAULT_TEMPLATE_ID);
+      setNumeroLaudo("");
       setError(null);
     }
     // Intencional: dependemos só de `open`. Incluir `suggestedTitle` reseedaria
@@ -80,8 +83,11 @@ export function NewLaudoDialog({
     setError(null);
 
     const trimmed = title.trim() || "Laudo sem título";
+    const numero = numeroLaudo.trim();
     try {
-      const laudo = await createLaudoDocx(trimmed, templateId);
+      const laudo = await createLaudoDocx(trimmed, templateId, {
+        numeroLaudo: numero || undefined,
+      });
       onCreated(laudo);
       close();
     } catch (err) {
@@ -123,6 +129,23 @@ export function NewLaudoDialog({
             onChange={(e) => setTitle(e.target.value)}
             autoFocus
           />
+        </div>
+
+        <div className={styles.field}>
+          <label htmlFor="laudo-numero" className={styles.label}>
+            Número do laudo (opcional)
+          </label>
+          <input
+            id="laudo-numero"
+            type="text"
+            className={styles.input}
+            value={numeroLaudo}
+            onChange={(e) => setNumeroLaudo(e.target.value)}
+            placeholder="ex.: 12345/2026"
+          />
+          <span className={styles.hint}>
+            Em branco, o número vem da ocorrência (quando houver).
+          </span>
         </div>
 
         {showTemplatePicker ? (
