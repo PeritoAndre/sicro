@@ -10,7 +10,7 @@ Croquis, análise de imagem, áudio e vídeo, documentoscopia, central de
 evidências e custódia do laudo, num único workspace `.sicro` autocontido.
 
 ![status](https://img.shields.io/badge/status-beta-orange)
-![plataforma](https://img.shields.io/badge/plataforma-Windows%2010%2F11-1f6feb)
+![plataforma](https://img.shields.io/badge/plataforma-Windows%20%7C%20Linux-1f6feb)
 ![offline](https://img.shields.io/badge/100%25-offline-2ea043)
 ![license](https://img.shields.io/badge/license-Apache--2.0-blue)
 
@@ -45,7 +45,12 @@ perito tem sempre a palavra final.
 
 ## Instalação (perito / usuário final)
 
-1. Baixe o instalador mais recente em **[Releases](https://github.com/PeritoAndre/sicro/releases/latest)** — arquivo `SICRO 3.0_<versão>_x64-setup.exe`.
+Baixe o pacote da sua plataforma em
+**[Releases](https://github.com/PeritoAndre/sicro/releases/latest)**.
+
+### Windows
+
+1. Baixe `SICRO 3.0_<versão>_x64-setup.exe`.
 2. Execute. O instalador pergunta se quer instalar **só para você** (sem
    administrador) ou **para todos os usuários** (requer administrador).
 3. Leia e aceite o **Termo de Uso** e conclua. Pronto — atalho **SICRO 3.0** no
@@ -53,6 +58,21 @@ perito tem sempre a palavra final.
 
 > **Requisitos:** Windows 10/11 (x64) e o runtime **WebView2** (já presente na
 > maioria das instalações; o instalador orienta caso falte).
+
+### Linux
+
+- **AppImage** (`SICRO 3.0_<versão>_amd64.AppImage`) — roda em qualquer
+  distribuição, sem instalar. Dê permissão (`chmod +x`) e execute.
+  Precisa do **FUSE 2** (Arch: `sudo pacman -S fuse2`; Debian/Ubuntu:
+  `sudo apt install libfuse2`).
+- **`.deb`** (`SICRO 3.0_<versão>_amd64.deb`) — Debian, Ubuntu e derivados:
+  `sudo apt install ./SICRO*.deb`.
+
+> **Requisitos:** `webkit2gtk-4.1` e GTK 3 — presentes na maioria dos desktops.
+>
+> **Placa NVIDIA:** se a janela abrir em branco, execute com
+> `WEBKIT_DISABLE_DMABUF_RENDERER=1`. É uma limitação conhecida do WebKitGTK
+> com o driver proprietário, não do SICRO.
 >
 > Versão **beta** — em validação (ainda não testada em produção após o redesenho
 > do módulo de laudo). Veja [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md)
@@ -74,7 +94,7 @@ perito tem sempre a palavra final.
 | **Documentoscopia** | Leitura de documentos e PDFs (cópia + hash) com **OCR offline**, layout, extração de campos, análise de integridade/metadados e **confronto** questionado × padrão, em três abas (Exame / Confronto / Relatório). A origem de cada resultado fica registrada. |
 | **Estatísticas** | Painel **descritivo** (nunca interpretativo): contagens e distribuições do que o caso armazena, por caso ou geral, em gráficos próprios. Exporta HTML/CSV/JSON. |
 | **Ajuda** | Manual do SICRO renderizado in-app a partir de `docs/MANUAL_SICRO.md`, com índice navegável e busca. |
-| **Configurações** | Perfil do perito, instituição/marca (cabeçalho, brasões), tema, integrações (credenciais salvas no Gerenciador de Credenciais do Windows, nunca em JSON), caminhos padrão, atalhos, diagnóstico e **backup geral** do acervo. |
+| **Configurações** | Perfil do perito, instituição/marca (cabeçalho, brasões), tema, integrações (credenciais salvas no cofre do sistema — Gerenciador de Credenciais no Windows, Secret Service no Linux — nunca em JSON), caminhos padrão, atalhos, diagnóstico e **backup geral** do acervo. |
 
 > **Assinatura digital.** O laudo é assinado **fora do SICRO** — no documento
 > `.docx`/PDF, via Word + gov.br / SIGDOCS. O módulo Laudo apenas exibe um
@@ -115,23 +135,46 @@ avisa se você apontar um caso para pasta sincronizada.
 
 Stack: **Tauri 2 + React 18 + TypeScript + Rust + SQLite**.
 
+Comuns às duas plataformas:
+
 | Ferramenta | Versão | Onde |
 |---|---|---|
 | Node.js | 20.x (rec. 22+) | https://nodejs.org/ |
 | pnpm | 9.x | `npm install -g pnpm` |
 | Rust (stable) | 1.77+ | https://rustup.rs/ |
+
+**Windows**, adicionalmente:
+
+| Ferramenta | Versão | Onde |
+|---|---|---|
 | WebView2 | (já vem no Windows 11) | https://developer.microsoft.com/microsoft-edge/webview2/ |
 | VS Build Tools | "Desktop development with C++" | https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
 
-```powershell
+**Linux**, adicionalmente — `webkit2gtk-4.1`, `gtk3`, `librsvg`, `patchelf` e as
+ferramentas de compilação C. No Arch:
+
+```bash
+sudo pacman -S --needed rust pnpm webkit2gtk-4.1 gtk3 librsvg patchelf base-devel fuse2
+```
+
+Compilar:
+
+```bash
 pnpm install          # dependências do front
 pnpm tauri dev        # app nativo com hot reload
-pnpm tauri build      # gera o instalador em src-tauri/target/release/bundle/nsis/
+pnpm tauri build      # gera os pacotes em src-tauri/target/release/bundle/
 ```
+
+No Windows sai o instalador em `bundle/nsis/`; no Linux, o AppImage em
+`bundle/appimage/` e o `.deb` em `bundle/deb/`.
+
+> **AppImage sem FUSE 2:** o `linuxdeploy` que empacota o AppImage é ele próprio
+> um AppImage e falha com `failed to run linuxdeploy` se faltar `libfuse.so.2`.
+> Instale o `fuse2` ou compile com `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build`.
 
 Validações:
 
-```powershell
+```bash
 pnpm typecheck        # type-check do front
 pnpm test             # vitest (front)
 cargo check           # type-check do backend (em src-tauri/)
