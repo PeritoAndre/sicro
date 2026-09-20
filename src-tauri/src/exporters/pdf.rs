@@ -1,4 +1,4 @@
-//! PDF export via Microsoft Edge headless.
+//! PDF export via a headless Chromium-based browser.
 //!
 //! Strategy: write the HTML to a temp file inside the workspace's `cache/`
 //! folder, invoke `msedge.exe --headless=new --print-to-pdf=<out> file://<in>`,
@@ -8,13 +8,13 @@
 //!   - Crates like `wkhtmltopdf`, `weasyprint` and `headless_chrome` all add
 //!     either a heavy native dependency or wrap a Chromium handshake we'd
 //!     have to maintain. Spawning Edge keeps the binary footprint of the
-//!     SICRO app unchanged and uses the Chromium that already ships with
-//!     Windows 11.
+//!     SICRO app unchanged and reuses whichever Chromium-based browser the
+//!     machine already has (chromium/chrome/brave on Linux, Edge on Windows).
 //!   - The `--print-to-pdf` flag has been part of Chromium since 2018 and is
 //!     stable across Edge versions.
 //!
 //! Failure modes the caller must surface to the UI:
-//!   - Edge executable not found  → "instale o Microsoft Edge" message.
+//!   - No browser found            → "instale um navegador Chromium".
 //!   - Subprocess exit code != 0  → "Edge falhou ao gerar o PDF (exit X)".
 //!   - Output file missing after Edge exited                       (idem).
 //!   - Subprocess timeout                                           (idem).
@@ -27,12 +27,30 @@ use base64::Engine;
 
 use crate::error::{Result, SicroError};
 
-const EDGE_KNOWN_PATHS: &[&str] = &[
-    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+/// Chromium-based browsers we can drive headless, looked up in `PATH`.
+///
+/// `PATH` first is deliberate: it is the portable case (Linux, macOS, and
+/// portable installs on Windows). Names are ordered by how likely they are to
+/// be the user's everyday browser, not by preference of vendor.
+const BROWSER_BINARIES: &[&str] = &[
+    "chromium",
+    "chromium-browser",
+    "google-chrome-stable",
+    "google-chrome",
+    "brave",
+    "brave-browser",
+    "microsoft-edge-stable",
+    "microsoft-edge",
+    "chrome",
+    "msedge",
 ];
 
-const CHROME_KNOWN_PATHS: &[&str] = &[
+/// Windows installers put the official browsers outside `PATH`, so these
+/// absolute locations are the fallback once the `PATH` lookup above fails.
+#[cfg(windows)]
+const WINDOWS_FALLBACK_PATHS: &[&str] = &[
+    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ];
@@ -355,28 +373,27 @@ fn wait_for_page_ws(port: u16) -> Result<String> {
 }
 
 fn locate_browser() -> Result<PathBuf> {
-    for path in EDGE_KNOWN_PATHS.iter().chain(CHROME_KNOWN_PATHS.iter()) {
-        let p = PathBuf::from(path);
-        if p.is_file() {
+    for name in BROWSER_BINARIES {
+        if let Ok(p) = which::which(name) {
             return Ok(p);
         }
     }
-    // Last resort: try to find chrome.exe in PATH (works for portable Chrome installs).
-    if let Ok(output) = Command::new("where").arg("chrome.exe").output() {
-        if output.status.success() {
-            if let Ok(first_line) = String::from_utf8(output.stdout) {
-                if let Some(first) = first_line.lines().next() {
-                    let p = PathBuf::from(first.trim());
-                    if p.is_file() {
-                        return Ok(p);
-                    }
-                }
+
+    #[cfg(windows)]
+    {
+        for path in WINDOWS_FALLBACK_PATHS {
+            let p = PathBuf::from(path);
+            if p.is_file() {
+                return Ok(p);
             }
         }
     }
 
     Err(SicroError::Workspace(
-        "Microsoft Edge não encontrado. Instale o Edge ou configure manualmente o caminho de um navegador baseado em Chromium.".to_string(),
+        "Nenhum navegador baseado em Chromium foi encontrado. Instale um destes \
+         e garanta que esteja no PATH: chromium, google-chrome, brave ou \
+         microsoft-edge."
+            .to_string(),
     ))
 }
 

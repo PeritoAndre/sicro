@@ -11,12 +11,15 @@
 //!
 //! §13: offline-after-download, opt-in, nada instalado silenciosamente.
 
+#[cfg(windows)]
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::AppHandle;
+#[cfg(windows)]
+use tauri::{Emitter, Manager};
 
 use crate::error::{Result, SicroError};
 
@@ -28,6 +31,9 @@ const LIBREOFFICE_APPROX_MB: u32 = 349;
 /// Página oficial (fallback manual se o download direto falhar).
 const LIBREOFFICE_SITE: &str = "https://pt-br.libreoffice.org/baixe-ja/libreoffice-novo/";
 
+/// Caminhos onde o instalador oficial do Windows deixa o LibreOffice fora do
+/// PATH. Em Linux/macOS o binário fica no PATH, então isto é só fallback.
+#[cfg(windows)]
 const KNOWN_SOFFICE_PATHS: &[&str] = &[
     r"C:\Program Files\LibreOffice\program\soffice.exe",
     r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
@@ -49,6 +55,7 @@ pub struct LibreOfficeStatus {
     pub site_url: String,
 }
 
+#[cfg(windows)]
 #[derive(Clone, Serialize)]
 struct ProgressPayload {
     id: String,
@@ -56,17 +63,23 @@ struct ProgressPayload {
     total: u64,
 }
 
-/// Localiza o `soffice` (caminhos conhecidos primeiro, depois PATH).
+/// Localiza o `soffice` (PATH primeiro; caminhos fixos só como fallback).
 pub fn find_soffice() -> Option<PathBuf> {
-    for p in KNOWN_SOFFICE_PATHS {
-        let pb = PathBuf::from(p);
-        if pb.is_file() {
-            return Some(pb);
+    for name in ["soffice", "libreoffice", "soffice.exe"] {
+        if let Ok(p) = which::which(name) {
+            return Some(p);
         }
     }
-    which::which("soffice")
-        .ok()
-        .or_else(|| which::which("soffice.exe").ok())
+    #[cfg(windows)]
+    {
+        for p in KNOWN_SOFFICE_PATHS {
+            let pb = PathBuf::from(p);
+            if pb.is_file() {
+                return Some(pb);
+            }
+        }
+    }
+    None
 }
 
 /// Tenta obter a versão. No Windows o `soffice.com` (wrapper de console, ao lado
@@ -85,6 +98,7 @@ fn query_version(soffice: &Path) -> String {
 }
 
 /// Agente HTTP com TLS nativo (mesmo padrão do ai_commands — sem ring/OpenSSL).
+#[cfg(windows)]
 fn http_agent() -> Result<ureq::Agent> {
     let connector = native_tls::TlsConnector::new()
         .map_err(|e| SicroError::Validation(format!("TLS indisponível: {e}")))?;
@@ -94,6 +108,7 @@ fn http_agent() -> Result<ureq::Agent> {
         .build())
 }
 
+#[cfg(windows)]
 fn download_with_progress(app: &AppHandle, url: &str, dest: &Path, id: &str) -> Result<()> {
     let agent = http_agent()?;
     let resp = agent
@@ -166,6 +181,23 @@ pub async fn get_libreoffice_status() -> Result<LibreOfficeStatus> {
 /// instalação manualmente; depois usa "Verificar" para detectar.
 #[tauri::command]
 pub async fn download_libreoffice_installer(app: AppHandle) -> Result<()> {
+    // O .msi só serve ao Windows. Nas demais plataformas o LibreOffice vem do
+    // gerenciador de pacotes, que também cuida das atualizações — baixar um
+    // instalador aqui seria pior que apenas orientar.
+    #[cfg(not(windows))]
+    {
+        let _ = app;
+        return Err(SicroError::Validation(
+            "Instale o LibreOffice pelo gerenciador de pacotes da sua distribuição \
+             (Arch: `sudo pacman -S libreoffice-still`; Debian/Ubuntu: \
+             `sudo apt install libreoffice`; Fedora: `sudo dnf install libreoffice`) \
+             e depois use \"Verificar\"."
+                .to_string(),
+        ));
+    }
+
+    #[cfg(windows)]
+    {
     let cache = app
         .path()
         .app_cache_dir()
@@ -195,6 +227,7 @@ pub async fn download_libreoffice_installer(app: AppHandle) -> Result<()> {
             ))
         })?;
     Ok(())
+    }
 }
 
 /// Converte um `.docx` em PDF via LibreOffice headless (diagramação "estilo
