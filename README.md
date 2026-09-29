@@ -63,6 +63,7 @@ no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 - O instalador não tem assinatura digital. Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo**.
 
 **Linux**
+- Distribuição de 2024 em diante: Ubuntu 24.04+, Debian 13+, Fedora 39+, Arch e derivados (o motor de OCR exige glibc 2.38 ou mais nova).
 - O AppImage precisa do **FUSE 2**: `sudo pacman -S fuse2` (Arch) ou `sudo apt install libfuse2` (Debian/Ubuntu).
 - Vídeo e áudio usam o **ffmpeg do sistema**: `sudo pacman -S ffmpeg` ou `sudo apt install ffmpeg`.
 - Com placa **NVIDIA**, se a janela abrir em branco, rode com `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver proprietário).
@@ -131,7 +132,7 @@ cd src-tauri && cargo test --lib   # testes do backend
 
 As releases são compiladas pelo **GitHub Actions**
 ([`.github/workflows/release.yml`](./.github/workflows/release.yml)), em Linux
-(Ubuntu 22.04, para o AppImage rodar em distribuições mais antigas) e Windows.
+(Ubuntu 24.04) e Windows.
 Ninguém precisa compilar na própria máquina.
 
 1. Suba a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`
