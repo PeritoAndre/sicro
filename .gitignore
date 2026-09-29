@@ -45,6 +45,8 @@ public/pdfjs-wasm/
 docs/*
 !docs/MANUAL_SICRO.md
 !docs/.gitkeep
+# Notas de versão: são publicadas na página da release (scripts/release-linux.sh).
+!docs/releases/
 
 # Prévias PNG dos BMP do instalador (geradas pelo make_installer_art.py p/ revisão)
 src-tauri/installer/*_preview.png
