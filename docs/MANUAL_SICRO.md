@@ -456,7 +456,23 @@ frames e **medir velocidade e distância** por fotogrametria.
 
 - **Adicionar vídeo** importa o arquivo (mp4, mov, mkv, avi, webm, m4v), extrai
   metadados técnicos (codec, resolução, fps, duração) e calcula o **SHA-256**.
-- O player tem timeline, controle de velocidade e atalhos de navegação por frame.
+- O player tem timeline, controle de velocidade e atalhos de navegação por frame:
+  - **J / K / L** como nos editores: L toca à frente, J em ré, K pausa;
+    repetir J ou L acelera **1× → 2× → 4× → 8×**. **↑ / ↓** escolhem de
+    **0,1× a 8×**.
+  - **Arraste** na linha do tempo (a imagem acompanha). **Ctrl + roda do mouse**
+    ou **= / − / 0** aproximam/afastam a linha do tempo — no máximo, um risco
+    por quadro; aproximada, aparece uma faixa de visão geral para mover a janela.
+  - **I / O** marcam entrada e saída de um trecho, que passa a **repetir**
+    (Ctrl+L liga/desliga, Alt+X limpa, Shift+I / Shift+O vão às pontas).
+  - **Shift + ↑ / ↓** pulam para o evento anterior / seguinte.
+  - **Ctrl + G** (ou clique em "tempo atual") abre o **ir para**: digite um tempo
+    (`12.48`, `00:12.480`, `1:02:03`) ou um quadro (`#312`). Ao lado aparece o
+    **quadro ≈** estimado (mesma conta do storyboard: tempo × fps declarado).
+  - O SICRO **lembra onde você parou** em cada vídeo. Vídeo recortado cujo 1º
+    quadro vem depois do 0:00 abre direto nele (**Home** volta ao 1º quadro).
+  - **F**, duplo clique no vídeo ou o botão ⛶ entram em **tela cheia** com os
+    controles e atalhos funcionando (Esc sai).
 - **Coletar frame** salva um PNG no timecode exato (vira "storyboard" e pode
   ilustrar o laudo).
 

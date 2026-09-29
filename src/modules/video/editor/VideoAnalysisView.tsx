@@ -17,7 +17,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, AlertTriangle } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Repeat, X } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { toSicroError } from "@core/errors";
 import { useShortcuts } from "@core/useShortcuts";
@@ -27,14 +27,20 @@ import {
   useWorkspaceStore,
 } from "@stores/workspaceStore";
 import { useVideoStore } from "../store/videoStore";
-import { VideoPlayerPanel } from "./VideoPlayerPanel";
+import { VideoPlayerPanel, type PlayerController } from "./VideoPlayerPanel";
 import { VideoTimeline } from "./VideoTimeline";
 import { VideoEventPanel } from "./VideoEventPanel";
 import { VideoMetadataPanel } from "./VideoMetadataPanel";
 import { VideoStoryboardPanel } from "./VideoStoryboardPanel";
 import { SpeedPanel } from "./speed/SpeedPanel";
 import { MeasurePanel } from "./measure/MeasurePanel";
-import { formatDuration, parseWarnings } from "./format";
+import {
+  estimateFrameIndex,
+  formatDuration,
+  parseTimeInput,
+  parseWarnings,
+  probeStartTime,
+} from "./format";
 import styles from "./VideoAnalysisView.module.css";
 
 export function VideoAnalysisView() {
@@ -57,7 +63,7 @@ export function VideoAnalysisView() {
   const [mainTab, setMainTab] = useState<"player" | "speed" | "measure">(
     "player",
   );
-  const seekRef = useRef<((seconds: number) => void) | null>(null);
+  const controllerRef = useRef<PlayerController | null>(null);
 
   // Autor (perito) do contexto do app — usado nas calibrações/cálculos de
   // velocidade. Nunca vazio: cai para "Perito" se a ocorrência não listar.
@@ -66,9 +72,15 @@ export function VideoAnalysisView() {
     return peritos.length > 0 ? peritos.join(", ") : "Perito";
   }, [occurrence]);
 
-  const handlePlayerSeekRef = useCallback((fn: (s: number) => void) => {
-    seekRef.current = fn;
+  const handleRegisterController = useCallback((c: PlayerController) => {
+    controllerRef.current = c;
   }, []);
+  /** Tempo exato do player (o estado `currentTime` pode estar um tique atrás). */
+  const nowTime = () => controllerRef.current?.getTime() ?? currentTime;
+  const flash = (msg: string, ms = 2500) => {
+    setFeedback(msg);
+    setTimeout(() => setFeedback(null), ms);
+  };
 
   const probeWarnings = useMemo(
     () => (bundle ? parseWarnings(bundle.media.warnings_json) : []),
@@ -136,6 +148,98 @@ export function VideoAnalysisView() {
   );
   const bigScreen = fullscreen || expanded;
 
+  const media0 = bundle?.media ?? null;
+  const fpsDeclared = media0?.fps_declared ?? null;
+  const startTime = useMemo(
+    () => probeStartTime(media0?.raw_probe_json),
+    [media0?.raw_probe_json],
+  );
+
+  // ---- trecho entrada/saída (I/O) + repetição ----------------------------
+  const [markIn, setMarkIn] = useState<number | null>(null);
+  const [markOut, setMarkOut] = useState<number | null>(null);
+  const [loopOn, setLoopOn] = useState(false);
+  const range = useMemo(
+    () =>
+      markIn != null && markOut != null && Math.abs(markOut - markIn) > 1e-3
+        ? { a: Math.min(markIn, markOut), b: Math.max(markIn, markOut) }
+        : null,
+    [markIn, markOut],
+  );
+  const loop = loopOn && range ? range : null;
+  // Fechou o trecho (entrada + saída) → já liga a repetição.
+  const setMark = (which: "in" | "out") => {
+    const t = nowTime();
+    if (which === "in") setMarkIn(t);
+    else setMarkOut(t);
+    const other = which === "in" ? markOut : markIn;
+    if (other != null && Math.abs(other - t) > 1e-3) setLoopOn(true);
+    flash(`${which === "in" ? "Entrada" : "Saída"} do trecho em ${formatDuration(t)}.`);
+  };
+  const clearInOut = () => {
+    setMarkIn(null);
+    setMarkOut(null);
+    setLoopOn(false);
+  };
+
+  // ---- ir para tempo / quadro (digitado) ---------------------------------
+  const [gotoOpen, setGotoOpen] = useState(false);
+  const [gotoText, setGotoText] = useState("");
+  const [gotoError, setGotoError] = useState(false);
+  const openGoto = () => {
+    setGotoText(formatDuration(nowTime()));
+    setGotoError(false);
+    setGotoOpen(true);
+  };
+  const submitGoto = () => {
+    const t = parseTimeInput(gotoText, fpsDeclared);
+    if (t == null) {
+      setGotoError(true);
+      return;
+    }
+    controllerRef.current?.seek(t);
+    setCurrentTime(t);
+    setGotoOpen(false);
+  };
+
+  // ---- pular entre eventos -----------------------------------------------
+  const jumpEvent = (dir: 1 | -1) => {
+    const evs = [...(bundle?.events ?? [])].sort((x, y) => x.timestamp_s - y.timestamp_s);
+    const now = nowTime();
+    const target =
+      dir > 0
+        ? evs.find((e) => e.timestamp_s > now + 0.02)
+        : [...evs].reverse().find((e) => e.timestamp_s < now - 0.02);
+    if (!target) {
+      flash(dir > 0 ? "Não há evento depois deste ponto." : "Não há evento antes deste ponto.");
+      return;
+    }
+    setSelectedEventId(target.id);
+    controllerRef.current?.seek(target.timestamp_s);
+    setCurrentTime(target.timestamp_s);
+  };
+
+  useShortcuts(
+    {
+      "video.markIn": () => setMark("in"),
+      "video.markOut": () => setMark("out"),
+      "video.clearInOut": clearInOut,
+      "video.gotoIn": () => range && controllerRef.current?.seek(range.a),
+      "video.gotoOut": () => range && controllerRef.current?.seek(range.b),
+      "video.toggleLoop": () => {
+        if (!range) {
+          flash("Marque a entrada (I) e a saída (O) do trecho primeiro.");
+          return;
+        }
+        setLoopOn((on) => !on);
+      },
+      "video.prevEvent": () => jumpEvent(-1),
+      "video.nextEvent": () => jumpEvent(1),
+      "video.gotoTime": openGoto,
+    },
+    { enabled: mainTab === "player" },
+  );
+
   if (!workspacePath || !bundle) {
     return <div className={styles.empty}>Sem mídia aberta.</div>;
   }
@@ -194,7 +298,7 @@ export function VideoAnalysisView() {
   };
 
   const handleSeek = (seconds: number) => {
-    seekRef.current?.(seconds);
+    controllerRef.current?.seek(seconds);
   };
 
   const handleCollectFrame = async (opts?: {
@@ -322,16 +426,31 @@ export function VideoAnalysisView() {
               onTimeUpdate={setCurrentTime}
               onDurationLoaded={setDuration}
               onCollectFrame={() => void handleCollectFrame()}
-              registerSeek={handlePlayerSeekRef}
+              registerController={handleRegisterController}
+              mediaKey={media.sha256}
+              startTime={startTime}
+              loop={loop}
               fullscreen={bigScreen}
               onToggleFullscreen={toggleFullscreen}
             />
             <VideoTimeline
               duration={effectiveDuration}
+              fps={media.fps_declared}
               currentTime={currentTime}
               events={events}
               selectedEventId={selectedEventId}
-              onSeek={handleSeek}
+              range={range}
+              loopOn={loopOn}
+              shortcutsEnabled={mainTab === "player"}
+              onScrubStart={() => controllerRef.current?.scrubStart()}
+              onScrub={(t) => {
+                controllerRef.current?.scrub(t);
+                setCurrentTime(t);
+              }}
+              onScrubEnd={(t) => {
+                controllerRef.current?.scrubEnd(t);
+                setCurrentTime(t);
+              }}
               onSelectEvent={(id) => {
                 setSelectedEventId(id);
                 const ev = events.find((e) => e.id === id);
@@ -339,13 +458,83 @@ export function VideoAnalysisView() {
               }}
             />
             <div className={styles.statusBar}>
-              <span>
-                tempo atual:{" "}
-                <code>{formatDuration(currentTime)}</code>
+              {gotoOpen ? (
+                <input
+                  autoFocus
+                  className={`${styles.gotoInput} ${gotoError ? styles.gotoInputError : ""}`}
+                  value={gotoText}
+                  onChange={(e) => {
+                    setGotoText(e.target.value);
+                    setGotoError(false);
+                  }}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") submitGoto();
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      setGotoOpen(false);
+                    }
+                  }}
+                  onBlur={() => setGotoOpen(false)}
+                  placeholder="00:12.480 ou #312"
+                  title={
+                    gotoError
+                      ? "Não entendi — use 12.48, 00:12.480, 1:02:03 ou #312 (quadro)"
+                      : "Enter vai · Esc cancela · tempo (00:12.480) ou quadro (#312)"
+                  }
+                />
+              ) : (
+                <button
+                  type="button"
+                  className={styles.timeBtn}
+                  onClick={openGoto}
+                  title="Ir para um tempo ou quadro (Ctrl+G)"
+                >
+                  tempo atual: <code>{formatDuration(currentTime)}</code>
+                </button>
+              )}
+              <span title="Estimado: round(tempo × fps declarado) — mesma conta do storyboard">
+                quadro ≈ <code>{estimateFrameIndex(currentTime, media.fps_declared) ?? "—"}</code>
               </span>
               <span>
                 duração: <code>{formatDuration(effectiveDuration)}</code>
               </span>
+              {range ? (
+                <span className={styles.rangeInfo}>
+                  trecho:{" "}
+                  <button type="button" onClick={() => handleSeek(range.a)} title="Ir para a entrada (Shift+I)">
+                    <code>{formatDuration(range.a)}</code>
+                  </button>
+                  →
+                  <button type="button" onClick={() => handleSeek(range.b)} title="Ir para a saída (Shift+O)">
+                    <code>{formatDuration(range.b)}</code>
+                  </button>
+                  <span className={styles.rangeLen}>({(range.b - range.a).toFixed(3)} s)</span>
+                  <button
+                    type="button"
+                    className={`${styles.rangeBtn} ${loopOn ? styles.rangeBtnOn : ""}`}
+                    onClick={() => setLoopOn((on) => !on)}
+                    title={loopOn ? "Repetindo o trecho — clique para parar (Ctrl+L)" : "Repetir o trecho (Ctrl+L)"}
+                  >
+                    <Repeat size={12} />
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.rangeBtn}
+                    onClick={clearInOut}
+                    title="Limpar entrada e saída (Alt+X)"
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              ) : markIn != null || markOut != null ? (
+                <span className={styles.rangeInfo}>
+                  {markIn != null ? `entrada ${formatDuration(markIn)} — falta a saída (O)` : `saída ${formatDuration(markOut ?? 0)} — falta a entrada (I)`}
+                  <button type="button" className={styles.rangeBtn} onClick={clearInOut} title="Limpar (Alt+X)">
+                    <X size={12} />
+                  </button>
+                </span>
+              ) : null}
               <span>
                 eventos: <code>{events.length}</code>
               </span>

@@ -16,14 +16,30 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
   // Reprodução / transporte.
   { id: "video.playPause", scope: "video", group: "Vídeo · Reprodução", label: "Reproduzir / pausar", defaultBinding: "Space" },
   { id: "video.playPauseK", scope: "video", group: "Vídeo · Reprodução", label: "Reproduzir / pausar (alternativo)", defaultBinding: "K" },
-  { id: "video.reverse", scope: "video", group: "Vídeo · Reprodução", label: "Reproduzir em ré", defaultBinding: "J" },
-  { id: "video.forward", scope: "video", group: "Vídeo · Reprodução", label: "Reproduzir à frente", defaultBinding: "L" },
+  { id: "video.reverse", scope: "video", group: "Vídeo · Reprodução", label: "Ré — repetir acelera (1× → 2× → 4× → 8×)", defaultBinding: "J" },
+  { id: "video.forward", scope: "video", group: "Vídeo · Reprodução", label: "À frente — repetir acelera (1× → 2× → 4× → 8×)", defaultBinding: "L" },
 
   // Navegação por quadro / posição.
   { id: "video.prevFrame", scope: "video", group: "Vídeo · Navegação", label: "Quadro anterior", defaultBinding: "," },
   { id: "video.nextFrame", scope: "video", group: "Vídeo · Navegação", label: "Próximo quadro", defaultBinding: "." },
   { id: "video.seekStart", scope: "video", group: "Vídeo · Navegação", label: "Ir para o início", defaultBinding: "Home" },
   { id: "video.seekEnd", scope: "video", group: "Vídeo · Navegação", label: "Ir para o fim", defaultBinding: "End" },
+  { id: "video.prevEvent", scope: "video", group: "Vídeo · Navegação", label: "Evento anterior", defaultBinding: "Shift+Up" },
+  { id: "video.nextEvent", scope: "video", group: "Vídeo · Navegação", label: "Próximo evento", defaultBinding: "Shift+Down" },
+  { id: "video.gotoTime", scope: "video", group: "Vídeo · Navegação", label: "Ir para tempo / quadro (digitar)", defaultBinding: "Ctrl+G" },
+
+  // Trecho (entrada/saída) e repetição.
+  { id: "video.markIn", scope: "video", group: "Vídeo · Trecho", label: "Marcar entrada do trecho", defaultBinding: "I" },
+  { id: "video.markOut", scope: "video", group: "Vídeo · Trecho", label: "Marcar saída do trecho", defaultBinding: "O" },
+  { id: "video.gotoIn", scope: "video", group: "Vídeo · Trecho", label: "Ir para a entrada", defaultBinding: "Shift+I" },
+  { id: "video.gotoOut", scope: "video", group: "Vídeo · Trecho", label: "Ir para a saída", defaultBinding: "Shift+O" },
+  { id: "video.toggleLoop", scope: "video", group: "Vídeo · Trecho", label: "Repetir o trecho (liga / desliga)", defaultBinding: "Ctrl+L" },
+  { id: "video.clearInOut", scope: "video", group: "Vídeo · Trecho", label: "Limpar entrada e saída", defaultBinding: "Alt+X" },
+
+  // Linha do tempo.
+  { id: "video.timelineZoomIn", scope: "video", group: "Vídeo · Linha do tempo", label: "Aproximar a linha do tempo", defaultBinding: "=" },
+  { id: "video.timelineZoomOut", scope: "video", group: "Vídeo · Linha do tempo", label: "Afastar a linha do tempo", defaultBinding: "-" },
+  { id: "video.timelineZoomFit", scope: "video", group: "Vídeo · Linha do tempo", label: "Linha do tempo inteira", defaultBinding: "0" },
 
   // Velocidade de reprodução.
   { id: "video.speedUp", scope: "video", group: "Vídeo · Velocidade", label: "Aumentar velocidade", defaultBinding: "Up" },

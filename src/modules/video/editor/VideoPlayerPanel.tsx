@@ -16,9 +16,14 @@
  * field is focused):
  *   →/←  tap = ±1 frame · hold = reproduz à frente / em ré (até o início)
  *   ,/.  frame anterior / próximo            Shift+→/←  ±1 s
- *   Espaço/K  play-pause   J/L  ré / frente   Home/End  início / fim
- *   ↑/↓  velocidade        Ctrl+1  coletar frame
+ *   Espaço/K  play-pause   Home/End  1º quadro / fim
+ *   J/L  ré / frente — repetir acelera 1× → 2× → 4× → 8× (como nos editores)
+ *   ↑/↓  velocidade (0,1× … 8×)   Ctrl+1  coletar frame
  *   F / duplo clique no vídeo  tela cheia (quem executa é o VideoAnalysisView)
+ *
+ * Também: repete o trecho entrada/saída (`loop`), publica o tempo ~30×/s
+ * enquanto toca (a linha do tempo com zoom precisa), junta os seeks de quem
+ * arrasta a régua e lembra a posição de cada vídeo (abre no 1º quadro real).
  *
  * Reverse playback is synthesized with requestAnimationFrame (Chromium
  * ignores a negative playbackRate), so it is an *approximation* for visual
@@ -32,6 +37,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { mediaSrc } from "@core/mediaSrc";
+import { formatDuration } from "./format";
+import { loadPosition, savePosition } from "./resume";
 import { useShortcuts } from "@core/useShortcuts";
 import {
   Maximize,
@@ -58,13 +65,31 @@ interface Props {
   onDurationLoaded: (d: number) => void;
   /** Ctrl+1 — collect the current frame (resolved upstream via ffmpeg). */
   onCollectFrame: () => void;
-  registerSeek: (fn: (seconds: number) => void) => void;
+  /** Entrega ao pai os comandos imperativos (seek, arrastar, tempo atual). */
+  registerController: (c: PlayerController) => void;
+  /** SHA-256 da mídia — chave do "continuar de onde parou". */
+  mediaKey: string;
+  /** Instante do 1º quadro (vídeo recortado pode começar depois do 0:00). */
+  startTime?: number;
+  /** Trecho a repetir (já ordenado), ou null. */
+  loop?: { a: number; b: number } | null;
   /** Tela cheia do reprodutor — estado e alternância vêm do VideoAnalysisView. */
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
 }
 
-const PLAYBACK_RATES = [0.25, 0.5, 1, 2];
+export interface PlayerController {
+  seek: (seconds: number) => void;
+  /** Arrastar na régua: pausa (e lembra se tocava), segue o dedo, retoma. */
+  scrubStart: () => void;
+  scrub: (seconds: number) => void;
+  scrubEnd: (seconds: number) => void;
+  getTime: () => number;
+}
+
+const PLAYBACK_RATES = [0.1, 0.25, 0.5, 1, 2, 4, 8];
+/** J/L repetidos: 1× → 2× → 4× → 8× (fica em 8×). */
+const nextShuttle = (r: number) => (r < 1 ? 1 : Math.min(8, r * 2));
 /** Hold longer than this (ms) and an arrow switches from frame-step to play. */
 const HOLD_MS = 300;
 const DEFAULT_FPS = 30;
@@ -77,7 +102,10 @@ export function VideoPlayerPanel({
   onTimeUpdate,
   onDurationLoaded,
   onCollectFrame,
-  registerSeek,
+  registerController,
+  mediaKey,
+  startTime = 0,
+  loop = null,
   fullscreen = false,
   onToggleFullscreen,
 }: Props) {
@@ -86,12 +114,27 @@ export function VideoPlayerPanel({
   const [isReversing, setIsReversing] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   // --- refs read by the single bound key listener (avoid stale closures) ---
   const activeRef = useRef(active);
   const fpsRef = useRef(fps ?? null);
   const rateRef = useRef(1);
   const onCollectFrameRef = useRef(onCollectFrame);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
+  onTimeUpdateRef.current = onTimeUpdate;
+  const loopRef = useRef(loop);
+  loopRef.current = loop;
+  const startTimeRef = useRef(startTime);
+  startTimeRef.current = startTime;
+  const mediaKeyRef = useRef(mediaKey);
+  mediaKeyRef.current = mediaKey;
+  // posição restaurada uma vez por mídia; arrastar a régua
+  const restoredRef = useRef(false);
+  const scrubRef = useRef<{ wasPlaying: boolean; pending: number | null } | null>(null);
+  const lastSaveRef = useRef(0);
+  /** Último tempo conhecido — ao desmontar, o <video> já pode ter zerado. */
+  const lastTimeRef = useRef(0);
   // reverse-playback state — paced by the decoder (one seek at a time)
   const revActiveRef = useRef(false);
   const revRafRef = useRef<number | null>(null);
@@ -168,7 +211,12 @@ export function VideoPlayerPanel({
     if (!v) return;
     if (revActiveRef.current) return; // already reversing
     if (!v.paused) v.pause();
-    if (v.currentTime <= 0) return; // already at the start
+    const lp0 = loopRef.current;
+    if (lp0 && (v.currentTime <= lp0.a + 1e-3 || v.currentTime > lp0.b + 1e-3)) {
+      v.currentTime = lp0.b; // repetindo: ré começa do fim do trecho
+    } else if (v.currentTime <= startTimeRef.current + 1e-3) {
+      return; // already at the first frame
+    }
     revActiveRef.current = true;
     setIsReversing(true);
     revLastWallRef.current = performance.now();
@@ -195,12 +243,16 @@ export function VideoPlayerPanel({
           revLastWallRef.current = now;
           const step = Math.min(owed, MAX_REVERSE_STEP_S);
           const next = vid.currentTime - step;
-          if (next <= 0) {
-            vid.currentTime = 0;
+          const lp = loopRef.current;
+          if (lp && next <= lp.a) {
+            vid.currentTime = lp.b; // trecho em repetição: volta ao fim
+          } else if (next <= startTimeRef.current) {
+            vid.currentTime = startTimeRef.current;
             stopReverse();
             return;
+          } else {
+            vid.currentTime = next;
           }
-          vid.currentTime = next;
         }
       }
       revRafRef.current = requestAnimationFrame(loop);
@@ -212,6 +264,10 @@ export function VideoPlayerPanel({
     const v = videoRef.current;
     if (!v) return;
     stopReverse();
+    const lp = loopRef.current;
+    if (lp && (v.currentTime < lp.a - 1e-3 || v.currentTime >= lp.b - 1e-3)) {
+      v.currentTime = lp.a; // repetindo: começa do início do trecho
+    }
     try {
       await v.play();
     } catch {
@@ -249,17 +305,59 @@ export function VideoPlayerPanel({
     const idx = PLAYBACK_RATES.indexOf(rateRef.current);
     const ni = Math.max(
       0,
-      Math.min(PLAYBACK_RATES.length - 1, (idx < 0 ? 2 : idx) + dir),
+      Math.min(
+        PLAYBACK_RATES.length - 1,
+        (idx < 0 ? PLAYBACK_RATES.indexOf(1) : idx) + dir,
+      ),
     );
     applyRate(PLAYBACK_RATES[ni]!);
   };
 
-  const forwardKey = () => {
+  // J/L no estilo dos editores: parado → 1×; repetir na mesma direção dobra
+  // até 8×; a direção oposta recomeça em 1×. K/Espaço pausa.
+  const shuttleForward = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (revActiveRef.current || v.paused) {
+      stopReverse();
+      applyRate(1);
+      void playForward();
+      return;
+    }
+    applyRate(nextShuttle(rateRef.current));
+  };
+  const shuttleReverse = () => {
+    if (revActiveRef.current) {
+      applyRate(nextShuttle(rateRef.current));
+      return;
+    }
+    applyRate(1);
+    startReverse();
+  };
+
+  // ---- arrastar a régua: um seek de cada vez; o último pedido espera o
+  // anterior terminar (evento `seeked`) em vez de empilhar -----------------
+  const scrubStart = () => {
     const v = videoRef.current;
     if (!v) return;
     stopReverse();
-    if (v.paused) void playForward();
-    else v.pause();
+    scrubRef.current = { wasPlaying: !v.paused, pending: null };
+    if (!v.paused) v.pause();
+  };
+  const scrub = (t: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    if (v.seeking && scrubRef.current) {
+      scrubRef.current.pending = t;
+      return;
+    }
+    seekTo(t);
+  };
+  const scrubEnd = (t: number) => {
+    const s = scrubRef.current;
+    scrubRef.current = null;
+    seekTo(t);
+    if (s?.wasPlaying) void playForward();
   };
 
   // ---- atalhos discretos do reprodutor (customizáveis, escopo `video`) ---
@@ -272,16 +370,13 @@ export function VideoPlayerPanel({
     {
       "video.playPause": () => void togglePlay(),
       "video.playPauseK": () => void togglePlay(),
-      "video.reverse": () => {
-        if (revActiveRef.current) stopReverse();
-        else startReverse();
-      },
-      "video.forward": forwardKey,
+      "video.reverse": shuttleReverse,
+      "video.forward": shuttleForward,
       "video.prevFrame": () => frameStep(-1),
       "video.nextFrame": () => frameStep(1),
       "video.seekStart": () => {
         stopReverse();
-        seekTo(0);
+        seekTo(startTimeRef.current); // 1º quadro real
       },
       "video.seekEnd": () => {
         stopReverse();
@@ -301,24 +396,141 @@ export function VideoPlayerPanel({
     { enabled: active, allowInInputs: true },
   );
 
-  // ---- wiring: expose seek to parent ------------------------------------
+  // ---- wiring: expose the controller to the parent ----------------------
   useEffect(() => {
-    registerSeek((seconds: number) => {
-      stopReverse();
-      seekTo(seconds);
+    registerController({
+      seek: (seconds: number) => {
+        stopReverse();
+        seekTo(seconds);
+      },
+      scrubStart,
+      scrub,
+      scrubEnd,
+      getTime: () => videoRef.current?.currentTime ?? 0,
     });
-  }, [registerSeek]);
+    // Handlers só leem refs — a primeira closure continua correta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerController]);
+
+  // ---- nova mídia: restaurar a posição de novo ---------------------------
+  useEffect(() => {
+    restoredRef.current = false;
+    setNotice(null);
+  }, [src]);
+
+  // Aviso curto sobre o vídeo (retomada / 1º quadro) — some sozinho.
+  useEffect(() => {
+    if (!notice) return;
+    const id = window.setTimeout(() => setNotice(null), 5000);
+    return () => clearTimeout(id);
+  }, [notice]);
+
+  // ---- relógio fino + repetição do trecho enquanto toca -------------------
+  // `timeupdate` só vem ~4×/s: pouco para a régua com zoom e para repetir um
+  // trecho curto sem passar do ponto. Enquanto toca, um rAF publica o tempo
+  // (~30×/s), cumpre a repetição e salva a posição de tempos em tempos.
+  //
+  // Rede de segurança: numa sessão o WebKit/GStreamer "travou tocando" (play
+  // ativo, tempo parado) e só destravou ao mudar a velocidade. Se o tempo não
+  // anda por 1 s tocando (sem seek pendente), reaplica a velocidade e
+  // reposiciona no mesmo ponto — no máximo a cada 2 s.
+  useEffect(() => {
+    if (!isPlaying) return;
+    let raf = 0;
+    let lastPub = 0;
+    let stallT = -1;
+    let stallSince = performance.now();
+    let lastNudge = 0;
+    const tick = (now: number) => {
+      const v = videoRef.current;
+      if (v && !v.paused) {
+        if (v.seeking || v.readyState < 2 || Math.abs(v.currentTime - stallT) > 1e-4) {
+          stallT = v.currentTime;
+          stallSince = now;
+        } else if (now - stallSince > 1000 && now - lastNudge > 2000) {
+          lastNudge = now;
+          stallSince = now;
+          const r = v.playbackRate;
+          v.playbackRate = r === 1 ? 0.999 : 1;
+          v.playbackRate = r;
+          v.currentTime = v.currentTime;
+        }
+        const lp = loopRef.current;
+        if (lp && v.currentTime >= lp.b) v.currentTime = lp.a;
+        lastTimeRef.current = v.currentTime;
+        if (now - lastPub >= 33) {
+          lastPub = now;
+          onTimeUpdateRef.current(v.currentTime);
+        }
+        if (now - lastSaveRef.current >= 2000) {
+          lastSaveRef.current = now;
+          savePosition(mediaKeyRef.current, v.currentTime);
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [isPlaying]);
+
+  // Ao sair do vídeo (voltar / trocar de mídia), guarda onde parou — com a
+  // chave DESTE vídeo (a ref já pode apontar para o próximo).
+  useEffect(() => {
+    const key = mediaKey;
+    return () => {
+      if (restoredRef.current) savePosition(key, lastTimeRef.current);
+    };
+  }, [src, mediaKey]);
 
   // ---- media element event listeners ------------------------------------
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     const onPlay = () => setIsPlaying(true);
-    const onPause = () => setIsPlaying(false);
-    const onTime = () => onTimeUpdate(v.currentTime);
+    const onPause = () => {
+      setIsPlaying(false);
+      if (restoredRef.current) savePosition(mediaKeyRef.current, v.currentTime);
+    };
+    const onTime = () => {
+      lastTimeRef.current = v.currentTime;
+      onTimeUpdate(v.currentTime);
+    };
+    const onSeeked = () => {
+      lastTimeRef.current = v.currentTime;
+      onTimeUpdate(v.currentTime);
+      // arrastando: aplica o último pedido que chegou durante este seek
+      const s = scrubRef.current;
+      if (s && s.pending != null) {
+        const p = s.pending;
+        s.pending = null;
+        seekTo(p);
+        return;
+      }
+      // parado e navegando quadro a quadro: salva (no máx. 2×/s)
+      const now = performance.now();
+      if (!s && restoredRef.current && now - lastSaveRef.current >= 500) {
+        lastSaveRef.current = now;
+        savePosition(mediaKeyRef.current, v.currentTime);
+      }
+    };
     const onMeta = () => {
       onDurationLoaded(v.duration);
       v.playbackRate = rateRef.current; // keep the chosen rate across loads
+      if (restoredRef.current) return;
+      restoredRef.current = true;
+      // Continua de onde parou; senão abre no 1º quadro (se houver vazio antes).
+      const st = startTimeRef.current;
+      const saved = loadPosition(mediaKeyRef.current);
+      const dur = Number.isFinite(v.duration) ? v.duration : Infinity;
+      if (saved != null && saved > st + 0.5 && saved < dur - 0.5) {
+        v.currentTime = saved;
+        setNotice(`Continuando de ${formatDuration(saved)} · Home volta ao 1º quadro`);
+      } else if (st > 0.05) {
+        v.currentTime = st;
+        setNotice(
+          `Este vídeo começa em ${formatDuration(st)} — antes disso não há quadros (Home volta aqui).`,
+        );
+      }
     };
     const onErr = () => {
       const code = v.error?.code;
@@ -331,12 +543,14 @@ export function VideoPlayerPanel({
     v.addEventListener("play", onPlay);
     v.addEventListener("pause", onPause);
     v.addEventListener("timeupdate", onTime);
+    v.addEventListener("seeked", onSeeked);
     v.addEventListener("loadedmetadata", onMeta);
     v.addEventListener("error", onErr);
     return () => {
       v.removeEventListener("play", onPlay);
       v.removeEventListener("pause", onPause);
       v.removeEventListener("timeupdate", onTime);
+      v.removeEventListener("seeked", onSeeked);
       v.removeEventListener("loadedmetadata", onMeta);
       v.removeEventListener("error", onErr);
     };
@@ -440,6 +654,7 @@ export function VideoPlayerPanel({
         </div>
       )}
       <div className={styles.videoWrap}>
+        {notice && <div className={styles.notice}>{notice}</div>}
         {src ? (
           <video
             ref={videoRef}
@@ -470,7 +685,7 @@ export function VideoPlayerPanel({
           type="button"
           className={isReversing ? styles.reverseActive : ""}
           onClick={() => (isReversing ? stopReverse() : startReverse())}
-          title="Reproduzir em ré (J, ou segurar ←)"
+          title="Reproduzir em ré (J — repetir acelera; ou segurar ←)"
         >
           <Rewind size={14} />
         </button>
@@ -499,8 +714,9 @@ export function VideoPlayerPanel({
               type="button"
               className={`${styles.rate} ${playbackRate === r ? styles.rateActive : ""}`}
               onClick={() => applyRate(r)}
+              title={`${String(r).replace(".", ",")}× (↑/↓ muda · J/L repetidos aceleram)`}
             >
-              {r}×
+              {String(r).replace(".", ",")}×
             </button>
           ))}
         </div>
@@ -524,19 +740,25 @@ export function VideoPlayerPanel({
       </div>
       <div className={styles.shortcuts}>
         <span>
-          <kbd>→</kbd>/<kbd>←</kbd> frame · segurar = play/ré
+          <kbd>→</kbd>/<kbd>←</kbd> quadro · segurar = play/ré
         </span>
         <span>
-          <kbd>,</kbd>/<kbd>.</kbd> frame
+          <kbd>,</kbd>/<kbd>.</kbd> quadro · <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> ±1 s
         </span>
         <span>
-          <kbd>Shift</kbd>+<kbd>→</kbd>/<kbd>←</kbd> ±1 s
-        </span>
-        <span>
-          <kbd>Espaço</kbd>/<kbd>K</kbd> play · <kbd>J</kbd>/<kbd>L</kbd> ré/frente
+          <kbd>Espaço</kbd>/<kbd>K</kbd> play · <kbd>J</kbd>/<kbd>L</kbd> ré/frente (repetir: até 8×)
         </span>
         <span>
           <kbd>↑</kbd>/<kbd>↓</kbd> velocidade · <kbd>Home</kbd>/<kbd>End</kbd>
+        </span>
+        <span>
+          <kbd>I</kbd>/<kbd>O</kbd> trecho · <kbd>Ctrl</kbd>+<kbd>L</kbd> repetir
+        </span>
+        <span>
+          <kbd>Shift</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> eventos · <kbd>Ctrl</kbd>+<kbd>G</kbd> ir para
+        </span>
+        <span>
+          <kbd>=</kbd>/<kbd>−</kbd>/<kbd>0</kbd> zoom da linha
         </span>
         <span>
           <kbd>F</kbd> tela cheia
