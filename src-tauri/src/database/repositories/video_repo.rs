@@ -21,14 +21,15 @@ const MEDIA_COLS: &str = "
     id, occurrence_id, original_path, relative_path, filename, sha256,
     size_bytes, duration_s, codec, width, height, pixel_format,
     fps_declared, avg_frame_rate, r_frame_rate, time_base, frame_count,
-    bitrate, raw_probe_json, warnings_json, created_at, updated_at
+    bitrate, raw_probe_json, warnings_json, created_at, updated_at,
+    derived_from_hash, derivation_json
 ";
 
 pub fn insert_media(conn: &Connection, m: &VideoMedia) -> Result<()> {
     conn.execute(
         &format!(
             "INSERT INTO video_media ({MEDIA_COLS}) VALUES \
-             (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22)"
+             (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13,?14,?15,?16,?17,?18,?19,?20,?21,?22,?23,?24)"
         ),
         params![
             m.id.to_string(),
@@ -53,6 +54,8 @@ pub fn insert_media(conn: &Connection, m: &VideoMedia) -> Result<()> {
             m.warnings_json,
             m.created_at.to_rfc3339(),
             m.updated_at.to_rfc3339(),
+            m.derived_from_hash,
+            m.derivation_json,
         ],
     )?;
     Ok(())
@@ -125,6 +128,8 @@ fn row_to_media(row: &Row<'_>) -> rusqlite::Result<VideoMedia> {
         warnings_json: row.get("warnings_json")?,
         created_at: parse_dt(row.get::<_, String>("created_at")?)?,
         updated_at: parse_dt(row.get::<_, String>("updated_at")?)?,
+        derived_from_hash: row.get("derived_from_hash")?,
+        derivation_json: row.get("derivation_json")?,
     })
 }
 

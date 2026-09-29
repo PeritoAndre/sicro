@@ -167,7 +167,16 @@ export function VideoListView() {
                 <li key={m.id} className={styles.row}>
                   <VideoThumb workspacePath={workspacePath ?? ""} mediaId={m.id} />
                   <div className={styles.rowMain}>
-                    <strong className={styles.rowTitle}>{m.filename}</strong>
+                    <strong className={styles.rowTitle}>
+                      {m.filename}
+                      {m.derived_from_hash && (
+                        <span className={styles.derivedTag} title="Cópia de parte de outro vídeo do caso">
+                          trecho de{" "}
+                          {list.find((o) => o.sha256 === m.derived_from_hash)?.filename ??
+                            "vídeo removido"}
+                        </span>
+                      )}
+                    </strong>
                     <div className={styles.rowMeta}>
                       <span title={m.codec ?? ""}>
                         {m.codec ?? "codec desconhecido"}

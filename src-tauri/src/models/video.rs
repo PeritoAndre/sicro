@@ -38,6 +38,12 @@ pub struct VideoMedia {
     pub warnings_json: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    /// Trecho exportado: SHA-256 do vídeo de origem (None = vídeo original).
+    #[serde(default)]
+    pub derived_from_hash: Option<String>,
+    /// Como o trecho foi feito (JSON): entrada/saída, modo, comando ffmpeg.
+    #[serde(default)]
+    pub derivation_json: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -85,6 +91,40 @@ pub struct UpdateVideoEventInput {
     pub category: Option<String>,
     pub timestamp_s: Option<f64>,
     pub reviewed: Option<bool>,
+}
+
+// ---------------------------------------------------------------------------
+// Exportar trecho (migration 019)
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ExportClipInput {
+    pub media_hash: String,
+    pub start_s: f64,
+    pub end_s: f64,
+    /// "copy" (sem recompressão, padrão) | "reencode".
+    #[serde(default = "default_clip_mode")]
+    pub mode: String,
+    #[serde(default = "default_true")]
+    pub include_audio: bool,
+}
+
+fn default_clip_mode() -> String {
+    "copy".into()
+}
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ExportClipResult {
+    /// O trecho registrado como vídeo do caso.
+    pub media: VideoMedia,
+    /// Onde o trecho começa de fato no vídeo de origem (copy: quadro-chave).
+    pub actual_start_s: f64,
+    pub actual_end_s: f64,
+    /// Já existia um trecho idêntico (mesmo hash) — devolvido em vez de duplicar.
+    pub already_existed: bool,
+    pub warnings: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------

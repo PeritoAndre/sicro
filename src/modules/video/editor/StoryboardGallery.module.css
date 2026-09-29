@@ -1,0 +1,110 @@
+.overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  background: rgba(5, 7, 12, 0.97);
+}
+.top {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 8px var(--space-3);
+  border-bottom: 1px solid var(--sicro-divider);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
+.title {
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 40%;
+}
+.meta {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.meta code {
+  font-family: var(--font-mono);
+  color: var(--sicro-fg);
+}
+.count {
+  font-family: var(--font-mono);
+}
+.top button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg);
+  border-radius: var(--radius-sm);
+  padding: 4px 10px;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3);
+}
+.big {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+.nav {
+  flex-shrink: 0;
+  width: 44px;
+  height: 88px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.nav:disabled {
+  opacity: 0.25;
+  cursor: default;
+}
+.strip {
+  display: flex;
+  gap: 6px;
+  padding: 8px var(--space-3) 12px;
+  overflow-x: auto;
+  border-top: 1px solid var(--sicro-divider);
+}
+.thumb {
+  flex-shrink: 0;
+  width: 128px;
+  aspect-ratio: 16 / 9;
+  padding: 0;
+  background: #000;
+  border: 2px solid transparent;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: pointer;
+}
+.thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.thumbOn {
+  border-color: var(--sicro-accent);
+}

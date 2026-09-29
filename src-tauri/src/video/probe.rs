@@ -36,6 +36,33 @@ pub struct ParsedProbe {
     pub warnings: Vec<String>,
 }
 
+/// `format.start_time` do ffprobe (s): onde começa a linha do tempo do
+/// arquivo. Vídeo recortado costuma começar depois do 0 (trecho vazio / edit
+/// list). IMPORTANTE para o ffmpeg: `-ss` de ENTRADA é medido a partir daqui,
+/// enquanto o player, o ffprobe e o `-ss` de saída com `-copyts` usam o tempo
+/// absoluto — quem busca na entrada precisa descontar este valor.
+pub fn container_start_time(raw_probe_json: &str) -> f64 {
+    serde_json::from_str::<serde_json::Value>(raw_probe_json)
+        .ok()
+        .and_then(|v| {
+            let st = &v["format"]["start_time"];
+            st.as_str().and_then(|s| s.parse::<f64>().ok()).or_else(|| st.as_f64())
+        })
+        .filter(|t| t.is_finite() && *t > 0.0)
+        .unwrap_or(0.0)
+}
+
+/// `format.start_time` lido direto do arquivo (quando não há probe guardado).
+pub fn read_start_time(path: &Path) -> Result<f64> {
+    let ffprobe = detect_ffprobe()?;
+    let out = std::process::Command::new(&ffprobe)
+        .args(["-v", "error", "-show_entries", "format=start_time", "-of", "json"])
+        .arg(path)
+        .output()
+        .map_err(|e| SicroError::Workspace(format!("could not spawn ffprobe: {e}")))?;
+    Ok(container_start_time(&String::from_utf8_lossy(&out.stdout)))
+}
+
 /// Look up an `ffprobe` binary that the orchestrator can call. Tries the
 /// user's PATH first; in the future this could fall back to a bundled
 /// build. Returns the resolved path.

@@ -2,14 +2,39 @@
  * VideoStoryboardPanel — cards com as fotos extraídas pelo ffmpeg.
  * Cada card mostra miniatura (servida via Tauri asset protocol),
  * timestamp, índice de frame (sempre estimado neste spike) e ações.
+ *
+ * Tamanho das miniaturas P / M / G (lembrado), galeria em tela grande e menu
+ * no botão direito de cada quadro.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { ImageOff, Trash2, Eye } from "lucide-react";
+import { Copy, Crosshair, Expand, ImageOff, Trash2, Eye } from "lucide-react";
 import type { VideoEvent, VideoStoryboardFrame } from "@domain/video";
+import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMenu";
 import { formatDuration } from "./format";
 import styles from "./VideoStoryboardPanel.module.css";
+
+export type ThumbSize = "s" | "m" | "l";
+const SIZE_KEY = "sicro.video.storyboardSize.v1";
+function loadSize(): ThumbSize {
+  try {
+    const v = localStorage.getItem(SIZE_KEY);
+    return v === "m" || v === "l" ? v : "s";
+  } catch {
+    return "s";
+  }
+}
+
+/** URL servível do PNG de um quadro coletado. */
+export function frameSrc(workspacePath: string, frame: VideoStoryboardFrame): string | null {
+  try {
+    const sep = workspacePath.includes("\\") ? "\\" : "/";
+    return convertFileSrc(`${workspacePath}${sep}${frame.output_path.replace(/\//g, sep)}`);
+  } catch {
+    return null;
+  }
+}
 
 interface Props {
   workspacePath: string;
@@ -17,6 +42,9 @@ interface Props {
   events: VideoEvent[];
   onSelectFrame: (f: VideoStoryboardFrame) => void;
   onDelete: (frameId: string, deletePng: boolean) => Promise<void> | void;
+  /** Abre a galeria em tela grande no quadro `index`. */
+  onOpenGallery?: (index: number) => void;
+  onCopyTime?: (f: VideoStoryboardFrame) => void;
 }
 
 export function VideoStoryboardPanel({
@@ -25,18 +53,74 @@ export function VideoStoryboardPanel({
   events,
   onSelectFrame,
   onDelete,
+  onOpenGallery,
+  onCopyTime,
 }: Props) {
+  const [size, setSize] = useState<ThumbSize>(loadSize);
+  const menu = useContextMenu();
+  useEffect(() => {
+    try {
+      localStorage.setItem(SIZE_KEY, size);
+    } catch {
+      /* só não lembra */
+    }
+  }, [size]);
+
+  const frameMenu = (e: React.MouseEvent, f: VideoStoryboardFrame, index: number) => {
+    const items: MenuItem[] = [];
+    if (onOpenGallery)
+      items.push({ label: "Ver grande", icon: <Expand size={12} />, onSelect: () => onOpenGallery(index) });
+    items.push({ label: "Ir para este instante", icon: <Crosshair size={12} />, onSelect: () => onSelectFrame(f) });
+    if (onCopyTime)
+      items.push({ label: "Copiar tempo (laudo)", icon: <Copy size={12} />, onSelect: () => onCopyTime(f) });
+    items.push("separator", {
+      label: "Remover do storyboard",
+      icon: <Trash2 size={12} />,
+      danger: true,
+      onSelect: () => void onDelete(f.id, false),
+    });
+    menu.open(e, items);
+  };
+
   return (
     <section className={styles.panel}>
-      <h3 className={styles.title}>Storyboard ({frames.length})</h3>
+      {menu.element}
+      <div className={styles.head}>
+        <h3 className={styles.title}>Storyboard ({frames.length})</h3>
+        <div className={styles.sizeSeg} role="radiogroup" aria-label="Tamanho das miniaturas">
+          {(["s", "m", "l"] as const).map((k) => (
+            <button
+              key={k}
+              type="button"
+              className={size === k ? styles.sizeOn : ""}
+              onClick={() => setSize(k)}
+              title={k === "s" ? "Miniaturas pequenas" : k === "m" ? "Miniaturas médias" : "Miniaturas grandes"}
+            >
+              {k === "s" ? "P" : k === "m" ? "M" : "G"}
+            </button>
+          ))}
+        </div>
+        {onOpenGallery && frames.length > 0 && (
+          <button
+            type="button"
+            className={styles.galleryBtn}
+            onClick={() => onOpenGallery(0)}
+            title="Ver os quadros em tela grande"
+          >
+            <Expand size={12} />
+          </button>
+        )}
+      </div>
       {frames.length === 0 ? (
         <p className={styles.empty}>
           Nenhum frame coletado ainda. Use <strong>Coletar frame atual</strong>{" "}
           ou o ícone <em>ImagePlus</em> em um evento.
         </p>
       ) : (
-        <div className={styles.grid}>
-          {frames.map((f) => (
+        <div
+          className={`${styles.grid} ${size === "m" ? styles.gridM : size === "l" ? styles.gridL : ""}`}
+        >
+          {frames.map((f, i) => (
             <FrameCard
               key={f.id}
               frame={f}
@@ -48,6 +132,8 @@ export function VideoStoryboardPanel({
               }
               onSelect={() => onSelectFrame(f)}
               onDelete={(deletePng) => void onDelete(f.id, deletePng)}
+              onContextMenu={(e) => frameMenu(e, f, i)}
+              onOpenBig={onOpenGallery ? () => onOpenGallery(i) : undefined}
             />
           ))}
         </div>
@@ -62,31 +148,28 @@ function FrameCard({
   eventLabel,
   onSelect,
   onDelete,
+  onContextMenu,
+  onOpenBig,
 }: {
   frame: VideoStoryboardFrame;
   workspacePath: string;
   eventLabel: string | null;
   onSelect: () => void;
   onDelete: (deletePng: boolean) => void;
+  onContextMenu: (e: React.MouseEvent) => void;
+  onOpenBig?: () => void;
 }) {
-  const src = (() => {
-    try {
-      const sep = workspacePath.includes("\\") ? "\\" : "/";
-      const abs = `${workspacePath}${sep}${frame.output_path.replace(/\//g, sep)}`;
-      return convertFileSrc(abs);
-    } catch {
-      return null;
-    }
-  })();
+  const src = frameSrc(workspacePath, frame);
   const [failed, setFailed] = useState(false);
 
   return (
-    <figure className={styles.card}>
+    <figure className={styles.card} onContextMenu={onContextMenu}>
       <button
         type="button"
         className={styles.thumbBtn}
         onClick={onSelect}
-        title="Mover o player para o timestamp deste frame"
+        onDoubleClick={onOpenBig}
+        title="Clique: levar o player a este quadro · duplo clique: ver grande · botão direito: mais opções"
       >
         {!src || failed ? (
           <div className={styles.failed}>
@@ -117,8 +200,9 @@ function FrameCard({
           {frame.delta_s != null && Math.abs(frame.delta_s) > 0.001 && (
             <span
               className={styles.deltaChip}
-              // O extrator (ffmpeg) pode entregar o keyframe mais próximo do tempo pedido.
-              title="Diferença entre o tempo solicitado e o frame entregue (ajuste ao keyframe mais próximo)"
+              // O quadro coletado é o que o player mostra no instante pedido: ele
+              // começa um pouco antes (até 1 quadro). Δ = início do quadro − pedido.
+              title="O quadro coletado é o que aparece no instante pedido; ele começa Δ antes (no máximo a duração de 1 quadro)"
             >
               Δ {frame.delta_s.toFixed(3)}s
             </span>

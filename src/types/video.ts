@@ -39,6 +39,38 @@ export interface VideoMedia {
   warnings_json: string;
   created_at: string;
   updated_at: string;
+  /** Trecho exportado: SHA-256 do vídeo de origem (null = vídeo original). */
+  derived_from_hash?: string | null;
+  /** Como o trecho foi feito (JSON — ver `ClipDerivation`). */
+  derivation_json?: string | null;
+}
+
+export type ClipMode = "copy" | "reencode";
+
+export interface ExportClipInput {
+  media_hash: string;
+  start_s: number;
+  end_s: number;
+  mode: ClipMode;
+  include_audio: boolean;
+}
+
+export interface ExportClipResult {
+  media: VideoMedia;
+  actual_start_s: number;
+  actual_end_s: number;
+  already_existed: boolean;
+  warnings: string[];
+}
+
+/** Conteúdo de `derivation_json` de um trecho. */
+export interface ClipDerivation {
+  kind: "clip";
+  source: { sha256: string; filename: string; relative_path: string };
+  requested: { start_s: number; end_s: number };
+  actual: { start_s: number; end_s: number };
+  mode: ClipMode;
+  include_audio: boolean;
 }
 
 /** Relógio da câmera: "aos media_time_s do vídeo, a câmera marca clock_seconds". */

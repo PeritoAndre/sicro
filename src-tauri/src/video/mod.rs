@@ -12,6 +12,7 @@
 //! ffprobe/ffmpeg. Spike F honours that decision: HTMLVideoElement is the
 //! viewer, this module is the perito's technical eye.
 
+pub mod clip;
 pub mod frame_export;
 pub mod measure;
 pub mod probe;

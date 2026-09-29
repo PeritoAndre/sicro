@@ -26,6 +26,12 @@
 //! (so ffmpeg only decodes a short span, even deep into a long video), and
 //! `-copyts` + an ABSOLUTE output `-ss` make ffmpeg decode-and-discard until
 //! it reaches the exact frame. Distinct requests ⇒ distinct frames.
+//!
+//! ATENÇÃO — início do arquivo: o `-ss` de ENTRADA do ffmpeg conta a partir
+//! do `start_time` do arquivo, mas o pedido (e o player, e o `-ss` de saída
+//! com `-copyts`) usa o tempo absoluto. Em vídeo recortado (trecho vazio no
+//! início, ex.: 3,97 s) a busca rápida caía DEPOIS do alvo e o ffmpeg entregava
+//! um quadro atrasado. Por isso a busca rápida desconta `start_time_s`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -56,6 +62,9 @@ pub struct ExtractFrameOptions<'a> {
     /// the caller can attach domain context without us having to model it
     /// at this layer.
     pub sidecar_extra: serde_json::Value,
+    /// `format.start_time` do arquivo (`probe::container_start_time`): a busca
+    /// rápida de entrada é medida a partir dele.
+    pub start_time_s: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -95,12 +104,28 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
     }
     let ffmpeg = detect_ffmpeg()?;
 
+    // O quadro a coletar é o que o PLAYER MOSTRA no instante pedido: o último
+    // que começa em ou antes dele (pts <= t). Os tempos dos pacotes dão isso
+    // exatamente; mira-se 1/4 de quadro antes dele, e a busca exata de saída
+    // (que fica com o 1º quadro >= alvo) cai nele — nem o anterior, nem o
+    // seguinte. Sem tempos de pacote (contêiner raro), volta ao pedido cru.
+    let (target_abs, shown_pts) = match crate::video::clip::plan_clip(
+        opts.video_path,
+        opts.timestamp_s,
+        opts.timestamp_s,
+    ) {
+        Ok(p) => ((p.first_frame - p.frame_dur * 0.25).max(0.0), Some(p.first_frame)),
+        Err(_) => (opts.timestamp_s, None),
+    };
+
     // Fast + ACCURATE seek (see module docs): a coarse input seek snaps to the
     // keyframe just before the target (cheap), `-copyts` keeps the original
     // timestamps, and an ABSOLUTE output seek nails the exact frame — so two
     // instants in the same GOP no longer collapse onto one keyframe.
-    let coarse = format_seconds((opts.timestamp_s - SEEK_REWIND_S).max(0.0));
-    let target = format_seconds(opts.timestamp_s);
+    let coarse = format_seconds(
+        (target_abs - SEEK_REWIND_S - opts.start_time_s.max(0.0)).max(0.0),
+    );
+    let target = format_seconds(target_abs);
     let status = Command::new(&ffmpeg)
         .args([
             "-hide_banner",
@@ -144,7 +169,7 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
     // Try to read back the precise timestamp of the produced PNG by
     // re-running ffprobe on the SOURCE near that timestamp. ffmpeg with
     // fast `-ss` may snap to a keyframe; we surface the delta honestly.
-    let actual = probe_actual_timestamp(opts.video_path, opts.timestamp_s).ok();
+    let actual = shown_pts.or_else(|| probe_actual_timestamp(opts.video_path, opts.timestamp_s).ok());
     let delta = actual.map(|a| a - opts.timestamp_s);
 
     let ffmpeg_version = detect_ffmpeg_version(&ffmpeg);
@@ -180,15 +205,16 @@ fn probe_actual_timestamp(video: &Path, ts_s: f64) -> Result<f64> {
     let ffprobe = detect_ffprobe()?;
     let ts = ts_s.max(0.0);
     let start = (ts - SEEK_REWIND_S).max(0.0);
-    // Window must comfortably reach past the target so the frame at/after it
-    // is decoded and listed.
-    let window = SEEK_REWIND_S + 4.0;
+    // Fim ABSOLUTO da janela: um fim relativo (`%+n`) conta a partir de onde
+    // a busca caiu (o quadro-chave, às vezes vários segundos antes) e a janela
+    // podia acabar antes do alvo — aí o "tempo real" saía o último quadro dela.
+    let end = ts + 4.0;
     let output = Command::new(&ffprobe)
         .args([
             "-v",
             "error",
             "-read_intervals",
-            &format!("{start}%+{window}"),
+            &format!("{start}%{end}"),
             "-select_streams",
             "v:0",
             "-show_entries",

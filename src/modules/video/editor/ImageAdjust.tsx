@@ -21,22 +21,23 @@ export function isAdjusted(a: Adjust): boolean {
   return a.brightness !== 1 || a.contrast !== 1 || a.gamma !== 1;
 }
 
-/** CSS `filter` do <video>, ou undefined quando não há ajuste ativo. */
-export function adjustFilter(a: Adjust): string | undefined {
+/** CSS `filter` do <video>, ou undefined quando não há ajuste ativo. `id` =
+ *  o do filtro de gama (um por vídeo na tela). */
+export function adjustFilter(a: Adjust, id: string = GAMMA_FILTER_ID): string | undefined {
   if (!a.on || !isAdjusted(a)) return undefined;
   const parts: string[] = [];
-  if (a.gamma !== 1) parts.push(`url(#${GAMMA_FILTER_ID})`);
+  if (a.gamma !== 1) parts.push(`url(#${id})`);
   if (a.brightness !== 1) parts.push(`brightness(${a.brightness})`);
   if (a.contrast !== 1) parts.push(`contrast(${a.contrast})`);
   return parts.join(" ");
 }
 
 /** Definição do filtro de gama (saída = entrada^(1/gama)). Montar uma vez. */
-export function GammaFilterDefs({ gamma }: { gamma: number }) {
+export function GammaFilterDefs({ gamma, id = GAMMA_FILTER_ID }: { gamma: number; id?: string }) {
   const exp = String(1 / gamma);
   return (
     <svg width="0" height="0" style={{ position: "absolute" }} aria-hidden>
-      <filter id={GAMMA_FILTER_ID} colorInterpolationFilters="sRGB">
+      <filter id={id} colorInterpolationFilters="sRGB">
         <feComponentTransfer>
           <feFuncR type="gamma" amplitude="1" exponent={exp} offset="0" />
           <feFuncG type="gamma" amplitude="1" exponent={exp} offset="0" />

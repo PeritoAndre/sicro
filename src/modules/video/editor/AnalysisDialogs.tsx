@@ -195,3 +195,104 @@ export function SequenceDialog({ startTime, fps, duration, onStart, onClose }: S
     </div>
   );
 }
+
+// ---- exportar trecho -----------------------------------------------------------
+
+interface ClipProps {
+  range: { a: number; b: number };
+  hasAudio: boolean;
+  busy: boolean;
+  result: import("@domain/video").ExportClipResult | null;
+  onExport: (mode: import("@domain/video").ClipMode, includeAudio: boolean) => void;
+  onOpenClip: () => void;
+  onClose: () => void;
+}
+
+export function ExportClipDialog({ range, hasAudio, busy, result, onExport, onOpenClip, onClose }: ClipProps) {
+  const [mode, setMode] = useState<import("@domain/video").ClipMode>("copy");
+  const [audio, setAudio] = useState(hasAudio);
+  const len = range.b - range.a;
+
+  return (
+    <div className={styles.backdrop} data-no-magnify onPointerDown={(e) => e.stopPropagation()}>
+      <div className={styles.dialog} role="dialog" aria-label="Exportar trecho">
+        <h3>Exportar trecho</h3>
+        {result ? (
+          <>
+            <p className={styles.lead}>
+              {result.already_existed ? "Esse trecho já tinha sido exportado: " : "Trecho salvo no caso como "}
+              <code>{result.media.filename}</code>.
+            </p>
+            <p className={styles.tip}>
+              Cobre <code>{formatDuration(result.actual_start_s)}</code> →{" "}
+              <code>{formatDuration(result.actual_end_s)}</code> do vídeo de origem. Hash próprio,
+              JSON ao lado e registro na trilha de operações; o original não foi alterado.
+            </p>
+            {result.warnings.map((w, i) => (
+              <p key={i} className={styles.warn}>
+                {w}
+              </p>
+            ))}
+            <div className={styles.actions}>
+              <span className={styles.spacer} />
+              <button type="button" onClick={onClose}>
+                Fechar
+              </button>
+              <button type="button" className={styles.primary} onClick={onOpenClip}>
+                Abrir o trecho
+              </button>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className={styles.lead}>
+              De <code>{formatDuration(range.a)}</code> a <code>{formatDuration(range.b)}</code> (
+              {len.toFixed(3).replace(".", ",")} s). Vira um vídeo NOVO do caso; o original não é tocado.
+            </p>
+            <label className={styles.choice}>
+              <input type="radio" checked={mode === "copy"} onChange={() => setMode("copy")} />
+              <span>
+                <strong>Sem recompressão (recomendado)</strong>
+                <br />
+                Quadros idênticos ao original, byte a byte. Começa no quadro-chave anterior à entrada e
+                pode levar alguns quadros depois da saída — o SICRO informa quanto.
+              </span>
+            </label>
+            <label className={styles.choice}>
+              <input type="radio" checked={mode === "reencode"} onChange={() => setMode("reencode")} />
+              <span>
+                <strong>Recomprimir</strong>
+                <br />
+                Começa e termina exatamente nos quadros marcados, mas a imagem é recodificada (H.264 de
+                alta qualidade) — os pixels deixam de ser os do original.
+              </span>
+            </label>
+            <label className={styles.check}>
+              <input
+                type="checkbox"
+                checked={audio && hasAudio}
+                disabled={!hasAudio}
+                onChange={(e) => setAudio(e.target.checked)}
+              />{" "}
+              {hasAudio ? "Incluir o áudio" : "Este vídeo não tem áudio"}
+            </label>
+            <div className={styles.actions}>
+              <span className={styles.spacer} />
+              <button type="button" onClick={onClose} disabled={busy}>
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={styles.primary}
+                onClick={() => onExport(mode, audio && hasAudio)}
+                disabled={busy}
+              >
+                {busy ? "Exportando…" : "Exportar"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}

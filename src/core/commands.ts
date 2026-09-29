@@ -48,6 +48,8 @@ import type {
   CollectFrameInput,
   CollectFrameResult,
   CreateVideoEventInput,
+  ExportClipInput,
+  ExportClipResult,
   RegisterVideoInput,
   UpdateStoryboardFrameInput,
   SetVideoClockInput,
@@ -761,6 +763,11 @@ export const commands = {
 
   deleteVideoClock(workspacePath: string, mediaHash: string): Promise<void> {
     return safeInvoke<void>("delete_video_clock", { workspacePath, mediaHash });
+  },
+
+  /** Exporta um trecho como CÓPIA registrada no caso (o original não muda). */
+  exportVideoClip(workspacePath: string, input: ExportClipInput): Promise<ExportClipResult> {
+    return safeInvoke<ExportClipResult>("export_video_clip", { workspacePath, input });
   },
 
   /** Caminho absoluto da miniatura (gerada na 1ª vez, no cache do app). */

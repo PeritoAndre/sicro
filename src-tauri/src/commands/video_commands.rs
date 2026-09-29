@@ -12,6 +12,7 @@
 //!   - list_video_operation_logs
 //!   - list/set/delete_video_clock → relógio da câmera (migration 018)
 //!   - video_thumbnail             → miniatura (cache do app, não o `.sicro`)
+//!   - export_video_clip           → trecho como CÓPIA registrada (migration 019)
 
 use std::path::{Path, PathBuf};
 
@@ -25,7 +26,8 @@ use crate::database::repositories::{occurrence_repo, video_repo};
 use crate::error::{Result, SicroError};
 use crate::hashing::sha256::sha256_file;
 use crate::models::{
-    CollectFrameInput, CollectFrameResult, CreateVideoEventInput, RegisterVideoInput,
+    CollectFrameInput, CollectFrameResult, CreateVideoEventInput, ExportClipInput,
+    ExportClipResult, RegisterVideoInput,
     SetVideoClockInput, UpdateStoryboardFrameInput, UpdateVideoEventInput, VideoBundle,
     VideoClockCalibration, VideoEvent, VideoExport, VideoMedia, VideoOperationLog,
     VideoStoryboardFrame,
@@ -36,6 +38,7 @@ use crate::workspace::open_workspace;
 
 const VIDEOS_SUBDIR: &str = "videos/originais";
 const FRAMES_SUBDIR: &str = "videos/storyboards/frames";
+const CLIPS_SUBDIR: &str = "videos/trechos";
 
 #[tauri::command]
 pub async fn register_video_media(
@@ -159,6 +162,8 @@ pub async fn register_video_media(
         warnings_json,
         created_at: now,
         updated_at: now,
+        derived_from_hash: None,
+        derivation_json: None,
     };
     video_repo::insert_media(&conn, &media)?;
     video_repo::insert_log(
@@ -407,6 +412,7 @@ pub async fn collect_video_frame(
         out_png: &png_target,
         sidecar_json: Some(&sidecar_target),
         sidecar_extra,
+        start_time_s: crate::video::probe::container_start_time(&media.raw_probe_json),
     })?;
 
     // Persist video_exports + video_storyboard_frames.
@@ -685,6 +691,200 @@ pub async fn delete_video_clock(workspace_path: String, media_hash: String) -> R
         )?;
     }
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Exportar trecho
+
+/// Grava parte de um vídeo do caso como ARQUIVO NOVO em `videos/trechos/`
+/// (o original não é tocado), com JSON ao lado, e registra a cópia como vídeo
+/// do caso ligado à origem (`derived_from_hash`). Ver `video::clip` para a
+/// diferença entre "copy" (sem recompressão) e "reencode".
+#[tauri::command]
+pub async fn export_video_clip(
+    workspace_path: String,
+    input: ExportClipInput,
+) -> Result<ExportClipResult> {
+    use crate::video::clip::{clip_filename, export_clip, ClipMode, ClipOptions};
+
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let occurrence_id = manifest.occurrence_id;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    let mode = match input.mode.as_str() {
+        "copy" => ClipMode::Copy,
+        "reencode" => ClipMode::Reencode,
+        other => return Err(SicroError::Validation(format!("modo de trecho inválido: {other}"))),
+    };
+    if !input.start_s.is_finite() || !input.end_s.is_finite() || input.start_s < 0.0 {
+        return Err(SicroError::Validation("tempos do trecho inválidos".into()));
+    }
+    if input.end_s - input.start_s < 0.04 {
+        return Err(SicroError::Validation("o trecho precisa ter pelo menos um quadro".into()));
+    }
+    let source = video_repo::find_media_by_sha256(&conn, &occurrence_id, &input.media_hash)?
+        .ok_or_else(|| SicroError::Validation("vídeo de origem não encontrado nesta ocorrência".into()))?;
+    let source_path = ws.join(&source.relative_path);
+    if !source_path.is_file() {
+        return Err(SicroError::Filesystem(format!("vídeo de origem ausente: {}", source.relative_path)));
+    }
+
+    let clips_dir = ws.join(CLIPS_SUBDIR);
+    std::fs::create_dir_all(&clips_dir)
+        .map_err(|e| SicroError::Filesystem(format!("cannot create {}: {e}", clips_dir.display())))?;
+    let wanted = clip_filename(&source_path, input.start_s, input.end_s, mode);
+    let target_name = pick_unique_filename(&clips_dir, &wanted);
+    let target_path = clips_dir.join(&target_name);
+
+    // ffmpeg fora do runtime assíncrono (pode levar segundos em trecho longo).
+    let (src_c, out_c) = (source_path.clone(), target_path.clone());
+    let (start, end, audio) = (input.start_s, input.end_s, input.include_audio);
+    let clip = tauri::async_runtime::spawn_blocking(move || {
+        export_clip(&ClipOptions {
+            video: &src_c,
+            out: &out_c,
+            start_s: start,
+            end_s: end,
+            mode,
+            include_audio: audio,
+        })
+    })
+    .await
+    .map_err(|e| SicroError::Workspace(format!("clip task: {e}")))??;
+
+    let sha256 = sha256_file(&target_path)?;
+    let size_bytes = std::fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
+    let probe = probe_media(&target_path).ok();
+    let actual_end = clip.actual_end_s;
+
+    let mut warnings: Vec<String> = Vec::new();
+    let recuo = input.start_s - clip.actual_start_s;
+    if mode == ClipMode::Copy && recuo > 0.001 {
+        warnings.push(format!(
+            "Sem recompressão, o trecho começa no quadro-chave anterior: {:.3} s antes do ponto marcado ({} em vez de {}).",
+            recuo,
+            format_seconds(clip.actual_start_s),
+            format_seconds(input.start_s),
+        ));
+    }
+    let excesso = clip.actual_end_s - clip.marked_end_s;
+    if mode == ClipMode::Copy && excesso > 0.001 {
+        warnings.push(format!(
+            "Sem recompressão, o trecho também vai {:.3} s além da saída marcada (termina em {}).",
+            excesso,
+            format_seconds(clip.actual_end_s),
+        ));
+    }
+    if mode == ClipMode::Reencode {
+        warnings.push("Trecho recomprimido (H.264, CRF 16): a imagem foi recodificada — os pixels não são os do original.".into());
+    }
+
+    // Mesmo trecho já exportado antes (bytes idênticos) → devolve o existente.
+    if let Some(existing) = video_repo::find_media_by_sha256(&conn, &occurrence_id, &sha256)? {
+        let _ = std::fs::remove_file(&target_path);
+        return Ok(ExportClipResult {
+            media: existing,
+            actual_start_s: clip.actual_start_s,
+            actual_end_s: actual_end,
+            already_existed: true,
+            warnings,
+        });
+    }
+
+    let now = Utc::now();
+    let derivation = json!({
+        "kind": "clip",
+        "source": {
+            "sha256": source.sha256,
+            "filename": source.filename,
+            "relative_path": source.relative_path,
+        },
+        "requested": { "start_s": input.start_s, "end_s": input.end_s },
+        "marked_frames_end_s": clip.marked_end_s,
+        "actual": { "start_s": clip.actual_start_s, "end_s": actual_end },
+        "mode": mode.as_str(),
+        "include_audio": input.include_audio,
+        "ffmpeg_command": clip.command,
+        "created_at": now.to_rfc3339(),
+        "note": "Cópia de parte do vídeo de origem; o original não foi alterado.",
+    });
+    // JSON ao lado do trecho (quem abrir a pasta do caso entende o arquivo).
+    let sidecar = target_path.with_extension(format!(
+        "{}.json",
+        target_path.extension().and_then(|e| e.to_str()).unwrap_or("mp4")
+    ));
+    std::fs::write(
+        &sidecar,
+        serde_json::to_vec_pretty(&json!({ "sha256": sha256, "derivation": derivation }))
+            .unwrap_or_default(),
+    )
+    .map_err(|e| SicroError::Filesystem(format!("cannot write {}: {e}", sidecar.display())))?;
+
+    let mut probe_warnings = Vec::new();
+    let media = VideoMedia {
+        id: Uuid::new_v4(),
+        occurrence_id,
+        original_path: None,
+        relative_path: format!("{CLIPS_SUBDIR}/{target_name}"),
+        filename: target_name.clone(),
+        sha256: sha256.clone(),
+        size_bytes,
+        duration_s: probe.as_ref().and_then(|p| p.duration_s),
+        codec: probe.as_ref().and_then(|p| p.video_codec.clone()),
+        width: probe.as_ref().and_then(|p| p.width),
+        height: probe.as_ref().and_then(|p| p.height),
+        pixel_format: probe.as_ref().and_then(|p| p.pixel_format.clone()),
+        fps_declared: probe.as_ref().and_then(|p| p.fps_declared),
+        avg_frame_rate: probe.as_ref().and_then(|p| p.avg_frame_rate.clone()),
+        r_frame_rate: probe.as_ref().and_then(|p| p.r_frame_rate.clone()),
+        time_base: probe.as_ref().and_then(|p| p.time_base.clone()),
+        frame_count: probe.as_ref().and_then(|p| p.frame_count),
+        bitrate: probe.as_ref().and_then(|p| p.bitrate),
+        raw_probe_json: probe.as_ref().map(|p| p.raw_json.clone()).unwrap_or_else(|| "{}".into()),
+        warnings_json: {
+            if let Some(p) = &probe {
+                probe_warnings.extend(p.warnings.clone());
+            }
+            serde_json::to_string(&probe_warnings).unwrap_or_else(|_| "[]".into())
+        },
+        created_at: now,
+        updated_at: now,
+        derived_from_hash: Some(source.sha256.clone()),
+        derivation_json: Some(derivation.to_string()),
+    };
+    video_repo::insert_media(&conn, &media)?;
+    video_repo::insert_log(
+        &conn,
+        &occurrence_id,
+        Some(&source.sha256),
+        "clip.export",
+        &json!({
+            "clip_media_id": media.id.to_string(),
+            "clip_sha256": media.sha256,
+            "filename": media.filename,
+            "derivation": derivation,
+        })
+        .to_string(),
+    )?;
+    occurrence_repo::record_audit(
+        &conn,
+        Some(&occurrence_id),
+        "video.clip.exported",
+        Some("video"),
+        Some("video_media"),
+        Some(&media.id),
+        Some(&media.sha256),
+    )?;
+
+    Ok(ExportClipResult {
+        media,
+        actual_start_s: clip.actual_start_s,
+        actual_end_s: actual_end,
+        already_existed: false,
+        warnings,
+    })
 }
 
 // ---------------------------------------------------------------------------

@@ -54,7 +54,8 @@ pub use occurrence::{
     RecentOccurrence,
 };
 pub use video::{
-    CollectFrameInput, CollectFrameResult, CreateVideoEventInput, RegisterVideoInput,
+    CollectFrameInput, CollectFrameResult, CreateVideoEventInput, ExportClipInput,
+    ExportClipResult, RegisterVideoInput,
     SetVideoClockInput, UpdateStoryboardFrameInput, UpdateVideoEventInput, VideoBundle,
     VideoClockCalibration, VideoEvent, VideoExport, VideoMedia, VideoOperationLog,
     VideoStoryboardFrame,

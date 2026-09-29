@@ -491,13 +491,34 @@ frames e **medir velocidade e distância** por fotogrametria.
   - **Sequência de quadros** (**Ctrl+2** ou "Sequência…"): coleta N quadros
     seguidos (ou de k em k) a partir do atual — útil para a aba Velocidade.
   - **Comparar câmeras** (botão no topo): dois vídeos da ocorrência lado a lado,
-    tocando juntos. Ajuste a sincronia de B em ±1 quadro / ±1 s até o mesmo
-    acontecimento coincidir, ou use **pelo relógio** quando os dois vídeos têm o
-    relógio da câmera vinculado.
+    cada um com a sua linha do tempo, controles, lupa, ajustes de tela, "Coletar
+    frame" e a faixa do seu storyboard. O lado **ativo** (contorno dourado; clique
+    nele ou **Tab**) recebe o teclado. Ache o mesmo acontecimento nas duas e
+    clique em **Vincular**: o SICRO guarda a diferença e passa a mover as duas
+    juntas (ajuste fino ±1 quadro / ±1 s). Vinculadas, **Ctrl+1** coleta o **par**
+    (um quadro no storyboard de cada vídeo). **pelo relógio** vincula pelo relógio
+    da câmera quando os dois têm.
+  - **Exportar trecho** (tesoura na barra, com o trecho I/O marcado): grava uma
+    CÓPIA do trecho como vídeo novo do caso, com hash próprio, JSON ao lado e
+    registro na trilha — o original não muda. **Sem recompressão** (padrão):
+    quadros idênticos ao original, começando no quadro-chave anterior à entrada
+    e podendo levar alguns quadros depois da saída (o SICRO informa quanto).
+    **Recomprimir**: exatamente os quadros marcados, mas a imagem é recodificada.
+    O trecho aparece na lista como "trecho de …" e abre com o link para a origem.
+  - **Botão direito:** menus do SICRO no vídeo (tocar, tela cheia, coletar,
+    sequência, evento, copiar tempo, trecho, lupa, ajustes, relógio), na linha do
+    tempo (ir para / marcar entrada ou saída aqui, zoom) e nos quadros do
+    storyboard (ver grande, ir para, copiar tempo, remover). O menu de navegador
+    não aparece mais (só nos campos de texto, para copiar e colar).
+  - **Storyboard:** miniaturas P / M / G, divisória arrastável para alargar o
+    painel da direita (duplo clique volta ao padrão) e **tela grande** (botão ⤢ ou
+    duplo clique num quadro): ← / → navegam, Enter leva o player ao quadro, Esc
+    fecha.
 - A **lista de vídeos** mostra uma miniatura de cada câmera (gerada uma vez e
   guardada no cache do SICRO — o caso não muda).
-- **Coletar frame** salva um PNG no timecode exato (vira "storyboard" e pode
-  ilustrar o laudo).
+- **Coletar frame** salva um PNG do quadro que está na tela naquele instante —
+  exatamente o mesmo que o player mostra — com o tempo real desse quadro (vira
+  "storyboard" e pode ilustrar o laudo).
 
 ### 8.2 Eventos
 

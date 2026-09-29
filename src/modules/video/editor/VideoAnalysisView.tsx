@@ -17,8 +17,15 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, AlertTriangle, Clock, Columns2, Copy, Repeat, X } from "lucide-react";
-import type { VideoClockCalibration, VideoMedia } from "@domain/video";
+import { ArrowLeft, AlertTriangle, Clock, Columns2, Copy, Repeat, Scissors, X } from "lucide-react";
+import type {
+  ClipMode,
+  ExportClipResult,
+  VideoClockCalibration,
+  VideoMedia,
+  VideoStoryboardFrame,
+} from "@domain/video";
+import type { MenuItem } from "@components/ContextMenu/ContextMenu";
 import { commands } from "@core/commands";
 import { Button } from "@components/Button/Button";
 import { toSicroError } from "@core/errors";
@@ -36,7 +43,8 @@ import { VideoMetadataPanel } from "./VideoMetadataPanel";
 import { VideoStoryboardPanel } from "./VideoStoryboardPanel";
 import { SpeedPanel } from "./speed/SpeedPanel";
 import { MeasurePanel } from "./measure/MeasurePanel";
-import { ClockDialog, SequenceDialog } from "./AnalysisDialogs";
+import { ClockDialog, ExportClipDialog, SequenceDialog } from "./AnalysisDialogs";
+import { StoryboardGallery } from "./StoryboardGallery";
 import { MultiCamView } from "./MultiCamView";
 import {
   cameraClockAt,
@@ -44,6 +52,7 @@ import {
   formatClock,
   formatDuration,
   formatLaudoTime,
+  parseDerivation,
   parseTimeInput,
   parseWarnings,
   probeHasAudio,
@@ -64,6 +73,7 @@ export function VideoAnalysisView() {
   const warningsFromLastAction = useVideoStore((s) => s.warningsFromLastAction);
   const clearWarnings = useVideoStore((s) => s.clearWarnings);
   const mediaList = useVideoStore((s) => s.list);
+  const openMedia = useVideoStore((s) => s.openMedia);
   const loadList = useVideoStore((s) => s.loadList);
 
   const [currentTime, setCurrentTime] = useState(0);
@@ -157,7 +167,11 @@ export function VideoAnalysisView() {
   // ---- comparação de câmeras (item 16) ------------------------------------
   const [compareWith, setCompareWith] = useState<VideoMedia | null>(null);
   const [pickCompare, setPickCompare] = useState(false);
-  const playerKeys = mainTab === "player" && compareWith == null;
+  // Galeria do storyboard e diálogo de trecho abertos: o teclado é deles.
+  const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
+  const [clipOpen, setClipOpen] = useState(false);
+  const playerKeys =
+    mainTab === "player" && compareWith == null && galleryIndex == null && !clipOpen;
   useShortcuts({ "video.fullscreen": toggleFullscreen }, { enabled: playerKeys });
 
   const media0 = bundle?.media ?? null;
@@ -180,8 +194,8 @@ export function VideoAnalysisView() {
   );
   const loop = loopOn && range ? range : null;
   // Fechou o trecho (entrada + saída) → já liga a repetição.
-  const setMark = (which: "in" | "out") => {
-    const t = nowTime();
+  const setMark = (which: "in" | "out") => setMarkAt(which, nowTime());
+  const setMarkAt = (which: "in" | "out", t: number) => {
     if (which === "in") setMarkIn(t);
     else setMarkOut(t);
     const other = which === "in" ? markOut : markIn;
@@ -326,8 +340,8 @@ export function VideoAnalysisView() {
       flash(`Falha: ${toSicroError(err).message}`, 5000);
     }
   };
-  const copyTime = async () => {
-    const t = nowTime();
+  /** Texto no formato de laudo para o instante `t` (com relógio, se vinculado). */
+  const timeText = (t: number) => {
     const idx = estimateFrameIndex(t, fpsDeclared);
     let text = `${formatLaudoTime(t)}${idx != null ? ` (quadro ≈ ${idx})` : ""}`;
     if (clock) {
@@ -340,6 +354,9 @@ export function VideoAnalysisView() {
       }
       text += ` — relógio da câmera: ${formatClock(cam, false)}${date}`;
     }
+    return text;
+  };
+  const copyText = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
       flash(`Copiado: ${text}`, 3500);
@@ -347,6 +364,99 @@ export function VideoAnalysisView() {
       flash("Não foi possível copiar para a área de transferência.");
     }
   };
+  const copyTime = () => copyText(timeText(nowTime()));
+  const copyFrameTime = (f: VideoStoryboardFrame) =>
+    copyText(timeText(f.actual_timestamp_s ?? f.requested_timestamp_s));
+
+  // ---- exportar trecho (cópia) ---------------------------------------------
+  const [clipBusy, setClipBusy] = useState(false);
+  const [clipResult, setClipResult] = useState<ExportClipResult | null>(null);
+  const exportClip = async (mode: ClipMode, includeAudio: boolean) => {
+    if (!workspacePath || !media0 || !range) return;
+    setClipBusy(true);
+    try {
+      const r = await commands.exportVideoClip(workspacePath, {
+        media_hash: media0.sha256,
+        start_s: range.a,
+        end_s: range.b,
+        mode,
+        include_audio: includeAudio,
+      });
+      setClipResult(r);
+      void loadList(workspacePath);
+    } catch (err) {
+      flash(`Falha ao exportar o trecho: ${toSicroError(err).message}`, 6000);
+      setClipOpen(false);
+    } finally {
+      setClipBusy(false);
+    }
+  };
+  const openClipDialog = () => {
+    if (!range) {
+      flash("Marque a entrada (I) e a saída (O) do trecho primeiro.");
+      return;
+    }
+    exitFullscreen();
+    setClipResult(null);
+    setClipOpen(true);
+  };
+
+  // ---- painel lateral redimensionável -------------------------------------
+  const [sideWidth, setSideWidth] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem("sicro.video.sideWidth.v1"));
+      return Number.isFinite(n) && n >= 260 ? n : 380;
+    } catch {
+      return 380;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem("sicro.video.sideWidth.v1", String(Math.round(sideWidth)));
+    } catch {
+      /* só não lembra */
+    }
+  }, [sideWidth]);
+  const bodyRef = useRef<HTMLDivElement | null>(null);
+  const startSideDrag = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    const el = e.currentTarget;
+    el.setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const r = bodyRef.current?.getBoundingClientRect();
+      if (!r) return;
+      setSideWidth(Math.min(r.width * 0.7, Math.max(260, r.right - ev.clientX)));
+    };
+    const up = () => {
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+      el.removeEventListener("pointercancel", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+    el.addEventListener("pointercancel", up);
+  };
+
+  // ---- menus de botão direito --------------------------------------------
+  const videoMenuItems = (): MenuItem[] => [
+    { label: "Coletar frame", shortcut: "Ctrl+1", onSelect: () => void handleCollectFrame() },
+    { label: "Coletar sequência…", shortcut: "Ctrl+2", onSelect: () => setSeqOpen(true) },
+    { label: "Marcar evento aqui", shortcut: "M", onSelect: () => void quickEvent() },
+    { label: "Copiar tempo (laudo)", shortcut: "Ctrl+Shift+C", onSelect: () => void copyTime() },
+    "separator",
+    { label: "Marcar entrada do trecho", shortcut: "I", onSelect: () => setMark("in") },
+    { label: "Marcar saída do trecho", shortcut: "O", onSelect: () => setMark("out") },
+    ...(range ? [{ label: "Exportar trecho…", onSelect: openClipDialog }] : []),
+    "separator",
+    { label: clock ? "Relógio da câmera…" : "Vincular relógio da câmera…", onSelect: () => setClockOpen(true) },
+    { label: "Ir para tempo ou quadro…", shortcut: "Ctrl+G", onSelect: openGoto },
+  ];
+  const timelineMenuItems = (t: number): MenuItem[] => [
+    { label: `Ir para ${formatDuration(t)}`, onSelect: () => handleSeek(t) },
+    { label: "Marcar entrada aqui", onSelect: () => setMarkAt("in", t) },
+    { label: "Marcar saída aqui", onSelect: () => setMarkAt("out", t) },
+  ];
 
   // ---- coletar sequência de quadros (item 11) ------------------------------
   const [seqOpen, setSeqOpen] = useState(false);
@@ -404,6 +514,11 @@ export function VideoAnalysisView() {
     if (workspacePath && mediaList.length === 0) void loadList(workspacePath);
   }, [workspacePath, mediaList.length, loadList]);
   const otherVideos = mediaList.filter((m) => m.sha256 !== media0?.sha256);
+  // Este vídeo é um trecho exportado? (de onde veio)
+  const derivation = parseDerivation(media0?.derivation_json);
+  const sourceOfClip = derivation
+    ? mediaList.find((m) => m.sha256 === derivation.source.sha256) ?? null
+    : null;
 
   if (!workspacePath || !bundle) {
     return <div className={styles.empty}>Sem mídia aberta.</div>;
@@ -531,6 +646,22 @@ export function VideoAnalysisView() {
               : "fps —"}{" "}
             · SHA <code>{media.sha256.slice(0, 12)}…</code>
           </span>
+          {derivation && (
+            <span className={styles.derived}>
+              <Scissors size={11} /> trecho de <strong>{derivation.source.filename}</strong> (
+              {formatDuration(derivation.actual.start_s)} → {formatDuration(derivation.actual.end_s)},{" "}
+              {derivation.mode === "copy" ? "sem recompressão" : "recomprimido"})
+              {sourceOfClip && (
+                <button
+                  type="button"
+                  onClick={() => workspacePath && void openMedia(workspacePath, sourceOfClip.id)}
+                  title="Abrir o vídeo de origem"
+                >
+                  abrir origem
+                </button>
+              )}
+            </span>
+          )}
         </div>
         {feedback && <span className={styles.feedback}>{feedback}</span>}
         <div className={styles.compareBox}>
@@ -603,7 +734,18 @@ export function VideoAnalysisView() {
           onClose={() => setCompareWith(null)}
         />
       ) : (
-      <div className={styles.body}>
+      <div ref={bodyRef} className={styles.body}>
+        {galleryIndex != null && workspacePath && (
+          <StoryboardGallery
+            workspacePath={workspacePath}
+            frames={storyboard}
+            events={events}
+            startIndex={galleryIndex}
+            onClose={() => setGalleryIndex(null)}
+            onGoto={(f) => handleSeek(f.actual_timestamp_s ?? f.requested_timestamp_s)}
+            onCopyTime={(f) => void copyFrameTime(f)}
+          />
+        )}
         <main className={styles.main}>
           <div className={styles.mainTabs}>
             <button
@@ -649,6 +791,21 @@ export function VideoAnalysisView() {
                 onClose={() => setClockOpen(false)}
               />
             )}
+            {clipOpen && range && (
+              <ExportClipDialog
+                range={range}
+                hasAudio={probeHasAudio(media.raw_probe_json)}
+                busy={clipBusy}
+                result={clipResult}
+                onExport={(mode, audio) => void exportClip(mode, audio)}
+                onOpenClip={() => {
+                  const id = clipResult?.media.id;
+                  setClipOpen(false);
+                  if (id && workspacePath) void openMedia(workspacePath, id);
+                }}
+                onClose={() => setClipOpen(false)}
+              />
+            )}
             {seqOpen && (
               <SequenceDialog
                 startTime={nowTime()}
@@ -662,7 +819,7 @@ export function VideoAnalysisView() {
               workspacePath={workspacePath}
               relativePath={media.relative_path}
               fps={media.fps_declared}
-              active={mainTab === "player"}
+              active={playerKeys}
               onTimeUpdate={setCurrentTime}
               onDurationLoaded={setDuration}
               onCollectFrame={() => void handleCollectFrame()}
@@ -671,6 +828,7 @@ export function VideoAnalysisView() {
               startTime={startTime}
               loop={loop}
               hasAudio={probeHasAudio(media.raw_probe_json)}
+              menuItems={videoMenuItems}
               fullscreen={bigScreen}
               onToggleFullscreen={toggleFullscreen}
             />
@@ -682,7 +840,8 @@ export function VideoAnalysisView() {
               selectedEventId={selectedEventId}
               range={range}
               loopOn={loopOn}
-              shortcutsEnabled={mainTab === "player"}
+              shortcutsEnabled={playerKeys}
+              contextItems={timelineMenuItems}
               onScrubStart={() => controllerRef.current?.scrubStart()}
               onScrub={(t) => {
                 controllerRef.current?.scrub(t);
@@ -780,6 +939,14 @@ export function VideoAnalysisView() {
                   <span className={styles.rangeLen}>({(range.b - range.a).toFixed(3)} s)</span>
                   <button
                     type="button"
+                    className={styles.rangeBtn}
+                    onClick={openClipDialog}
+                    title="Exportar este trecho como vídeo novo (cópia; o original não muda)"
+                  >
+                    <Scissors size={12} />
+                  </button>
+                  <button
+                    type="button"
                     className={`${styles.rangeBtn} ${loopOn ? styles.rangeBtnOn : ""}`}
                     onClick={() => setLoopOn((on) => !on)}
                     title={loopOn ? "Repetindo o trecho — clique para parar (Ctrl+L)" : "Repetir o trecho (Ctrl+L)"}
@@ -868,7 +1035,15 @@ export function VideoAnalysisView() {
           </div>
         </main>
 
-        <aside className={styles.side}>
+        <div
+          className={styles.splitter}
+          onPointerDown={startSideDrag}
+          onDoubleClick={() => setSideWidth(380)}
+          title="Arraste para mudar a largura do painel · duplo clique volta ao padrão"
+          role="separator"
+          aria-orientation="vertical"
+        />
+        <aside className={styles.side} style={{ width: sideWidth }}>
           <VideoMetadataPanel media={media} warnings={probeWarnings} />
           <VideoEventPanel
             events={events}
@@ -893,6 +1068,8 @@ export function VideoAnalysisView() {
             events={events}
             onSelectFrame={(f) => handleSeek(f.requested_timestamp_s)}
             onDelete={handleDeleteFrame}
+            onOpenGallery={(i) => setGalleryIndex(i)}
+            onCopyTime={(f) => void copyFrameTime(f)}
           />
         </aside>
       </div>

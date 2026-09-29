@@ -84,6 +84,7 @@
 }
 
 .body {
+  position: relative; /* a galeria do storyboard cobre o corpo inteiro */
   flex: 1;
   display: flex;
   flex-direction: row;
@@ -98,6 +99,21 @@
   min-height: 0;
   background: #0a0d14;
   border-right: 1px solid var(--sicro-divider);
+}
+/* divisória arrastável entre o vídeo e o painel da direita */
+.splitter {
+  flex-shrink: 0;
+  width: 6px;
+  margin-left: -3px;
+  margin-right: -3px;
+  z-index: 5;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+.splitter:hover,
+.splitter:active {
+  background: var(--sicro-accent-soft, rgba(215, 168, 79, 0.25));
 }
 .side {
   width: 380px;
@@ -349,4 +365,27 @@
   padding: 1px 8px;
   cursor: pointer;
   font: inherit;
+}
+
+/* vídeo que é um trecho exportado */
+.derived {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: #5aa9e6;
+}
+.derived strong {
+  color: var(--sicro-fg);
+  font-weight: 500;
+}
+.derived button {
+  margin-left: 6px;
+  background: transparent;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  font-size: 10px;
+  padding: 0 6px;
+  cursor: pointer;
 }

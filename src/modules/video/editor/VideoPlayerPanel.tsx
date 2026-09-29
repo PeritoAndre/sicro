@@ -45,6 +45,7 @@ import { mediaSrc } from "@core/mediaSrc";
 import { formatDuration } from "./format";
 import { loadPosition, savePosition } from "./resume";
 import { useMagnifier } from "./useMagnifier";
+import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMenu";
 import {
   ADJUST_DEFAULT,
   GammaFilterDefs,
@@ -92,6 +93,8 @@ interface Props {
   startTime?: number;
   /** Trecho a repetir (já ordenado), ou null. */
   loop?: { a: number; b: number } | null;
+  /** Itens do menu de botão direito que vêm de fora (coletar, evento, trecho…). */
+  menuItems?: () => MenuItem[];
   /** O vídeo tem trilha de áudio? (sem áudio o controle de volume fica inativo) */
   hasAudio?: boolean;
   /** Tela cheia do reprodutor — estado e alternância vêm do VideoAnalysisView. */
@@ -150,6 +153,7 @@ export function VideoPlayerPanel({
   mediaKey,
   startTime = 0,
   loop = null,
+  menuItems,
   hasAudio = true,
   fullscreen = false,
   onToggleFullscreen,
@@ -211,6 +215,7 @@ export function VideoPlayerPanel({
   })();
 
   const magnifier = useMagnifier(src);
+  const menu = useContextMenu();
 
   // Ajustes de imagem valem para o vídeo aberto; outro vídeo começa no original.
   useEffect(() => {
@@ -771,7 +776,34 @@ export function VideoPlayerPanel({
         className={styles.videoWrap}
         style={{ cursor: magnifier.scale > 1 ? (magnifier.panning ? "grabbing" : "grab") : undefined }}
         {...magnifier.panHandlers}
+        onContextMenu={(e) => {
+          const v = videoRef.current;
+          const playingNow = !!v && (!v.paused || revActiveRef.current);
+          // Posição do clique AGORA (o evento do React não guarda o elemento depois).
+          const r = e.currentTarget.getBoundingClientRect();
+          const cx = e.clientX - r.left;
+          const cy = e.clientY - r.top;
+          const own: MenuItem[] = [
+            { label: playingNow ? "Pausar" : "Tocar", shortcut: "Espaço", onSelect: () => void togglePlay() },
+            ...(onToggleFullscreen
+              ? [{ label: fullscreen ? "Sair da tela cheia" : "Tela cheia", shortcut: "F", onSelect: onToggleFullscreen }]
+              : []),
+            "separator",
+            ...(magnifier.scale > 1
+              ? [{ label: "Lupa: imagem inteira", shortcut: "Ctrl+0", onSelect: magnifier.reset }]
+              : [{ label: "Lupa: aproximar aqui", shortcut: "roda", onSelect: () => magnifier.zoomAt(2, cx, cy) }]),
+            { label: "Ajustes de tela…", onSelect: () => setAdjustOpen(true) },
+            ...(isAdjusted(adjust)
+              ? [{ label: adjust.on ? "Ver o original" : "Ligar os ajustes", shortcut: "A", onSelect: () => setAdjust((a) => ({ ...a, on: !a.on })) }]
+              : []),
+            ...(hasAudio
+              ? [{ label: audio.muted ? "Ligar o som" : "Mudo", shortcut: "Ctrl+M", onSelect: toggleMute }]
+              : []),
+          ];
+          menu.open(e, [...own, "separator", ...(menuItems?.() ?? [])]);
+        }}
       >
+        {menu.element}
         {notice && <div className={styles.notice}>{notice}</div>}
         {(magnifier.scale > 1 || (adjust.on && isAdjusted(adjust))) && (
           <div className={styles.viewChips}>

@@ -9,6 +9,7 @@ import { ConfiguracoesModule } from "@modules/configuracoes/ConfiguracoesModule"
 import { useSettingsStore } from "@stores/settingsStore";
 import { Toaster } from "@/components/toast/Toaster";
 import { installAutoBackupWatcher } from "@core/autoBackup";
+import { installContextMenuGuard } from "@components/ContextMenu/ContextMenu";
 
 // F12.9 — Bundle splitting:
 //   - Croqui carrega Konva (~280 KB) + Leaflet (~180 KB) → lazy.
@@ -85,6 +86,10 @@ export function App() {
   // Auto-backup ao fechar/trocar a ocorrência (DR — Fase 2b). O observador
   // dispara o backup geral incremental para a pasta de backup configurada.
   useEffect(() => installAutoBackupWatcher(), []);
+
+  // Sem o menu de navegador do WebKit no botão direito (Voltar, Recarregar…);
+  // os menus próprios do SICRO continuam.
+  useEffect(() => installContextMenuGuard(), []);
 
   return (
     <WorkspaceProvider>

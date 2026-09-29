@@ -13,6 +13,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import type { VideoEvent } from "@domain/video";
 import { useShortcuts } from "@core/useShortcuts";
+import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMenu";
 import styles from "./VideoTimeline.module.css";
 
 interface Props {
@@ -30,6 +31,8 @@ interface Props {
   onScrub: (seconds: number) => void;
   onScrubEnd: (seconds: number) => void;
   onSelectEvent: (id: string) => void;
+  /** Itens do botão direito para o instante `t` sob o cursor (ir para, marcar…). */
+  contextItems?: (t: number) => MenuItem[];
 }
 
 interface View {
@@ -50,7 +53,9 @@ export function VideoTimeline({
   onScrub,
   onScrubEnd,
   onSelectEvent,
+  contextItems,
 }: Props) {
+  const menu = useContextMenu();
   const railRef = useRef<HTMLDivElement | null>(null);
   const [railWidth, setRailWidth] = useState(800);
   const safeDuration = duration > 0 ? duration : 1;
@@ -215,6 +220,7 @@ export function VideoTimeline({
 
   return (
     <div className={styles.wrap}>
+      {menu.element}
       <div className={styles.toolbar}>
         {zoomed ? (
           <div
@@ -269,6 +275,15 @@ export function VideoTimeline({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onContextMenu={(e) => {
+          const t = timeAtX(e.clientX);
+          menu.open(e, [
+            ...(contextItems?.(t) ?? []),
+            "separator",
+            { label: "Aproximar a linha do tempo aqui", shortcut: "Ctrl+roda", onSelect: () => zoomAround(0.5, t) },
+            { label: "Linha do tempo inteira", shortcut: "0", disabled: !zoomed, onSelect: fit },
+          ]);
+        }}
         role="slider"
         aria-valuemin={0}
         aria-valuemax={duration}

@@ -166,3 +166,16 @@ export function probeHasAudio(rawProbeJson: string | null | undefined): boolean 
     return false;
   }
 }
+
+/** Lê o `derivation_json` de um trecho exportado (null se não for trecho). */
+export function parseDerivation(
+  json: string | null | undefined,
+): import("@domain/video").ClipDerivation | null {
+  if (!json) return null;
+  try {
+    const d = JSON.parse(json) as { kind?: string };
+    return d && d.kind === "clip" ? (d as import("@domain/video").ClipDerivation) : null;
+  } catch {
+    return null;
+  }
+}

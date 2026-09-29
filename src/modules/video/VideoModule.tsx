@@ -42,7 +42,8 @@ export function VideoModule() {
 
   return (
     <div className={styles.wrap}>
-      {activeMediaId == null ? <VideoListView /> : <VideoAnalysisView />}
+      {/* key: cada vídeo começa com o estado limpo (trecho, lupa, comparação…) */}
+      {activeMediaId == null ? <VideoListView /> : <VideoAnalysisView key={activeMediaId} />}
     </div>
   );
 }
