@@ -16,10 +16,11 @@
  * timestamp técnico.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, AlertTriangle } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { toSicroError } from "@core/errors";
+import { useShortcuts } from "@core/useShortcuts";
 import {
   selectActiveOccurrence,
   selectActiveWorkspacePath,
@@ -73,6 +74,67 @@ export function VideoAnalysisView() {
     () => (bundle ? parseWarnings(bundle.media.warnings_json) : []),
     [bundle],
   );
+
+  // Tela cheia do reprodutor (F / duplo clique / botão): o painel inteiro —
+  // vídeo, controles, linha do tempo e "Coletar frame" — vai para a tela
+  // cheia pela Fullscreen API; os atalhos seguem valendo (ouvem a janela).
+  // Se o WebView recusar, cai num modo "expandido" que cobre a janela.
+  const playerPaneRef = useRef<HTMLDivElement | null>(null);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    const onChange = () =>
+      setFullscreen(
+        playerPaneRef.current != null &&
+          document.fullscreenElement === playerPaneRef.current,
+      );
+    document.addEventListener("fullscreenchange", onChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", onChange);
+      if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    };
+  }, []);
+
+  const exitFullscreen = useCallback(() => {
+    setExpanded(false);
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }, []);
+
+  const toggleFullscreen = useCallback(() => {
+    if (fullscreen || expanded) {
+      exitFullscreen();
+      return;
+    }
+    const el = playerPaneRef.current;
+    if (!el) return;
+    if (typeof el.requestFullscreen !== "function") {
+      setExpanded(true);
+      return;
+    }
+    el.requestFullscreen().catch(() => setExpanded(true));
+  }, [fullscreen, expanded, exitFullscreen]);
+
+  // O modo expandido sai com Esc (a tela cheia nativa já sai sozinha).
+  useEffect(() => {
+    if (!expanded) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expanded]);
+
+  // Trocar de aba sai da tela cheia (o painel do reprodutor fica oculto).
+  useEffect(() => {
+    if (mainTab !== "player") exitFullscreen();
+  }, [mainTab, exitFullscreen]);
+
+  useShortcuts(
+    { "video.fullscreen": toggleFullscreen },
+    { enabled: mainTab === "player" },
+  );
+  const bigScreen = fullscreen || expanded;
 
   if (!workspacePath || !bundle) {
     return <div className={styles.empty}>Sem mídia aberta.</div>;
@@ -248,7 +310,8 @@ export function VideoAnalysisView() {
               visibilidade para preservar a marcação em andamento e o estado
               do player ao trocar de aba. */}
           <div
-            className={styles.tabPane}
+            ref={playerPaneRef}
+            className={`${styles.tabPane} ${expanded ? styles.tabPaneExpanded : ""}`}
             style={{ display: mainTab === "player" ? "flex" : "none" }}
           >
             <VideoPlayerPanel
@@ -260,6 +323,8 @@ export function VideoAnalysisView() {
               onDurationLoaded={setDuration}
               onCollectFrame={() => void handleCollectFrame()}
               registerSeek={handlePlayerSeekRef}
+              fullscreen={bigScreen}
+              onToggleFullscreen={toggleFullscreen}
             />
             <VideoTimeline
               duration={effectiveDuration}
@@ -287,6 +352,10 @@ export function VideoAnalysisView() {
               <span>
                 storyboard: <code>{storyboard.length}</code>
               </span>
+              {/* Em tela cheia o topo (onde o feedback aparece) fica escondido. */}
+              {bigScreen && feedback && (
+                <span className={styles.statusFeedback}>{feedback}</span>
+              )}
               <Button
                 variant="primary"
                 onClick={() => void handleCollectFrame()}

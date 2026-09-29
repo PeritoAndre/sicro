@@ -18,6 +18,7 @@
  *   ,/.  frame anterior / próximo            Shift+→/←  ±1 s
  *   Espaço/K  play-pause   J/L  ré / frente   Home/End  início / fim
  *   ↑/↓  velocidade        Ctrl+1  coletar frame
+ *   F / duplo clique no vídeo  tela cheia (quem executa é o VideoAnalysisView)
  *
  * Reverse playback is synthesized with requestAnimationFrame (Chromium
  * ignores a negative playbackRate), so it is an *approximation* for visual
@@ -33,6 +34,8 @@ import { useEffect, useRef, useState } from "react";
 import { mediaSrc } from "@core/mediaSrc";
 import { useShortcuts } from "@core/useShortcuts";
 import {
+  Maximize,
+  Minimize,
   Pause,
   Play,
   Rewind,
@@ -56,6 +59,9 @@ interface Props {
   /** Ctrl+1 — collect the current frame (resolved upstream via ffmpeg). */
   onCollectFrame: () => void;
   registerSeek: (fn: (seconds: number) => void) => void;
+  /** Tela cheia do reprodutor — estado e alternância vêm do VideoAnalysisView. */
+  fullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 const PLAYBACK_RATES = [0.25, 0.5, 1, 2];
@@ -72,6 +78,8 @@ export function VideoPlayerPanel({
   onDurationLoaded,
   onCollectFrame,
   registerSeek,
+  fullscreen = false,
+  onToggleFullscreen,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -439,6 +447,7 @@ export function VideoPlayerPanel({
             className={styles.video}
             controls={false}
             preload="metadata"
+            onDoubleClick={onToggleFullscreen}
           />
         ) : (
           <div className={styles.placeholder}>
@@ -495,6 +504,23 @@ export function VideoPlayerPanel({
             </button>
           ))}
         </div>
+        {onToggleFullscreen && (
+          <button
+            type="button"
+            onClick={(e) => {
+              // Tira o foco: senão o Espaço "clicaria" este botão em vez de dar play.
+              e.currentTarget.blur();
+              onToggleFullscreen();
+            }}
+            title={
+              fullscreen
+                ? "Sair da tela cheia (F ou Esc)"
+                : "Tela cheia (F ou duplo clique no vídeo)"
+            }
+          >
+            {fullscreen ? <Minimize size={14} /> : <Maximize size={14} />}
+          </button>
+        )}
       </div>
       <div className={styles.shortcuts}>
         <span>
@@ -511,6 +537,9 @@ export function VideoPlayerPanel({
         </span>
         <span>
           <kbd>↑</kbd>/<kbd>↓</kbd> velocidade · <kbd>Home</kbd>/<kbd>End</kbd>
+        </span>
+        <span>
+          <kbd>F</kbd> tela cheia
         </span>
         <span className={styles.shortcutStrong}>
           <kbd>Ctrl</kbd>+<kbd>1</kbd> coletar frame

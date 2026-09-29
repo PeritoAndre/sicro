@@ -142,6 +142,22 @@
   min-height: 0;
   min-width: 0;
 }
+/* Tela cheia do reprodutor (F / duplo clique): vídeo + controles + linha do
+   tempo + "Coletar frame" ocupam a tela. `tabPaneExpanded` é o plano B
+   quando o WebView recusa a Fullscreen API: cobre a janela inteira. */
+.tabPane:fullscreen {
+  background: #000;
+}
+.tabPaneExpanded {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: #000;
+}
+.statusFeedback {
+  color: var(--sicro-accent);
+  font-family: var(--font-ui);
+}
 .tabPaneScroll {
   flex: 1;
   flex-direction: column;

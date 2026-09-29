@@ -29,6 +29,9 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
   { id: "video.speedUp", scope: "video", group: "Vídeo · Velocidade", label: "Aumentar velocidade", defaultBinding: "Up" },
   { id: "video.speedDown", scope: "video", group: "Vídeo · Velocidade", label: "Diminuir velocidade", defaultBinding: "Down" },
 
+  // Tela.
+  { id: "video.fullscreen", scope: "video", group: "Vídeo · Tela", label: "Tela cheia (entrar / sair)", defaultBinding: "F" },
+
   // Captura.
   { id: "video.collectFrame", scope: "video", group: "Vídeo · Captura", label: "Coletar quadro (storyboard)", defaultBinding: "Ctrl+1" },
 ];
