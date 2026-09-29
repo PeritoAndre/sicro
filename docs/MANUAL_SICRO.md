@@ -591,7 +591,10 @@ Abas:
   atuação** (pré-preenche novas ocorrências) e caminho da imagem de assinatura.
 - **Instituição & marca:** órgão, unidade, endereço, texto de rodapé e caminhos
   dos brasões/logo (alimentam o cabeçalho do laudo).
-- **Aparência:** tema (escuro / claro / automático) e cor de destaque.
+- **Aparência:** tema (escuro / claro / automático), cor de destaque e
+  **tamanho da interface** (90% a 175%). Em qualquer tela, **Ctrl + Shift + =**
+  aumenta, **Ctrl + Shift + −** diminui e **Ctrl + Shift + 0** volta a 100% —
+  sem mexer no zoom do croqui, da imagem ou do laudo (Ctrl + = / − / 0).
 - **Integrações (SIGDOC):** e-mail e senha do SIGDOCS para autopreenchimento. A
   **senha fica no Gerenciador de Credenciais do Windows** (criptografada), nunca
   em texto claro.
@@ -599,7 +602,8 @@ Abas:
 - **Backup geral:** cópia de todos os casos.
 - **Dependências:** status e instalação de LibreOffice (PDF fiel), IA (Whisper,
   degravação) e OCR (Tesseract).
-- **Atalhos de teclado:** customizáveis por ação, organizados por módulo.
+- **Atalhos de teclado:** customizáveis por ação, organizados por módulo (os
+  do grupo **Geral** valem em todas as telas).
 - **Diagnóstico:** mostra onde o arquivo de configurações fica no disco.
 
 > 💡 **Primeiro uso:** preencha o **Perfil** e, se for assinar via SIGDOCS,

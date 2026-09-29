@@ -1,12 +1,13 @@
 /**
  * settingsStore — estado global das Configurações do app (o "cofrinho" que
  * vive fora de qualquer `.sicro`). Carregado uma vez no boot (App.tsx) e
- * aplicado ao documento (tema + cor de destaque). A persistência é via
+ * aplicado ao documento (tema + cor de destaque + zoom). A persistência é via
  * `commands.saveAppSettings` no diretório de config do SO.
  */
 
 import { create } from "zustand";
 import { commands } from "@core/commands";
+import { applyUiZoom, clampUiZoom } from "@core/uiZoom";
 import {
   defaultAppSettings,
   type AppSettings,
@@ -39,9 +40,9 @@ function lighten([r, g, b]: [number, number, number], amt: number): string {
 }
 
 /**
- * Aplica tema + cor de destaque no `<html>`. Resolve "auto" via
- * prefers-color-scheme. As vars de accent são setadas inline no
- * documentElement (sobrepõem o `:root` do tokens.css).
+ * Aplica tema + cor de destaque no `<html>` e o zoom da interface no
+ * webview. Resolve "auto" via prefers-color-scheme. As vars de accent são
+ * setadas inline no documentElement (sobrepõem o `:root` do tokens.css).
  */
 export function applyAppearance(appearance: AppearanceSettings): void {
   const root = document.documentElement;
@@ -66,6 +67,8 @@ export function applyAppearance(appearance: AppearanceSettings): void {
     root.style.removeProperty("--sicro-accent-hover");
     root.style.removeProperty("--sicro-accent-soft");
   }
+
+  applyUiZoom(appearance.ui_zoom);
 }
 
 interface SettingsState {
@@ -75,9 +78,11 @@ interface SettingsState {
   load: () => Promise<void>;
   /** Aplica a aparência, atualiza o estado e grava no disco. */
   persist: (next: AppSettings) => Promise<void>;
+  /** Muda só o zoom da interface (atalhos Ctrl+Shift+= / - / 0) e grava. */
+  setUiZoom: (zoom: number) => Promise<void>;
 }
 
-export const useSettingsStore = create<SettingsState>((set) => ({
+export const useSettingsStore = create<SettingsState>((set, get) => ({
   settings: defaultAppSettings(),
   loaded: false,
   async load() {
@@ -94,5 +99,22 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     applyAppearance(next.appearance);
     set({ settings: next });
     await commands.saveAppSettings(next);
+  },
+  async setUiZoom(zoom) {
+    // Antes do load terminar, gravar agora sobrescreveria o arquivo com os
+    // defaults — então só aplica na tela.
+    if (!get().loaded) {
+      applyUiZoom(zoom);
+      return;
+    }
+    const s = get().settings;
+    try {
+      await get().persist({
+        ...s,
+        appearance: { ...s.appearance, ui_zoom: clampUiZoom(zoom) },
+      });
+    } catch {
+      /* já aplicado na tela; falha de disco não derruba o atalho */
+    }
   },
 }));

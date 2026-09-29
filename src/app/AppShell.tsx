@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import { useShortcuts } from "@core/useShortcuts";
+import { UI_ZOOM_DEFAULT, getUiZoom, stepUiZoom } from "@core/uiZoom";
+import { useSettingsStore } from "@stores/settingsStore";
 import { ActivityRail } from "./ActivityRail";
 import { TitleBar } from "./TitleBar";
 import { TopBar } from "./TopBar";
@@ -22,6 +25,18 @@ interface AppShellProps {
  * cover, o webview some e o React reaparece naturalmente.
  */
 export function AppShell({ children }: AppShellProps) {
+  // Zoom da interface inteira — vale em qualquer tela, inclusive com o foco
+  // num campo de texto (Ctrl+Shift+= não digita nada).
+  const setUiZoom = useSettingsStore((s) => s.setUiZoom);
+  useShortcuts(
+    {
+      "geral.uiZoomIn": () => void setUiZoom(stepUiZoom(getUiZoom(), 1)),
+      "geral.uiZoomOut": () => void setUiZoom(stepUiZoom(getUiZoom(), -1)),
+      "geral.uiZoomReset": () => void setUiZoom(UI_ZOOM_DEFAULT),
+    },
+    { allowInInputs: true },
+  );
+
   return (
     <div className={styles.shell}>
       <div className={styles.titlebar}>

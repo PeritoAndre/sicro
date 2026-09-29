@@ -131,6 +131,7 @@ import type {
 } from "@domain/documentoscopia";
 import type { OcrCatalog, OcrStatus, OcrUpdateInfo } from "@domain/ocr";
 import { toSicroError, type SicroError } from "./errors";
+import { getUiZoom } from "./uiZoom";
 
 async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -138,6 +139,14 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
   } catch (err) {
     throw toSicroError(err);
   }
+}
+
+type Rect = { x: number; y: number; width: number; height: number };
+
+/** CSS px do webview principal → px lógicos da janela (desfaz o zoom da interface). */
+function cssToWindowPx(r: Rect): Rect {
+  const z = getUiZoom();
+  return { x: r.x * z, y: r.y * z, width: r.width * z, height: r.height * z };
 }
 
 export const commands = {
@@ -309,13 +318,14 @@ export const commands = {
    * Onda 3 — "Cover mode": abre o SIGDOC num webview borderless que
    * cobre EXATAMENTE a área de conteúdo do editor (entre topbar e
    * statusbar, à direita da rail). `bounds` em CSS px relativos ao
-   * webview principal.
+   * webview principal — convertidos aqui para px lógicos da janela (o zoom
+   * da interface faz 1 CSS px valer `getUiZoom()` px na tela).
    */
   openSigdocsCover(
     url: string | null,
     bounds: { x: number; y: number; width: number; height: number },
   ): Promise<void> {
-    return safeInvoke("open_sigdocs_cover", { url, bounds });
+    return safeInvoke("open_sigdocs_cover", { url, bounds: cssToWindowPx(bounds) });
   },
 
   /** Reposiciona o cover quando a área disponível muda (resize, route change). */
@@ -325,7 +335,7 @@ export const commands = {
     width: number;
     height: number;
   }): Promise<void> {
-    return safeInvoke("update_sigdocs_cover_bounds", { bounds });
+    return safeInvoke("update_sigdocs_cover_bounds", { bounds: cssToWindowPx(bounds) });
   },
 
   closeSigdocsCover(): Promise<void> {

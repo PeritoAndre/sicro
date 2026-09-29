@@ -14,6 +14,7 @@ import { AUDIO_ACTIONS } from "./keymap/audio";
 import { IMAGEM_ACTIONS } from "./keymap/imagem";
 
 export type ActionScope =
+  | "geral"
   | "dossie"
   | "laudo"
   | "croqui"
@@ -32,6 +33,16 @@ export interface ShortcutAction {
   /** Combinação padrão, na forma canônica de `keymap.ts`. */
   defaultBinding: string;
 }
+
+/**
+ * Geral — valem em qualquer tela (ligados no AppShell). Zoom da interface
+ * inteira usa Shift para não colidir com o Ctrl + = / - / 0 dos módulos.
+ */
+const GERAL: ShortcutAction[] = [
+  { id: "geral.uiZoomIn", scope: "geral", group: "Geral · Interface", label: "Aumentar a interface", defaultBinding: "Ctrl+Shift+=" },
+  { id: "geral.uiZoomOut", scope: "geral", group: "Geral · Interface", label: "Diminuir a interface", defaultBinding: "Ctrl+Shift+-" },
+  { id: "geral.uiZoomReset", scope: "geral", group: "Geral · Interface", label: "Interface em 100%", defaultBinding: "Ctrl+Shift+0" },
+];
 
 /** Dossiê — navegação entre as duas lentes + abas, e editar o cabeçalho. */
 const DOSSIE: ShortcutAction[] = [
@@ -81,9 +92,10 @@ const EXAME: ShortcutAction[] = [
   { id: "exame.group.proveniencia", scope: "exame", group: "Exame · Navegação", label: "Grupo Proveniência", defaultBinding: "Alt+4" },
 ];
 
-// Ordem dos módulos (ActivityRail): Dossiê → Laudo → Croqui → Vídeo → Áudio →
-// Imagem → Documentoscopia (Confronto + Exame).
+// Geral primeiro; depois a ordem dos módulos (ActivityRail): Dossiê → Laudo →
+// Croqui → Vídeo → Áudio → Imagem → Documentoscopia (Confronto + Exame).
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
+  ...GERAL,
   ...DOSSIE,
   ...LAUDO_ACTIONS,
   ...CROQUI_ACTIONS,

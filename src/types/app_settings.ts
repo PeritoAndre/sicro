@@ -32,6 +32,8 @@ export type ThemeMode = "dark" | "light" | "auto";
 export interface AppearanceSettings {
   theme: ThemeMode;
   accent: string; // hex (#rrggbb)
+  /** Zoom da interface inteira (1 = 100%). Ver `@core/uiZoom`. */
+  ui_zoom: number;
 }
 
 export interface PathsSettings {
@@ -114,7 +116,7 @@ export function defaultAppSettings(): AppSettings {
       brasao_left_path: "",
       brasao_right_path: "",
     },
-    appearance: { theme: "dark", accent: "#d7a84f" },
+    appearance: { theme: "dark", accent: "#d7a84f", ui_zoom: 1 },
     paths: { default_workspace_dir: "", default_export_dir: "" },
     ai: {
       whisper_bin_path: "",

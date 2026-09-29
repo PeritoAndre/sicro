@@ -1,6 +1,6 @@
 /**
  * ConfiguracoesModule — Configurações GLOBAIS do app (o "cofrinho" fora do
- * `.sicro`). v1: Perfil do perito, Instituição/marca, Aparência (tema + cor),
+ * `.sicro`). v1: Perfil do perito, Instituição/marca, Aparência (tema + cor + zoom),
  * Integração SIGDOC (credenciais) e Caminhos padrão.
  *
  * Persistência: `settingsStore` (→ `app-settings.json` no app_config_dir).
@@ -30,6 +30,7 @@ import { Button } from "@components/Button/Button";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { useSettingsStore } from "@stores/settingsStore";
+import { clampUiZoom } from "@core/uiZoom";
 import { MUNICIPIOS_AP } from "@domain/pericia";
 import { AiManagerCard } from "./AiManagerCard";
 import { OcrManagerCard } from "./OcrManagerCard";
@@ -59,6 +60,13 @@ const THEMES: { value: ThemeMode; label: string }[] = [
   { value: "light", label: "Claro" },
   { value: "auto", label: "Automático" },
 ];
+
+/** Tamanhos oferecidos na tela; os atalhos Ctrl+Shift+= / - andam por mais degraus. */
+const UI_ZOOMS = [0.9, 1, 1.1, 1.25, 1.5, 1.75];
+
+function zoomLabel(z: number): string {
+  return `${Math.round(z * 100)}%`;
+}
 
 function normalizeHex(s: string): string {
   return /^#[0-9a-fA-F]{6}$/.test(s.trim()) ? s.trim() : "#d7a84f";
@@ -458,8 +466,8 @@ export function ConfiguracoesModule() {
             <h2 className={styles.cardTitle}>Aparência</h2>
           </div>
           <p className={styles.cardDesc}>
-            Tema e cor de destaque. As mudanças valem na hora e são salvas
-            automaticamente.
+            Tema, cor de destaque e tamanho da interface. As mudanças valem na
+            hora e são salvas automaticamente.
           </p>
           <div className={styles.grid}>
             <div className={styles.field}>
@@ -508,6 +516,33 @@ export function ConfiguracoesModule() {
                   aria-label="Cor personalizada"
                 />
               </div>
+            </div>
+            <div className={styles.field}>
+              <label className={styles.label}>
+                Tamanho da interface — {zoomLabel(clampUiZoom(draft.appearance.ui_zoom))}
+              </label>
+              <div className={styles.segmented} role="tablist">
+                {UI_ZOOMS.map((z) => {
+                  const active =
+                    Math.abs(clampUiZoom(draft.appearance.ui_zoom) - z) < 0.001;
+                  return (
+                    <button
+                      key={z}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      className={`${styles.segBtn} ${active ? styles.segBtnActive : ""}`}
+                      onClick={() => setAppearance({ ui_zoom: z })}
+                    >
+                      {zoomLabel(z)}
+                    </button>
+                  );
+                })}
+              </div>
+              <span className={styles.hint}>
+                Em qualquer tela: Ctrl + Shift + = aumenta, Ctrl + Shift + −
+                diminui, Ctrl + Shift + 0 volta a 100%.
+              </span>
             </div>
           </div>
         </section>

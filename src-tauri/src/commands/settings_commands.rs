@@ -68,6 +68,9 @@ pub struct AppearanceSettings {
     pub theme: String,
     #[serde(default = "default_accent")]
     pub accent: String,
+    /// Zoom da interface inteira (1.0 = 100%), aplicado no webview pelo frontend.
+    #[serde(default = "default_ui_zoom")]
+    pub ui_zoom: f64,
 }
 
 impl Default for AppearanceSettings {
@@ -75,6 +78,7 @@ impl Default for AppearanceSettings {
         Self {
             theme: default_theme(),
             accent: default_accent(),
+            ui_zoom: default_ui_zoom(),
         }
     }
 }
@@ -84,6 +88,9 @@ fn default_theme() -> String {
 }
 fn default_accent() -> String {
     "#d7a84f".to_string()
+}
+fn default_ui_zoom() -> f64 {
+    1.0
 }
 
 /// Caminhos padrão. Guardados globalmente; o uso efetivo em cada fluxo
