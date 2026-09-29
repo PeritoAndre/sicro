@@ -117,7 +117,8 @@ const nextShuttle = (r: number) => (r < 1 ? 1 : Math.min(8, r * 2));
 
 // Volume/mudo e a legenda aberta/fechada: preferência de UI por máquina.
 const AUDIO_KEY = "sicro.video.audio.v1";
-const LEGEND_KEY = "sicro.video.legend.v1";
+// v2: a legenda passou a começar escondida (v1 guardava "1" para todo mundo).
+const LEGEND_KEY = "sicro.video.legend.v2";
 function loadAudioPrefs(): { volume: number; muted: boolean } {
   try {
     const o = JSON.parse(localStorage.getItem(AUDIO_KEY) ?? "null") as {
@@ -132,9 +133,9 @@ function loadAudioPrefs(): { volume: number; muted: boolean } {
 }
 function loadLegendOpen(): boolean {
   try {
-    return localStorage.getItem(LEGEND_KEY) !== "0";
+    return localStorage.getItem(LEGEND_KEY) === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 /** Hold longer than this (ms) and an arrow switches from frame-step to play. */
@@ -220,6 +221,40 @@ export function VideoPlayerPanel({
   // Ajustes de imagem valem para o vídeo aberto; outro vídeo começa no original.
   useEffect(() => {
     setAdjust(ADJUST_DEFAULT);
+  }, [src]);
+
+  // Pausado, o WebKitGTK não redesenha o quadro quando o <video> muda de
+  // tamanho (linha do tempo mais alta, divisória, janela): a imagem fica
+  // "rasgada". Parou de mudar de tamanho → força um quadro novo: vai meio
+  // milissegundo adiante e volta ao instante exato (buscar no MESMO instante
+  // o WebKit ignora). O tempo final é o de antes, sem arredondar nada.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (!v || typeof ResizeObserver === "undefined") return;
+    let timer: number | undefined;
+    let first = true;
+    const ro = new ResizeObserver(() => {
+      if (first) {
+        first = false;
+        return;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        if (!v.paused || v.seeking || v.readyState < 2) return;
+        const t0 = v.currentTime;
+        const back = () => {
+          v.removeEventListener("seeked", back);
+          if (v.paused) v.currentTime = t0;
+        };
+        v.addEventListener("seeked", back);
+        v.currentTime = t0 + 0.0005;
+      }, 180);
+    });
+    ro.observe(v);
+    return () => {
+      window.clearTimeout(timer);
+      ro.disconnect();
+    };
   }, [src]);
 
   // Volume/mudo: aplica no <video> e lembra.

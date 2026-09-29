@@ -8,8 +8,10 @@
  *     régua marca cada quadro.
  *   - Trecho entrada/saída (I/O) aparece destacado; mais forte quando repete.
  *   - Tocando com zoom, a janela acompanha o playhead.
+ *   - Altura ajustável: arrastar a borda de cima (duplo clique volta ao
+ *     padrão). Lembrada por máquina e igual em todas as linhas do tempo.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
 import type { VideoEvent } from "@domain/video";
 import { useShortcuts } from "@core/useShortcuts";
@@ -40,6 +42,43 @@ interface View {
   end: number;
 }
 
+// ---- altura da régua (preferência compartilhada) -------------------------------
+
+const HEIGHT_KEY = "sicro.video.timelineHeight.v1";
+export const TIMELINE_MIN_H = 36;
+export const TIMELINE_MAX_H = 240;
+export const TIMELINE_DEFAULT_H = 60;
+const clampH = (h: number) => Math.round(Math.min(TIMELINE_MAX_H, Math.max(TIMELINE_MIN_H, h)));
+let railHeight = (() => {
+  try {
+    const v = Number(localStorage.getItem(HEIGHT_KEY));
+    return v > 0 ? clampH(v) : TIMELINE_DEFAULT_H;
+  } catch {
+    return TIMELINE_DEFAULT_H;
+  }
+})();
+const heightListeners = new Set<() => void>();
+function setRailHeight(h: number, persist: boolean) {
+  railHeight = clampH(h);
+  heightListeners.forEach((f) => f());
+  if (persist) {
+    try {
+      localStorage.setItem(HEIGHT_KEY, String(railHeight));
+    } catch {
+      /* só não lembra */
+    }
+  }
+}
+function useRailHeight(): number {
+  return useSyncExternalStore(
+    (f) => {
+      heightListeners.add(f);
+      return () => heightListeners.delete(f);
+    },
+    () => railHeight,
+  );
+}
+
 export function VideoTimeline({
   duration,
   fps,
@@ -57,6 +96,10 @@ export function VideoTimeline({
 }: Props) {
   const menu = useContextMenu();
   const railRef = useRef<HTMLDivElement | null>(null);
+  const height = useRailHeight();
+  // Régua alta: riscos, rótulos e marcadores crescem junto.
+  const tall = height >= 90;
+  const gripRef = useRef<{ y: number; h: number } | null>(null);
   const [railWidth, setRailWidth] = useState(800);
   const safeDuration = duration > 0 ? duration : 1;
   const [view, setView] = useState<View>({ start: 0, end: safeDuration });
@@ -177,6 +220,9 @@ export function VideoTimeline({
   };
   const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0 || duration <= 0) return;
+    // Sem isso, arrastar saindo da régua seleciona o texto da tela.
+    e.preventDefault();
+    e.currentTarget.focus({ preventScroll: true });
     e.currentTarget.setPointerCapture(e.pointerId);
     draggingRef.current = true;
     onScrubStart();
@@ -219,8 +265,31 @@ export function VideoTimeline({
   const pctAll = (t: number) => `${(t / safeDuration) * 100}%`;
 
   return (
-    <div className={styles.wrap}>
+    <div className={`${styles.wrap} ${tall ? styles.tall : ""}`}>
       {menu.element}
+      <div
+        className={styles.grip}
+        title="Arraste para cima ou para baixo para mudar a altura da linha do tempo · duplo clique: altura padrão"
+        onPointerDown={(e) => {
+          e.preventDefault();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          gripRef.current = { y: e.clientY, h: height };
+        }}
+        onPointerMove={(e) => {
+          const g = gripRef.current;
+          if (!g) return;
+          // Não deixa a régua passar de ~45% da janela (o vídeo precisa de espaço).
+          const cap = Math.max(TIMELINE_MIN_H, window.innerHeight * 0.45);
+          setRailHeight(Math.min(cap, g.h + (g.y - e.clientY)), false);
+        }}
+        onPointerUp={() => {
+          if (!gripRef.current) return;
+          gripRef.current = null;
+          setRailHeight(railHeight, true);
+        }}
+        onPointerCancel={() => (gripRef.current = null)}
+        onDoubleClick={() => setRailHeight(TIMELINE_DEFAULT_H, true)}
+      />
       <div className={styles.toolbar}>
         {zoomed ? (
           <div
@@ -228,6 +297,7 @@ export function VideoTimeline({
             className={styles.overview}
             title="Visão geral — clique ou arraste para mover a janela"
             onPointerDown={(e) => {
+              e.preventDefault();
               e.currentTarget.setPointerCapture(e.pointerId);
               overviewDragRef.current = true;
               centerViewAt(e.clientX);
@@ -271,6 +341,7 @@ export function VideoTimeline({
       <div
         ref={railRef}
         className={styles.rail}
+        style={{ height }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -282,6 +353,10 @@ export function VideoTimeline({
             "separator",
             { label: "Aproximar a linha do tempo aqui", shortcut: "Ctrl+roda", onSelect: () => zoomAround(0.5, t) },
             { label: "Linha do tempo inteira", shortcut: "0", disabled: !zoomed, onSelect: fit },
+            "separator",
+            { label: "Linha do tempo mais alta", onSelect: () => setRailHeight(height + 30, true), disabled: height >= TIMELINE_MAX_H },
+            { label: "Linha do tempo mais baixa", onSelect: () => setRailHeight(height - 30, true), disabled: height <= TIMELINE_MIN_H },
+            { label: "Altura padrão", onSelect: () => setRailHeight(TIMELINE_DEFAULT_H, true), disabled: height === TIMELINE_DEFAULT_H },
           ]);
         }}
         role="slider"

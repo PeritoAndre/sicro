@@ -42,6 +42,7 @@ import {
 } from "@stores/workspaceStore";
 import type { AudioMedia } from "@domain/audio";
 import type { VideoMedia } from "@domain/video";
+import { probeHasAudio } from "@modules/video/editor/format";
 import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
 import { AudioAnalysisPanel } from "./AudioAnalysisPanel";
 import styles from "./AudioModule.module.css";
@@ -162,6 +163,12 @@ function parseWarnings(json: string): string[] {
   }
 }
 
+/** O vídeo tem trilha de áudio? "?" quando o ffprobe não foi registrado. */
+function videoAudio(v: VideoMedia): "sim" | "nao" | "?" {
+  if (!v.raw_probe_json) return "?";
+  return probeHasAudio(v.raw_probe_json) ? "sim" : "nao";
+}
+
 export function AudioModule() {
   const ws = useWorkspaceStore(selectActiveWorkspacePath);
   const navigate = useNavigate();
@@ -218,7 +225,13 @@ export function AudioModule() {
     if (!ws) return;
     void commands
       .listVideoMedia(ws)
-      .then((v) => setCaseVideos(v))
+      .then((v) => {
+        setCaseVideos(v);
+        // Já deixa escolhido o primeiro vídeo que tem áudio.
+        setPickedVideo((cur) =>
+          cur && v.some((x) => x.id === cur) ? cur : (v.find((x) => videoAudio(x) !== "nao")?.id ?? ""),
+        );
+      })
       .catch(() => setCaseVideos([]));
   }, [ws]);
 
@@ -422,6 +435,42 @@ export function AudioModule() {
     );
   }
 
+  // "Extrair do vídeo do caso": o mesmo controle na tela inicial (logo abaixo
+  // dos botões) e na lista (na barra do topo). Vídeo sem trilha de áudio
+  // aparece marcado e não pode ser escolhido.
+  const caseExtract =
+    caseVideos.length > 0 ? (
+      <div className={styles.caseExtract}>
+        <span className={styles.caseExtractLabel}>
+          <Film size={12} aria-hidden /> Do vídeo do caso:
+        </span>
+        <select
+          className={styles.select}
+          value={pickedVideo}
+          onChange={(e) => setPickedVideo(e.target.value)}
+        >
+          <option value="">selecione um vídeo…</option>
+          {caseVideos.map((v) => {
+            const noAudio = videoAudio(v) === "nao";
+            return (
+              <option key={v.id} value={v.id} disabled={noAudio} title={v.filename}>
+                {/* aviso na frente: nome comprido é cortado no fim */}
+                {noAudio ? `(sem áudio) ${v.filename}` : v.filename}
+              </option>
+            );
+          })}
+        </select>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => void handleExtractCase()}
+          disabled={busy !== null || !pickedVideo}
+        >
+          {busy === "extract" ? "Extraindo…" : "Extrair"}
+        </Button>
+      </div>
+    ) : null;
+
   if (!loading && items.length === 0) {
     return (
       <div className={styles.wrap}>
@@ -447,38 +496,12 @@ export function AudioModule() {
               >
                 {busy === "extract" ? "Extraindo…" : "Extrair de vídeo…"}
               </Button>
+              {caseExtract && <div className={styles.caseExtractRow}>{caseExtract}</div>}
             </>
           }
           features={AUDIO_FEATURES}
           note="Realce, espectrograma e medições são apoio técnico (FFmpeg, determinístico). Não recuperam nem alteram o conteúdo; a interpretação cabe ao perito responsável."
         >
-          {caseVideos.length > 0 && (
-            <div className={styles.caseExtract}>
-              <span className={styles.caseExtractLabel}>
-                <Film size={12} aria-hidden /> Extrair do vídeo do caso:
-              </span>
-              <select
-                className={styles.select}
-                value={pickedVideo}
-                onChange={(e) => setPickedVideo(e.target.value)}
-              >
-                <option value="">selecione um vídeo…</option>
-                {caseVideos.map((v) => (
-                  <option key={v.id} value={v.id}>
-                    {v.filename}
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => void handleExtractCase()}
-                disabled={busy !== null || !pickedVideo}
-              >
-                Extrair
-              </Button>
-            </div>
-          )}
         </ModuleLanding>
         {error && (
           <div
@@ -533,35 +556,8 @@ export function AudioModule() {
             Reindexar
           </Button>
         </div>
+        {caseExtract && <div className={styles.caseExtractBar}>{caseExtract}</div>}
       </header>
-
-      {caseVideos.length > 0 && (
-        <div className={styles.caseExtract}>
-          <span className={styles.caseExtractLabel}>
-            <Film size={12} aria-hidden /> Extrair do vídeo do caso:
-          </span>
-          <select
-            className={styles.select}
-            value={pickedVideo}
-            onChange={(e) => setPickedVideo(e.target.value)}
-          >
-            <option value="">selecione um vídeo…</option>
-            {caseVideos.map((v) => (
-              <option key={v.id} value={v.id}>
-                {v.filename}
-              </option>
-            ))}
-          </select>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void handleExtractCase()}
-            disabled={busy !== null || !pickedVideo}
-          >
-            Extrair
-          </Button>
-        </div>
-      )}
 
       {error && (
         <div className={styles.errorBanner}>

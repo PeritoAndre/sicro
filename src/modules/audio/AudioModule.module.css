@@ -46,7 +46,21 @@
   background: var(--sicro-surface-1);
   border: 1px solid var(--sicro-divider);
   border-radius: var(--radius-md);
-  align-self: flex-start;
+}
+/* Tela inicial: linha própria, centralizada logo abaixo dos botões. */
+.caseExtractRow {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: center;
+}
+/* Lista: linha própria na barra do topo, alinhada à direita, sob os botões. */
+.caseExtractBar {
+  flex-basis: 100%;
+  display: flex;
+  justify-content: flex-end;
+}
+.caseExtract .select {
+  max-width: 340px;
 }
 .caseExtractLabel {
   display: inline-flex;

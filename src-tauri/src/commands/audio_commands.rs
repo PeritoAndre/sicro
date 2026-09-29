@@ -49,6 +49,14 @@ pub async fn extract_audio_from_video(
             source.display()
         )));
     }
+    // Antes de tudo: vídeo só com imagem não tem o que extrair (o ffmpeg daria
+    // "Output file does not contain any stream", incompreensível para o perito).
+    if !crate::audio::has_audio_stream(&source)? {
+        return Err(SicroError::Validation(format!(
+            "o vídeo \"{}\" não tem trilha de áudio — só imagem. Não há áudio para extrair.",
+            source.file_name().and_then(|n| n.to_str()).unwrap_or("?")
+        )));
+    }
 
     let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
     create_dir(&wav_dir)?;

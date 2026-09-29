@@ -463,6 +463,12 @@ frames e **medir velocidade e distância** por fotogrametria.
   - **Arraste** na linha do tempo (a imagem acompanha). **Ctrl + roda do mouse**
     ou **= / − / 0** aproximam/afastam a linha do tempo — no máximo, um risco
     por quadro; aproximada, aparece uma faixa de visão geral para mover a janela.
+  - **Altura da linha do tempo:** arraste o **puxador na borda de cima** dela
+    (para cima = mais alta, até ~4× a padrão); duplo clique volta ao padrão. Também
+    no botão direito da linha do tempo. A altura fica lembrada e vale também na
+    comparação de câmeras.
+  - A **legenda de atalhos** sobre o vídeo começa escondida: o botão de teclado
+    na barra de controles mostra/esconde.
   - **I / O** marcam entrada e saída de um trecho, que passa a **repetir**
     (Ctrl+L liga/desliga, Alt+X limpa, Shift+I / Shift+O vão às pontas).
   - **Shift + ↑ / ↓** pulam para o evento anterior / seguinte.
@@ -550,6 +556,12 @@ mudança de faixa…), com título e — se quiser — um frame vinculado.
 
 - **Importar áudio** (WhatsApp, gravador…) ou **Extrair de vídeo**. O original é
   preservado e gera-se um WAV de análise (PCM 16-bit), ambos com hash.
+- **Do vídeo do caso:** escolha um vídeo já registrado no caso e clique
+  **Extrair** (na tela inicial, logo abaixo dos botões; com áudios na lista, no
+  topo à direita). Vídeos **só com imagem** (sem trilha de áudio — comum em
+  câmera de segurança) aparecem como "(sem áudio)" e não podem ser escolhidos;
+  se um arquivo assim vier pelo "Extrair de vídeo…", o SICRO avisa em vez de
+  dar erro do ffmpeg.
 
 ### 9.2 Player e abas
 

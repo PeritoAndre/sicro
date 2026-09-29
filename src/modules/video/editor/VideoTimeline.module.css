@@ -1,7 +1,35 @@
 .wrap {
+  position: relative;
+  flex-shrink: 0;
   background: var(--sicro-surface-1);
   padding: var(--space-3) var(--space-3) var(--space-4);
   border-top: 1px solid var(--sicro-divider);
+}
+/* Puxador da altura: a borda de cima inteira. */
+.grip {
+  position: absolute;
+  top: -4px;
+  left: 0;
+  right: 0;
+  height: 9px;
+  z-index: 3;
+  cursor: ns-resize;
+  touch-action: none;
+}
+.grip::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 50%;
+  width: 44px;
+  height: 3px;
+  margin-left: -22px;
+  border-radius: 2px;
+  background: var(--sicro-border);
+  transition: background var(--t-fast);
+}
+.grip:hover::after {
+  background: var(--sicro-accent);
 }
 /* ----- barra: visão geral (com zoom) + rótulo + botões de zoom ----- */
 .toolbar {
@@ -105,7 +133,7 @@
 
 .rail {
   position: relative;
-  height: 36px;
+  height: 60px;
   touch-action: none;
   background: var(--sicro-surface-2);
   border: 1px solid var(--sicro-border);
@@ -164,6 +192,25 @@
   outline-offset: 1px;
 }
 
+/* régua alta: marcadores e rótulos maiores */
+.tall .marker {
+  width: 12px;
+  margin-left: -6px;
+  top: 8px;
+  bottom: 8px;
+}
+.tall .tickLabel {
+  font-size: 11px;
+  bottom: -18px;
+}
+.tall .playhead {
+  width: 3px;
+  margin-left: -1px;
+}
+.tall {
+  padding-bottom: calc(var(--space-4) + 3px);
+}
+
 /* category palette */
 .cat-colisao { background: #dc2626; }
 .cat-frenagem { background: #d97706; }
@@ -181,4 +228,16 @@
   background: #ffffff;
   pointer-events: none;
   box-shadow: 0 0 4px rgba(255, 255, 255, 0.4);
+}
+/* cabeça do playhead: um triângulo em cima, para achar "onde estamos" de relance */
+.playhead::before {
+  content: "";
+  position: absolute;
+  top: -3px;
+  left: 50%;
+  width: 11px;
+  height: 8px;
+  margin-left: -5.5px;
+  background: #fff;
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
 }

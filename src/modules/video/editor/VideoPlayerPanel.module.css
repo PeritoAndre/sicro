@@ -58,6 +58,7 @@
 
 .controls {
   display: flex;
+  flex-wrap: wrap; /* painel estreito: quebra a linha em vez de vazar para o lado */
   align-items: center;
   gap: var(--space-2);
   padding: 6px var(--space-3);

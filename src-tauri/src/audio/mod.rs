@@ -37,6 +37,24 @@ fn detect(bin: &str) -> Result<PathBuf> {
     })
 }
 
+/// O arquivo tem ao menos uma trilha de áudio? (ffprobe; vídeo de câmera de
+/// segurança muitas vezes só tem imagem.)
+pub fn has_audio_stream(path: &Path) -> Result<bool> {
+    let ffprobe = detect("ffprobe")?;
+    let out = std::process::Command::new(&ffprobe)
+        .args(["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0"])
+        .arg(path)
+        .output()
+        .map_err(|e| SicroError::Workspace(format!("não foi possível rodar o ffprobe: {e}")))?;
+    if !out.status.success() {
+        return Err(SicroError::Validation(format!(
+            "o ffprobe não conseguiu ler o arquivo: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        )));
+    }
+    Ok(!String::from_utf8_lossy(&out.stdout).trim().is_empty())
+}
+
 /// Extrai a trilha de áudio de um vídeo para WAV PCM 16-bit (sem perda), 48 kHz.
 pub fn extract_audio_to_wav(video: &Path, out_wav: &Path) -> Result<()> {
     let i = video.to_string_lossy();
@@ -376,4 +394,34 @@ pub fn probe_audio(path: &Path) -> AudioProbe {
         }
     }
     probe
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::process::Command;
+
+    /// Gera um vídeo curto (com ou sem trilha de áudio); None sem ffmpeg.
+    fn sample(dir: &Path, with_audio: bool) -> Option<PathBuf> {
+        let ffmpeg = detect("ffmpeg").ok()?;
+        let p = dir.join(if with_audio { "com_audio.mp4" } else { "so_imagem.mp4" });
+        let mut cmd = Command::new(ffmpeg);
+        cmd.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=160x120:rate=10"]);
+        if with_audio {
+            cmd.args(["-f", "lavfi", "-i", "sine=frequency=440"]);
+        }
+        cmd.args(["-t", "1", "-pix_fmt", "yuv420p", "-y"]).arg(&p);
+        cmd.status().ok()?.success().then_some(p)
+    }
+
+    #[test]
+    fn detecta_video_sem_trilha_de_audio() {
+        let dir = tempfile::tempdir().unwrap();
+        let (Some(com), Some(sem)) = (sample(dir.path(), true), sample(dir.path(), false)) else {
+            eprintln!("ffmpeg ausente — teste pulado");
+            return;
+        };
+        assert!(has_audio_stream(&com).unwrap());
+        assert!(!has_audio_stream(&sem).unwrap());
+    }
 }
