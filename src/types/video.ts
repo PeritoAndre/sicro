@@ -41,6 +41,31 @@ export interface VideoMedia {
   updated_at: string;
 }
 
+/** Relógio da câmera: "aos media_time_s do vídeo, a câmera marca clock_seconds". */
+export interface VideoClockCalibration {
+  id: string;
+  occurrence_id: string;
+  media_hash: string;
+  media_time_s: number;
+  /** Segundos desde 00:00:00. */
+  clock_seconds: number;
+  /** AAAA-MM-DD, quando a câmera mostra a data. */
+  clock_date: string | null;
+  clock_label: string;
+  note: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SetVideoClockInput {
+  media_hash: string;
+  media_time_s: number;
+  clock_seconds: number;
+  clock_date?: string | null;
+  clock_label: string;
+  note?: string;
+}
+
 export interface VideoEvent {
   id: string;
   occurrence_id: string;

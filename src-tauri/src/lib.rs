@@ -158,6 +158,10 @@ pub fn run() {
             commands::video_commands::update_storyboard_frame,
             commands::video_commands::delete_storyboard_frame,
             commands::video_commands::list_video_operation_logs,
+            commands::video_commands::list_video_clocks,
+            commands::video_commands::set_video_clock,
+            commands::video_commands::delete_video_clock,
+            commands::video_commands::video_thumbnail,
             // áudio (módulo Áudio — Camada 1)
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,

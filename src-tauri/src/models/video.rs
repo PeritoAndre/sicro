@@ -88,6 +88,40 @@ pub struct UpdateVideoEventInput {
 }
 
 // ---------------------------------------------------------------------------
+// VideoClockCalibration — relógio da câmera (migration 018)
+
+/// "Aos `media_time_s` do vídeo, o relógio da câmera marca `clock_seconds`."
+/// Horário da câmera em qualquer instante t = t − media_time_s + clock_seconds.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct VideoClockCalibration {
+    pub id: Uuid,
+    pub occurrence_id: Uuid,
+    pub media_hash: String,
+    pub media_time_s: f64,
+    /// Segundos desde 00:00:00 (pode ter fração).
+    pub clock_seconds: f64,
+    /// AAAA-MM-DD, quando a câmera mostra a data.
+    pub clock_date: Option<String>,
+    /// Exatamente o que o perito digitou.
+    pub clock_label: String,
+    pub note: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct SetVideoClockInput {
+    pub media_hash: String,
+    pub media_time_s: f64,
+    pub clock_seconds: f64,
+    #[serde(default)]
+    pub clock_date: Option<String>,
+    pub clock_label: String,
+    #[serde(default)]
+    pub note: String,
+}
+
+// ---------------------------------------------------------------------------
 // VideoExport (PNG frame extraction)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

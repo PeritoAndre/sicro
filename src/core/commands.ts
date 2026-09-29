@@ -50,8 +50,10 @@ import type {
   CreateVideoEventInput,
   RegisterVideoInput,
   UpdateStoryboardFrameInput,
+  SetVideoClockInput,
   UpdateVideoEventInput,
   VideoBundle,
+  VideoClockCalibration,
   VideoEvent,
   VideoMedia,
   VideoOperationLog,
@@ -743,6 +745,27 @@ export const commands = {
       workspacePath,
       input,
     });
+  },
+
+  /** Relógio da câmera de todos os vídeos da ocorrência. */
+  listVideoClocks(workspacePath: string): Promise<VideoClockCalibration[]> {
+    return safeInvoke<VideoClockCalibration[]>("list_video_clocks", { workspacePath });
+  },
+
+  setVideoClock(
+    workspacePath: string,
+    input: SetVideoClockInput,
+  ): Promise<VideoClockCalibration> {
+    return safeInvoke<VideoClockCalibration>("set_video_clock", { workspacePath, input });
+  },
+
+  deleteVideoClock(workspacePath: string, mediaHash: string): Promise<void> {
+    return safeInvoke<void>("delete_video_clock", { workspacePath, mediaHash });
+  },
+
+  /** Caminho absoluto da miniatura (gerada na 1ª vez, no cache do app). */
+  videoThumbnail(workspacePath: string, mediaId: string): Promise<string> {
+    return safeInvoke<string>("video_thumbnail", { workspacePath, mediaId });
   },
 
   /** Lists every video registered in the active occurrence. */

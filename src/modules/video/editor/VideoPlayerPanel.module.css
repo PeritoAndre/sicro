@@ -148,3 +148,106 @@
   border: 1px solid var(--sicro-border);
   border-radius: 3px;
 }
+
+/* ----- lupa / ajustes: avisos no topo do vídeo ----- */
+.viewChips {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+.viewChip {
+  background: rgba(10, 13, 20, 0.82);
+  border: 1px solid #5aa9e6;
+  color: #cfe6fb;
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* ----- painel de ajustes de tela ----- */
+.adjPanel {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 3;
+  width: 260px;
+  padding: 10px 12px;
+  background: rgba(14, 18, 27, 0.95);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  font-size: var(--text-xs);
+  cursor: default;
+}
+.adjHead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.adjHead button,
+.adjFoot button {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+  cursor: pointer;
+}
+.adjRow {
+  display: grid;
+  grid-template-columns: 64px 1fr 40px;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.adjRow code {
+  font-family: var(--font-mono);
+  text-align: right;
+  color: var(--sicro-fg-muted);
+}
+.adjFoot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 6px;
+}
+.adjFoot kbd {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  padding: 0 4px;
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+}
+.adjNote {
+  margin: 8px 0 0;
+  color: var(--sicro-fg-dim);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+/* ----- volume e botões de alternar ----- */
+.volumeGroup {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.volumeSlider {
+  width: 70px;
+  accent-color: var(--sicro-accent);
+}
+.volumeGroup button:disabled,
+.volumeSlider:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.toggleOn {
+  color: var(--sicro-accent) !important;
+  border-color: var(--sicro-accent) !important;
+}

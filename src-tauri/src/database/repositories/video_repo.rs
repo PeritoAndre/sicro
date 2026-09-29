@@ -10,7 +10,8 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::models::{
-    VideoEvent, VideoExport, VideoMedia, VideoOperationLog, VideoStoryboardFrame,
+    VideoClockCalibration, VideoEvent, VideoExport, VideoMedia, VideoOperationLog,
+    VideoStoryboardFrame,
 };
 
 // ---------------------------------------------------------------------------
@@ -455,6 +456,92 @@ fn row_to_storyboard(row: &Row<'_>) -> rusqlite::Result<VideoStoryboardFrame> {
 }
 
 // ---------------------------------------------------------------------------
+// video_clock_calibrations (relógio da câmera — um por vídeo)
+
+const CLOCK_COLS: &str = "
+    id, occurrence_id, media_hash, media_time_s, clock_seconds, clock_date,
+    clock_label, note, created_at, updated_at
+";
+
+/// Grava (ou substitui) o vínculo de relógio do vídeo `media_hash`.
+pub fn upsert_clock(conn: &Connection, c: &VideoClockCalibration) -> Result<()> {
+    conn.execute(
+        &format!(
+            "INSERT INTO video_clock_calibrations ({CLOCK_COLS}) VALUES \
+             (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10) \
+             ON CONFLICT(occurrence_id, media_hash) DO UPDATE SET \
+               media_time_s = excluded.media_time_s, \
+               clock_seconds = excluded.clock_seconds, \
+               clock_date = excluded.clock_date, \
+               clock_label = excluded.clock_label, \
+               note = excluded.note, \
+               updated_at = excluded.updated_at"
+        ),
+        params![
+            c.id.to_string(),
+            c.occurrence_id.to_string(),
+            c.media_hash,
+            c.media_time_s,
+            c.clock_seconds,
+            c.clock_date,
+            c.clock_label,
+            c.note,
+            c.created_at.to_rfc3339(),
+            c.updated_at.to_rfc3339(),
+        ],
+    )?;
+    Ok(())
+}
+
+pub fn find_clock(
+    conn: &Connection,
+    occurrence_id: &Uuid,
+    media_hash: &str,
+) -> Result<Option<VideoClockCalibration>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {CLOCK_COLS} FROM video_clock_calibrations \
+         WHERE occurrence_id = ?1 AND media_hash = ?2"
+    ))?;
+    Ok(stmt
+        .query_row(params![occurrence_id.to_string(), media_hash], row_to_clock)
+        .optional()?)
+}
+
+pub fn list_clocks_for_occurrence(
+    conn: &Connection,
+    occurrence_id: &Uuid,
+) -> Result<Vec<VideoClockCalibration>> {
+    let mut stmt = conn.prepare(&format!(
+        "SELECT {CLOCK_COLS} FROM video_clock_calibrations WHERE occurrence_id = ?1"
+    ))?;
+    let rows = stmt.query_map([occurrence_id.to_string()], row_to_clock)?;
+    Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+}
+
+pub fn delete_clock(conn: &Connection, occurrence_id: &Uuid, media_hash: &str) -> Result<()> {
+    conn.execute(
+        "DELETE FROM video_clock_calibrations WHERE occurrence_id = ?1 AND media_hash = ?2",
+        params![occurrence_id.to_string(), media_hash],
+    )?;
+    Ok(())
+}
+
+fn row_to_clock(row: &Row<'_>) -> rusqlite::Result<VideoClockCalibration> {
+    Ok(VideoClockCalibration {
+        id: parse_uuid(row, "id")?,
+        occurrence_id: parse_uuid(row, "occurrence_id")?,
+        media_hash: row.get("media_hash")?,
+        media_time_s: row.get("media_time_s")?,
+        clock_seconds: row.get("clock_seconds")?,
+        clock_date: row.get("clock_date")?,
+        clock_label: row.get("clock_label")?,
+        note: row.get("note")?,
+        created_at: parse_dt(row.get::<_, String>("created_at")?)?,
+        updated_at: parse_dt(row.get::<_, String>("updated_at")?)?,
+    })
+}
+
+// ---------------------------------------------------------------------------
 // video_operation_logs
 
 pub fn insert_log(
@@ -526,4 +613,51 @@ fn parse_dt(s: String) -> rusqlite::Result<DateTime<Utc>> {
         .map_err(|e| {
             rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
         })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::migrations::run_migrations;
+
+    fn clock(occ: Uuid, hash: &str, t: f64, clock_s: f64) -> VideoClockCalibration {
+        let now = Utc::now();
+        VideoClockCalibration {
+            id: Uuid::new_v4(),
+            occurrence_id: occ,
+            media_hash: hash.into(),
+            media_time_s: t,
+            clock_seconds: clock_s,
+            clock_date: Some("2026-08-02".into()),
+            clock_label: "03:36:05".into(),
+            note: String::new(),
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    #[test]
+    fn migration_018_clock_upsert_list_delete() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        run_migrations(&mut conn).unwrap();
+        // Sem linha em `occurrences`: desliga a FK só neste teste.
+        conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
+        let occ = Uuid::new_v4();
+
+        upsert_clock(&conn, &clock(occ, "aaa", 5.0, 12_965.0)).unwrap();
+        upsert_clock(&conn, &clock(occ, "bbb", 1.0, 12_960.0)).unwrap();
+        // Segundo vínculo do mesmo vídeo SUBSTITUI (um por vídeo).
+        upsert_clock(&conn, &clock(occ, "aaa", 7.5, 12_967.5)).unwrap();
+
+        let all = list_clocks_for_occurrence(&conn, &occ).unwrap();
+        assert_eq!(all.len(), 2);
+        let a = find_clock(&conn, &occ, "aaa").unwrap().unwrap();
+        assert_eq!(a.media_time_s, 7.5);
+        assert_eq!(a.clock_seconds, 12_967.5);
+        assert_eq!(a.clock_date.as_deref(), Some("2026-08-02"));
+
+        delete_clock(&conn, &occ, "aaa").unwrap();
+        assert!(find_clock(&conn, &occ, "aaa").unwrap().is_none());
+        assert_eq!(list_clocks_for_occurrence(&conn, &occ).unwrap().len(), 1);
+    }
 }

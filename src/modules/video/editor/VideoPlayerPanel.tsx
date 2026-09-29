@@ -21,6 +21,11 @@
  *   ↑/↓  velocidade (0,1× … 8×)   Ctrl+1  coletar frame
  *   F / duplo clique no vídeo  tela cheia (quem executa é o VideoAnalysisView)
  *
+ * Só de tela (nada disso altera o arquivo nem os quadros coletados):
+ *   roda do mouse / Ctrl+= / Ctrl+− / Ctrl+0  lupa (arrastar move a imagem)
+ *   A  liga/desliga os ajustes de brilho/contraste/gama (comparar)
+ *   Ctrl+M mudo · Ctrl+↑/↓ volume (lembrado entre sessões)
+ *
  * Também: repete o trecho entrada/saída (`loop`), publica o tempo ~30×/s
  * enquanto toca (a linha do tempo com zoom precisa), junta os seeks de quem
  * arrasta a régua e lembra a posição de cada vídeo (abre no 1º quadro real).
@@ -39,10 +44,24 @@ import { useEffect, useRef, useState } from "react";
 import { mediaSrc } from "@core/mediaSrc";
 import { formatDuration } from "./format";
 import { loadPosition, savePosition } from "./resume";
+import { useMagnifier } from "./useMagnifier";
+import {
+  ADJUST_DEFAULT,
+  GammaFilterDefs,
+  ImageAdjustPanel,
+  adjustFilter,
+  isAdjusted,
+  type Adjust,
+} from "./ImageAdjust";
 import { useShortcuts } from "@core/useShortcuts";
 import {
+  Keyboard,
   Maximize,
   Minimize,
+  SlidersHorizontal,
+  Volume1,
+  Volume2,
+  VolumeX,
   Pause,
   Play,
   Rewind,
@@ -73,6 +92,8 @@ interface Props {
   startTime?: number;
   /** Trecho a repetir (já ordenado), ou null. */
   loop?: { a: number; b: number } | null;
+  /** O vídeo tem trilha de áudio? (sem áudio o controle de volume fica inativo) */
+  hasAudio?: boolean;
   /** Tela cheia do reprodutor — estado e alternância vêm do VideoAnalysisView. */
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -90,6 +111,29 @@ export interface PlayerController {
 const PLAYBACK_RATES = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 /** J/L repetidos: 1× → 2× → 4× → 8× (fica em 8×). */
 const nextShuttle = (r: number) => (r < 1 ? 1 : Math.min(8, r * 2));
+
+// Volume/mudo e a legenda aberta/fechada: preferência de UI por máquina.
+const AUDIO_KEY = "sicro.video.audio.v1";
+const LEGEND_KEY = "sicro.video.legend.v1";
+function loadAudioPrefs(): { volume: number; muted: boolean } {
+  try {
+    const o = JSON.parse(localStorage.getItem(AUDIO_KEY) ?? "null") as {
+      volume?: number;
+      muted?: boolean;
+    } | null;
+    const v = typeof o?.volume === "number" ? Math.min(1, Math.max(0, o.volume)) : 1;
+    return { volume: v, muted: o?.muted === true };
+  } catch {
+    return { volume: 1, muted: false };
+  }
+}
+function loadLegendOpen(): boolean {
+  try {
+    return localStorage.getItem(LEGEND_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
 /** Hold longer than this (ms) and an arrow switches from frame-step to play. */
 const HOLD_MS = 300;
 const DEFAULT_FPS = 30;
@@ -106,6 +150,7 @@ export function VideoPlayerPanel({
   mediaKey,
   startTime = 0,
   loop = null,
+  hasAudio = true,
   fullscreen = false,
   onToggleFullscreen,
 }: Props) {
@@ -115,6 +160,10 @@ export function VideoPlayerPanel({
   const [playbackRate, setPlaybackRate] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [adjust, setAdjust] = useState<Adjust>(ADJUST_DEFAULT);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [audio, setAudio] = useState(loadAudioPrefs);
+  const [legendOpen, setLegendOpen] = useState(loadLegendOpen);
 
   // --- refs read by the single bound key listener (avoid stale closures) ---
   const activeRef = useRef(active);
@@ -160,6 +209,56 @@ export function VideoPlayerPanel({
       return null;
     }
   })();
+
+  const magnifier = useMagnifier(src);
+
+  // Ajustes de imagem valem para o vídeo aberto; outro vídeo começa no original.
+  useEffect(() => {
+    setAdjust(ADJUST_DEFAULT);
+  }, [src]);
+
+  // Volume/mudo: aplica no <video> e lembra.
+  useEffect(() => {
+    const v = videoRef.current;
+    if (v) {
+      v.volume = audio.volume;
+      v.muted = audio.muted;
+    }
+    try {
+      localStorage.setItem(AUDIO_KEY, JSON.stringify(audio));
+    } catch {
+      /* sem localStorage — só não lembra */
+    }
+  }, [audio, src]);
+  const changeVolume = (delta: number) => {
+    if (!hasAudio) {
+      setNotice("Este vídeo não tem trilha de áudio.");
+      return;
+    }
+    setAudio((a) => {
+      const volume = Math.round(Math.min(1, Math.max(0, a.volume + delta)) * 100) / 100;
+      setNotice(`Volume ${Math.round(volume * 100)}%`);
+      return { volume, muted: false };
+    });
+  };
+  const toggleMute = () => {
+    if (!hasAudio) {
+      setNotice("Este vídeo não tem trilha de áudio.");
+      return;
+    }
+    setAudio((a) => {
+      setNotice(a.muted ? `Som ligado (${Math.round(a.volume * 100)}%)` : "Mudo");
+      return { ...a, muted: !a.muted };
+    });
+  };
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEGEND_KEY, legendOpen ? "1" : "0");
+    } catch {
+      /* idem */
+    }
+  }, [legendOpen]);
 
   // ---- imperative helpers (only read refs + stable setState; safe to
   // capture once inside the key listener) --------------------------------
@@ -384,6 +483,20 @@ export function VideoPlayerPanel({
       },
       "video.speedUp": () => cycleRate(1),
       "video.speedDown": () => cycleRate(-1),
+      "video.magnifyIn": () => magnifier.zoomAt(1.5),
+      "video.magnifyOut": () => magnifier.zoomAt(1 / 1.5),
+      "video.magnifyReset": magnifier.reset,
+      "video.adjustToggle": () => {
+        if (!isAdjusted(adjust)) {
+          setAdjustOpen(true); // nada a comparar ainda: abre o painel
+          return;
+        }
+        setAdjust((a) => ({ ...a, on: !a.on }));
+        setNotice(adjust.on ? "Original (ajustes desligados)" : "Ajustes de tela ligados");
+      },
+      "video.mute": toggleMute,
+      "video.volumeUp": () => changeVolume(0.1),
+      "video.volumeDown": () => changeVolume(-0.1),
     },
     { enabled: active },
   );
@@ -653,13 +766,55 @@ export function VideoPlayerPanel({
           <AlertTriangle size={14} /> {error}
         </div>
       )}
-      <div className={styles.videoWrap}>
+      <div
+        ref={magnifier.wrapRef}
+        className={styles.videoWrap}
+        style={{ cursor: magnifier.scale > 1 ? (magnifier.panning ? "grabbing" : "grab") : undefined }}
+        {...magnifier.panHandlers}
+      >
         {notice && <div className={styles.notice}>{notice}</div>}
+        {(magnifier.scale > 1 || (adjust.on && isAdjusted(adjust))) && (
+          <div className={styles.viewChips}>
+            {magnifier.scale > 1 && (
+              <button
+                type="button"
+                className={styles.viewChip}
+                onClick={magnifier.reset}
+                title="Imagem inteira (Ctrl+0)"
+              >
+                Lupa {magnifier.scale.toFixed(1).replace(".", ",")}× · arraste para mover · ×
+              </button>
+            )}
+            {adjust.on && isAdjusted(adjust) && (
+              <button
+                type="button"
+                className={styles.viewChip}
+                onClick={() => setAdjustOpen(true)}
+                title="Ajustes só de tela — A compara com o original"
+              >
+                Ajuste de tela ativo (não altera o vídeo)
+              </button>
+            )}
+          </div>
+        )}
+        {adjustOpen && (
+          <ImageAdjustPanel
+            value={adjust}
+            onChange={setAdjust}
+            onClose={() => setAdjustOpen(false)}
+          />
+        )}
+        {adjust.gamma !== 1 && <GammaFilterDefs gamma={adjust.gamma} />}
         {src ? (
           <video
             ref={videoRef}
             src={src}
             className={styles.video}
+            style={{
+              transform: magnifier.transform,
+              transformOrigin: "0 0",
+              filter: adjustFilter(adjust),
+            }}
             controls={false}
             preload="metadata"
             onDoubleClick={onToggleFullscreen}
@@ -720,6 +875,66 @@ export function VideoPlayerPanel({
             </button>
           ))}
         </div>
+        <div className={styles.volumeGroup}>
+          <button
+            type="button"
+            disabled={!hasAudio}
+            onClick={(e) => {
+              e.currentTarget.blur();
+              toggleMute();
+            }}
+            title={
+              hasAudio
+                ? audio.muted
+                  ? "Ligar o som (Ctrl+M)"
+                  : "Mudo (Ctrl+M) · volume: Ctrl+↑/↓"
+                : "Este vídeo não tem trilha de áudio"
+            }
+          >
+            {!hasAudio || audio.muted || audio.volume === 0 ? (
+              <VolumeX size={14} />
+            ) : audio.volume < 0.5 ? (
+              <Volume1 size={14} />
+            ) : (
+              <Volume2 size={14} />
+            )}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.05}
+            disabled={!hasAudio}
+            value={audio.muted ? 0 : audio.volume}
+            onChange={(e) => setAudio({ volume: Number(e.target.value), muted: false })}
+            onKeyDown={(e) => e.preventDefault()}
+            onPointerUp={(e) => e.currentTarget.blur()}
+            title={hasAudio ? `Volume ${Math.round(audio.volume * 100)}%` : "Sem áudio"}
+            className={styles.volumeSlider}
+          />
+        </div>
+        <button
+          type="button"
+          className={adjustOpen || (adjust.on && isAdjusted(adjust)) ? styles.toggleOn : ""}
+          onClick={(e) => {
+            e.currentTarget.blur();
+            setAdjustOpen((o) => !o);
+          }}
+          title="Brilho, contraste e gama — só na tela (A compara)"
+        >
+          <SlidersHorizontal size={14} />
+        </button>
+        <button
+          type="button"
+          className={legendOpen ? styles.toggleOn : ""}
+          onClick={(e) => {
+            e.currentTarget.blur();
+            setLegendOpen((o) => !o);
+          }}
+          title={legendOpen ? "Esconder a lista de atalhos" : "Mostrar a lista de atalhos"}
+        >
+          <Keyboard size={14} />
+        </button>
         {onToggleFullscreen && (
           <button
             type="button"
@@ -738,6 +953,7 @@ export function VideoPlayerPanel({
           </button>
         )}
       </div>
+      {legendOpen && (
       <div className={styles.shortcuts}>
         <span>
           <kbd>→</kbd>/<kbd>←</kbd> quadro · segurar = play/ré
@@ -763,10 +979,20 @@ export function VideoPlayerPanel({
         <span>
           <kbd>F</kbd> tela cheia
         </span>
+        <span>
+          roda no vídeo / <kbd>Ctrl</kbd>+<kbd>=</kbd> lupa · <kbd>A</kbd> ajustes
+        </span>
+        <span>
+          <kbd>M</kbd> evento · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>C</kbd> copiar tempo
+        </span>
+        <span>
+          <kbd>Ctrl</kbd>+<kbd>M</kbd> mudo · <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> volume
+        </span>
         <span className={styles.shortcutStrong}>
-          <kbd>Ctrl</kbd>+<kbd>1</kbd> coletar frame
+          <kbd>Ctrl</kbd>+<kbd>1</kbd> coletar frame · <kbd>Ctrl</kbd>+<kbd>2</kbd> sequência
         </span>
       </div>
+      )}
     </div>
   );
 }

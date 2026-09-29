@@ -47,7 +47,19 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
 
   // Tela.
   { id: "video.fullscreen", scope: "video", group: "Vídeo · Tela", label: "Tela cheia (entrar / sair)", defaultBinding: "F" },
+  { id: "video.magnifyIn", scope: "video", group: "Vídeo · Tela", label: "Lupa: aproximar a imagem", defaultBinding: "Ctrl+=" },
+  { id: "video.magnifyOut", scope: "video", group: "Vídeo · Tela", label: "Lupa: afastar a imagem", defaultBinding: "Ctrl+-" },
+  { id: "video.magnifyReset", scope: "video", group: "Vídeo · Tela", label: "Lupa: imagem inteira", defaultBinding: "Ctrl+0" },
+  { id: "video.adjustToggle", scope: "video", group: "Vídeo · Tela", label: "Ajustes de brilho/contraste: ligar / desligar (comparar)", defaultBinding: "A" },
+
+  // Áudio.
+  { id: "video.mute", scope: "video", group: "Vídeo · Áudio", label: "Mudo (liga / desliga)", defaultBinding: "Ctrl+M" },
+  { id: "video.volumeUp", scope: "video", group: "Vídeo · Áudio", label: "Aumentar o volume", defaultBinding: "Ctrl+Up" },
+  { id: "video.volumeDown", scope: "video", group: "Vídeo · Áudio", label: "Diminuir o volume", defaultBinding: "Ctrl+Down" },
 
   // Captura.
   { id: "video.collectFrame", scope: "video", group: "Vídeo · Captura", label: "Coletar quadro (storyboard)", defaultBinding: "Ctrl+1" },
+  { id: "video.collectSequence", scope: "video", group: "Vídeo · Captura", label: "Coletar sequência de quadros…", defaultBinding: "Ctrl+2" },
+  { id: "video.quickEvent", scope: "video", group: "Vídeo · Captura", label: "Marcar evento no tempo atual", defaultBinding: "M" },
+  { id: "video.copyTime", scope: "video", group: "Vídeo · Captura", label: "Copiar o tempo (formato de laudo)", defaultBinding: "Ctrl+Shift+C" },
 ];

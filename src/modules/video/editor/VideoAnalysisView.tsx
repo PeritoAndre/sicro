@@ -17,7 +17,9 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, AlertTriangle, Repeat, X } from "lucide-react";
+import { ArrowLeft, AlertTriangle, Clock, Columns2, Copy, Repeat, X } from "lucide-react";
+import type { VideoClockCalibration, VideoMedia } from "@domain/video";
+import { commands } from "@core/commands";
 import { Button } from "@components/Button/Button";
 import { toSicroError } from "@core/errors";
 import { useShortcuts } from "@core/useShortcuts";
@@ -34,11 +36,17 @@ import { VideoMetadataPanel } from "./VideoMetadataPanel";
 import { VideoStoryboardPanel } from "./VideoStoryboardPanel";
 import { SpeedPanel } from "./speed/SpeedPanel";
 import { MeasurePanel } from "./measure/MeasurePanel";
+import { ClockDialog, SequenceDialog } from "./AnalysisDialogs";
+import { MultiCamView } from "./MultiCamView";
 import {
+  cameraClockAt,
   estimateFrameIndex,
+  formatClock,
   formatDuration,
+  formatLaudoTime,
   parseTimeInput,
   parseWarnings,
+  probeHasAudio,
   probeStartTime,
 } from "./format";
 import styles from "./VideoAnalysisView.module.css";
@@ -55,6 +63,8 @@ export function VideoAnalysisView() {
   const deleteStoryboardFrame = useVideoStore((s) => s.deleteStoryboardFrame);
   const warningsFromLastAction = useVideoStore((s) => s.warningsFromLastAction);
   const clearWarnings = useVideoStore((s) => s.clearWarnings);
+  const mediaList = useVideoStore((s) => s.list);
+  const loadList = useVideoStore((s) => s.loadList);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number | null>(null);
@@ -142,11 +152,13 @@ export function VideoAnalysisView() {
     if (mainTab !== "player") exitFullscreen();
   }, [mainTab, exitFullscreen]);
 
-  useShortcuts(
-    { "video.fullscreen": toggleFullscreen },
-    { enabled: mainTab === "player" },
-  );
   const bigScreen = fullscreen || expanded;
+
+  // ---- comparação de câmeras (item 16) ------------------------------------
+  const [compareWith, setCompareWith] = useState<VideoMedia | null>(null);
+  const [pickCompare, setPickCompare] = useState(false);
+  const playerKeys = mainTab === "player" && compareWith == null;
+  useShortcuts({ "video.fullscreen": toggleFullscreen }, { enabled: playerKeys });
 
   const media0 = bundle?.media ?? null;
   const fpsDeclared = media0?.fps_declared ?? null;
@@ -237,8 +249,161 @@ export function VideoAnalysisView() {
       "video.nextEvent": () => jumpEvent(1),
       "video.gotoTime": openGoto,
     },
-    { enabled: mainTab === "player" },
+    { enabled: playerKeys },
   );
+
+  // ---- relógio da câmera (item 14) ----------------------------------------
+  const [clocks, setClocks] = useState<VideoClockCalibration[]>([]);
+  const [clockOpen, setClockOpen] = useState(false);
+  const [clockBusy, setClockBusy] = useState(false);
+  useEffect(() => {
+    if (!workspacePath) return;
+    void commands
+      .listVideoClocks(workspacePath)
+      .then(setClocks)
+      .catch(() => setClocks([]));
+  }, [workspacePath, media0?.sha256]);
+  const clock = clocks.find((c) => c.media_hash === media0?.sha256) ?? null;
+  /** "câmera 03:36:08" do instante `t`, ou "" sem vínculo. */
+  const clockText = (t: number, withMs = false) =>
+    clock ? formatClock(cameraClockAt(t, clock), withMs) : "";
+  const saveClock = async (v: {
+    clockSeconds: number;
+    clockLabel: string;
+    clockDate: string | null;
+    note: string;
+  }) => {
+    if (!workspacePath || !media0) return;
+    setClockBusy(true);
+    try {
+      const t = nowTime();
+      const saved = await commands.setVideoClock(workspacePath, {
+        media_hash: media0.sha256,
+        media_time_s: t,
+        clock_seconds: v.clockSeconds,
+        clock_date: v.clockDate,
+        clock_label: v.clockLabel,
+        note: v.note,
+      });
+      setClocks((cs) => [...cs.filter((c) => c.media_hash !== saved.media_hash), saved]);
+      setClockOpen(false);
+      flash(`Relógio vinculado: ${formatDuration(t)} do vídeo = ${formatClock(v.clockSeconds, false)} na câmera.`, 4000);
+    } catch (err) {
+      flash(`Falha: ${toSicroError(err).message}`, 5000);
+    } finally {
+      setClockBusy(false);
+    }
+  };
+  const deleteClock = async () => {
+    if (!workspacePath || !media0) return;
+    setClockBusy(true);
+    try {
+      await commands.deleteVideoClock(workspacePath, media0.sha256);
+      setClocks((cs) => cs.filter((c) => c.media_hash !== media0.sha256));
+      setClockOpen(false);
+      flash("Vínculo do relógio removido.");
+    } catch (err) {
+      flash(`Falha: ${toSicroError(err).message}`, 5000);
+    } finally {
+      setClockBusy(false);
+    }
+  };
+
+  // ---- evento com uma tecla (item 12) e copiar o tempo (item 13) -----------
+  const quickEvent = async () => {
+    if (!workspacePath || !media0) return;
+    const t = nowTime();
+    try {
+      const ev = await createEvent(workspacePath, {
+        media_hash: media0.sha256,
+        timestamp_s: t,
+        category: "outro",
+        title: `Marcador ${formatDuration(t)}${clock ? ` · câmera ${clockText(t)}` : ""}`,
+      });
+      setSelectedEventId(ev.id);
+      flash(`Evento marcado em ${ev.timestamp_label} — renomeie no painel de eventos.`, 3500);
+    } catch (err) {
+      flash(`Falha: ${toSicroError(err).message}`, 5000);
+    }
+  };
+  const copyTime = async () => {
+    const t = nowTime();
+    const idx = estimateFrameIndex(t, fpsDeclared);
+    let text = `${formatLaudoTime(t)}${idx != null ? ` (quadro ≈ ${idx})` : ""}`;
+    if (clock) {
+      const cam = cameraClockAt(t, clock);
+      let date = "";
+      if (clock.clock_date) {
+        const d = new Date(`${clock.clock_date}T00:00:00`);
+        d.setDate(d.getDate() + Math.floor(cam / 86400));
+        date = ` de ${d.toLocaleDateString("pt-BR")}`;
+      }
+      text += ` — relógio da câmera: ${formatClock(cam, false)}${date}`;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      flash(`Copiado: ${text}`, 3500);
+    } catch {
+      flash("Não foi possível copiar para a área de transferência.");
+    }
+  };
+
+  // ---- coletar sequência de quadros (item 11) ------------------------------
+  const [seqOpen, setSeqOpen] = useState(false);
+  const [seqRun, setSeqRun] = useState<{ done: number; total: number } | null>(null);
+  const seqCancelRef = useRef(false);
+  const runSequence = async (count: number, stepFrames: number) => {
+    if (!workspacePath || !media0) return;
+    setSeqOpen(false);
+    seqCancelRef.current = false;
+    const t0 = nowTime();
+    const frame = fpsDeclared && fpsDeclared > 0 ? 1 / fpsDeclared : 1 / 30;
+    const end = media0.duration_s ?? Infinity;
+    let done = 0;
+    setSeqRun({ done: 0, total: count });
+    try {
+      for (let i = 0; i < count; i++) {
+        if (seqCancelRef.current) break;
+        const t = t0 + i * stepFrames * frame;
+        if (t > end) break;
+        await collectFrame(workspacePath, {
+          media_hash: media0.sha256,
+          timestamp_s: t,
+          event_id: null,
+          title: `Seq. ${i + 1}/${count} · ${formatDuration(t)}${clock ? ` · câmera ${clockText(t, true)}` : ""}`,
+        });
+        done = i + 1;
+        setSeqRun({ done, total: count });
+      }
+      flash(
+        seqCancelRef.current
+          ? `Sequência interrompida: ${done} de ${count} quadros coletados.`
+          : `${done} quadros coletados a partir de ${formatDuration(t0)}.`,
+        4000,
+      );
+    } catch (err) {
+      flash(`Falha no quadro ${done + 1}: ${toSicroError(err).message}`, 6000);
+    } finally {
+      setSeqRun(null);
+    }
+  };
+
+  useShortcuts(
+    {
+      "video.quickEvent": () => void quickEvent(),
+      "video.copyTime": () => void copyTime(),
+      "video.collectSequence": () => {
+        if (!seqRun) setSeqOpen(true);
+      },
+    },
+    { enabled: playerKeys },
+  );
+
+  // Lista de vídeos da ocorrência (para escolher a 2ª câmera).
+  useEffect(() => {
+    if (workspacePath && mediaList.length === 0) void loadList(workspacePath);
+  }, [workspacePath, mediaList.length, loadList]);
+  const otherVideos = mediaList.filter((m) => m.sha256 !== media0?.sha256);
 
   if (!workspacePath || !bundle) {
     return <div className={styles.empty}>Sem mídia aberta.</div>;
@@ -311,7 +476,9 @@ export function VideoAnalysisView() {
         media_hash: media.sha256,
         timestamp_s: currentTime,
         event_id: opts?.eventId ?? null,
-        title: opts?.title ?? `Frame ${formatDuration(currentTime)}`,
+        title:
+          opts?.title ??
+          `Frame ${formatDuration(currentTime)}${clock ? ` · câmera ${clockText(currentTime, true)}` : ""}`,
       });
       setFeedback(`Frame coletado em ${formatDuration(currentTime)}.`);
       setTimeout(() => {
@@ -366,6 +533,50 @@ export function VideoAnalysisView() {
           </span>
         </div>
         {feedback && <span className={styles.feedback}>{feedback}</span>}
+        <div className={styles.compareBox}>
+          {compareWith ? (
+            <button type="button" className={styles.compareBtn} onClick={() => setCompareWith(null)}>
+              <X size={13} /> Fechar comparação
+            </button>
+          ) : (
+            <button
+              type="button"
+              className={styles.compareBtn}
+              disabled={otherVideos.length === 0}
+              onClick={() => setPickCompare((o) => !o)}
+              title={
+                otherVideos.length === 0
+                  ? "Registre outro vídeo nesta ocorrência para comparar"
+                  : "Ver duas câmeras lado a lado, sincronizadas"
+              }
+            >
+              <Columns2 size={13} /> Comparar câmeras
+            </button>
+          )}
+          {pickCompare && !compareWith && (
+            <ul className={styles.comparePick}>
+              {otherVideos.map((m) => (
+                <li key={m.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPickCompare(false);
+                      exitFullscreen();
+                      controllerRef.current?.seek(nowTime()); // estabiliza o tempo atual
+                      setCompareWith(m);
+                    }}
+                  >
+                    {m.filename}
+                    <span>
+                      {m.duration_s != null ? formatDuration(m.duration_s) : "—"}
+                      {clocks.some((c) => c.media_hash === m.sha256) ? " · relógio vinculado" : ""}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </header>
 
       {(probeWarnings.length > 0 || warningsFromLastAction.length > 0) && (
@@ -382,6 +593,16 @@ export function VideoAnalysisView() {
         </div>
       )}
 
+      {compareWith && workspacePath ? (
+        <MultiCamView
+          workspacePath={workspacePath}
+          a={media}
+          b={compareWith}
+          clocks={clocks}
+          initialTime={currentTime}
+          onClose={() => setCompareWith(null)}
+        />
+      ) : (
       <div className={styles.body}>
         <main className={styles.main}>
           <div className={styles.mainTabs}>
@@ -418,6 +639,25 @@ export function VideoAnalysisView() {
             className={`${styles.tabPane} ${expanded ? styles.tabPaneExpanded : ""}`}
             style={{ display: mainTab === "player" ? "flex" : "none" }}
           >
+            {clockOpen && (
+              <ClockDialog
+                mediaTime={nowTime()}
+                current={clock}
+                busy={clockBusy}
+                onSave={(v) => void saveClock(v)}
+                onDelete={() => void deleteClock()}
+                onClose={() => setClockOpen(false)}
+              />
+            )}
+            {seqOpen && (
+              <SequenceDialog
+                startTime={nowTime()}
+                fps={fpsDeclared}
+                duration={effectiveDuration}
+                onStart={(n, k) => void runSequence(n, k)}
+                onClose={() => setSeqOpen(false)}
+              />
+            )}
             <VideoPlayerPanel
               workspacePath={workspacePath}
               relativePath={media.relative_path}
@@ -430,6 +670,7 @@ export function VideoAnalysisView() {
               mediaKey={media.sha256}
               startTime={startTime}
               loop={loop}
+              hasAudio={probeHasAudio(media.raw_probe_json)}
               fullscreen={bigScreen}
               onToggleFullscreen={toggleFullscreen}
             />
@@ -496,6 +737,33 @@ export function VideoAnalysisView() {
               <span title="Estimado: round(tempo × fps declarado) — mesma conta do storyboard">
                 quadro ≈ <code>{estimateFrameIndex(currentTime, media.fps_declared) ?? "—"}</code>
               </span>
+              <button
+                type="button"
+                className={styles.clockBtn}
+                onClick={() => setClockOpen(true)}
+                title={
+                  clock
+                    ? `Relógio da câmera (vínculo: ${formatDuration(clock.media_time_s)} = ${clock.clock_label}) — clique para refazer`
+                    : "Vincular o relógio que a câmera mostra na imagem"
+                }
+              >
+                <Clock size={11} />{" "}
+                {clock ? (
+                  <>
+                    câmera <code>{clockText(currentTime, true)}</code>
+                  </>
+                ) : (
+                  "relógio da câmera"
+                )}
+              </button>
+              <button
+                type="button"
+                className={styles.clockBtn}
+                onClick={() => void copyTime()}
+                title="Copiar o tempo no formato de laudo (Ctrl+Shift+C)"
+              >
+                <Copy size={11} /> copiar
+              </button>
               <span>
                 duração: <code>{formatDuration(effectiveDuration)}</code>
               </span>
@@ -545,10 +813,27 @@ export function VideoAnalysisView() {
               {bigScreen && feedback && (
                 <span className={styles.statusFeedback}>{feedback}</span>
               )}
+              {seqRun ? (
+                <span className={styles.seqRun} style={{ marginLeft: "auto" }}>
+                  coletando {seqRun.done}/{seqRun.total}…
+                  <button type="button" onClick={() => (seqCancelRef.current = true)}>
+                    parar
+                  </button>
+                </span>
+              ) : (
+                <Button
+                  variant="secondary"
+                  onClick={() => setSeqOpen(true)}
+                  style={{ marginLeft: "auto" }}
+                  title="Coletar N quadros seguidos (Ctrl+2)"
+                >
+                  Sequência…
+                </Button>
+              )}
               <Button
                 variant="primary"
                 onClick={() => void handleCollectFrame()}
-                style={{ marginLeft: "auto" }}
+                disabled={seqRun != null}
               >
                 Coletar frame atual
               </Button>
@@ -611,6 +896,7 @@ export function VideoAnalysisView() {
           />
         </aside>
       </div>
+      )}
     </div>
   );
 }

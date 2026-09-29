@@ -96,3 +96,73 @@ export function parseTimeInput(
   if (nums.length >= 2 && nums.slice(1).some((n) => n >= 60)) return null;
   return nums.reduce((acc, n) => acc * 60 + n, 0);
 }
+
+// ---- relógio da câmera / texto para o laudo ---------------------------------
+
+/**
+ * Lê o horário que a câmera imprime: "03:36:05", "3:36:05.5", "03:36" (s = 0),
+ * "03h36m05s". Retorna segundos desde 00:00 ou null.
+ */
+export function parseClockInput(input: string): number | null {
+  const s = input.trim().toLowerCase().replace(/,/g, ".");
+  const hms = /^(\d{1,2})\s*[:h]\s*(\d{1,2})(?:\s*[:m]\s*(\d{1,2}(?:\.\d+)?)\s*s?)?$/.exec(s);
+  if (!hms) return null;
+  const h = Number(hms[1]);
+  const m = Number(hms[2]);
+  const sec = hms[3] != null ? Number(hms[3]) : 0;
+  if (h > 23 || m > 59 || sec >= 60) return null;
+  return h * 3600 + m * 60 + sec;
+}
+
+/** 13565.48 → "03:46:05.480" (volta em 24 h). */
+export function formatClock(seconds: number, withMs = true): string {
+  const day = 86400;
+  const t = ((seconds % day) + day) % day;
+  const totalMs = Math.round(t * 1000);
+  const ms = totalMs % 1000;
+  const totalS = Math.floor(totalMs / 1000) % day;
+  const h = Math.floor(totalS / 3600);
+  const m = Math.floor(totalS / 60) % 60;
+  const s = totalS % 60;
+  const base = `${pad2(h)}:${pad2(m)}:${pad2(s)}`;
+  return withMs ? `${base}.${pad3(ms)}` : base;
+}
+
+/** Horário da câmera (s desde 00:00, pode passar de 24 h) no instante `t` do vídeo. */
+export function cameraClockAt(
+  t: number,
+  cal: { media_time_s: number; clock_seconds: number },
+): number {
+  return t - cal.media_time_s + cal.clock_seconds;
+}
+
+/**
+ * Deslocamento para ver o MESMO instante real em duas câmeras calibradas:
+ * tempo_B = tempo_A + offset.
+ */
+export function clockSyncOffset(
+  a: { media_time_s: number; clock_seconds: number },
+  b: { media_time_s: number; clock_seconds: number },
+): number {
+  return a.clock_seconds - a.media_time_s - (b.clock_seconds - b.media_time_s);
+}
+
+/** Tempo no formato de laudo: 12.48 → "00:00:12,480". */
+export function formatLaudoTime(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "—";
+  const totalMs = Math.round(seconds * 1000);
+  const ms = totalMs % 1000;
+  const totalS = Math.floor(totalMs / 1000);
+  return `${pad2(Math.floor(totalS / 3600))}:${pad2(Math.floor(totalS / 60) % 60)}:${pad2(totalS % 60)},${pad3(ms)}`;
+}
+
+/** O ffprobe achou alguma trilha de áudio? */
+export function probeHasAudio(rawProbeJson: string | null | undefined): boolean {
+  if (!rawProbeJson) return false;
+  try {
+    const p = JSON.parse(rawProbeJson) as { streams?: { codec_type?: string }[] };
+    return (p.streams ?? []).some((s) => s.codec_type === "audio");
+  } catch {
+    return false;
+  }
+}

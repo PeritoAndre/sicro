@@ -473,6 +473,29 @@ frames e **medir velocidade e distância** por fotogrametria.
     quadro vem depois do 0:00 abre direto nele (**Home** volta ao 1º quadro).
   - **F**, duplo clique no vídeo ou o botão ⛶ entram em **tela cheia** com os
     controles e atalhos funcionando (Esc sai).
+  - **Lupa:** a roda do mouse sobre o vídeo aproxima no ponto do cursor (até 8×);
+    aproximado, arraste para mover. **Ctrl + = / − / 0** também. Só de tela.
+  - **Ajustes de tela** (botão de controles deslizantes): brilho, contraste e
+    gama para imagem escura. **A** liga/desliga para comparar com o original.
+    Não alteram o vídeo, os quadros coletados nem as medições.
+  - **Som:** botão de volume e **Ctrl+M** (mudo), **Ctrl + ↑ / ↓** (volume). O
+    SICRO lembra o volume. Vídeo sem trilha de áudio deixa o controle apagado.
+  - **M** marca um evento no tempo atual (categoria "outro" — renomeie depois).
+  - **Ctrl + Shift + C** (ou "copiar") copia o tempo no formato de laudo:
+    `00:00:12,480 (quadro ≈ 312) — relógio da câmera: 03:36:08 de 02/08/2026`.
+  - **Relógio da câmera:** pare num quadro, clique em "relógio da câmera" e
+    digite o horário que a câmera imprime (e a data, se houver). A partir daí o
+    SICRO mostra o horário da câmera em qualquer instante, põe esse horário no
+    nome dos quadros coletados e dos marcadores. O vínculo fica gravado no caso,
+    com registro na trilha de operações.
+  - **Sequência de quadros** (**Ctrl+2** ou "Sequência…"): coleta N quadros
+    seguidos (ou de k em k) a partir do atual — útil para a aba Velocidade.
+  - **Comparar câmeras** (botão no topo): dois vídeos da ocorrência lado a lado,
+    tocando juntos. Ajuste a sincronia de B em ±1 quadro / ±1 s até o mesmo
+    acontecimento coincidir, ou use **pelo relógio** quando os dois vídeos têm o
+    relógio da câmera vinculado.
+- A **lista de vídeos** mostra uma miniatura de cada câmera (gerada uma vez e
+  guardada no cache do SICRO — o caso não muda).
 - **Coletar frame** salva um PNG no timecode exato (vira "storyboard" e pode
   ilustrar o laudo).
 

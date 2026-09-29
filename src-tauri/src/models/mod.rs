@@ -55,8 +55,9 @@ pub use occurrence::{
 };
 pub use video::{
     CollectFrameInput, CollectFrameResult, CreateVideoEventInput, RegisterVideoInput,
-    UpdateStoryboardFrameInput, UpdateVideoEventInput, VideoBundle, VideoEvent, VideoExport,
-    VideoMedia, VideoOperationLog, VideoStoryboardFrame,
+    SetVideoClockInput, UpdateStoryboardFrameInput, UpdateVideoEventInput, VideoBundle,
+    VideoClockCalibration, VideoEvent, VideoExport, VideoMedia, VideoOperationLog,
+    VideoStoryboardFrame,
 };
 pub use video_distance::{
     CreateDistanceMeasurementInput, McSigmasDistance, VideoDistanceMeasurement,

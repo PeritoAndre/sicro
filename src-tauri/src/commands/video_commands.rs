@@ -10,6 +10,8 @@
 //!   - update_storyboard_frame
 //!   - delete_storyboard_frame
 //!   - list_video_operation_logs
+//!   - list/set/delete_video_clock → relógio da câmera (migration 018)
+//!   - video_thumbnail             → miniatura (cache do app, não o `.sicro`)
 
 use std::path::{Path, PathBuf};
 
@@ -24,8 +26,9 @@ use crate::error::{Result, SicroError};
 use crate::hashing::sha256::sha256_file;
 use crate::models::{
     CollectFrameInput, CollectFrameResult, CreateVideoEventInput, RegisterVideoInput,
-    UpdateStoryboardFrameInput, UpdateVideoEventInput, VideoBundle, VideoEvent, VideoExport,
-    VideoMedia, VideoOperationLog, VideoStoryboardFrame,
+    SetVideoClockInput, UpdateStoryboardFrameInput, UpdateVideoEventInput, VideoBundle,
+    VideoClockCalibration, VideoEvent, VideoExport, VideoMedia, VideoOperationLog,
+    VideoStoryboardFrame,
 };
 use crate::video::{extract_frame, probe_media, ExtractFrameOptions};
 use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
@@ -580,6 +583,145 @@ pub async fn list_video_operation_logs(
         &media_hash,
         limit.unwrap_or(100),
     )
+}
+
+// ---------------------------------------------------------------------------
+// Relógio da câmera
+
+/// Todos os vínculos de relógio da ocorrência (o player usa o do vídeo aberto;
+/// a comparação de câmeras usa os dois para sincronizar pelo horário).
+#[tauri::command]
+pub async fn list_video_clocks(workspace_path: String) -> Result<Vec<VideoClockCalibration>> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    video_repo::list_clocks_for_occurrence(&conn, &manifest.occurrence_id)
+}
+
+#[tauri::command]
+pub async fn set_video_clock(
+    workspace_path: String,
+    input: SetVideoClockInput,
+) -> Result<VideoClockCalibration> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    if !input.media_time_s.is_finite() || input.media_time_s < 0.0 {
+        return Err(SicroError::Validation("instante do vídeo inválido".into()));
+    }
+    if !input.clock_seconds.is_finite() || !(0.0..86_400.0).contains(&input.clock_seconds) {
+        return Err(SicroError::Validation("horário da câmera inválido".into()));
+    }
+    let clock_date = match input.clock_date.as_deref().map(str::trim) {
+        None | Some("") => None,
+        Some(d) => Some(
+            chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d")
+                .map_err(|_| SicroError::Validation(format!("data da câmera inválida: {d}")))?
+                .format("%Y-%m-%d")
+                .to_string(),
+        ),
+    };
+    video_repo::find_media_by_sha256(&conn, &manifest.occurrence_id, &input.media_hash)?
+        .ok_or_else(|| SicroError::Validation("vídeo não encontrado nesta ocorrência".into()))?;
+
+    let now = Utc::now();
+    let previous = video_repo::find_clock(&conn, &manifest.occurrence_id, &input.media_hash)?;
+    let clock = VideoClockCalibration {
+        id: previous.as_ref().map(|p| p.id).unwrap_or_else(Uuid::new_v4),
+        occurrence_id: manifest.occurrence_id,
+        media_hash: input.media_hash.clone(),
+        media_time_s: input.media_time_s,
+        clock_seconds: input.clock_seconds,
+        clock_date,
+        clock_label: input.clock_label.trim().to_string(),
+        note: input.note.trim().to_string(),
+        created_at: previous.as_ref().map(|p| p.created_at).unwrap_or(now),
+        updated_at: now,
+    };
+    video_repo::upsert_clock(&conn, &clock)?;
+    video_repo::insert_log(
+        &conn,
+        &clock.occurrence_id,
+        Some(&clock.media_hash),
+        "clock.set",
+        &json!({
+            "media_time_s": clock.media_time_s,
+            "clock_seconds": clock.clock_seconds,
+            "clock_date": clock.clock_date,
+            "clock_label": clock.clock_label,
+            "replaced": previous.map(|p| json!({
+                "media_time_s": p.media_time_s,
+                "clock_seconds": p.clock_seconds,
+                "clock_label": p.clock_label,
+            })),
+        })
+        .to_string(),
+    )?;
+    Ok(clock)
+}
+
+#[tauri::command]
+pub async fn delete_video_clock(workspace_path: String, media_hash: String) -> Result<()> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    if let Some(prev) = video_repo::find_clock(&conn, &manifest.occurrence_id, &media_hash)? {
+        video_repo::delete_clock(&conn, &manifest.occurrence_id, &media_hash)?;
+        video_repo::insert_log(
+            &conn,
+            &manifest.occurrence_id,
+            Some(&media_hash),
+            "clock.delete",
+            &json!({
+                "media_time_s": prev.media_time_s,
+                "clock_seconds": prev.clock_seconds,
+                "clock_label": prev.clock_label,
+            })
+            .to_string(),
+        )?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Miniatura
+
+/// Caminho absoluto da miniatura do vídeo (gera na primeira vez). Fica no
+/// cache do app, nomeada pelo SHA-256 — o `.sicro` não é tocado.
+#[tauri::command]
+pub async fn video_thumbnail(
+    app: tauri::AppHandle,
+    workspace_path: String,
+    media_id: String,
+) -> Result<String> {
+    use tauri::Manager;
+    let ws = PathBuf::from(&workspace_path);
+    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let id = Uuid::parse_str(&media_id)
+        .map_err(|e| SicroError::Validation(format!("invalid media_id: {e}")))?;
+    let media = video_repo::find_media_by_id(&conn, &id)?
+        .ok_or_else(|| SicroError::Validation(format!("media {id} not found")))?;
+    let cache = app
+        .path()
+        .app_cache_dir()
+        .map_err(|e| SicroError::Filesystem(format!("cache dir: {e}")))?;
+    let out = cache.join("video_thumbs").join(format!("{}.jpg", media.sha256));
+    if !out.is_file() {
+        let video = ws.join(&media.relative_path);
+        // ~15% do vídeo (máx. 10 s): passa do eventual trecho vazio do início.
+        let ts = media.duration_s.map(|d| (d * 0.15).min(10.0)).unwrap_or(1.0);
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::video::thumbnail::make_thumbnail(&video, &out, ts).map(|_| out)
+        })
+        .await
+        .map_err(|e| SicroError::Workspace(format!("thumbnail task: {e}")))??;
+    }
+    let out = cache.join("video_thumbs").join(format!("{}.jpg", media.sha256));
+    Ok(out.to_string_lossy().into_owned())
 }
 
 // ---------------------------------------------------------------------------

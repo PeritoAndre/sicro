@@ -137,6 +137,7 @@
   color: var(--sicro-fg);
 }
 .tabPane {
+  position: relative; /* diálogos (relógio, sequência) ficam por cima do painel */
   flex: 1;
   flex-direction: column;
   min-height: 0;
@@ -252,4 +253,100 @@
   background: #5aa9e6;
   border-color: #5aa9e6;
   color: #fff;
+}
+
+/* ----- comparar câmeras (topo) ----- */
+.compareBox {
+  position: relative;
+  margin-left: auto;
+}
+.compareBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.compareBtn:hover:not(:disabled) {
+  color: var(--sicro-fg);
+}
+.compareBtn:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.comparePick {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+  min-width: 280px;
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+.comparePick button {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg);
+  font-size: var(--text-xs);
+  text-align: left;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.comparePick button:hover {
+  background: var(--sicro-surface-2);
+}
+.comparePick span {
+  color: var(--sicro-fg-dim);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* ----- relógio da câmera / copiar / sequência (barra de status) ----- */
+.clockBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  font: inherit;
+  padding: 1px 6px;
+  cursor: pointer;
+}
+.clockBtn:hover {
+  color: var(--sicro-fg);
+  border-color: var(--sicro-fg-muted);
+}
+.seqRun {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sicro-accent);
+}
+.seqRun button {
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg);
+  border-radius: var(--radius-sm);
+  padding: 1px 8px;
+  cursor: pointer;
+  font: inherit;
 }
