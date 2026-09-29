@@ -39,16 +39,24 @@ pub fn detect_broken_laudo_links(
         let Some(rel) = item.relative_path.as_deref() else {
             continue;
         };
+        // Desde o 3.0 o laudo é um .docx (editado no Word): só se confere que
+        // o arquivo existe. As figuras internas só são seguidas no .sicrodoc
+        // (JSON) dos laudos do 2.0 — ler um .docx como JSON dava alarme falso.
+        let is_sicrodoc = rel.to_ascii_lowercase().ends_with(".sicrodoc");
+        let file_kind = match Path::new(rel).extension().and_then(|e| e.to_str()) {
+            Some(ext) => format!(".{}", ext.to_ascii_lowercase()),
+            None => "arquivo".to_string(),
+        };
         let abs = match probe_workspace_relative(workspace_root, Some(rel)) {
             RelativeResolution::Ok { absolute, .. } => absolute,
             RelativeResolution::Missing { .. } => {
                 out.push(BrokenLaudoLink {
                     laudo_id,
                     laudo_title: title,
-                    node_type: ".sicrodoc".to_string(),
+                    node_type: file_kind.clone(),
                     relative_path: Some(rel.to_string()),
                     status: IntegrityStatus::MissingFile,
-                    detail: Some("arquivo .sicrodoc não encontrado".to_string()),
+                    detail: Some(format!("arquivo do laudo ({file_kind}) não encontrado")),
                 });
                 continue;
             }
@@ -56,7 +64,7 @@ pub fn detect_broken_laudo_links(
                 out.push(BrokenLaudoLink {
                     laudo_id,
                     laudo_title: title,
-                    node_type: ".sicrodoc".to_string(),
+                    node_type: file_kind.clone(),
                     relative_path: Some(rel.to_string()),
                     status: IntegrityStatus::UnsafePath,
                     detail: Some(reason),
@@ -65,6 +73,9 @@ pub fn detect_broken_laudo_links(
             }
             RelativeResolution::Empty => continue,
         };
+        if !is_sicrodoc {
+            continue;
+        }
 
         let bytes = match std::fs::read(&abs) {
             Ok(b) => b,
@@ -292,6 +303,28 @@ mod tests {
         let r = detect_broken_laudo_links(tmp.path(), &[item]).unwrap();
         assert_eq!(r.len(), 1);
         assert_eq!(r[0].status, IntegrityStatus::UnsafePath);
+    }
+
+    #[test]
+    fn docx_laudo_present_is_not_flagged() {
+        // Laudo do 3.x: um .docx (ZIP) não é JSON e não pode virar "link quebrado".
+        let tmp = TempDir::new().unwrap();
+        let (_id, item) = fixture_laudo_item("laudos/laudo_1.docx", "Laudo 3.x");
+        let abs = tmp.path().join("laudos").join("laudo_1.docx");
+        fs::create_dir_all(abs.parent().unwrap()).unwrap();
+        fs::write(&abs, b"PK\x03\x04 zip do word").unwrap();
+        let r = detect_broken_laudo_links(tmp.path(), &[item]).unwrap();
+        assert!(r.is_empty(), "{r:?}");
+    }
+
+    #[test]
+    fn docx_laudo_missing_is_reported() {
+        let tmp = TempDir::new().unwrap();
+        let (_id, item) = fixture_laudo_item("laudos/sumiu.docx", "Laudo 3.x");
+        let r = detect_broken_laudo_links(tmp.path(), &[item]).unwrap();
+        assert_eq!(r.len(), 1);
+        assert_eq!(r[0].status, IntegrityStatus::MissingFile);
+        assert_eq!(r[0].node_type, ".docx");
     }
 
     #[test]

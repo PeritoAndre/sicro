@@ -122,8 +122,8 @@ export function RelatorioView({
 
       <p className={styles.hintLine}>
         Os <strong>indícios</strong> de manipulação digital (ELA, ruído,
-        copy-move) e os <strong>confrontos</strong> entram no laudo pela aba
-        Evidências, como peças indiciárias separadas. O quadro abaixo é a versão
+        copy-move) ficam em <code>documentoscopia/indicios/</code> do caso, para
+        inserir no laudo como figuras separadas. O quadro abaixo é a versão
         curta para colar diretamente no corpo do laudo.
       </p>
 

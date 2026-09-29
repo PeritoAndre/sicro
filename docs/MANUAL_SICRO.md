@@ -1,12 +1,14 @@
-# Manual do SICRO 2.0 — Suíte Pericial
+# Manual do SICRO 3.1 — Suíte Pericial
 
 > **Para quem é este manual:** peritos criminais e equipe técnica que usam o
-> SICRO 2.0 no dia a dia. Ele ensina, módulo por módulo, **o que cada parte faz
+> SICRO no dia a dia. Ele ensina, módulo por módulo, **o que cada parte faz
 > e como usar** — com passos, dicas e os limites honestos de cada ferramenta.
 >
-> **O que é o SICRO 2.0:** uma suíte pericial **desktop, 100% offline**, que
-> reúne num só lugar a gestão da ocorrência, a elaboração de laudos, croquis,
-> análise de imagem/vídeo/áudio, documentoscopia e estatísticas.
+> **O que é o SICRO:** uma suíte pericial **desktop, 100% offline**, para
+> Windows e Linux, que reúne num só lugar a gestão da ocorrência, croquis,
+> análise de imagem/vídeo/áudio, documentoscopia, estatísticas e a custódia das
+> evidências. **O laudo é um `.docx`** escrito no Word ou no LibreOffice; o
+> SICRO cria o documento, guarda a custódia e entrega as figuras do caso.
 >
 > **Princípio que rege tudo (§13):** o SICRO é uma **ferramenta de apoio**. Ele
 > organiza, mede, calcula e documenta — mas **nunca conclui no seu lugar e nunca
@@ -81,7 +83,7 @@ ou SIGDOCS.
 
 No topo, uma **barra escura** com a marca SICRO à esquerda e os botões de
 **minimizar / maximizar / fechar** à direita. Você arrasta a janela por ela e
-redimensiona pelas bordas, como qualquer janela do Windows.
+redimensiona pelas bordas, como qualquer janela.
 
 ### 2.2 Trilho lateral (esquerda)
 
@@ -89,7 +91,7 @@ A coluna fixa à esquerda é a navegação principal. Em **Módulos**:
 
 - **Início** — central de ocorrências.
 - **Dossiê** — dados e provas do caso.
-- **Laudos** — elaboração de laudos.
+- **Laudos** — registro dos laudos (`.docx`) e ponte com o Word.
 - **Croquis** — viário, corporal e planta baixa.
 - **Vídeos** — análise de vídeo.
 - **Áudios** — análise de áudio e degravação.
@@ -97,13 +99,15 @@ A coluna fixa à esquerda é a navegação principal. Em **Módulos**:
 - **Documentoscopia** — análise de documentos.
 - **Estatísticas** — painéis do caso e gerais.
 
+Abaixo, separados: **Configurações** e **Ajuda** (este manual).
+
 No rodapé do trilho: o **card do perito** (puxado de Configurações → Perfil), o
 indicador **Local · Offline** e a **versão** do app.
 
 ### 2.3 Barra de status (rodapé)
 
 Mostra o contexto atual (workspace ativo, modo de trabalho, contadores). Em
-módulos com tela (laudo, imagem, croqui) ela também traz controles de **zoom**.
+módulos com tela (imagem, croqui) ela também traz controles de **zoom**.
 
 > ⚠️ **Quase tudo exige uma ocorrência ativa.** Sem um caso aberto, os módulos
 > ficam em modo "vazio" pedindo que você crie ou abra uma ocorrência.
@@ -118,15 +122,17 @@ e de onde dispara backup e verificação de integridade.
 ### 3.1 O que tem na tela
 
 - **Cartão do workspace ativo** (se um caso está aberto): rótulo do caso, caminho,
-  status, última abertura, e os botões **Continuar ocorrência**, **Abrir
-  workspace**, **Propriedades** e um menu **⋯** (abrir pasta no Explorer, gerar
-  relatório de saúde).
+  status e o botão **Continuar ocorrência**.
 - **Estado vazio** (sem caso aberto): botões **Nova ocorrência** e **Abrir
   workspace**.
-- **Ações rápidas:** Nova ocorrência · Abrir workspace · Importar .sicroapp ·
-  Verificar integridade · Gerar backup.
+- **Painel de ações:** sempre *Nova ocorrência*, *Abrir workspace* e *Importar
+  .sicroapp*. Com um caso aberto, também *Concluir* (ou *Reabrir*) *ocorrência*,
+  *Propriedades*, *Verificar integridade*, *Gerar backup*, *Relatório de saúde*,
+  *Abrir pasta* e *Fechar ocorrência*.
 - **Histórico de ocorrências:** tabela de todos os casos, com busca e filtro de
   data.
+- **Feedback** (no topo): abre as formas de relatar um problema ou sugerir algo
+  (GitHub ou e-mail).
 
 ### 3.2 Criar uma nova ocorrência
 
@@ -169,7 +175,7 @@ e de onde dispara backup e verificação de integridade.
 Casos coletados no **SICRO Operacional** (campo/mobile) chegam como um pacote
 `.sicroapp`.
 
-1. **Ações rápidas → Importar .sicroapp**.
+1. **Importar .sicroapp** no painel de ações.
 2. Selecione o arquivo (`.sicroapp` ou `.sicrocampo` legado).
 3. O SICRO valida o ZIP, confere os hashes das fotos, cria um novo workspace e
    copia tudo. Ao final, mostra um **relatório de importação** (fotos
@@ -178,18 +184,21 @@ Casos coletados no **SICRO Operacional** (campo/mobile) chegam como um pacote
 
 ### 3.6 Backup
 
-1. Com um caso aberto, **Ações rápidas → Gerar backup**.
+1. Com um caso aberto, **Gerar backup** no painel de ações.
 2. O SICRO compacta todo o workspace num arquivo único **`.sicrobackup`** (ZIP
    com hash), salvo dentro do próprio caso.
 3. Esse arquivo é o que você leva para a nuvem ou HD externo — seguro contra
    corrupção por sync.
 
+Para copiar **todos** os casos de uma vez (incremental) e para **restaurar** um
+backup, use **Configurações → Backup geral** (item 12).
+
 ### 3.7 Verificar integridade / relatório de saúde
 
 - **Verificar integridade** leva você ao Dossiê na lente **Central de Provas**
   (ver item 4).
-- **Relatório de saúde** (menu ⋯ do cartão) gera um HTML com versão do app,
-  dependências e estado geral do caso.
+- **Relatório de saúde** (painel de ações) gera um HTML com versão do app,
+  dependências (ffmpeg e ffprobe) e estado geral do caso.
 
 > ⚠️ **§13:** excluir uma ocorrência apaga **permanentemente** a pasta `.sicro`
 > do disco (laudos, croquis, fotos, tudo). É irreversível — só confirme com
@@ -239,87 +248,66 @@ saúde no disco.
 
 ## 5. Laudos
 
-O módulo mais completo: um **editor de página A4** profissional (estilo Word)
-para redigir, formatar, ilustrar, exportar e assinar laudos.
+**O laudo é um documento `.docx`**, escrito no Word ou no LibreOffice — os
+editores que você já domina. O SICRO não tem editor de texto: ele **cria o
+documento-base**, **guarda o arquivo no caso** e serve de **ponte** entre o
+caso e o documento aberto.
 
-> ⚠️ **§13:** o editor é **apoio à redação**. O conteúdo técnico, as análises e
-> as conclusões são seus. O SICRO não escreve nem conclui por você.
+> ⚠️ **§13:** o SICRO é apoio à redação. O conteúdo técnico, as conclusões e a
+> assinatura são do perito.
 
-### 5.1 Lista e criação
+### 5.1 Lista de laudos
 
-No módulo **Laudos** você vê os laudos do caso (com status e selo de assinatura).
+O módulo **Laudos** mostra os laudos registrados na ocorrência. Cada cartão traz
+o título, o status, o caminho do arquivo e a data da última mudança, com dois
+botões: **Abrir no Word** e **Excluir laudo** (pede confirmação; o arquivo sai
+do workspace e o registro é apagado). Clicar no cartão abre a **ponte** (5.4).
 
-- **Novo laudo:** escolha um título e um modelo (em branco ou institucional).
-- **Importar do Word (.docx):** traz um documento existente (conversão best-effort).
+### 5.2 Novo laudo
 
-### 5.2 A página e a edição
+1. Clique **Novo laudo**.
+2. O **Título do laudo** já vem montado com os dados da ocorrência, no formato
+   `Tipo - Laudo Nº {protocolo} - BO {nº BO} - Ofício nº {nº ofício}` (o que
+   faltar fica de fora). Ajuste se quiser.
+3. **Número do laudo** é opcional — em branco, vem da ocorrência.
+4. Clique **Criar laudo**.
 
-- A página A4 aparece com **paginação real** (o conteúdo quebra em páginas como
-  no papel) e réguas. Você arrasta as **margens** pela régua.
-- **Cabeçalho editável:** dê dois cliques na faixa do cabeçalho para editar
-  (texto e imagens, como logos). Ele se repete em todas as páginas no
-  PDF/DOCX.
-- **Zoom:** Ctrl+scroll ou o controle de zoom na barra de status. Reduzindo,
-  você vê várias páginas empilhadas.
+O SICRO grava `laudos/laudo_<id>.docx` dentro do caso: página A4, as linhas de
+identificação (*Laudo nº*, *BO nº*, *Tipo de exame*, *Data da perícia*, *Local
+da perícia*, *Perito*) preenchidas com o que a ocorrência tem — o que faltar
+fica como `{campo}` para você completar — e o esqueleto das seções **1 –
+OBJETIVO**, **2 – HISTÓRICO**, **3 – DOS EXAMES** e **4 – CONCLUSÃO**. Em
+seguida abre a ponte.
 
-### 5.3 Barra de ferramentas
+### 5.3 Registrar um .docx existente
 
-Os controles principais:
+Já escreveu o laudo por fora? **Registrar .docx existente** e escolha o
+arquivo: o SICRO **copia** o documento para `laudos/` do caso (o original fica
+onde estava), usa o nome do arquivo como título e abre a ponte.
 
-- **Fonte e tamanho.**
-- **Negrito / itálico / sublinhado / tachado**, subscrito/sobrescrito.
-- **Cor do texto** e **realce**.
-- **Alinhamento** (esquerda, centro, direita, justificado) e **recuo**.
-- **Listas** com marcador e numeradas.
-- **Espaçamento:** entrelinhas (*Linhas*), espaço antes/depois do parágrafo (pt),
-  e o botão **Compactar ¶** — que remove linhas em branco (Enter duplo vindo de
-  .docx) e aplica um espaçamento real de 6pt entre parágrafos.
-- **Inserções:** tabela, imagem (do disco, colar com Ctrl+V, ou arrastar),
-  figura/foto, formas, caixa de texto, fórmula matemática, quesito, assinatura.
-- **Localizar/Substituir**, prévia, **Exportar** e **assinar (SIGDOCS)**.
+### 5.4 A ponte: Consulta e Produção
 
-### 5.4 Fotos, croquis e figuras
+Com o laudo aberto no Word, deixe o SICRO ao lado:
 
-- Insira fotos pelo botão, **arrastando** o arquivo para a página, ou **colando**
-  (Ctrl+V).
-- Ao selecionar uma figura, aparecem alças para **redimensionar**, **girar** e
-  **mover**, e modos de posição (alinhada ao texto, à frente, atrás).
-- Você pode **inserir um croqui** ou uma **análise de imagem** já feita no caso
-  (eles entram com a legenda e ficam registrados na cadeia de custódia).
+- **Abrir no Word** (no topo) abre o `.docx` no editor padrão do sistema (Word
+  ou LibreOffice).
+- **Consulta:** os dados da ocorrência, só para leitura, agrupados — para
+  conferir BO, datas, local e envolvidos enquanto escreve.
+- **Produção:** as imagens do caso — fotos, croquis exportados, quadros de vídeo
+  e imagens tratadas — com miniatura. **Copiar pro laudo** põe a imagem na área
+  de transferência; no Word, **Ctrl+V** cola. **Atualizar** recarrega a lista
+  (por exemplo, depois de exportar um croqui).
 
-### 5.5 Fórmulas, quesitos e campos automáticos
+> 💡 O SICRO **não mexe no .docx enquanto você escreve**: nada é inserido
+> sozinho. Você decide o que entra, colando.
 
-- **Fórmula matemática:** abre um editor visual; o SICRO renderiza a equação na
-  página.
-- **Quesitos:** marque um parágrafo como *Quesito* (numera sozinho) e a *Resposta*
-  logo abaixo.
-- **Campos automáticos** (ex.: `{{numero_laudo}}`, `{{municipio}}`,
-  `{{data_hoje}}`): inserem dados da ocorrência que se atualizam sozinhos.
-- **Sumário, lista de figuras e de tabelas** dinâmicos: numeram e se atualizam
-  conforme o documento muda.
+### 5.5 Exportar e assinar
 
-### 5.6 Revisão e versões
+O PDF sai do próprio Word ou LibreOffice (*Salvar como PDF*), e a assinatura é
+feita fora do SICRO — ver [13. Assinatura digital](#13-assinatura-digital).
 
-- **Comentários** ancorados em trechos do texto (abrir/resolver).
-- **Versões/snapshots** do documento, para voltar a um estado anterior.
-- **Validação:** um painel aponta o que falta (seções, campos obrigatórios,
-  fotos sem legenda, comentários abertos) antes de finalizar.
-- **Status:** rascunho → em revisão → final.
-
-### 5.7 Exportar
-
-Pelo menu **Exportar**:
-
-- **PDF** — se o LibreOffice estiver instalado, a diagramação fica mais fiel ao
-  Word; senão, o SICRO usa o motor interno.
-- **DOCX** — editável no Word.
-- **HTML** — para visualização.
-
-Ao terminar, o SICRO abre a pasta da exportação.
-
-### 5.8 Assinar
-
-Ver o item [13. Assinatura digital](#13-assinatura-digital).
+> Laudos feitos no **SICRO 2.0** (arquivos `.sicrodoc`) continuam aparecendo na
+> lista, com o selo de assinatura que tiverem, mas não são mais editados aqui.
 
 ---
 
@@ -336,7 +324,8 @@ Sob a umbrella **Croquis** há **três tipos**, cada um com seu editor:
 Em todos: você cria pela lista de croquis (cada tipo tem seu botão e um selo de
 cor), desenha/anota, e exporta um **PNG técnico** (com cabeçalho institucional,
 título, escala e data) ou um **PNG limpo** (para colar no corpo do laudo). O
-botão **Abrir Laudo** garante que o PNG inserido esteja sempre atualizado.
+botão **Abrir Laudo** (Ctrl+L) salva o croqui, atualiza o PNG e leva ao módulo
+Laudos, onde a imagem aparece no painel **Produção** para copiar ao Word.
 
 ### 6.1 Croqui viário
 
@@ -363,7 +352,7 @@ botão **Abrir Laudo** garante que o PNG inserido esteja sempre atualizado.
 3. **Definir escala** com uma distância conhecida.
 4. Desenhe vias, posicione veículos e marque vestígios.
 5. Meça o que precisar.
-6. **Exportar PNG técnico** e/ou **Abrir Laudo** para inserir.
+6. **Exportar PNG técnico** e/ou **Abrir Laudo** para copiar ao documento.
 
 ### 6.2 Croqui corporal
 
@@ -438,8 +427,8 @@ copiado e "hasheado"; todo o trabalho fica numa pilha por cima.
 
 - **Relatório** gera um HTML/PDF com origem, hash, metadados, anotações e a
   pilha de filtros.
-- Você pode **editar uma foto do laudo** aqui e voltar — a foto tratada substitui
-  a do laudo, com o original preservado.
+- As imagens exportadas aparecem no painel **Produção** do laudo (5.4), prontas
+  para copiar ao Word.
 
 > ⚠️ **§13:** o original **nunca** é alterado — tudo é pilha reversível. Mapas e
 > realces (ELA, etc.) são **indícios** que exigem exame humano; nada conclui
@@ -615,15 +604,17 @@ indícios de manipulação e confronto visual.
 - **Mapa de ruído:** saltos de textura podem sugerir composição.
 - **Copy-move:** procura regiões clonadas na mesma imagem.
 
-Cada um gera um mapa que você pode **exportar** ou **enviar ao laudo** (entra em
-Evidências → Indícios).
+Cada um gera um mapa. **Exportar** salva onde você escolher; **Enviar ao laudo**
+guarda o PNG em `documentoscopia/indicios/` dentro do caso, de onde você insere
+a figura no Word.
 
 ### 10.4 Confronto e relatório
 
 - **Confronto:** documento questionado × padrão, lado a lado ou em sobreposição,
   com zoom/pan sincronizados, marcadores correspondentes, medições e calibração.
-- **Relatório:** gera um quadro técnico (proveniência, hash, campos revisados,
-  regiões) em **linguagem indiciária** para colar no laudo.
+- **Relatório:** **Gerar relatório técnico (HTML/PDF)** ou **Copiar quadro
+  técnico** (proveniência, hash, campos revisados, regiões), em **linguagem
+  indiciária**, para colar no laudo.
 
 > ⚠️ **§13 (crítico):** ELA, ruído e copy-move são **indicativos, não prova** —
 > bordas e alto contraste dão falso-positivo; sem histórico de compressão JPEG o
@@ -667,55 +658,45 @@ Abas:
   **tamanho da interface** (90% a 175%). Em qualquer tela, **Ctrl + Shift + =**
   aumenta, **Ctrl + Shift + −** diminui e **Ctrl + Shift + 0** volta a 100% —
   sem mexer no zoom do croqui, da imagem ou do laudo (Ctrl + = / − / 0).
-- **Integrações (SIGDOC):** e-mail e senha do SIGDOCS para autopreenchimento. A
-  **senha fica no Gerenciador de Credenciais do Windows** (criptografada), nunca
-  em texto claro.
+- **Integrações (SIGDOC):** guarda e-mail e senha do SIGDOCS no **cofre do
+  sistema** (Gerenciador de Credenciais no Windows, chaveiro/Secret Service no
+  Linux), nunca em texto claro. Nesta versão nenhuma tela usa essas credenciais:
+  a assinatura é feita fora do SICRO (item 13).
 - **Caminhos padrão:** pasta padrão de workspaces e de exportação.
-- **Backup geral:** cópia de todos os casos.
-- **Dependências:** status e instalação de LibreOffice (PDF fiel), IA (Whisper,
-  degravação) e OCR (Tesseract).
+- **Backup geral:** copia **todos** os casos para um destino (HD externo,
+  pendrive, rede), um `.sicrobackup` por caso, só recopiando o que mudou
+  (*Escolher destino e fazer backup*, *Repetir neste destino*). **Restaurar
+  backup…** recria os casos na pasta local padrão — sem sobrescrever os que já
+  existem — e traz de volta o perfil e os cabeçalhos.
+- **Dependências:** instalação assistida do **LibreOffice** (Windows), da **IA
+  de degravação** (motor whisper.cpp + modelos, baixados só quando você clica) e
+  do pacote de modelos do **OCR** (motor PP-OCRv5 já embutido no SICRO).
 - **Atalhos de teclado:** customizáveis por ação, organizados por módulo (os
   do grupo **Geral** valem em todas as telas).
 - **Diagnóstico:** mostra onde o arquivo de configurações fica no disco.
 
-> 💡 **Primeiro uso:** preencha o **Perfil** e, se for assinar via SIGDOCS,
-> guarde as credenciais em **Integrações**.
+> 💡 **Primeiro uso:** preencha o **Perfil** e a **Instituição & marca**.
 
 ---
 
 ## 13. Assinatura digital
 
-O SICRO **não assina por você** — ele exporta o PDF, leva você ao portal e
-**arquiva** o PDF assinado de volta, com hash. Há duas vias prontas:
+A assinatura é feita **fora do SICRO**, no PDF do laudo. O caminho:
 
-### 13.1 SIGDOCS (institucional — Estado do Amapá)
+1. No Word ou LibreOffice, **salve o laudo como PDF**.
+2. Assine no portal:
+   - **SIGDOCS** (institucional — Estado do Amapá): entre, anexe o PDF, assine e
+     baixe o assinado. No SIGDOCS o **Ctrl+V não funciona** — **arraste** o
+     arquivo do gerenciador de arquivos.
+   - **gov.br** (federal — ITI): em `assinador.iti.gov.br`, faça login, anexe o
+     PDF, confirme e baixe o assinado.
+3. Guarde o PDF assinado **na pasta do caso** (por exemplo, em `laudos/`), para
+   ele entrar no backup junto com o resto.
 
-1. No laudo **finalizado**, abra **Assinatura digital → SIGDOCS**.
-2. **Exportar PDF e abrir SIGDOCS:** o SICRO gera o PDF, copia o caminho,
-   abre o Explorer com o arquivo selecionado e abre o SIGDOCS por cima do app.
-3. No SIGDOCS: entre, anexe o PDF (arraste do Explorer), assine e baixe o
-   assinado.
-4. **Importar PDF assinado:** selecione o arquivo baixado (pode informar
-   *Pasta SIGDOCS* e *Protocolo*). O SICRO arquiva em `…/assinados/`, calcula o
-   hash e marca o laudo como **Assinado SIGDOCS**.
-
-> 💡 No SIGDOCS o **Ctrl+V não funciona** — por isso o SICRO já abre o Explorer
-> na pasta certa para você **arrastar** o PDF.
-
-### 13.2 gov.br (federal — ITI)
-
-Igual ao fluxo acima, mas o botão abre `assinador.iti.gov.br` no navegador.
-Você faz login gov.br, anexa o PDF, confirma com 2FA, baixa o assinado e
-**Importa** no SICRO. O laudo fica **Assinado gov.br**.
-
-### 13.3 Onde fica e como aparece
-
-- O PDF assinado fica em `laudos/<id>/assinados/`.
-- Na lista de laudos, um **selo** indica *Assinado gov.br* ou *Assinado SIGDOCS*.
-
-> ⚠️ **§13:** o SICRO **não valida** a assinatura (isso é do portal) e **não
-> assina automaticamente**. A assinatura é sempre um ato do perito. Os tipos
-> A1/A3 com certificado local ainda **não** estão implementados.
+> ⚠️ **§13:** a assinatura é sempre um ato do perito. O SICRO **não assina** e
+> **não valida** assinaturas (isso é do portal). Nesta versão ele também não
+> importa o PDF assinado de volta. Laudos do SICRO 2.0 que foram assinados pelo
+> fluxo antigo mantêm o selo (*Assinado gov.br* / *Assinado SIGDOCS*) na lista.
 
 ---
 
@@ -730,8 +711,10 @@ Um caso típico, do campo ao laudo assinado:
 4. **Imagens / Vídeos / Áudios / Documentoscopia:** trate, meça e analise as
    evidências (sempre de forma não-destrutiva).
 5. **Croquis:** desenhe a cena (viário/corporal/planta) e exporte o PNG.
-6. **Laudos:** redija, insira fotos/croquis/análises, responda quesitos, valide.
-7. **Exportar PDF** e **Assinar** (SIGDOCS ou gov.br).
+6. **Laudos:** *Novo laudo* cria o `.docx`; abra no Word e redija, com a
+   **Consulta** ao lado e as figuras vindo da **Produção** (*Copiar pro laudo* →
+   Ctrl+V).
+7. **PDF e assinatura:** salve como PDF no Word e assine no SIGDOCS ou gov.br.
 8. **Backup:** gere o `.sicrobackup` para guardar/transportar.
 9. **Estatísticas:** acompanhe a produção do caso e do conjunto.
 
@@ -751,8 +734,9 @@ ilusões:
   **exigem exame humano** e podem dar falso-positivo.
 - **Medições têm incerteza.** Velocidade/distância são medição com IC, não
   veredito.
-- **Offline.** Sem nuvem nem servidor; rede só no OSM e nos portais de
-  assinatura, sempre explícita.
+- **Offline.** Sem nuvem nem servidor. A rede só é usada quando você pede: mapa
+  e vias do OSM (Croqui), downloads de Configurações → Dependências (IA, OCR,
+  LibreOffice) e os portais de assinatura, no navegador.
 - **Reprodutível e auditável.** Pilhas, históricos e hashes permitem refazer e
   verificar.
 - **A palavra final é do perito.** Sempre.
@@ -767,7 +751,8 @@ ilusões:
 | **`.sicro`** | A pasta do caso (banco, manifesto e subpastas). |
 | **`.sicroapp`** | Pacote do SICRO Operacional (campo) para importar no Desktop. |
 | **`.sicrobackup`** | Backup compactado (ZIP) de um caso inteiro, com hash. |
-| **`.sicrodoc`** | Documento do laudo (conteúdo estruturado + cabeçalho + metadados). |
+| **`.docx` (laudo)** | O laudo, em `laudos/` do caso, editado no Word ou LibreOffice. |
+| **`.sicrodoc`** | Laudo do SICRO 2.0 (formato antigo). Ainda aparece na lista; não é mais criado. |
 | **`.sicrocroqui`** | Croqui viário. |
 | **`.sicrocorpo`** | Croqui corporal. |
 | **`.sicroplanta`** | Croqui de planta baixa. |
@@ -779,6 +764,7 @@ ilusões:
 
 ---
 
-*Manual gerado a partir da inspeção do código-fonte do SICRO 2.0. Algumas telas e
-rótulos evoluem entre versões; se algo divergir do que você vê no app, vale o
-app — e me avise para atualizar este manual.*
+*Manual do SICRO 3.1 (setembro de 2026), conferido com o código-fonte desta
+versão. Algumas telas e rótulos evoluem entre versões; se algo divergir do que
+você vê no app, vale o app — e avise (botão **Feedback** no Início) para
+atualizar este manual.*

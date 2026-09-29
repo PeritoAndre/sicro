@@ -77,7 +77,7 @@ const IMAGEM_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <Share2 size={18} />,
     title: "Integra à suíte",
-    desc: "O derivado tratado volta ao Laudo e à Documentoscopia, com proveniência.",
+    desc: "O derivado tratado aparece no painel Produção do Laudo, pronto para copiar ao Word, com proveniência.",
   },
 ];
 

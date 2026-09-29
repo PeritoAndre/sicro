@@ -775,7 +775,7 @@ export function DocWorkbench({ ws, doc, onDocChanged, onDeleted }: Props) {
         await commands.revealEvidenceInFolder(ws, rel);
         setIndicioMsg("Exportado — pasta aberta.");
       } else {
-        setIndicioMsg("Enviado: aparece em Evidências → Indícios ao abrir o laudo.");
+        setIndicioMsg("Salvo em documentoscopia/indicios/ do caso — insira a figura no laudo a partir dessa pasta.");
       }
     } catch (e) {
       setErr(toSicroError(e).message);
