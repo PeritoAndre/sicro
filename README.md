@@ -64,7 +64,7 @@ no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 **Linux**
 - Distribuição de 2024 em diante (o motor de OCR exige glibc 2.38 ou mais nova).
 - Vídeo e áudio usam o **ffmpeg** e o **GStreamer** do sistema (o comando da tabela instala os dois).
-- **Arch e outras distribuições:** ainda sem pacote pronto. O AppImage ficou de fora porque as bibliotecas que ele leva embutidas quebram fora do Ubuntu; um pacote para o AUR está a caminho. Até lá, compile do código (abaixo).
+- **Arch e outras distribuições:** ainda sem pacote pronto. O AppImage ficou de fora porque as bibliotecas que ele leva embutidas quebram fora do Ubuntu. Para o Arch, o caminho previsto é um pacote no AUR; por enquanto, compile do código (abaixo).
 - Com placa **NVIDIA**, se a janela abrir em branco, rode com `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver proprietário).
 
 > Versão **beta**, em validação. Veja [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md)
