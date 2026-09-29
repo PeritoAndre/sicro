@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { mediaSrc } from "@core/mediaSrc";
 import {
   Activity,
   AlertTriangle,
@@ -279,6 +280,10 @@ export function AudioModule() {
   );
   const fileUrl = useMemo(
     () => (ws && selected ? convertFileSrc(`${ws}/${selected.relative_path}`) : null),
+    [ws, selected],
+  );
+  const mediaUrl = useMemo(
+    () => (ws && selected ? mediaSrc(`${ws}/${selected.relative_path}`) : undefined),
     [ws, selected],
   );
   const warnings = useMemo(
@@ -615,6 +620,7 @@ export function AudioModule() {
                 <AudioPlayer
                   ref={playerRef}
                   fileUrl={fileUrl}
+                  mediaUrl={mediaUrl}
                   workspacePath={ws}
                   audioSha256={selected.sha256}
                 />

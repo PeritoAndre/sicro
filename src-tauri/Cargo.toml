@@ -136,6 +136,12 @@ oar-ocr = "0.6"
 rxing = "0.7"
 lopdf = "0.36.0"
 
+# Linux (WebKitGTK) — o player de mídia (GStreamer) não lê o asset protocol do
+# Tauri; <video>/<audio> vão por file:// e a página precisa ser "local" no
+# WebKit. Ver `allow_local_media` em lib.rs. Mesma versão que o `wry` usa.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "2.0"
+
 [dev-dependencies]
 tempfile = "3"
 

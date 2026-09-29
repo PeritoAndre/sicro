@@ -5135,6 +5135,7 @@ dependencies = [
  "tungstenite",
  "ureq 2.12.1",
  "uuid",
+ "webkit2gtk",
  "which",
  "zip",
 ]

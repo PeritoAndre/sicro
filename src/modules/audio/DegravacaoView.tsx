@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { mediaSrc } from "@core/mediaSrc";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { AlertTriangle, ArrowLeft, Bot, ClipboardCopy, Flag, Plus, Trash2 } from "lucide-react";
 import { Button } from "@components/Button/Button";
@@ -234,6 +235,10 @@ export function DegravacaoView() {
     () => (ws && media ? convertFileSrc(`${ws}/${media.relative_path}`) : null),
     [ws, media],
   );
+  const mediaUrl = useMemo(
+    () => (ws && media ? mediaSrc(`${ws}/${media.relative_path}`) : undefined),
+    [ws, media],
+  );
 
   const activeIdx = useMemo(() => {
     for (let i = 0; i < segments.length; i++) {
@@ -424,6 +429,7 @@ export function DegravacaoView() {
             <AudioPlayer
               ref={playerRef}
               fileUrl={fileUrl}
+              mediaUrl={mediaUrl}
               workspacePath={ws}
               audioSha256={media.sha256}
               onTimeChange={setCurrentTime}

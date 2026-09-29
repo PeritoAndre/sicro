@@ -25,6 +25,36 @@ pub mod workspace;
 
 use tracing_subscriber::EnvFilter;
 
+/// Linux: o WebView é o WebKitGTK, cujo player de mídia (GStreamer) só lê
+/// http(s), blob e file:// — pelo asset protocol do Tauri dá "No URI handler
+/// implemented for asset" e o <video>/<audio> falha com MediaError 4. O
+/// frontend passa a mídia por file:// (`src/core/mediaSrc.ts`), o que exige que
+/// a página do app (esquema `tauri`) seja "local" para o WebKit.
+///
+/// Tem de rodar ANTES de a página carregar: o WebKit decide no nascimento do
+/// documento se ele pode abrir file://, então registrar depois não vale. O
+/// `setup` roda na thread principal logo após criar a janela do config, e aí o
+/// `with_webview` executa na hora (sem ir para a fila do event loop).
+///
+/// Não amplia o acesso: o escopo do asset protocol já é `**`.
+#[cfg(target_os = "linux")]
+fn allow_local_media(app: &tauri::App) {
+    use tauri::Manager;
+    use webkit2gtk::{SecurityManagerExt, WebContextExt, WebViewExt};
+
+    let Some(main) = app.get_webview_window("main") else {
+        return;
+    };
+    let result = main.with_webview(|webview| {
+        if let Some(security) = webview.inner().context().and_then(|c| c.security_manager()) {
+            security.register_uri_scheme_as_local("tauri");
+        }
+    });
+    if let Err(e) = result {
+        tracing::warn!("não foi possível liberar file:// para mídia: {e}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tracing_subscriber::fmt()
@@ -55,6 +85,8 @@ pub fn run() {
             commands::sigdocs_commands::install_cover_resize_listener(
                 &app.handle().clone(),
             );
+            #[cfg(target_os = "linux")]
+            allow_local_media(app);
             Ok(())
         })
         .manage(app_state)

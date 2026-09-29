@@ -31,7 +31,10 @@ export function fmtTime(t: number): string {
 }
 
 interface Props {
+  /** Asset protocol — usado pelo `fetch` da forma de onda. */
   fileUrl: string;
+  /** Fonte do <audio> (`mediaSrc`: file:// no Linux). Padrão: `fileUrl`. */
+  mediaUrl?: string;
   workspacePath: string;
   audioSha256: string;
   /** Chamado a cada atualização de tempo — sincroniza a degravação. */
@@ -48,7 +51,7 @@ export interface AudioPlayerHandle {
 }
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPlayer(
-  { fileUrl, workspacePath, audioSha256, onTimeChange },
+  { fileUrl, mediaUrl, workspacePath, audioSha256, onTimeChange },
   ref,
 ) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -254,7 +257,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
     <div className={styles.player}>
       <audio
         ref={audioRef}
-        src={fileUrl}
+        src={mediaUrl ?? fileUrl}
         onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;

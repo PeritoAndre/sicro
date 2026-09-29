@@ -1,7 +1,8 @@
 /**
  * VideoPlayerPanel — HTMLVideoElement embedded in the Tauri WebView.
  *
- * The asset is served via Tauri's asset protocol (`convertFileSrc`). Why
+ * The asset is served via Tauri's asset protocol (`convertFileSrc`) — on
+ * Linux via file:// instead, see `@core/mediaSrc`. Why
  * HTMLVideoElement is the right starting point in 2026:
  *   - Chromium (the WebView) plays H.264/AAC inside MP4/MOV out of the
  *     box on Windows;
@@ -29,7 +30,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { mediaSrc } from "@core/mediaSrc";
 import { useShortcuts } from "@core/useShortcuts";
 import {
   Pause,
@@ -103,7 +104,7 @@ export function VideoPlayerPanel({
     try {
       const sep = workspacePath.includes("\\") ? "\\" : "/";
       const abs = `${workspacePath}${sep}${relativePath.replace(/\//g, sep)}`;
-      return convertFileSrc(abs);
+      return mediaSrc(abs);
     } catch {
       return null;
     }
