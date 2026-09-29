@@ -8,13 +8,12 @@
 //! (Word / LibreOffice / visualizador) sem duplicar o comando por plataforma.
 
 use std::path::Path;
-use std::process::Command;
 
 use crate::error::{Result, SicroError};
 
 #[cfg(target_os = "windows")]
 pub(crate) fn open_with_os(path: &Path) -> Result<()> {
-    Command::new("cmd")
+    crate::tools::command("cmd")
         .args(["/C", "start", "", &path.to_string_lossy()])
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao abrir: {e}")))?;
@@ -23,7 +22,7 @@ pub(crate) fn open_with_os(path: &Path) -> Result<()> {
 
 #[cfg(target_os = "macos")]
 pub(crate) fn open_with_os(path: &Path) -> Result<()> {
-    Command::new("open")
+    crate::tools::command("open")
         .arg(path)
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao abrir: {e}")))?;
@@ -32,7 +31,7 @@ pub(crate) fn open_with_os(path: &Path) -> Result<()> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 pub(crate) fn open_with_os(path: &Path) -> Result<()> {
-    Command::new("xdg-open")
+    crate::tools::command("xdg-open")
         .arg(path)
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao abrir: {e}")))?;

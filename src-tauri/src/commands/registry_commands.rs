@@ -5,7 +5,6 @@
 //! with an `occurrence_id` because the manifest IS the source of truth.
 
 use std::path::PathBuf;
-use std::process::Command;
 
 use chrono::Utc;
 
@@ -175,7 +174,7 @@ pub async fn generate_workspace_integrity_report(
 
 #[cfg(target_os = "windows")]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
-    Command::new("explorer")
+    crate::tools::command("explorer")
         .args(["/select,", &path.to_string_lossy()])
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao revelar: {e}")))?;
@@ -184,7 +183,7 @@ fn reveal_with_os(path: &std::path::Path) -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
-    Command::new("open")
+    crate::tools::command("open")
         .args(["-R", &path.to_string_lossy()])
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao revelar: {e}")))?;
@@ -195,7 +194,7 @@ fn reveal_with_os(path: &std::path::Path) -> Result<()> {
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
     // Best-effort: open the containing folder.
     let dir = path.parent().unwrap_or(path);
-    Command::new("xdg-open")
+    crate::tools::command("xdg-open")
         .arg(dir)
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao revelar: {e}")))?;

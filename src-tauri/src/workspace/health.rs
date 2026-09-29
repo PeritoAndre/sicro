@@ -15,7 +15,6 @@
 //! relatório de integridade do MVP 5).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
@@ -274,16 +273,16 @@ fn directory_size(path: &Path) -> std::io::Result<u64> {
 fn probe_dependencies(warnings: &mut Vec<String>) -> Vec<DependencyStatus> {
     let mut deps: Vec<DependencyStatus> = Vec::new();
     for tool in &["ffmpeg", "ffprobe"] {
-        let result = which::which(tool).ok();
+        let result = crate::tools::find_ffmpeg_tool(tool);
         let found = result.is_some();
         let path = result.as_ref().map(|p| p.to_string_lossy().into_owned());
         if !found {
             warnings.push(format!(
-                "{} não encontrado no PATH — módulo Vídeo precisa dele",
+                "{} não encontrado (nem junto do SICRO, nem no PATH) — módulos Vídeo e Áudio precisam dele",
                 tool
             ));
         }
-        let version_hint = if found { probe_version(tool) } else { None };
+        let version_hint = result.as_deref().and_then(probe_version);
         deps.push(DependencyStatus {
             name: tool.to_string(),
             found,
@@ -294,8 +293,8 @@ fn probe_dependencies(warnings: &mut Vec<String>) -> Vec<DependencyStatus> {
     deps
 }
 
-fn probe_version(tool: &str) -> Option<String> {
-    let out = Command::new(tool).arg("-version").output().ok()?;
+fn probe_version(tool: &std::path::Path) -> Option<String> {
+    let out = crate::tools::command(tool).arg("-version").output().ok()?;
     if !out.status.success() {
         return None;
     }

@@ -1,0 +1,118 @@
+# Compila o SICRO para Linux e Windows e monta a release como RASCUNHO.
+#
+# Dispara com `scripts/release.sh` (ou Actions → Release → Run workflow), ou ao
+# empurrar uma tag v*. A versão vem do package.json; as notas, de
+# docs/releases/v<versão>.md. Conferido o rascunho, publica-se à mão:
+#   gh release edit v<versão> --draft=false
+name: Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # 22.04: glibc mais antiga → o AppImage roda em mais distribuições.
+          - os: ubuntu-22.04
+            bundles: appimage,deb
+          - os: windows-latest
+            bundles: nsis
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências do sistema (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config file libfuse2 patchelf \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev libdbus-1-dev \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
+            gstreamer1.0-plugins-base gstreamer1.0-plugins-good gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly gstreamer1.0-libav
+
+      - name: FFmpeg que vai dentro do instalador (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: scripts/fetch-ffmpeg-windows.ps1
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Compilar e empacotar
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: pnpm tauri build --bundles ${{ matrix.bundles }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacotes-${{ runner.os }}
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/nsis/*-setup.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Nomes limpos, SHA256SUMS e rascunho da release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          V=$(node -p "require('./package.json').version")
+          TAG="v$V"
+          NOTES="docs/releases/$TAG.md"
+          test -f "$NOTES" || { echo "faltam as notas: $NOTES"; exit 1; }
+
+          mkdir out
+          cp "$(find dist -name '*.AppImage' | head -1)" "out/SICRO-$V-linux-x86_64.AppImage"
+          cp "$(find dist -name '*.deb' | head -1)" "out/sicro_${V}_amd64.deb"
+          cp "$(find dist -name '*-setup.exe' | head -1)" "out/SICRO-$V-windows-x64-setup.exe"
+          (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+
+          # Refaz só rascunho; release publicada nunca é tocada.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if [ "$(gh release view "$TAG" --json isDraft -q .isDraft)" = "true" ]; then
+              gh release delete "$TAG" --yes
+            else
+              echo "A release $TAG já está publicada — suba a versão."; exit 1
+            fi
+          fi
+          gh release create "$TAG" --draft \
+            --title "SICRO ${V%.*}" \
+            --notes-file "$NOTES" \
+            --target "$GITHUB_SHA" \
+            out/*
+          echo "Rascunho: $(gh release view "$TAG" --json url -q .url)"

@@ -9,7 +9,6 @@
 //! limitation; bundling ffprobe is a future step.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde_json::Value;
 
@@ -55,7 +54,7 @@ pub fn container_start_time(raw_probe_json: &str) -> f64 {
 /// `format.start_time` lido direto do arquivo (quando não há probe guardado).
 pub fn read_start_time(path: &Path) -> Result<f64> {
     let ffprobe = detect_ffprobe()?;
-    let out = std::process::Command::new(&ffprobe)
+    let out = crate::tools::command(&ffprobe)
         .args(["-v", "error", "-show_entries", "format=start_time", "-of", "json"])
         .arg(path)
         .output()
@@ -63,10 +62,12 @@ pub fn read_start_time(path: &Path) -> Result<f64> {
     Ok(container_start_time(&String::from_utf8_lossy(&out.stdout)))
 }
 
-/// Look up an `ffprobe` binary that the orchestrator can call. Tries the
-/// user's PATH first; in the future this could fall back to a bundled
-/// build. Returns the resolved path.
+/// Look up an `ffprobe` binary that the orchestrator can call: the one
+/// bundled with SICRO (Windows installer) first, then the user's PATH.
 pub fn detect_ffprobe() -> Result<PathBuf> {
+    if let Some(p) = crate::tools::bundled_ffmpeg_tool("ffprobe") {
+        return Ok(p);
+    }
     which("ffprobe")
 }
 
@@ -82,7 +83,7 @@ pub fn probe_media(path: &Path) -> Result<ParsedProbe> {
     }
     let bin = detect_ffprobe()?;
 
-    let output = Command::new(&bin)
+    let output = crate::tools::command(&bin)
         .args([
             "-v",
             "error",

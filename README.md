@@ -1,20 +1,21 @@
 <div align="center">
 
-<img src="public/branding/sicro-logo.png" alt="SICRO 3.0" width="116" />
+<img src="public/branding/sicro-logo.png" alt="SICRO" width="116" />
 
-# SICRO 3.0
+# SICRO 3.1
 
-**Suíte pericial forense — offline, local e reproduzível.**
+**Suíte pericial forense: offline, local e reproduzível.**
 
-Croquis, análise de imagem, áudio e vídeo, documentoscopia, central de
-evidências e custódia do laudo, num único workspace `.sicro` autocontido.
+Vídeo, áudio, imagem, croquis, documentoscopia e a custódia das evidências do
+laudo, num só programa e num único arquivo de caso `.sicro`.
 
-![status](https://img.shields.io/badge/status-beta-orange)
+![versão](https://img.shields.io/github/v/release/PeritoAndre/sicro?label=vers%C3%A3o&color=d7a84f)
 ![plataforma](https://img.shields.io/badge/plataforma-Windows%20%7C%20Linux-1f6feb)
 ![offline](https://img.shields.io/badge/100%25-offline-2ea043)
-![license](https://img.shields.io/badge/license-Apache--2.0-blue)
+![status](https://img.shields.io/badge/status-beta-orange)
+![licença](https://img.shields.io/badge/licen%C3%A7a-Apache--2.0-blue)
 
-### ⬇️ [Baixar o instalador (beta)](https://github.com/PeritoAndre/sicro/releases/latest)
+### ⬇️ [Baixar a versão mais recente](https://github.com/PeritoAndre/sicro/releases/latest)
 
 <sub>Polícia Científica do Amapá</sub>
 
@@ -24,59 +25,49 @@ evidências e custódia do laudo, num único workspace `.sicro` autocontido.
 
 ## O que é
 
-O **SICRO 3.0** é uma ferramenta de **apoio** ao trabalho do perito criminal.
-Reúne, num só programa que roda **100% offline**, tudo o que normalmente fica
-espalhado por vários softwares: os croquis, o tratamento de imagem, áudio e
-vídeo, a leitura de documentos e o controle de integridade das evidências —
-cada caso isolado num arquivo de workspace `.sicro`.
+O SICRO é uma ferramenta de **apoio** ao perito criminal. Ele reúne o que
+normalmente fica espalhado por vários programas: tratar e medir vídeo, áudio e
+imagem, desenhar croquis, examinar documentos e manter a integridade de cada
+evidência. Cada caso fica isolado num workspace `.sicro`.
 
-É **determinístico e honesto sobre seus limites**: realça, mede e organiza, mas
-**nunca fabrica prova, nunca altera o original e não tira conclusões** — o
-perito tem sempre a palavra final.
+Ele realça, mede e organiza, mas **nunca altera o original, nunca fabrica prova
+e não tira conclusões**. A interpretação, a redação e a assinatura são do perito.
 
-> **O laudo, no SICRO 3.0, é um documento `.docx`** escrito no Word ou no
-> LibreOffice — editores robustos, que o perito já domina. O SICRO não substitui
-> esse editor: ele **entrega o cabeçalho institucional, os campos da ocorrência
-> e as figuras**, **mantém a custódia** dos arquivos e serve de **ponte** entre o
-> caso e o documento. A redação fica onde sempre esteve; o trabalho técnico fica
-> aqui.
+- **Offline e local:** nada sai da máquina. Sem nuvem obrigatória, sem telemetria.
+- **Original intocado:** tudo é feito sobre cópias, com SHA-256 na entrada.
+- **Reproduzível e auditável:** cada resultado registra a ferramenta, os parâmetros e o momento.
+- **Honesto sobre limites:** estimativas aparecem como estimativas, com a margem de erro quando existe.
+
+> **O laudo é um `.docx`**, escrito no Word ou no LibreOffice. O SICRO não
+> substitui o editor de texto: ele gera o documento com cabeçalho institucional
+> e campos da ocorrência, guarda a custódia e entrega as figuras prontas para
+> colar. A redação fica onde sempre esteve; o trabalho técnico fica aqui.
 
 ---
 
-## Instalação (perito / usuário final)
+## Baixar e instalar
 
-Baixe o pacote da sua plataforma em
-**[Releases](https://github.com/PeritoAndre/sicro/releases/latest)**.
+Os pacotes ficam em **[Releases](https://github.com/PeritoAndre/sicro/releases/latest)**.
 
-### Windows
+| Sistema | Arquivo | Como instalar |
+|---|---|---|
+| **Windows 10/11 (64 bits)** | `SICRO-<versão>-windows-x64-setup.exe` | Execute. Instale só para você (sem administrador) ou para todos. O FFmpeg já vem junto. |
+| **Linux (qualquer distribuição)** | `SICRO-<versão>-linux-x86_64.AppImage` | `chmod +x` no arquivo e abra. Não instala nada no sistema. |
+| **Debian, Ubuntu e derivados** | `sicro_<versão>_amd64.deb` | `sudo apt install ./sicro_<versão>_amd64.deb` |
 
-1. Baixe `SICRO 3.0_<versão>_x64-setup.exe`.
-2. Execute. O instalador pergunta se quer instalar **só para você** (sem
-   administrador) ou **para todos os usuários** (requer administrador).
-3. Leia e aceite o **Termo de Uso** e conclua. Pronto — atalho **SICRO 3.0** no
-   menu Iniciar.
+Confira o download com o `SHA256SUMS.txt` da release: `sha256sum -c SHA256SUMS.txt`
+no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 
-> **Requisitos:** Windows 10/11 (x64) e o runtime **WebView2** (já presente na
-> maioria das instalações; o instalador orienta caso falte).
+**Windows**
+- Requer o runtime **WebView2**, que já vem no Windows 11 e na maioria dos Windows 10. O instalador orienta se faltar.
+- O instalador não tem assinatura digital. Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo**.
 
-### Linux
+**Linux**
+- O AppImage precisa do **FUSE 2**: `sudo pacman -S fuse2` (Arch) ou `sudo apt install libfuse2` (Debian/Ubuntu).
+- Vídeo e áudio usam o **ffmpeg do sistema**: `sudo pacman -S ffmpeg` ou `sudo apt install ffmpeg`.
+- Com placa **NVIDIA**, se a janela abrir em branco, rode com `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver proprietário).
 
-- **AppImage** (`SICRO-<versão>-x86_64.AppImage`) — roda em qualquer
-  distribuição, sem instalar. Dê permissão (`chmod +x`) e execute.
-  Precisa do **FUSE 2** (Arch: `sudo pacman -S fuse2`; Debian/Ubuntu:
-  `sudo apt install libfuse2`).
-- **`.deb`** (`sicro_<versão>_amd64.deb`) — Debian, Ubuntu e derivados:
-  `sudo apt install ./sicro_*.deb`.
-- **`SHA256SUMS.txt`** — confira o download com `sha256sum -c SHA256SUMS.txt`.
-
-> **Requisitos:** `webkit2gtk-4.1` e GTK 3 — presentes na maioria dos desktops.
->
-> **Placa NVIDIA:** se a janela abrir em branco, execute com
-> `WEBKIT_DISABLE_DMABUF_RENDERER=1`. É uma limitação conhecida do WebKitGTK
-> com o driver proprietário, não do SICRO.
->
-> Versão **beta** — em validação (ainda não testada em produção após o redesenho
-> do módulo de laudo). Veja [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md)
+> Versão **beta**, em validação. Veja [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md)
 > e relate problemas na aba **Issues**.
 
 ---
@@ -85,163 +76,106 @@ Baixe o pacote da sua plataforma em
 
 | Módulo | O que faz |
 |---|---|
-| **Home** | Central operacional: workspace ativo, ações rápidas (nova / abrir / importar / verificar integridade / backup), atalhos da ocorrência e casos recentes. |
-| **Dossiê** | Workspace da ocorrência em duas lentes: **Operacional** (coleta de campo importada do pacote `.sicroapp` — resumo, fotos, checklist, entidades, vestígios, medições, timeline) e **Integridade / Central de Provas** (agrega toda a evidência do caso e confere em disco: existência, tamanho, SHA-256, links quebrados). |
-| **Laudo** | O laudo é um `.docx` editado no Word/LibreOffice — **não há editor de texto no app**. O módulo é um **registro** de laudos por ocorrência + **ponte SICRO ↔ Word**: cria um `.docx` base (cabeçalho institucional + campos da ocorrência + esqueleto de seções), **abre no Word**, ou **registra um `.docx` já pronto**. Com o laudo selecionado, a **ponte** mostra dois painéis: **Consulta** (dados da ocorrência, só-leitura) e **Produção** (artefatos de imagem/croqui da Central de Evidências, cada um com **"Copiar pro laudo"** → coloca a imagem na área de transferência para colar com `Ctrl+V` no documento aberto). |
-| **Croqui** | Editor 2D técnico em três frentes: **viário** (vias paramétricas via Parity Engine, rotatórias, 24+ silhuetas de veículo, vestígios, importação do **OpenStreetMap** via Overpass), **corporal** (carta de lesões com numeração POP automática — Anexo 1 SENASP, 49 regiões frente/costas — e 10 tipos de lesão) e **planta baixa** (paredes/mobiliário via Pixi + camada **pericial**: 10 tipos de evidência, trajetórias balísticas, estruturas, rosa dos ventos). Exporta **PNG técnico** (com carimbo: BO, município, escala, timestamp, rodapé §13) ou **PNG limpo**. |
-| **Imagem** | Realce e análise **não-destrutiva** (original preservado + derivado reversível + sidecar JSON): galeria de filtros forenses em Rust puro (Sobel/Laplacian/Canny, Gaussian/Median/Bilateral, morfologia, CLAHE/equalização/auto-levels/white balance, unsharp/threshold/pixelize, perspectiva 4-pontos), seleção/máscaras, zoom a nível de pixel, **EXIF**, ajustes, medições com escala, múltiplos hashes (MD5/SHA-1/SHA-256/SHA-3-256) e cadeia de custódia. |
-| **Áudio** | Aquisição com custódia (original preservado + WAV de análise, ambos com SHA-256), realce determinístico via FFmpeg (redução de ruído, corte de graves/agudos, normalização), **espectrograma** e medições objetivas (pico/RMS, fator de crista, clipping, ENF), recorte de trechos, compilação rotulada com manifesto e **degravação** assistida offline (whisper.cpp, rascunho a revisar). |
-| **Vídeo** | Registro de vídeos com custódia (cópia local + SHA-256 + `ffprobe`), **coleta de frames** (PNG + sidecar), **Calculador de Velocidade** (calibração por homografia DLT 4-pontos ou linha de tráfego, regressão e Monte Carlo reprodutível) e **Medidor de Distância** (projeção pixel→mundo pela homografia calibrada). |
-| **Documentoscopia** | Leitura de documentos e PDFs (cópia + hash) com **OCR offline**, layout, extração de campos, análise de integridade/metadados e **confronto** questionado × padrão, em três abas (Exame / Confronto / Relatório). A origem de cada resultado fica registrada. |
-| **Estatísticas** | Painel **descritivo** (nunca interpretativo): contagens e distribuições do que o caso armazena, por caso ou geral, em gráficos próprios. Exporta HTML/CSV/JSON. |
-| **Ajuda** | Manual do SICRO renderizado in-app a partir de `docs/MANUAL_SICRO.md`, com índice navegável e busca. |
-| **Configurações** | Perfil do perito, instituição/marca (cabeçalho, brasões), tema, integrações (credenciais salvas no cofre do sistema — Gerenciador de Credenciais no Windows, Secret Service no Linux — nunca em JSON), caminhos padrão, atalhos, diagnóstico e **backup geral** do acervo. |
-
-> **Assinatura digital.** O laudo é assinado **fora do SICRO** — no documento
-> `.docx`/PDF, via Word + gov.br / SIGDOCS. O módulo Laudo apenas exibe um
-> *badge* do tipo de assinatura (lido dos metadados) e prevê a **reimportação**
-> do PDF assinado ao workspace (fluxo futuro). Não há fluxo de assinatura dentro
-> do app.
+| **Vídeo** | Registro com custódia (cópia local, SHA-256, `ffprobe`) e um reprodutor feito para perícia: **J/K/L** até 8×, quadro a quadro, **linha do tempo** com zoom até o quadro e altura ajustável, trecho em repetição, eventos, **lupa** até 8×, brilho/contraste/gama só na tela, **relógio da câmera** e tela cheia. **Coleta de quadros** exatamente iguais ao que aparece no player (PNG + JSON + hash), sequências e storyboard. **Comparar duas câmeras** lado a lado, vinculadas pelo mesmo acontecimento ou pelo relógio. **Exportar trecho** como cópia registrada, sem recompressão. **Calculador de velocidade** (homografia DLT ou linha de tráfego, Monte Carlo reprodutível) e **medidor de distância**. |
+| **Áudio** | Aquisição com custódia (original + WAV de análise, ambos com SHA-256), inclusive extraído dos vídeos do caso. Realce para escuta via FFmpeg (ruído, graves/agudos, normalização), **espectrograma**, medições objetivas (pico/RMS, fator de crista, clipping, **ENF**), recorte, compilação rotulada e **degravação** assistida offline (whisper.cpp; rascunho a revisar). |
+| **Imagem** | Realce e análise **não destrutivos** (original + derivado reversível + JSON): filtros forenses em Rust (bordas, desfoque, morfologia, CLAHE, níveis, nitidez, perspectiva de 4 pontos), máscaras, zoom no pixel, **EXIF**, medições com escala e múltiplos hashes (MD5, SHA-1, SHA-256, SHA-3). |
+| **Croqui** | Editor 2D técnico: **viário** (vias paramétricas, rotatórias, 24+ veículos, vestígios, mapa do **OpenStreetMap**), **corporal** (carta de lesões com numeração automática, 49 regiões) e **planta baixa** (paredes, mobiliário, evidências, trajetórias). Exporta PNG técnico com carimbo ou PNG limpo. |
+| **Documentoscopia** | Documentos e PDFs com cópia e hash, **OCR offline**, extração de campos, leitura de QR e código de barras, análise de metadados e **confronto** questionado × padrão. |
+| **Dossiê** | O caso em duas lentes: **Operacional** (coleta de campo importada do `.sicroapp`: fotos, checklist, vestígios, medições, linha do tempo) e **Integridade** (confere cada evidência em disco: existência, tamanho, SHA-256, vínculos). |
+| **Laudo** | Registro dos laudos `.docx` do caso e **ponte com o Word**: cria o documento-base, abre no editor, registra um `.docx` pronto e copia as figuras do caso para colar com `Ctrl+V`. A assinatura é feita fora do SICRO (gov.br / SIGDOCS). |
+| **Estatísticas** | Painel **descritivo** do que o caso guarda, por caso ou geral. Exporta HTML, CSV e JSON. |
+| **Ajuda** | O [manual completo](./docs/MANUAL_SICRO.md) dentro do programa, com índice e busca. |
+| **Configurações** | Perfil do perito, instituição e brasões, tema, **zoom da interface** (Ctrl+Shift+= / − / 0), atalhos editáveis, credenciais no cofre do sistema (nunca em arquivo), diagnóstico e backup geral. |
 
 ---
 
-## Princípio de apoio
+## Backup
 
-O SICRO existe para **dar suporte**, não para substituir o perito:
+Regra de ouro: **caso vivo fica no disco local; a nuvem recebe só cópias
+fechadas.** Um `.sicro` aberto dentro de pasta sincronizada pode corromper, e o
+SICRO avisa se você tentar.
 
-- **Offline e local** — nada sai da máquina; sem nuvem obrigatória, sem telemetria.
-- **Nunca altera o original** — trabalha sobre cópias; a evidência de entrada é preservada.
-- **Reproduzível e auditável** — registra a origem de cada resultado (qual ferramenta, quais parâmetros).
-- **Sem conclusões automáticas** — realça e mede; a interpretação, a redação e a assinatura são do perito.
-
----
-
-## Backup e recuperação
-
-Regra de ouro: **dados vivos ficam locais; a nuvem recebe backups estáticos.**
-Um `.sicro` "vivo" dentro de uma pasta sincronizada (OneDrive/Drive) pode
-corromper — por isso a pasta padrão de casos é local (`~\SICRO\Casos`) e o app
-avisa se você apontar um caso para pasta sincronizada.
-
-- **Por caso** — ZIP `.sicrobackup` do workspace inteiro, com manifesto + SHA-256.
-- **Geral (incremental)** — copia todos os casos do acervo + o perfil/cabeçalhos
-  para um destino (HD externo, pendrive, nuvem, rede); só recopia o que mudou.
-  Pode rodar sozinho ao fechar a ocorrência.
-- **Restaurar** — aponta a pasta de backup e o app recria os casos + a
-  configuração. Cenário "trocou de PC → instala o SICRO → restaura → tudo de volta".
+- **Por caso:** um `.sicrobackup` (ZIP) do workspace inteiro, com manifesto e SHA-256.
+- **Geral, incremental:** todos os casos e a configuração para um HD externo, pendrive ou rede; só recopia o que mudou. Pode rodar sozinho ao fechar a ocorrência.
+- **Restaurar:** aponte a pasta do backup e o SICRO recria os casos e a configuração. Trocou de computador? Instale, restaure e está tudo de volta.
 
 ---
 
-## 🛠️ Build do código-fonte (desenvolvedores)
+## Desenvolvimento
 
-Stack: **Tauri 2 + React 18 + TypeScript + Rust + SQLite**.
+**Tauri 2** (Rust) + **React 18** + TypeScript + **SQLite**. O front fica em
+`src/`, o backend em `src-tauri/`.
 
-Comuns às duas plataformas:
+| Ferramenta | Versão |
+|---|---|
+| [Node.js](https://nodejs.org/) | 22 |
+| [pnpm](https://pnpm.io/) | 9 (`corepack enable`) |
+| [Rust](https://rustup.rs/) | stable |
+| FFmpeg (ffmpeg + ffprobe) | no PATH, para vídeo e áudio |
 
-| Ferramenta | Versão | Onde |
-|---|---|---|
-| Node.js | 20.x (rec. 22+) | https://nodejs.org/ |
-| pnpm | 9.x | `npm install -g pnpm` |
-| Rust (stable) | 1.77+ | https://rustup.rs/ |
-
-**Windows**, adicionalmente:
-
-| Ferramenta | Versão | Onde |
-|---|---|---|
-| WebView2 | (já vem no Windows 11) | https://developer.microsoft.com/microsoft-edge/webview2/ |
-| VS Build Tools | "Desktop development with C++" | https://visualstudio.microsoft.com/visual-cpp-build-tools/ |
-
-**Linux**, adicionalmente — `webkit2gtk-4.1`, `gtk3`, `librsvg`, `patchelf` e as
-ferramentas de compilação C. No Arch:
-
-```bash
-sudo pacman -S --needed rust pnpm webkit2gtk-4.1 gtk3 librsvg patchelf base-devel fuse2
-```
-
-Compilar:
+- **Windows:** [VS Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) ("Desktop development with C++") e WebView2. Antes do primeiro `tauri build`, rode `pwsh scripts/fetch-ffmpeg-windows.ps1`: ele baixa o FFmpeg que vai dentro do instalador.
+- **Linux:** `webkit2gtk-4.1`, `gtk3`, `librsvg`, `patchelf` e as ferramentas de compilação C. No Arch:
+  `sudo pacman -S --needed webkit2gtk-4.1 gtk3 librsvg patchelf base-devel fuse2 ffmpeg`
 
 ```bash
 pnpm install          # dependências do front
-pnpm tauri dev        # app nativo com hot reload
-pnpm tauri build      # gera os pacotes em src-tauri/target/release/bundle/
+pnpm tauri dev        # abre o app com recarga automática
+pnpm tauri build      # pacotes em src-tauri/target/release/bundle/
+
+pnpm typecheck        # tipos do front
+pnpm test             # testes do front (vitest)
+cd src-tauri && cargo test --lib   # testes do backend
 ```
 
-No Windows sai o instalador em `bundle/nsis/`; no Linux, o AppImage em
-`bundle/appimage/` e o `.deb` em `bundle/deb/`.
+### Publicar uma versão
 
-> **AppImage sem FUSE 2:** o `linuxdeploy` que empacota o AppImage é ele próprio
-> um AppImage e falha com `failed to run linuxdeploy` se faltar `libfuse.so.2`.
-> Instale o `fuse2` ou compile com `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build`.
+As releases são compiladas pelo **GitHub Actions**
+([`.github/workflows/release.yml`](./.github/workflows/release.yml)), em Linux
+(Ubuntu 22.04, para o AppImage rodar em distribuições mais antigas) e Windows.
+Ninguém precisa compilar na própria máquina.
 
-**Publicar uma versão (Linux):** suba a versão em `package.json`,
-`src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, escreva as notas em
-`docs/releases/v<versão>.md`, commite e dê push. Depois, na máquina que compila:
-
-```bash
-scripts/release-linux.sh   # gera AppImage + .deb + SHA256SUMS e publica a release no GitHub
-```
-
-O script confere antes (versões iguais, nada sem commit, local = GitHub, `gh`
-logado, release ainda inexistente) e só então compila e publica.
-
-Validações:
-
-```bash
-pnpm typecheck        # type-check do front
-pnpm test             # vitest (front)
-cargo check           # type-check do backend (em src-tauri/)
-cargo test            # testes do backend (em src-tauri/)
-```
-
-Pré-requisitos completos do Tauri: https://tauri.app/start/prerequisites/.
+1. Suba a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`
+   (e o título "SICRO x.y" no `tauri.conf.json` e no `index.html`, se mudar a série).
+2. Escreva as notas em `docs/releases/v<versão>.md`, commite e dê push.
+3. Rode `scripts/release.sh`. Ele confere tudo e dispara o Actions, que deixa a
+   release como **rascunho**, com os três pacotes e o `SHA256SUMS.txt`.
+4. Conferido o rascunho, publique: `gh release edit v<versão> --draft=false`.
 
 ---
 
 ## Estrutura
 
 ```
-sicro-desktop/
-├── docs/MANUAL_SICRO.md       # Manual do usuário (exibido na tela Ajuda)
-├── public/branding/           # Marca (logo, brasões)
-├── src/                       # Frontend React + TypeScript
-│   ├── app/                   # AppShell, ActivityRail, TopBar, StatusBar
-│   ├── core/                  # commands, errors, formatters, keymap
-│   ├── design-system/         # tokens, tipografia, reset
-│   ├── components/            # UI compartilhada
-│   ├── modules/               # home / dossie / laudo / croqui / imagem /
-│   │   │                      #   audio / video / documentoscopia /
-│   │   │                      #   estatisticas / evidencias / ajuda / configuracoes
-│   │   └── laudo/             # registro de .docx + BridgeView (Consulta/Produção)
-│   ├── stores/                # estado (Zustand)
-│   └── types/                 # tipos espelhando structs Rust
-├── src-tauri/                 # Backend nativo (Rust)
-│   ├── src/commands/          # comandos expostos ao front (24 routers)
-│   ├── src/workspace/         # workspace .sicro (criar, abrir, backup)
-│   ├── src/database/          # SQLite + migrations + repositórios
-│   ├── src/exporters/         # docx (base do laudo) / html / pdf / paths
-│   ├── src/image_editor/      # filtros forenses, EXIF, máscaras, hashes
-│   ├── src/audio/             # realce, espectrograma, medições, degravação
-│   ├── src/video/             # frames, velocidade (homografia), distância
-│   ├── src/registry/          # registro + verificador de integridade
-│   ├── src/ocr/               # OCR offline
-│   ├── installer/             # arte e Termo de Uso do instalador
-│   └── tauri.conf.json
-├── KNOWN_LIMITATIONS.md
-└── package.json
+sicro/
+├── .github/workflows/release.yml  # compila Linux + Windows e monta a release
+├── docs/
+│   ├── MANUAL_SICRO.md            # manual do usuário (exibido na Ajuda)
+│   └── releases/                  # notas de cada versão
+├── scripts/                       # release.sh, fetch-ffmpeg-windows.ps1
+├── src/                           # front: React + TypeScript
+│   ├── app/                       # janela, barra lateral, título
+│   ├── core/                      # comandos, atalhos, formatação
+│   ├── components/                # interface compartilhada
+│   └── modules/                   # vídeo, áudio, imagem, croqui, laudo, …
+└── src-tauri/                     # backend: Rust
+    ├── src/video/                 # probe, quadros, trechos, velocidade, distância
+    ├── src/audio/                 # realce, espectrograma, medições, degravação
+    ├── src/image_editor/          # filtros forenses, EXIF, hashes
+    ├── src/database/              # SQLite, migrações, repositórios
+    ├── src/workspace/             # workspace .sicro, backup, saúde
+    ├── installer/                 # arte e Termo de Uso do instalador
+    └── tauri.conf.json
 ```
 
----
-
-## Convenções
-
-- **Domínio em português** (`ocorrencia`, `laudo`, `croqui`, `vestigio`) — termos periciais sem equivalente direto.
-- **Infraestrutura em inglês** (variáveis, utilitários, comandos) · **commits** em Conventional Commits.
+Convenções: o **domínio em português** (`ocorrencia`, `laudo`, `vestigio`),
+termos periciais sem equivalente direto; a **infraestrutura em inglês**.
 
 ---
 
 ## Licença
 
-**Apache License 2.0** — ver [`LICENSE`](./LICENSE). Copyright © 2026 André Ricardo Barroso.
+**Apache License 2.0**. Ver [`LICENSE`](./LICENSE). Copyright © 2026 André Ricardo Barroso.
 
-Livre para usar, copiar, modificar e redistribuir, mantendo o aviso de copyright
-e a licença. Inclui concessão expressa de patentes com cláusula de represália defensiva.
+O instalador do Windows inclui o **FFmpeg** (GPLv3) sem modificações, como
+programa separado; licença e origem ficam em `ffmpeg\LEIA-ME-FFMPEG.txt`, na
+pasta de instalação.

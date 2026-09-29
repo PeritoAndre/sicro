@@ -105,7 +105,7 @@ pub async fn reveal_path_in_explorer(absolute_path: String) -> Result<()> {
 
 #[cfg(target_os = "windows")]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
-    std::process::Command::new("explorer")
+    crate::tools::command("explorer")
         .args(["/select,", &path.to_string_lossy()])
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao revelar: {e}")))?;
@@ -114,7 +114,7 @@ fn reveal_with_os(path: &std::path::Path) -> Result<()> {
 
 #[cfg(target_os = "macos")]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
-    std::process::Command::new("open")
+    crate::tools::command("open")
         .args(["-R", &path.to_string_lossy()])
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao revelar: {e}")))?;
@@ -124,7 +124,7 @@ fn reveal_with_os(path: &std::path::Path) -> Result<()> {
 #[cfg(all(unix, not(target_os = "macos")))]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
     let dir = path.parent().unwrap_or(path);
-    std::process::Command::new("xdg-open")
+    crate::tools::command("xdg-open")
         .arg(dir)
         .spawn()
         .map_err(|e| SicroError::Filesystem(format!("falha ao revelar: {e}")))?;

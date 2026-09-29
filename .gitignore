@@ -108,6 +108,9 @@ sicro.sqlite-shm
 # tauri.conf.json) — precisam ser versionados, senão um clone limpo não builda.
 !src-tauri/installer/*.bmp
 
+# FFmpeg do instalador do Windows — baixado no build (scripts/fetch-ffmpeg-windows.ps1)
+src-tauri/ffmpeg-win/
+
 # Env
 .env
 .env.local

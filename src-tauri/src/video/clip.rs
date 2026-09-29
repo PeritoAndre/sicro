@@ -12,7 +12,6 @@
 //! inclusive em arquivos com trecho vazio no início / edit list).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use crate::error::{Result, SicroError};
 use crate::video::frame_export::detect_ffmpeg;
@@ -58,7 +57,7 @@ pub struct ClipResult {
 /// `to`, em ordem de apresentação. Lê só cabeçalhos (sem decodificar).
 fn scan_frames(video: &Path, from: f64, to: f64) -> Result<Vec<(f64, bool)>> {
     let ffprobe = detect_ffprobe()?;
-    let out = Command::new(&ffprobe)
+    let out = crate::tools::command(&ffprobe)
         .args(["-v", "error", "-select_streams", "v:0"])
         .args(["-show_entries", "packet=pts_time,flags", "-of", "csv=p=0"])
         .args(if to.is_finite() {
@@ -207,7 +206,7 @@ pub fn export_clip(opts: &ClipOptions<'_>) -> Result<ClipResult> {
     args.push("-y".into());
     args.push(opts.out.to_string_lossy().into_owned());
 
-    let out = Command::new(&ffmpeg)
+    let out = crate::tools::command(&ffmpeg)
         .args(&args)
         .output()
         .map_err(|e| SicroError::Workspace(format!("could not spawn ffmpeg: {e}")))?;
@@ -281,7 +280,7 @@ mod tests {
     fn sample(dir: &Path) -> Option<PathBuf> {
         let ffmpeg = detect_ffmpeg().ok()?;
         let p = dir.join("amostra.mp4");
-        let ok = Command::new(ffmpeg)
+        let ok = crate::tools::command(ffmpeg)
             .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
             .arg("testsrc=size=320x240:rate=25")
             .args(["-t", "4", "-c:v", "libx264", "-g", "25", "-keyint_min", "25"])
@@ -304,7 +303,7 @@ mod tests {
     }
 
     fn count_frames(p: &Path) -> u64 {
-        let out = Command::new(detect_ffprobe().unwrap())
+        let out = crate::tools::command(detect_ffprobe().unwrap())
             .args(["-v", "error", "-count_frames", "-select_streams", "v:0"])
             .args(["-show_entries", "stream=nb_read_frames", "-of", "csv=p=0"])
             .arg(p)
@@ -368,7 +367,7 @@ mod tests {
     fn sample_offset(dir: &Path) -> Option<PathBuf> {
         let ffmpeg = detect_ffmpeg().ok()?;
         let p = dir.join("deslocado.mp4");
-        let ok = Command::new(ffmpeg)
+        let ok = crate::tools::command(ffmpeg)
             .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
             .arg("testsrc=size=320x240:rate=25")
             .args(["-t", "6", "-c:v", "libx264", "-g", "25", "-keyint_min", "25"])
@@ -383,7 +382,7 @@ mod tests {
     /// md5 dos pixels de UM quadro decodificado: o `n`-ésimo do arquivo
     /// (ou o primeiro, com `n = None`), em rgb24 para PNG e vídeo baterem.
     fn frame_md5(p: &Path, n: Option<u32>) -> String {
-        let mut cmd = Command::new(detect_ffmpeg().unwrap());
+        let mut cmd = crate::tools::command(detect_ffmpeg().unwrap());
         cmd.args(["-v", "error", "-i"]).arg(p);
         if let Some(n) = n {
             cmd.args(["-vf", &format!("select=eq(n\\,{n})"), "-fps_mode", "passthrough"]);

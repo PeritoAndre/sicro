@@ -20,6 +20,7 @@ pub mod models;
 pub mod ocr;
 pub mod registry;
 pub mod state;
+pub mod tools;
 pub mod video;
 pub mod workspace;
 

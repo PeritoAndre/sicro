@@ -20,7 +20,6 @@
 //!   - Subprocess timeout                                           (idem).
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{Duration, Instant};
 
 use base64::Engine;
@@ -117,7 +116,7 @@ fn render_via_cli(html: &str, cache_dir: &Path, output_path: &Path) -> Result<()
 
     // 3. Spawn Edge.
     let started_at = Instant::now();
-    let mut child = Command::new(&browser)
+    let mut child = crate::tools::command(&browser)
         .arg("--headless=new")
         .arg("--disable-gpu")
         .arg("--no-pdf-header-footer")
@@ -213,7 +212,7 @@ fn render_via_cdp(
     let _ = std::fs::create_dir_all(&user_data_dir);
 
     let port = pick_free_port()?;
-    let mut child = Command::new(&browser)
+    let mut child = crate::tools::command(&browser)
         .arg("--headless=new")
         .arg("--disable-gpu")
         .arg("--no-first-run")

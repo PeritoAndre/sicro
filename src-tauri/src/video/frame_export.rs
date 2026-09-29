@@ -34,7 +34,6 @@
 //! um quadro atrasado. Por isso a busca rápida desconta `start_time_s`.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
@@ -82,6 +81,9 @@ pub struct ExtractedFrame {
 
 /// Detect the `ffmpeg` binary in PATH. Same strategy as ffprobe (Spike F).
 pub fn detect_ffmpeg() -> Result<PathBuf> {
+    if let Some(p) = crate::tools::bundled_ffmpeg_tool("ffmpeg") {
+        return Ok(p);
+    }
     which("ffmpeg")
 }
 
@@ -126,7 +128,7 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
         (target_abs - SEEK_REWIND_S - opts.start_time_s.max(0.0)).max(0.0),
     );
     let target = format_seconds(target_abs);
-    let status = Command::new(&ffmpeg)
+    let status = crate::tools::command(&ffmpeg)
         .args([
             "-hide_banner",
             "-loglevel",
@@ -209,7 +211,7 @@ fn probe_actual_timestamp(video: &Path, ts_s: f64) -> Result<f64> {
     // a busca caiu (o quadro-chave, às vezes vários segundos antes) e a janela
     // podia acabar antes do alvo — aí o "tempo real" saía o último quadro dela.
     let end = ts + 4.0;
-    let output = Command::new(&ffprobe)
+    let output = crate::tools::command(&ffprobe)
         .args([
             "-v",
             "error",
@@ -292,7 +294,7 @@ fn write_sidecar(
 }
 
 fn detect_ffmpeg_version(ffmpeg: &Path) -> Option<String> {
-    let output = Command::new(ffmpeg).arg("-version").output().ok()?;
+    let output = crate::tools::command(ffmpeg).arg("-version").output().ok()?;
     if !output.status.success() {
         return None;
     }

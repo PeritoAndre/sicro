@@ -6,7 +6,6 @@
 //! no PATH — mesma estratégia do módulo Vídeo.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -30,9 +29,9 @@ pub struct AudioProbe {
 }
 
 fn detect(bin: &str) -> Result<PathBuf> {
-    which::which(bin).map_err(|_| {
+    crate::tools::find_ffmpeg_tool(bin).ok_or_else(|| {
         SicroError::Validation(format!(
-            "binário '{bin}' não encontrado no PATH. Instale o FFmpeg (com ffprobe) e garanta ffmpeg + ffprobe no PATH."
+            "'{bin}' não encontrado. Instale o FFmpeg (com ffprobe) e garanta ffmpeg + ffprobe no PATH."
         ))
     })
 }
@@ -41,7 +40,7 @@ fn detect(bin: &str) -> Result<PathBuf> {
 /// segurança muitas vezes só tem imagem.)
 pub fn has_audio_stream(path: &Path) -> Result<bool> {
     let ffprobe = detect("ffprobe")?;
-    let out = std::process::Command::new(&ffprobe)
+    let out = crate::tools::command(&ffprobe)
         .args(["-v", "error", "-select_streams", "a", "-show_entries", "stream=index", "-of", "csv=p=0"])
         .arg(path)
         .output()
@@ -160,7 +159,7 @@ pub fn transcribe_wav(
         args.push(vad.to_string_lossy().to_string());
     }
 
-    let output = Command::new(bin)
+    let output = crate::tools::command(bin)
         .args(&args)
         .output()
         .map_err(|e| SicroError::Validation(format!("falha ao executar whisper.cpp: {e}")))?;
@@ -303,7 +302,7 @@ pub fn spectrogram_png(wav: &Path, out_png: &Path) -> Result<()> {
 
 fn run_ffmpeg(args: &[&str]) -> Result<()> {
     let ffmpeg = detect("ffmpeg")?;
-    let output = Command::new(&ffmpeg)
+    let output = crate::tools::command(&ffmpeg)
         .args(args)
         .output()
         .map_err(|e| SicroError::Validation(format!("falha ao executar ffmpeg: {e}")))?;
@@ -330,7 +329,7 @@ pub fn probe_audio(path: &Path) -> AudioProbe {
         }
     };
     let p = path.to_string_lossy();
-    let output = Command::new(&ffprobe)
+    let output = crate::tools::command(&ffprobe)
         .args([
             "-v", "quiet", "-print_format", "json", "-show_format", "-show_streams",
             p.as_ref(),
@@ -399,13 +398,12 @@ pub fn probe_audio(path: &Path) -> AudioProbe {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::process::Command;
 
     /// Gera um vídeo curto (com ou sem trilha de áudio); None sem ffmpeg.
     fn sample(dir: &Path, with_audio: bool) -> Option<PathBuf> {
         let ffmpeg = detect("ffmpeg").ok()?;
         let p = dir.join(if with_audio { "com_audio.mp4" } else { "so_imagem.mp4" });
-        let mut cmd = Command::new(ffmpeg);
+        let mut cmd = crate::tools::command(ffmpeg);
         cmd.args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc=size=160x120:rate=10"]);
         if with_audio {
             cmd.args(["-f", "lavfi", "-i", "sine=frequency=440"]);

@@ -14,7 +14,6 @@
 #[cfg(windows)]
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::Serialize;
 use tauri::AppHandle;
@@ -87,7 +86,7 @@ pub fn find_soffice() -> Option<PathBuf> {
 fn query_version(soffice: &Path) -> String {
     let console = soffice.with_file_name("soffice.com");
     let bin = if console.is_file() { console } else { soffice.to_path_buf() };
-    if let Ok(o) = Command::new(&bin).arg("--version").output() {
+    if let Ok(o) = crate::tools::command(&bin).arg("--version").output() {
         let s = String::from_utf8_lossy(&o.stdout);
         let line = s.lines().next().unwrap_or("").trim();
         if !line.is_empty() {
@@ -216,7 +215,7 @@ pub async fn download_libreoffice_installer(app: AppHandle) -> Result<()> {
     .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))??;
 
     // Abre o instalador (NÃO silencioso): o perito clica pra concluir.
-    Command::new("msiexec")
+    crate::tools::command("msiexec")
         .arg("/i")
         .arg(&dest)
         .spawn()
@@ -266,7 +265,7 @@ pub fn convert_docx_to_pdf(docx: &Path, output_pdf: &Path, pdf_a: bool) -> Resul
         "pdf:writer_pdf_Export"
     };
 
-    let status = Command::new(&bin)
+    let status = crate::tools::command(&bin)
         .arg("--headless")
         .arg("--norestore")
         .arg("--invisible")

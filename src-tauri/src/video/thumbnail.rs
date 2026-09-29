@@ -5,7 +5,6 @@
 //! nomeado pelo SHA-256 do vídeo — nunca para dentro do `.sicro`.
 
 use std::path::Path;
-use std::process::Command;
 
 use crate::error::{Result, SicroError};
 use crate::video::frame_export::detect_ffmpeg;
@@ -23,7 +22,7 @@ pub fn make_thumbnail(video: &Path, out_jpg: &Path, timestamp_s: f64) -> Result<
     // Grava num temporário e renomeia: uma miniatura pela metade nunca fica no cache.
     let tmp = out_jpg.with_extension("tmp.jpg");
     let run = |ts: f64| {
-        Command::new(&ffmpeg)
+        crate::tools::command(&ffmpeg)
             .args(["-hide_banner", "-loglevel", "error", "-nostdin", "-ss"])
             .arg(format!("{:.3}", ts.max(0.0)))
             .arg("-i")
