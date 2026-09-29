@@ -30,9 +30,8 @@ import {
 import { useSettingsStore } from "@stores/settingsStore";
 import styles from "./ActivityRail.module.css";
 import { useNavGuard } from "./navGuard";
-
-/** Versão real do build (fonte: package.json). */
-const APP_VERSION = "2.0.0-beta.0";
+// Versão real do build: vem do package.json (não escrever à mão).
+import { version as APP_VERSION } from "../../package.json";
 
 interface RailItem {
   to: string;

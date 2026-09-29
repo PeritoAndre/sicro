@@ -1,7 +1,7 @@
 {
   "name": "sicro-desktop",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "SICRO 3.0 — Sistema Integrado de Criminalística e Operações (desktop suite)",
   "license": "Apache-2.0",
   "author": "André Ricardo Barroso",

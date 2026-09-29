@@ -61,12 +61,13 @@ Baixe o pacote da sua plataforma em
 
 ### Linux
 
-- **AppImage** (`SICRO 3.0_<versão>_amd64.AppImage`) — roda em qualquer
+- **AppImage** (`SICRO-<versão>-x86_64.AppImage`) — roda em qualquer
   distribuição, sem instalar. Dê permissão (`chmod +x`) e execute.
   Precisa do **FUSE 2** (Arch: `sudo pacman -S fuse2`; Debian/Ubuntu:
   `sudo apt install libfuse2`).
-- **`.deb`** (`SICRO 3.0_<versão>_amd64.deb`) — Debian, Ubuntu e derivados:
-  `sudo apt install ./SICRO*.deb`.
+- **`.deb`** (`sicro_<versão>_amd64.deb`) — Debian, Ubuntu e derivados:
+  `sudo apt install ./sicro_*.deb`.
+- **`SHA256SUMS.txt`** — confira o download com `sha256sum -c SHA256SUMS.txt`.
 
 > **Requisitos:** `webkit2gtk-4.1` e GTK 3 — presentes na maioria dos desktops.
 >
@@ -171,6 +172,17 @@ No Windows sai o instalador em `bundle/nsis/`; no Linux, o AppImage em
 > **AppImage sem FUSE 2:** o `linuxdeploy` que empacota o AppImage é ele próprio
 > um AppImage e falha com `failed to run linuxdeploy` se faltar `libfuse.so.2`.
 > Instale o `fuse2` ou compile com `APPIMAGE_EXTRACT_AND_RUN=1 pnpm tauri build`.
+
+**Publicar uma versão (Linux):** suba a versão em `package.json`,
+`src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`, escreva as notas em
+`docs/releases/v<versão>.md`, commite e dê push. Depois, na máquina que compila:
+
+```bash
+scripts/release-linux.sh   # gera AppImage + .deb + SHA256SUMS e publica a release no GitHub
+```
+
+O script confere antes (versões iguais, nada sem commit, local = GitHub, `gh`
+logado, release ainda inexistente) e só então compila e publica.
 
 Validações:
 

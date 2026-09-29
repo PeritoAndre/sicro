@@ -1,6 +1,6 @@
 [package]
 name = "sicro-desktop"
-version = "3.0.0"
+version = "3.1.0"
 description = "SICRO 3.0 — Sistema Integrado de Criminalística e Operações"
 authors = ["André Ricardo Barroso"]
 edition = "2021"
