@@ -52,8 +52,7 @@ Os pacotes ficam em **[Releases](https://github.com/PeritoAndre/sicro/releases/l
 | Sistema | Arquivo | Como instalar |
 |---|---|---|
 | **Windows 10/11 (64 bits)** | `SICRO-<versão>-windows-x64-setup.exe` | Execute. Instale só para você (sem administrador) ou para todos. O FFmpeg já vem junto. |
-| **Linux (qualquer distribuição)** | `SICRO-<versão>-linux-x86_64.AppImage` | `chmod +x` no arquivo e abra. Não instala nada no sistema. |
-| **Debian, Ubuntu e derivados** | `sicro_<versão>_amd64.deb` | `sudo apt install ./sicro_<versão>_amd64.deb` |
+| **Ubuntu 24.04+, Debian 13+ e derivados** | `sicro_<versão>_amd64.deb` | `sudo apt install ./sicro_<versão>_amd64.deb ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good` |
 
 Confira o download com o `SHA256SUMS.txt` da release: `sha256sum -c SHA256SUMS.txt`
 no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
@@ -63,9 +62,9 @@ no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 - O instalador não tem assinatura digital. Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo**.
 
 **Linux**
-- Distribuição de 2024 em diante: Ubuntu 24.04+, Debian 13+, Fedora 39+, Arch e derivados (o motor de OCR exige glibc 2.38 ou mais nova).
-- O AppImage precisa do **FUSE 2**: `sudo pacman -S fuse2` (Arch) ou `sudo apt install libfuse2` (Debian/Ubuntu).
-- Vídeo e áudio usam o **ffmpeg do sistema**: `sudo pacman -S ffmpeg` ou `sudo apt install ffmpeg`.
+- Distribuição de 2024 em diante (o motor de OCR exige glibc 2.38 ou mais nova).
+- Vídeo e áudio usam o **ffmpeg** e o **GStreamer** do sistema (o comando da tabela instala os dois).
+- **Arch e outras distribuições:** ainda sem pacote pronto. O AppImage ficou de fora porque as bibliotecas que ele leva embutidas quebram fora do Ubuntu; um pacote para o AUR está a caminho. Até lá, compile do código (abaixo).
 - Com placa **NVIDIA**, se a janela abrir em branco, rode com `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver proprietário).
 
 > Versão **beta**, em validação. Veja [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md)
@@ -116,7 +115,7 @@ SICRO avisa se você tentar.
 
 - **Windows:** [VS Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) ("Desktop development with C++") e WebView2. Antes do primeiro `tauri build`, rode `pwsh scripts/fetch-ffmpeg-windows.ps1` e `pwsh scripts/bundle-vcruntime-windows.ps1`: eles preparam o FFmpeg e o runtime do Visual C++ que vão dentro do instalador.
 - **Linux:** `webkit2gtk-4.1`, `gtk3`, `librsvg`, `patchelf` e as ferramentas de compilação C. No Arch:
-  `sudo pacman -S --needed webkit2gtk-4.1 gtk3 librsvg patchelf base-devel fuse2 ffmpeg`
+  `sudo pacman -S --needed webkit2gtk-4.1 gtk3 librsvg patchelf base-devel ffmpeg gst-plugins-good gst-libav`
 
 ```bash
 pnpm install          # dependências do front
@@ -139,7 +138,7 @@ Ninguém precisa compilar na própria máquina.
    (e o título "SICRO x.y" no `tauri.conf.json` e no `index.html`, se mudar a série).
 2. Escreva as notas em `docs/releases/v<versão>.md`, commite e dê push.
 3. Rode `scripts/release.sh`. Ele confere tudo e dispara o Actions, que deixa a
-   release como **rascunho**, com os três pacotes e o `SHA256SUMS.txt`.
+   release como **rascunho**, com o instalador do Windows, o `.deb` e o `SHA256SUMS.txt`.
 4. Conferido o rascunho, publique: `gh release edit v<versão> --draft=false`.
 
 ---
