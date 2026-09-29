@@ -113,7 +113,7 @@ SICRO avisa se você tentar.
 | [Rust](https://rustup.rs/) | stable |
 | FFmpeg (ffmpeg + ffprobe) | no PATH, para vídeo e áudio |
 
-- **Windows:** [VS Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) ("Desktop development with C++") e WebView2. Antes do primeiro `tauri build`, rode `pwsh scripts/fetch-ffmpeg-windows.ps1`: ele baixa o FFmpeg que vai dentro do instalador.
+- **Windows:** [VS Build Tools](https://visualstudio.microsoft.com/visual-cpp-build-tools/) ("Desktop development with C++") e WebView2. Antes do primeiro `tauri build`, rode `pwsh scripts/fetch-ffmpeg-windows.ps1` e `pwsh scripts/bundle-vcruntime-windows.ps1`: eles preparam o FFmpeg e o runtime do Visual C++ que vão dentro do instalador.
 - **Linux:** `webkit2gtk-4.1`, `gtk3`, `librsvg`, `patchelf` e as ferramentas de compilação C. No Arch:
   `sudo pacman -S --needed webkit2gtk-4.1 gtk3 librsvg patchelf base-devel fuse2 ffmpeg`
 
@@ -151,7 +151,7 @@ sicro/
 ├── docs/
 │   ├── MANUAL_SICRO.md            # manual do usuário (exibido na Ajuda)
 │   └── releases/                  # notas de cada versão
-├── scripts/                       # release.sh, fetch-ffmpeg-windows.ps1
+├── scripts/                       # release.sh e o preparo do instalador do Windows
 ├── src/                           # front: React + TypeScript
 │   ├── app/                       # janela, barra lateral, título
 │   ├── core/                      # comandos, atalhos, formatação

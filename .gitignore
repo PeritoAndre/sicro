@@ -110,6 +110,8 @@ sicro.sqlite-shm
 
 # FFmpeg do instalador do Windows — baixado no build (scripts/fetch-ffmpeg-windows.ps1)
 src-tauri/ffmpeg-win/
+# Runtime do Visual C++ do instalador do Windows (scripts/bundle-vcruntime-windows.ps1)
+src-tauri/vcruntime-win/
 
 # Env
 .env
