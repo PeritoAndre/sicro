@@ -3,7 +3,8 @@
  * há um caso aberto, a ocorrência ativa.
  *
  * No módulo Vídeo e Áudio ela leva as abas Vídeos / Áudios (as duas telas do
- * módulo) — sem tirar altura do player.
+ * módulo) — sem tirar altura do player. As abas são irmãs: com um vídeo aberto,
+ * Áudios abre o áudio dele; com o áudio de um vídeo, Vídeos abre o vídeo.
  */
 
 import { useEffect } from "react";
@@ -11,6 +12,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Film, Headphones } from "lucide-react";
 import { useWorkspaceStore } from "@stores/workspaceStore";
 import { isMidiaPath, rememberMidiaAba, rememberWorkModule } from "@modules/midia/midiaNav";
+import { prepareTabSwitch } from "@modules/midia/midiaLink";
 import { useNavGuard } from "./navGuard";
 import styles from "./TopBar.module.css";
 
@@ -37,11 +39,15 @@ export function TopBar() {
   const moduleLabel = midia ? "Vídeo e Áudio" : (moduleNames[pathname] ?? "—");
   const occurrenceLabel = occurrence ? buildOccurrenceLabel(occurrence) : null;
 
-  const go = (to: string) => {
+  const go = (to: "/video" | "/audio") => {
     if (pathname === to) return;
+    const switchTab = () => {
+      prepareTabSwitch(to);
+      navigate(to);
+    };
     const guard = useNavGuard.getState().guard;
-    if (!guard) navigate(to);
-    else void useNavGuard.getState().attemptNavigation(() => navigate(to));
+    if (!guard) switchTab();
+    else void useNavGuard.getState().attemptNavigation(switchTab);
   };
 
   return (

@@ -167,6 +167,26 @@ export function probeHasAudio(rawProbeJson: string | null | undefined): boolean 
   }
 }
 
+/**
+ * Onde a trilha de áudio começa no tempo do vídeo (s). O WAV extraído começa
+ * nesse ponto: tempo do WAV = tempo do vídeo − este valor. Sem trilha de
+ * áudio declarada, cai no início do vídeo.
+ */
+export function audioStreamStart(rawProbeJson: string | null | undefined): number {
+  if (!rawProbeJson) return 0;
+  try {
+    const p = JSON.parse(rawProbeJson) as {
+      streams?: { codec_type?: string; start_time?: string | number }[];
+    };
+    const as = p.streams?.find((s) => s.codec_type === "audio");
+    const raw = as?.start_time;
+    const n = typeof raw === "number" ? raw : parseFloat(raw ?? "");
+    return Number.isFinite(n) && n > 0 ? n : probeStartTime(rawProbeJson);
+  } catch {
+    return 0;
+  }
+}
+
 /** Lê o `derivation_json` de um trecho exportado (null se não for trecho). */
 export function parseDerivation(
   json: string | null | undefined,

@@ -16,6 +16,7 @@
  * timestamp técnico.
  */
 
+import { registerOpenVideo } from "@modules/midia/midiaLink";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, AlertTriangle, Clock, Columns2, Copy, Repeat, Scissors, X } from "lucide-react";
 import type {
@@ -78,6 +79,24 @@ export function VideoAnalysisView() {
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number | null>(null);
+
+  // Aba Áudios irmã: diz qual vídeo está aberto e em que instante (a barra do
+  // topo leva isso ao trocar para Áudios).
+  const timeNowRef = useRef(0);
+  timeNowRef.current = currentTime;
+  const openMediaRow = bundle?.media ?? null;
+  useEffect(() => {
+    const m = openMediaRow;
+    if (!m) return;
+    return registerOpenVideo(() => ({
+      id: m.id,
+      sha256: m.sha256,
+      relativePath: m.relative_path,
+      filename: m.filename,
+      rawProbeJson: m.raw_probe_json,
+      time: timeNowRef.current,
+    }));
+  }, [openMediaRow]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<"player" | "speed" | "measure">(

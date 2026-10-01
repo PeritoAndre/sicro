@@ -39,6 +39,8 @@ interface Props {
   audioSha256: string;
   /** Chamado a cada atualização de tempo — sincroniza a degravação. */
   onTimeChange?: (t: number) => void;
+  /** Ao carregar, posiciona aqui (ex.: o instante do vídeo de origem). */
+  initialTime?: number | null;
 }
 
 /** Handle imperativo exposto via ref (usado pela tela de degravação). */
@@ -51,7 +53,7 @@ export interface AudioPlayerHandle {
 }
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPlayer(
-  { fileUrl, mediaUrl, workspacePath, audioSha256, onTimeChange },
+  { fileUrl, mediaUrl, workspacePath, audioSha256, onTimeChange, initialTime },
   ref,
 ) {
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -258,7 +260,14 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
       <audio
         ref={audioRef}
         src={mediaUrl ?? fileUrl}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
+        onLoadedMetadata={(e) => {
+          const a = e.currentTarget;
+          setDuration(a.duration || 0);
+          if (initialTime != null && initialTime > 0 && a.duration > 0) {
+            a.currentTime = Math.min(a.duration, initialTime);
+            setTime(a.currentTime);
+          }
+        }}
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;
           setTime(t);

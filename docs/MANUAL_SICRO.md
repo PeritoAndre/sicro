@@ -364,7 +364,18 @@ escuta**, analisar e **degravar**.
 
 No trilho lateral há uma entrada só, **Vídeo e Áudio**. As abas **Vídeos |
 Áudios** ficam na barra do topo, e o módulo volta sempre para a última aba
-usada. Extrair o áudio de um vídeo do caso fica na aba Áudios (7.6).
+usada. As duas abas são **irmãs** — o mesmo material visto por dois lados:
+
+- **Vídeo aberto → aba Áudios:** abre o áudio **desse vídeo**, no mesmo instante
+  em que o vídeo estava. Se o áudio ainda não foi extraído, o SICRO extrai na
+  hora (WAV com hash, ligado ao vídeo de origem). Se o vídeo não tem trilha de
+  áudio, a aba avisa.
+- **Áudio de um vídeo → aba Vídeos** (ou o botão **"do vídeo …"** no cabeçalho do
+  áudio): reabre o vídeo de origem no instante em que o áudio estava.
+- O vídeo aberto **continua aberto** ao ir e voltar entre as abas.
+
+O instante leva em conta onde a trilha de áudio começa dentro do arquivo de
+vídeo, então vídeo e áudio apontam para o mesmo momento.
 
 
 ### 7.2 Importar e player

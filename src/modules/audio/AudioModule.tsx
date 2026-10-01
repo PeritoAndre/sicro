@@ -43,6 +43,13 @@ import {
 import type { AudioMedia } from "@domain/audio";
 import type { VideoMedia } from "@domain/video";
 import { probeHasAudio } from "@modules/video/editor/format";
+import {
+  prepareTabSwitch,
+  registerOpenAudio,
+  takeAudioHandoff,
+  videoToAudioTime,
+  type AudioHandoff,
+} from "@modules/midia/midiaLink";
 import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
 import { AudioAnalysisPanel } from "./AudioAnalysisPanel";
 import styles from "./AudioModule.module.css";
@@ -169,6 +176,9 @@ function videoAudio(v: VideoMedia): "sim" | "nao" | "?" {
   return probeHasAudio(v.raw_probe_json) ? "sim" : "nao";
 }
 
+/** Áudio aberto por último — volta selecionado ao retornar à aba. */
+let lastSelectedAudioId: string | null = null;
+
 export function AudioModule() {
   const ws = useWorkspaceStore(selectActiveWorkspacePath);
   const navigate = useNavigate();
@@ -198,6 +208,11 @@ export function AudioModule() {
   const [spectroBusy, setSpectroBusy] = useState(false);
   // W16 — aba ativa do detalhe (Realçar/Analisar/Trechos/Ficha).
   const [detailTab, setDetailTab] = useState<DetailTab>("realcar");
+  // Aba irmã Vídeos: pedido "o áudio deste vídeo, neste instante".
+  const [loadedOnce, setLoadedOnce] = useState(false);
+  const [linkReq, setLinkReq] = useState<AudioHandoff | null>(null);
+  const [linkNotice, setLinkNotice] = useState<string | null>(null);
+  const [seekOnLoad, setSeekOnLoad] = useState<{ id: string; t: number } | null>(null);
 
   const reload = useCallback(async () => {
     if (!ws) return;
@@ -207,8 +222,13 @@ export function AudioModule() {
       const list = await commands.listAudioMedia(ws);
       setItems(list);
       setSelectedId((cur) =>
-        cur && list.some((i) => i.id === cur) ? cur : (list[0]?.id ?? null),
+        cur && list.some((i) => i.id === cur)
+          ? cur
+          : lastSelectedAudioId && list.some((i) => i.id === lastSelectedAudioId)
+            ? lastSelectedAudioId
+            : (list[0]?.id ?? null),
       );
+      setLoadedOnce(true);
     } catch (e) {
       setError(toSicroError(e).message);
     } finally {
@@ -219,6 +239,54 @@ export function AudioModule() {
   useEffect(() => {
     void reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (selectedId) lastSelectedAudioId = selectedId;
+  }, [selectedId]);
+
+  // Veio da aba Vídeos com um vídeo aberto: pega o pedido (uma vez).
+  useEffect(() => {
+    const h = takeAudioHandoff();
+    if (h) setLinkReq(h);
+  }, []);
+
+  // …e atende: o áudio já extraído desse vídeo, ou extrai agora; abre no
+  // instante em que o vídeo estava.
+  useEffect(() => {
+    const h = linkReq;
+    if (!h || !ws || !loadedOnce) return;
+    setLinkReq(null);
+    const at = videoToAudioTime(h.time, h.rawProbeJson);
+    const existing = items.find((a) => a.source_video_sha256 === h.sha256);
+    if (existing) {
+      setLinkNotice(null);
+      setSeekOnLoad({ id: existing.id, t: at });
+      setSelectedId(existing.id);
+      return;
+    }
+    if (h.rawProbeJson && !probeHasAudio(h.rawProbeJson)) {
+      setLinkNotice(
+        `O vídeo “${h.filename}” não tem trilha de áudio (só imagem) — não há áudio para analisar.`,
+      );
+      return;
+    }
+    setLinkNotice(`Extraindo o áudio de “${h.filename}”…`);
+    setBusy("extract");
+    setError(null);
+    void commands
+      .extractAudioFromVideo(ws, `${ws}/${h.relativePath}`, h.sha256)
+      .then(async (m) => {
+        await reload();
+        setSeekOnLoad({ id: m.id, t: at });
+        setSelectedId(m.id);
+        setLinkNotice(null);
+      })
+      .catch((e) => {
+        setLinkNotice(null);
+        setError(toSicroError(e).message);
+      })
+      .finally(() => setBusy(null));
+  }, [linkReq, ws, loadedOnce, items, reload]);
 
   // Vídeos do caso (para "extrair do caso atual").
   useEffect(() => {
@@ -291,6 +359,38 @@ export function AudioModule() {
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   );
+
+  // Aba irmã Vídeos: diz qual áudio está aberto (e o vídeo de origem dele).
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+  useEffect(
+    () =>
+      registerOpenAudio(() => {
+        const s = selectedRef.current;
+        if (!s) return null;
+        return {
+          sourceVideoSha256: s.source_video_sha256,
+          time: playerRef.current?.getTime() ?? 0,
+        };
+      }),
+    [],
+  );
+  const sourceVideo = useMemo(
+    () =>
+      selected?.source_video_sha256
+        ? (caseVideos.find((v) => v.sha256 === selected.source_video_sha256) ?? null)
+        : null,
+    [selected, caseVideos],
+  );
+  const openSourceVideo = () => {
+    prepareTabSwitch("/video");
+    navigate("/video");
+  };
+  const linkNoticeEl = linkNotice ? (
+    <div className={styles.infoBanner}>
+      <Film size={14} /> {linkNotice}
+    </div>
+  ) : null;
   const fileUrl = useMemo(
     () => (ws && selected ? convertFileSrc(`${ws}/${selected.relative_path}`) : null),
     [ws, selected],
@@ -503,6 +603,7 @@ export function AudioModule() {
           note="Realce, espectrograma e medições são apoio técnico (FFmpeg, determinístico). Não recuperam nem alteram o conteúdo; a interpretação cabe ao perito responsável."
         >
         </ModuleLanding>
+        {linkNotice && <div style={{ margin: "var(--space-3)" }}>{linkNoticeEl}</div>}
         {error && (
           <div
             className={styles.errorBanner}
@@ -559,6 +660,7 @@ export function AudioModule() {
         {caseExtract && <div className={styles.caseExtractBar}>{caseExtract}</div>}
       </header>
 
+      {linkNoticeEl}
       {error && (
         <div className={styles.errorBanner}>
           <AlertTriangle size={14} /> {error}
@@ -601,6 +703,16 @@ export function AudioModule() {
                   <span className={styles.kindChip} data-kind={selected.kind}>
                     {kindChipLabel(selected.kind)}
                   </span>
+                  {sourceVideo && (
+                    <button
+                      type="button"
+                      className={styles.sourceVideoChip}
+                      onClick={openSourceVideo}
+                      title="Abrir o vídeo de origem neste mesmo instante (aba Vídeos)"
+                    >
+                      <Film size={12} aria-hidden /> do vídeo {sourceVideo.filename}
+                    </button>
+                  )}
                   <span style={{ marginLeft: "auto" }}>
                     <Button
                       variant="secondary"
@@ -619,6 +731,7 @@ export function AudioModule() {
                   mediaUrl={mediaUrl}
                   workspacePath={ws}
                   audioSha256={selected.sha256}
+                  initialTime={seekOnLoad?.id === selected.id ? seekOnLoad.t : null}
                 />
 
                 {/* W16 — abas por intenção. O player fica sempre visível
