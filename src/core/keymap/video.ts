@@ -62,4 +62,8 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
   { id: "video.collectSequence", scope: "video", group: "Vídeo · Captura", label: "Coletar sequência de quadros…", defaultBinding: "Ctrl+2" },
   { id: "video.quickEvent", scope: "video", group: "Vídeo · Captura", label: "Marcar evento no tempo atual", defaultBinding: "M" },
   { id: "video.copyTime", scope: "video", group: "Vídeo · Captura", label: "Copiar o tempo (formato de laudo)", defaultBinding: "Ctrl+Shift+C" },
+
+  { id: "video.prevVideo", scope: "video", group: "Vídeo · Vídeos do caso", label: "Vídeo anterior", defaultBinding: "Ctrl+PgUp" },
+  { id: "video.nextVideo", scope: "video", group: "Vídeo · Vídeos do caso", label: "Próximo vídeo", defaultBinding: "Ctrl+PgDn" },
+  { id: "video.addVideo", scope: "video", group: "Vídeo · Vídeos do caso", label: "Adicionar vídeos ao caso", defaultBinding: "Ctrl+O" },
 ];

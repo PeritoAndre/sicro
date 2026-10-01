@@ -382,6 +382,14 @@ vídeo, então vídeo e áudio apontam para o mesmo momento.
 
 - **Adicionar vídeo** importa o arquivo (mp4, mov, mkv, avi, webm, m4v), extrai
   metadados técnicos (codec, resolução, fps, duração) e calcula o **SHA-256**.
+  Na lista, clique no cartão (ou em **Abrir**) para analisar.
+- **Vídeos do caso em abas:** no topo da análise fica uma aba por vídeo (miniatura,
+  nome e duração; a do vídeo na tela fica destacada). Um clique troca de vídeo e
+  cada um volta ao instante em que estava; **Ctrl + PgUp / PgDn** alternam pelo
+  teclado. **+ Adicionar** (ou **Ctrl + O**) registra um ou vários vídeos sem
+  sair da análise e já abre o novo. Botão direito numa aba → **Comparar lado a
+  lado com o atual**. A aba **Áudios** sempre leva ao áudio do vídeo que está na
+  tela (7.1).
 - O player tem timeline, controle de velocidade e atalhos de navegação por frame:
   - **J / K / L** como nos editores: L toca à frente, J em ré, K pausa;
     repetir J ou L acelera **1× → 2× → 4× → 8×**. **↑ / ↓** escolhem de

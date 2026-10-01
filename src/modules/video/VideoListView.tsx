@@ -4,8 +4,6 @@
  */
 
 import { useEffect, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { commands } from "@core/commands";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Camera, Clock, Film, LayoutGrid, Plus, ShieldCheck } from "lucide-react";
 import { Button } from "@components/Button/Button";
@@ -21,6 +19,7 @@ import {
 } from "@stores/workspaceStore";
 import { useVideoStore } from "./store/videoStore";
 import { formatDuration, prettyBytes } from "./editor/format";
+import { VideoThumb } from "./VideoThumb";
 import styles from "./VideoListView.module.css";
 
 const VIDEO_FEATURES: ModuleLandingFeature[] = [
@@ -164,7 +163,12 @@ export function VideoListView() {
           ) : (
             <ul className={styles.list}>
               {list.map((m) => (
-                <li key={m.id} className={styles.row}>
+                <li
+                  key={m.id}
+                  className={styles.row}
+                  onClick={() => !busy && void handleOpen(m.id)}
+                  title="Abrir na análise"
+                >
                   <VideoThumb workspacePath={workspacePath ?? ""} mediaId={m.id} />
                   <div className={styles.rowMain}>
                     <strong className={styles.rowTitle}>
@@ -205,7 +209,10 @@ export function VideoListView() {
                   </div>
                   <Button
                     variant="secondary"
-                    onClick={() => void handleOpen(m.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleOpen(m.id);
+                    }}
                     disabled={busy}
                   >
                     Abrir
@@ -222,38 +229,3 @@ export function VideoListView() {
 
 // ---- miniatura --------------------------------------------------------------
 
-/** URL já resolvida por mídia (a lista abre instantânea na volta ao módulo). */
-const thumbCache = new Map<string, string>();
-
-/**
- * Miniatura gerada pelo backend (ffmpeg, cache do app, 1ª vez só). A lista
- * nunca espera: mostra o ícone enquanto a imagem chega em segundo plano.
- */
-function VideoThumb({ workspacePath, mediaId }: { workspacePath: string; mediaId: string }) {
-  const [src, setSrc] = useState<string | null>(() => thumbCache.get(mediaId) ?? null);
-  const [failed, setFailed] = useState(false);
-  useEffect(() => {
-    if (src || !workspacePath) return;
-    let alive = true;
-    void commands
-      .videoThumbnail(workspacePath, mediaId)
-      .then((path) => {
-        const url = convertFileSrc(path);
-        thumbCache.set(mediaId, url);
-        if (alive) setSrc(url);
-      })
-      .catch(() => alive && setFailed(true));
-    return () => {
-      alive = false;
-    };
-  }, [workspacePath, mediaId, src]);
-  return (
-    <div className={styles.thumb} title={failed ? "Não foi possível gerar a miniatura" : undefined}>
-      {src ? (
-        <img src={src} alt="" loading="lazy" onError={() => setFailed(true)} />
-      ) : (
-        <Film size={18} strokeWidth={1.4} className={failed ? undefined : styles.thumbWait} />
-      )}
-    </div>
-  );
-}

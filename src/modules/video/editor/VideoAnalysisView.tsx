@@ -17,6 +17,8 @@
  */
 
 import { registerOpenVideo } from "@modules/midia/midiaLink";
+import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, AlertTriangle, Clock, Columns2, Copy, Repeat, Scissors, X } from "lucide-react";
 import type {
@@ -76,6 +78,9 @@ export function VideoAnalysisView() {
   const mediaList = useVideoStore((s) => s.list);
   const openMedia = useVideoStore((s) => s.openMedia);
   const loadList = useVideoStore((s) => s.loadList);
+  const registerMedia = useVideoStore((s) => s.registerMedia);
+  /** Progresso ao registrar vídeos novos pelas abas ("Registrando 1 de 3…"). */
+  const [adding, setAdding] = useState<string | null>(null);
 
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState<number | null>(null);
@@ -192,6 +197,55 @@ export function VideoAnalysisView() {
   const playerKeys =
     mainTab === "player" && compareWith == null && galleryIndex == null && !clipOpen;
   useShortcuts({ "video.fullscreen": toggleFullscreen }, { enabled: playerKeys });
+
+  // ---- vídeos do caso: alternar e adicionar sem sair da análise ----------
+  const switchVideo = (id: string) => {
+    if (!workspacePath || id === bundle?.media.id) return;
+    exitFullscreen();
+    void openMedia(workspacePath, id).catch((e) => flash(`Falha: ${toSicroError(e).message}`, 5000));
+  };
+  const stepVideo = (dir: 1 | -1) => {
+    if (mediaList.length < 2 || !bundle) return;
+    const i = mediaList.findIndex((m) => m.id === bundle.media.id);
+    const next = mediaList[(i + dir + mediaList.length) % mediaList.length];
+    if (next) switchVideo(next.id);
+  };
+  const addVideos = async () => {
+    if (!workspacePath || adding) return;
+    let picked: string | string[] | null;
+    try {
+      picked = await openFileDialog({
+        multiple: true,
+        title: "Adicionar vídeos ao caso",
+        filters: [{ name: "Vídeos", extensions: ["mp4", "mov", "mkv", "avi", "webm", "m4v"] }],
+      });
+    } catch {
+      return;
+    }
+    const files = Array.isArray(picked) ? picked : typeof picked === "string" ? [picked] : [];
+    if (files.length === 0) return;
+    let last: VideoMedia | null = null;
+    const failed: string[] = [];
+    for (const [i, file] of files.entries()) {
+      setAdding(files.length > 1 ? `Registrando ${i + 1} de ${files.length}…` : "Registrando…");
+      try {
+        last = await registerMedia(workspacePath, file);
+      } catch (e) {
+        failed.push(`${file.split(/[\\/]/).pop()}: ${toSicroError(e).message}`);
+      }
+    }
+    setAdding(null);
+    if (failed.length) flash(`Não registrado — ${failed.join(" · ")}`, 7000);
+    if (last) switchVideo(last.id);
+  };
+  useShortcuts(
+    {
+      "video.prevVideo": () => stepVideo(-1),
+      "video.nextVideo": () => stepVideo(1),
+      "video.addVideo": () => void addVideos(),
+    },
+    { enabled: playerKeys },
+  );
 
   const media0 = bundle?.media ?? null;
   const fpsDeclared = media0?.fps_declared ?? null;
@@ -652,36 +706,22 @@ export function VideoAnalysisView() {
         >
           <ArrowLeft size={14} /> Voltar
         </button>
-        <div className={styles.titleBlock}>
-          <strong>{media.filename}</strong>
-          <span className={styles.meta}>
-            {media.codec ?? "codec —"} ·{" "}
-            {media.width && media.height
-              ? `${media.width}×${media.height}`
-              : "—"}{" "}
-            ·{" "}
-            {media.fps_declared
-              ? `${media.fps_declared.toFixed(2)} fps`
-              : "fps —"}{" "}
-            · SHA <code>{media.sha256.slice(0, 12)}…</code>
-          </span>
-          {derivation && (
-            <span className={styles.derived}>
-              <Scissors size={11} /> trecho de <strong>{derivation.source.filename}</strong> (
-              {formatDuration(derivation.actual.start_s)} → {formatDuration(derivation.actual.end_s)},{" "}
-              {derivation.mode === "copy" ? "sem recompressão" : "recomprimido"})
-              {sourceOfClip && (
-                <button
-                  type="button"
-                  onClick={() => workspacePath && void openMedia(workspacePath, sourceOfClip.id)}
-                  title="Abrir o vídeo de origem"
-                >
-                  abrir origem
-                </button>
-              )}
-            </span>
-          )}
-        </div>
+        <VideoTabs
+          workspacePath={workspacePath}
+          videos={mediaList.length ? mediaList : [media]}
+          activeId={media.id}
+          adding={adding}
+          onOpen={switchVideo}
+          onAdd={() => void addVideos()}
+          onCompare={(id) => {
+            const m = mediaList.find((x) => x.id === id);
+            if (!m) return;
+            setPickCompare(false);
+            exitFullscreen();
+            controllerRef.current?.seek(nowTime());
+            setCompareWith(m);
+          }}
+        />
         {feedback && <span className={styles.feedback}>{feedback}</span>}
         <div className={styles.compareBox}>
           {compareWith ? (
@@ -728,6 +768,22 @@ export function VideoAnalysisView() {
           )}
         </div>
       </header>
+      {derivation && (
+        <div className={styles.derivedBar}>
+          <Scissors size={11} /> trecho de <strong>{derivation.source.filename}</strong> (
+          {formatDuration(derivation.actual.start_s)} → {formatDuration(derivation.actual.end_s)},{" "}
+          {derivation.mode === "copy" ? "sem recompressão" : "recomprimido"})
+          {sourceOfClip && (
+            <button
+              type="button"
+              onClick={() => workspacePath && void openMedia(workspacePath, sourceOfClip.id)}
+              title="Abrir o vídeo de origem"
+            >
+              abrir origem
+            </button>
+          )}
+        </div>
+      )}
 
       {(probeWarnings.length > 0 || warningsFromLastAction.length > 0) && (
         <div className={styles.warningBanner}>

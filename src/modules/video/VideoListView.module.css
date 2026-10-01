@@ -10,6 +10,8 @@
   flex-direction: column;
 }
 .container {
+  width: 100%;
+  box-sizing: border-box;
   max-width: 1040px;
   margin: 0 auto;
   padding: var(--space-6) var(--space-4);
@@ -79,6 +81,10 @@
   background: var(--sicro-surface-1);
   border: 1px solid var(--sicro-border);
   border-radius: var(--radius-md);
+  cursor: pointer;
+}
+.row:hover {
+  border-color: var(--sicro-fg-dim);
 }
 .rowMain {
   flex: 1;
@@ -90,6 +96,7 @@
 .rowTitle {
   color: var(--sicro-fg);
   font-size: var(--text-sm);
+  overflow-wrap: anywhere; /* nome de arquivo comprido quebra em vez de estourar */
 }
 .rowMeta {
   display: flex;
