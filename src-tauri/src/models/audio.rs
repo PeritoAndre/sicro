@@ -74,6 +74,27 @@ pub struct AudioTranscriptSegment {
     pub created_at: DateTime<Utc>,
 }
 
+/// Um turno de fala da separação de locutores (locutor 1..N).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DiarTurn {
+    pub t_start: f64,
+    pub t_end: f64,
+    pub speaker: u32,
+}
+
+/// Separação de locutores de um áudio (uma por áudio; rodar de novo substitui).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AudioDiarization {
+    pub id: Uuid,
+    pub occurrence_id: Uuid,
+    pub audio_sha256: String,
+    pub turns: Vec<DiarTurn>,
+    /// Nomes dados pelo perito (índice = locutor − 1; vazio = "Locutor N").
+    pub names: Vec<String>,
+    pub params: serde_json::Value,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Entrada de segmento vinda do front (sem id/custódia — gerados ao salvar).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptSegmentInput {

@@ -57,6 +57,25 @@ export interface AudioTranscriptSegment {
   created_at: string;
 }
 
+/** Turno de fala da separação de locutores (locutor 1..N). */
+export interface DiarTurn {
+  t_start: number;
+  t_end: number;
+  speaker: number;
+}
+
+/** Separação de locutores gravada para um áudio. */
+export interface AudioDiarization {
+  id: string;
+  occurrence_id: string;
+  audio_sha256: string;
+  turns: DiarTurn[];
+  /** Nomes dados pelo perito (índice = locutor − 1; vazio = "Locutor N"). */
+  names: string[];
+  params: Record<string, unknown>;
+  created_at: string;
+}
+
 /** Palavra do rascunho da IA: tempo no áudio original e confiança (0..1). */
 export interface TranscriptWord {
   text: string;
@@ -71,6 +90,10 @@ export interface TranscriptAi {
   draft: boolean;
   confidence: number | null;
   words: TranscriptWord[];
+  /** Locutor preenchido pela separação de locutores (não pelo perito). */
+  speaker_auto?: boolean;
+  /** O trecho tem fala de mais de um locutor. */
+  speaker_mixed?: boolean;
 }
 
 /** Status da ferramenta whisper.cpp (Fase 2 — transcrição local). */

@@ -6,7 +6,8 @@ use uuid::Uuid;
 
 use crate::error::Result;
 use crate::models::{
-    AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment, TranscriptSegmentInput,
+    AudioDiarization, AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment,
+    DiarTurn, TranscriptSegmentInput,
 };
 
 const MEDIA_COLS: &str = "
@@ -282,6 +283,92 @@ pub fn replace_segments(
         )?;
     }
     tx.commit()?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// audio_diarizations (separação de locutores — uma por áudio)
+
+/// Grava a separação de locutores do áudio (substitui a anterior; os nomes
+/// dados pelo perito são mantidos).
+pub fn replace_diarization(
+    conn: &Connection,
+    occurrence_id: &Uuid,
+    audio_sha256: &str,
+    turns: &[DiarTurn],
+    params: &serde_json::Value,
+) -> Result<AudioDiarization> {
+    let names = get_diarization(conn, occurrence_id, audio_sha256)?.map(|d| d.names).unwrap_or_default();
+    conn.execute(
+        "DELETE FROM audio_diarizations WHERE occurrence_id = ?1 AND audio_sha256 = ?2",
+        params![occurrence_id.to_string(), audio_sha256],
+    )?;
+    let d = AudioDiarization {
+        id: Uuid::new_v4(),
+        occurrence_id: *occurrence_id,
+        audio_sha256: audio_sha256.to_string(),
+        turns: turns.to_vec(),
+        names,
+        params: params.clone(),
+        created_at: Utc::now(),
+    };
+    conn.execute(
+        "INSERT INTO audio_diarizations (id, occurrence_id, audio_sha256, turns_json, names_json, params_json, created_at)
+         VALUES (?1,?2,?3,?4,?5,?6,?7)",
+        params![
+            d.id.to_string(),
+            occurrence_id.to_string(),
+            audio_sha256,
+            serde_json::to_string(&d.turns).unwrap_or_else(|_| "[]".into()),
+            serde_json::to_string(&d.names).unwrap_or_else(|_| "[]".into()),
+            d.params.to_string(),
+            d.created_at.to_rfc3339(),
+        ],
+    )?;
+    Ok(d)
+}
+
+pub fn get_diarization(
+    conn: &Connection,
+    occurrence_id: &Uuid,
+    audio_sha256: &str,
+) -> Result<Option<AudioDiarization>> {
+    let row = conn
+        .query_row(
+            "SELECT id, occurrence_id, audio_sha256, turns_json, names_json, params_json, created_at
+             FROM audio_diarizations WHERE occurrence_id = ?1 AND audio_sha256 = ?2",
+            params![occurrence_id.to_string(), audio_sha256],
+            |row| {
+                Ok(AudioDiarization {
+                    id: parse_uuid(row, "id")?,
+                    occurrence_id: parse_uuid(row, "occurrence_id")?,
+                    audio_sha256: row.get("audio_sha256")?,
+                    turns: serde_json::from_str(&row.get::<_, String>("turns_json")?).unwrap_or_default(),
+                    names: serde_json::from_str(&row.get::<_, String>("names_json")?).unwrap_or_default(),
+                    params: serde_json::from_str(&row.get::<_, String>("params_json")?)
+                        .unwrap_or(serde_json::Value::Null),
+                    created_at: parse_dt(row.get::<_, String>("created_at")?)?,
+                })
+            },
+        )
+        .optional()?;
+    Ok(row)
+}
+
+pub fn set_diarization_names(
+    conn: &Connection,
+    occurrence_id: &Uuid,
+    audio_sha256: &str,
+    names: &[String],
+) -> Result<()> {
+    conn.execute(
+        "UPDATE audio_diarizations SET names_json = ?3 WHERE occurrence_id = ?1 AND audio_sha256 = ?2",
+        params![
+            occurrence_id.to_string(),
+            audio_sha256,
+            serde_json::to_string(names).unwrap_or_else(|_| "[]".into())
+        ],
+    )?;
     Ok(())
 }
 

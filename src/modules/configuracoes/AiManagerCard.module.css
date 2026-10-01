@@ -56,6 +56,9 @@
 }
 
 .group {
+  display: flex;
+  align-items: center;
+  gap: 5px;
   margin: var(--space-2) 0 0;
   font-size: 11px;
   text-transform: uppercase;

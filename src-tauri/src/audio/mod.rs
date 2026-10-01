@@ -15,6 +15,7 @@ use crate::error::{Result, SicroError};
 /// W12 (paridade Audacity) — análise forense de áudio em Rust puro
 /// (medição, espectro, ENF). Determinístico e testável; não altera o áudio.
 pub mod analysis;
+pub mod diarize;
 pub mod enhance;
 pub mod spectro;
 

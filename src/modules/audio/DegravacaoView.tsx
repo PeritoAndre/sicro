@@ -21,6 +21,7 @@ import {
   Flag,
   Plus,
   Trash2,
+  Users,
   Volume2,
 } from "lucide-react";
 import { Button } from "@components/Button/Button";
@@ -33,8 +34,9 @@ import {
   useWorkspaceStore,
 } from "@stores/workspaceStore";
 import { useSettingsStore } from "@stores/settingsStore";
-import type { AudioMedia, TranscriptWord } from "@domain/audio";
+import type { AudioDiarization, AudioMedia, TranscriptWord } from "@domain/audio";
 import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
+import { assignSpeakers, speakerColor, speakerName } from "./speakers";
 import { formatTranscript } from "./transcriptFormat";
 import styles from "./DegravacaoView.module.css";
 
@@ -50,7 +52,12 @@ interface LocalSeg {
   confidence?: number | null;
   /** Palavras da IA com tempo e confiança (as duvidosas viram "ouvir de novo"). */
   words?: TranscriptWord[];
+  /** Locutor preenchido pela separação de locutores (o perito ainda não mexeu). */
+  speakerAuto?: boolean;
+  /** Há fala de mais de um locutor no trecho. */
+  speakerMixed?: boolean;
 }
+
 
 /** Abaixo disto a palavra é marcada para ouvir de novo; abaixo de LOW, em vermelho. */
 const DOUBT_P = 0.5;
@@ -84,6 +91,16 @@ export function DegravacaoView() {
   const [language, setLanguage] = useState(
     () => localStorage.getItem("sicro.whisper.lang") || "pt",
   );
+  // Separação de locutores (sherpa-onnx local).
+  const [diar, setDiar] = useState<AudioDiarization | null>(null);
+  const diarRef = useRef(diar);
+  diarRef.current = diar;
+  const [diarBusy, setDiarBusy] = useState(false);
+  const [diarErr, setDiarErr] = useState<string | null>(null);
+  const [numSpeakers, setNumSpeakers] = useState<number | null>(() => {
+    const v = Number(localStorage.getItem("sicro.diar.n"));
+    return v > 0 ? v : null;
+  });
 
   const playerRef = useRef<AudioPlayerHandle>(null);
   const segsRef = useRef<LocalSeg[]>(segments);
@@ -102,8 +119,10 @@ export function DegravacaoView() {
       try {
         const m = await commands.openAudioMedia(ws, audioId);
         const segs = await commands.listAudioTranscript(ws, m.sha256);
+        const d = await commands.getAudioDiarization(ws, m.sha256).catch(() => null);
         if (cancelled) return;
         setMedia(m);
+        setDiar(d);
         setSegments(
           segs.map((s) => ({
             localId: crypto.randomUUID(),
@@ -114,6 +133,8 @@ export function DegravacaoView() {
             draft: s.ai?.draft ?? false,
             confidence: s.ai?.confidence ?? null,
             words: s.ai?.words ?? [],
+            speakerAuto: s.ai?.speaker_auto ?? false,
+            speakerMixed: s.ai?.speaker_mixed ?? false,
           })),
         );
         setSaveState(segs.length > 0 ? "saved" : "idle");
@@ -138,8 +159,14 @@ export function DegravacaoView() {
       speaker: s.speaker,
       text: s.text,
       ai:
-        s.draft || s.confidence != null || (s.words?.length ?? 0) > 0
-          ? { draft: !!s.draft, confidence: s.confidence ?? null, words: s.words ?? [] }
+        s.draft || s.confidence != null || (s.words?.length ?? 0) > 0 || s.speakerAuto || s.speakerMixed
+          ? {
+              draft: !!s.draft,
+              confidence: s.confidence ?? null,
+              words: s.words ?? [],
+              speaker_auto: !!s.speakerAuto,
+              speaker_mixed: !!s.speakerMixed,
+            }
           : null,
     }));
     setSaveState("saving");
@@ -186,6 +213,16 @@ export function DegravacaoView() {
     });
     setFocusId(localId);
   }, [mutate]);
+
+  // O perito escreveu o locutor: passa a ser dele (a separação não mexe mais).
+  const setSpeaker = useCallback(
+    (localId: string, speaker: string) => {
+      mutate((prev) =>
+        prev.map((s) => (s.localId === localId ? { ...s, speaker, speakerAuto: false } : s)),
+      );
+    },
+    [mutate],
+  );
 
   const updateSeg = useCallback(
     (localId: string, patch: Partial<LocalSeg>) => {
@@ -400,7 +437,10 @@ export function DegravacaoView() {
           confidence: c.confidence,
           words: c.words,
         }));
-        return [...kept, ...incoming].sort((a, b) => a.t_start - b.t_start);
+        return assignSpeakers(
+          [...kept, ...incoming].sort((a, b) => a.t_start - b.t_start),
+          diarRef.current,
+        );
       });
     } catch (e) {
       setTranscribeErr(toSicroError(e).message);
@@ -408,6 +448,46 @@ export function DegravacaoView() {
       setTranscribing(false);
     }
   }, [ws, media, whisperOk, pickModel, mutate, aiSettings, language]);
+
+  const runDiarize = useCallback(async () => {
+    if (!ws || !media) return;
+    if (!aiSettings.diar_bin_path) {
+      setDiarErr("Separador de locutores não instalado — baixe em Configurações → IA (≈ 58 MB, uma vez; depois roda offline).");
+      return;
+    }
+    setDiarBusy(true);
+    setDiarErr(null);
+    try {
+      const d = await commands.diarizeAudio(ws, media.id, numSpeakers);
+      setDiar(d);
+      mutate((prev) => assignSpeakers(prev, d));
+    } catch (e) {
+      setDiarErr(toSicroError(e).message);
+    } finally {
+      setDiarBusy(false);
+    }
+  }, [ws, media, aiSettings.diar_bin_path, numSpeakers, mutate]);
+
+  // Nome dado na legenda vale para todos os trechos preenchidos pela separação.
+  const renameSpeaker = useCallback(
+    (n: number, name: string) => {
+      const d = diarRef.current;
+      if (!ws || !media || !d) return;
+      const before = speakerName(d, n);
+      const names = Array.from({ length: Math.max(d.names.length, n) }, (_, i) => d.names[i] ?? "");
+      names[n - 1] = name.trim();
+      const next = { ...d, names };
+      const after = speakerName(next, n);
+      setDiar(next);
+      void commands.saveDiarizationNames(ws, media.sha256, names).catch(() => undefined);
+      if (after !== before) {
+        mutate((prev) =>
+          prev.map((s) => (s.speakerAuto && s.speaker === before ? { ...s, speaker: after } : s)),
+        );
+      }
+    },
+    [ws, media, mutate],
+  );
 
   const draftCount = useMemo(
     () => segments.filter((s) => s.draft).length,
@@ -473,6 +553,15 @@ export function DegravacaoView() {
               audioSha256={media.sha256}
               onTimeChange={setCurrentTime}
             />
+            {diar && diar.turns.length > 0 && (
+              <SpeakerStrip
+                diar={diar}
+                duration={media.duration_s ?? 0}
+                time={currentTime}
+                onSeek={seek}
+                onRename={renameSpeaker}
+              />
+            )}
             <div className={styles.captureBar}>
               <Button
                 variant="primary"
@@ -508,6 +597,38 @@ export function DegravacaoView() {
                   <option value="fr">Francês</option>
                   <option value="it">Italiano</option>
                   <option value="de">Alemão</option>
+                </select>
+              </label>
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Users size={14} />}
+                onClick={() => void runDiarize()}
+                disabled={diarBusy}
+                title="Separa as vozes: quem fala quando (local, offline)"
+              >
+                {diarBusy ? "Separando…" : "Locutores"}
+              </Button>
+              <label
+                className={styles.langSelect}
+                title="Se souber quantas pessoas falam, informe — é mais confiável que o automático"
+              >
+                pessoas:
+                <select
+                  value={numSpeakers ?? 0}
+                  onChange={(e) => {
+                    const v = Number(e.target.value);
+                    setNumSpeakers(v > 0 ? v : null);
+                    localStorage.setItem("sicro.diar.n", String(v));
+                  }}
+                  disabled={diarBusy}
+                >
+                  <option value={0}>automático (estimativa)</option>
+                  {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
                 </select>
               </label>
               <span className={styles.hint}>
@@ -552,6 +673,7 @@ export function DegravacaoView() {
             </div>
           )}
           {transcribeErr && <div className={styles.errorBanner}>{transcribeErr}</div>}
+          {diarErr && <div className={styles.errorBanner}>{diarErr}</div>}
           {draftCount > 0 && (
             <div className={styles.draftBanner}>
               <AlertTriangle size={14} aria-hidden />
@@ -590,7 +712,12 @@ export function DegravacaoView() {
                     className={styles.speaker}
                     value={s.speaker}
                     placeholder="Locutor"
-                    onChange={(e) => updateSeg(s.localId, { speaker: e.target.value })}
+                    style={(() => {
+                      const n = diar ? diar.turns.find((t) => speakerName(diar, t.speaker) === s.speaker)?.speaker : undefined;
+                      return n ? { borderLeft: `3px solid ${speakerColor(n)}` } : undefined;
+                    })()}
+                    title={s.speakerAuto ? "Preenchido pela separação de locutores — confira" : undefined}
+                    onChange={(e) => setSpeaker(s.localId, e.target.value)}
                   />
                   <textarea
                     ref={(el) => {
@@ -607,6 +734,14 @@ export function DegravacaoView() {
                     {s.draft && (
                       <span className={styles.iaTag} title="Rascunho da IA — revise">
                         IA
+                      </span>
+                    )}
+                    {s.speakerMixed && (
+                      <span
+                        className={styles.mixedTag}
+                        title="A separação ouviu mais de uma voz neste trecho — confira e, se for o caso, divida"
+                      >
+                        2+ vozes
                       </span>
                     )}
                     {s.draft && s.confidence != null && (
@@ -653,6 +788,93 @@ export function DegravacaoView() {
         </>
       )}
     </div>
+  );
+}
+
+/** Faixa "quem fala quando" + legenda com os nomes (editáveis) dos locutores. */
+function SpeakerStrip({
+  diar,
+  duration,
+  time,
+  onSeek,
+  onRename,
+}: {
+  diar: AudioDiarization;
+  duration: number;
+  time: number;
+  onSeek: (t: number) => void;
+  onRename: (n: number, name: string) => void;
+}) {
+  const total = duration > 0 ? duration : Math.max(...diar.turns.map((t) => t.t_end));
+  const speakers = [...new Set(diar.turns.map((t) => t.speaker))].sort((a, b) => a - b);
+  const talk = (n: number) =>
+    diar.turns.filter((t) => t.speaker === n).reduce((acc, t) => acc + (t.t_end - t.t_start), 0);
+  const informed = diar.params["locutores_informados"];
+  return (
+    <div className={styles.diar}>
+      <div className={styles.diarStrip}>
+        {diar.turns.map((t, i) => (
+          <button
+            key={i}
+            type="button"
+            className={styles.diarTurn}
+            style={{
+              left: `${(t.t_start / total) * 100}%`,
+              width: `${Math.max(0.15, ((t.t_end - t.t_start) / total) * 100)}%`,
+              background: speakerColor(t.speaker),
+            }}
+            onClick={() => onSeek(t.t_start)}
+            title={`${speakerName(diar, t.speaker)} · ${fmtTime(t.t_start)}–${fmtTime(t.t_end)}`}
+          />
+        ))}
+        {total > 0 && <div className={styles.diarHead} style={{ left: `${(time / total) * 100}%` }} />}
+      </div>
+      <div className={styles.diarLegend}>
+        {speakers.map((n) => (
+          <label key={n} className={styles.diarName}>
+            <span className={styles.diarDot} style={{ background: speakerColor(n) }} />
+            <SpeakerNameInput
+              value={diar.names[n - 1] ?? ""}
+              placeholder={`Locutor ${n}`}
+              onCommit={(v) => onRename(n, v)}
+            />
+            <span className={styles.diarTalk}>{fmtTime(talk(n))}</span>
+          </label>
+        ))}
+        <span className={styles.diarMeta}>
+          {typeof informed === "number"
+            ? `${informed} pessoas informadas`
+            : "nº de vozes estimado — se souber quantas pessoas falam, informe e rode de novo"}{" "}
+          · separação de vozes, não identificação
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function SpeakerNameInput({
+  value,
+  placeholder,
+  onCommit,
+}: {
+  value: string;
+  placeholder: string;
+  onCommit: (v: string) => void;
+}) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => setDraft(value), [value]);
+  return (
+    <input
+      className={styles.diarInput}
+      value={draft}
+      placeholder={placeholder}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => draft !== value && onCommit(draft)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.currentTarget.blur();
+      }}
+      title="Nome deste locutor — vale para todos os trechos preenchidos pela separação"
+    />
   );
 }
 

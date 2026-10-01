@@ -8,7 +8,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Bot, CheckCircle2, Download, RefreshCw, Trash2 } from "lucide-react";
+import { Bot, CheckCircle2, Download, RefreshCw, Trash2, Users } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
@@ -133,6 +133,38 @@ export function AiManagerCard() {
     }
   };
 
+  const installDiar = async () => {
+    setBusy(DIAR_ID);
+    setError(null);
+    setProgress((p) => ({ ...p, [DIAR_ID]: { id: DIAR_ID, received: 0, total: 0 } }));
+    try {
+      setStatus(await commands.installDiarization());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setError(toSicroError(e).message);
+    } finally {
+      setBusy(null);
+      setProgress((p) => {
+        const n = { ...p };
+        delete n[DIAR_ID];
+        return n;
+      });
+    }
+  };
+
+  const removeDiar = async () => {
+    setBusy(DIAR_ID);
+    setError(null);
+    try {
+      setStatus(await commands.removeDiarization());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setError(toSicroError(e).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const isInstalled = (item: CatalogItem): boolean => {
     if (!status) return false;
     if (item.kind === "build") {
@@ -206,6 +238,21 @@ export function AiManagerCard() {
         />
       ))}
 
+      {status?.diar_available && (
+        <>
+          <h3 className={styles.group}>
+            <Users size={13} aria-hidden /> Separação de locutores
+          </h3>
+          <DiarRow
+            status={status}
+            busy={busy}
+            progress={progress[DIAR_ID]}
+            onInstall={() => void installDiar()}
+            onRemove={() => void removeDiar()}
+          />
+        </>
+      )}
+
       <div className={styles.footer}>
         <Button
           variant="ghost"
@@ -225,6 +272,79 @@ export function AiManagerCard() {
         )}
       </div>
     </section>
+  );
+}
+
+const DIAR_ID = "diarizacao";
+
+/** Separador de locutores: um pacote só (programa + 2 modelos). */
+function DiarRow({
+  status,
+  busy,
+  progress,
+  onInstall,
+  onRemove,
+}: {
+  status: AiStatus;
+  busy: string | null;
+  progress?: AiProgress;
+  onInstall: () => void;
+  onRemove: () => void;
+}) {
+  const isBusy = busy === DIAR_ID;
+  const pct =
+    progress && progress.total > 0 ? Math.round((progress.received / progress.total) * 100) : null;
+  return (
+    <div className={styles.row}>
+      <div className={styles.rowMain}>
+        <div className={styles.rowLabel}>
+          Separador de locutores — sherpa-onnx
+          {status.diar_ok && (
+            <span className={styles.tagOk}>instalado ({status.diar_version || "?"})</span>
+          )}
+        </div>
+        <div className={styles.rowNote}>
+          ≈ {status.diar_approx_mb} MB · Diz <strong>quem fala quando</strong> na degravação
+          (segmentação pyannote 3.0 + assinatura de voz WeSpeaker). Arquivos oficiais do
+          k2-fsa/sherpa-onnx com hash conferido; depois de baixado, roda offline. Não identifica
+          pessoas — separa vozes diferentes.
+        </div>
+        {isBusy && (
+          <div className={styles.progress}>
+            <div className={styles.progressFill} style={{ width: `${pct ?? 0}%` }} />
+            <span className={styles.progressTxt}>
+              {pct != null ? `${pct}%` : "baixando…"}
+              {progress && progress.total > 0
+                ? ` (${prettyMB(progress.received)} / ${prettyMB(progress.total)})`
+                : ""}
+            </span>
+          </div>
+        )}
+      </div>
+      <div className={styles.rowActions}>
+        {status.diar_ok ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            leftIcon={<Trash2 size={13} />}
+            onClick={onRemove}
+            disabled={busy !== null}
+          >
+            Remover
+          </Button>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<Download size={13} />}
+            onClick={onInstall}
+            disabled={busy !== null}
+          >
+            {isBusy ? "Baixando…" : "Baixar"}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

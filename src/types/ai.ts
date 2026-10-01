@@ -35,6 +35,11 @@ export interface AiStatus {
   model_path: string;
   model_ok: boolean;
   installed_models: InstalledModel[];
+  /** Separação de locutores: há pacote para este sistema? */
+  diar_available: boolean;
+  diar_ok: boolean;
+  diar_version: string;
+  diar_approx_mb: number;
 }
 
 export interface AiUpdateInfo {

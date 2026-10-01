@@ -19,7 +19,8 @@ use crate::database::repositories::{audio_repo, occurrence_repo};
 use crate::error::{Result, SicroError};
 use crate::hashing::sha256::sha256_file;
 use crate::models::{
-    AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment, TranscriptSegmentInput,
+    AudioDiarization, AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment,
+    TranscriptSegmentInput,
 };
 use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
 
@@ -952,6 +953,108 @@ pub async fn transcribe_audio(
             words: s.words,
         })
         .collect())
+}
+
+// ---------------------------------------------------------------------------
+// Separação de locutores (sherpa-onnx local) — apoio à degravação
+
+/// "Quem fala quando" no áudio, com o separador local instalado em
+/// Configurações → IA. `num_speakers` informado pelo perito é mais confiável
+/// que o automático. Grava no caso (substitui a anterior, mantém os nomes).
+#[tauri::command]
+pub async fn diarize_audio(
+    app: tauri::AppHandle,
+    workspace_path: String,
+    audio_id: String,
+    num_speakers: Option<u32>,
+) -> Result<AudioDiarization> {
+    let s = crate::commands::settings_commands::get_app_settings(app).await?;
+    let (bin, seg, emb) = (
+        PathBuf::from(&s.ai.diar_bin_path),
+        PathBuf::from(&s.ai.diar_segmentation_path),
+        PathBuf::from(&s.ai.diar_embedding_path),
+    );
+    if !(bin.is_file() && seg.is_file() && emb.is_file()) {
+        return Err(SicroError::Validation(
+            "separador de locutores não instalado — baixe em Configurações → IA".into(),
+        ));
+    }
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let occurrence_id = manifest.occurrence_id;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
+
+    let tmp16k = std::env::temp_dir().join(format!("sicro-diar-{}.wav", Uuid::new_v4()));
+    crate::audio::to_wav_16k_mono(&wav_abs, &tmp16k)?;
+    let tmp2 = tmp16k.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        crate::audio::diarize::run(&bin, &seg, &emb, &tmp2, num_speakers)
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa de separação: {e}")));
+    let _ = std::fs::remove_file(&tmp16k);
+    let turns = result??;
+    if turns.is_empty() {
+        return Err(SicroError::Validation("nenhuma fala encontrada no áudio".into()));
+    }
+
+    let file_name = |p: &str| Path::new(p).file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
+    let params = json!({
+        "programa": "sherpa-onnx",
+        "versao": s.ai.diar_version,
+        "segmentacao": file_name(&s.ai.diar_segmentation_path),
+        "assinatura_de_voz": file_name(&s.ai.diar_embedding_path),
+        "locutores_informados": num_speakers.filter(|n| *n > 0),
+        "limiar_automatico": if num_speakers.unwrap_or(0) > 0 { None } else { Some(crate::audio::diarize::AUTO_THRESHOLD) },
+    });
+    let d = audio_repo::replace_diarization(&conn, &occurrence_id, &media.sha256, &turns, &params)?;
+    let speakers = turns.iter().map(|t| t.speaker).max().unwrap_or(0);
+    audio_repo::insert_log(
+        &conn,
+        &occurrence_id,
+        Some(&media.sha256),
+        "audio.diarize",
+        &json!({ "turnos": turns.len(), "locutores": speakers, "parametros": params }).to_string(),
+    )?;
+    occurrence_repo::record_audit(
+        &conn,
+        Some(&occurrence_id),
+        "audio.diarize",
+        Some("audio"),
+        Some("audio_diarizations"),
+        Some(&d.id),
+        Some(&media.sha256),
+    )?;
+    Ok(d)
+}
+
+/// Separação de locutores gravada para o áudio (ou nada).
+#[tauri::command]
+pub async fn get_audio_diarization(
+    workspace_path: String,
+    audio_sha256: String,
+) -> Result<Option<AudioDiarization>> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    audio_repo::get_diarization(&conn, &manifest.occurrence_id, &audio_sha256)
+}
+
+/// Nomes que o perito deu aos locutores (índice = locutor − 1).
+#[tauri::command]
+pub async fn save_diarization_names(
+    workspace_path: String,
+    audio_sha256: String,
+    names: Vec<String>,
+) -> Result<()> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    audio_repo::set_diarization_names(&conn, &manifest.occurrence_id, &audio_sha256, &names)
 }
 
 // ---------------------------------------------------------------------------

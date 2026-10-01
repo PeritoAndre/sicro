@@ -49,6 +49,9 @@ directories = "5"
 #         check (`hashes.json`) and for the per-file content hash recorded
 #         in `media_assets`.
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
+# Pacotes .tar.bz2 do sherpa-onnx (separação de locutores). bzip2 0.6 é Rust puro.
+tar = { version = "0.4", default-features = false }
+bzip2 = "0.6"
 sha2 = "0.10"
 
 # Spike E — Croqui Engine.

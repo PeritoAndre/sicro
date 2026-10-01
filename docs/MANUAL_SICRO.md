@@ -554,6 +554,21 @@ precisa ser revisada** antes de ir ao laudo.
   aproximado, ±0,3 s). **Conferido** tira a marcação daquele trecho.
 - Re-rodar o rascunho substitui só o que ainda não foi revisado.
 
+**Locutores (quem fala quando).** Com o separador instalado (Configurações →
+IA), clique **Locutores**. Em **pessoas**, informe quantas falam se souber — é
+bem mais confiável que o **automático**, que é uma estimativa e pode juntar ou
+separar vozes.
+
+- Aparece uma **faixa colorida** sob o player com os turnos de fala de cada
+  voz; um clique num turno leva o player até ele.
+- Na **legenda**, dê nome a cada voz ("Entrevistador", "Vítima"…): o nome vale
+  para todos os trechos que a separação preencheu.
+- O campo **Locutor** dos trechos é preenchido pela voz que mais fala neles, só
+  onde estava vazio ou foi a própria separação que preencheu — o que você
+  escreveu fica. **2+ vozes** avisa que o trecho tem fala de mais de uma
+  pessoa (talvez seja o caso de dividi-lo).
+- Separa vozes **diferentes**; **não identifica** quem é a pessoa.
+
 > ⚠️ **§13:** realce e análises são determinísticos e offline. O rascunho de IA
 > pode errar ou "inventar" texto em ruído/silêncio — é sugestão, não verdade.
 
@@ -579,7 +594,10 @@ Abas:
   backup…** recria os casos na pasta local padrão — sem sobrescrever os que já
   existem — e traz de volta o perfil.
 - **IA (degravação):** baixa o motor de transcrição local (whisper.cpp) e os
-  modelos, só quando você clica. Usado pelo Rascunho por IA da degravação.
+  modelos, só quando você clica. Usado pelo Rascunho por IA da degravação. Ali
+  também fica o **Separador de locutores** (sherpa-onnx, ≈ 58 MB, um clique):
+  programa e modelos oficiais com hash conferido — se o arquivo não conferir,
+  nada é instalado. Depois de baixado, roda offline.
 - **Atalhos de teclado:** customizáveis por ação, organizados por módulo (os
   do grupo **Geral** valem em todas as telas).
 - **Diagnóstico:** mostra onde o arquivo de configurações fica no disco.

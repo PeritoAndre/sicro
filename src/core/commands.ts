@@ -100,6 +100,7 @@ import type {
   SpectrumResult,
   TranscriptCandidate,
   WhisperStatus,
+  AudioDiarization,
   SpectroImage,
   TranscriptAi,
 } from "@domain/audio";
@@ -1291,6 +1292,32 @@ export const commands = {
   /** Remove um item instalado e limpa a configuração. */
   removeAiAsset(assetId: string): Promise<AiStatus> {
     return safeInvoke<AiStatus>("remove_ai_asset", { assetId });
+  },
+
+  /** Baixa e instala o separador de locutores (sherpa-onnx + 2 modelos, hash fixo). */
+  installDiarization(): Promise<AiStatus> {
+    return safeInvoke<AiStatus>("install_diarization", {});
+  },
+
+  removeDiarization(): Promise<AiStatus> {
+    return safeInvoke<AiStatus>("remove_diarization", {});
+  },
+
+  /** "Quem fala quando" no áudio (local). `numSpeakers` null = automático. */
+  diarizeAudio(
+    workspacePath: string,
+    audioId: string,
+    numSpeakers: number | null,
+  ): Promise<AudioDiarization> {
+    return safeInvoke<AudioDiarization>("diarize_audio", { workspacePath, audioId, numSpeakers });
+  },
+
+  getAudioDiarization(workspacePath: string, audioSha256: string): Promise<AudioDiarization | null> {
+    return safeInvoke<AudioDiarization | null>("get_audio_diarization", { workspacePath, audioSha256 });
+  },
+
+  saveDiarizationNames(workspacePath: string, audioSha256: string, names: string[]): Promise<void> {
+    return safeInvoke<void>("save_diarization_names", { workspacePath, audioSha256, names });
   },
 
   /** OPT-IN: consulta a última release do whisper.cpp (só informa). */

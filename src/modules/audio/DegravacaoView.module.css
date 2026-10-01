@@ -402,3 +402,88 @@
 .doubtsOk:hover {
   color: var(--sicro-fg);
 }
+
+/* separação de locutores — faixa "quem fala quando" sob o player */
+.diar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.diarStrip {
+  position: relative;
+  height: 14px;
+  border-radius: 3px;
+  background: var(--sicro-surface-2);
+  overflow: hidden;
+}
+.diarTurn {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border: none;
+  padding: 0;
+  opacity: 0.85;
+  cursor: pointer;
+}
+.diarTurn:hover {
+  opacity: 1;
+  filter: brightness(1.2);
+}
+.diarHead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  pointer-events: none;
+}
+.diarLegend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-size: 11px;
+  color: var(--sicro-fg-muted);
+}
+.diarName {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.diarDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.diarInput {
+  width: 120px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  font-size: 11px;
+  font-family: inherit;
+  padding: 1px 5px;
+}
+.diarTalk {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+}
+.diarMeta {
+  font-size: 10.5px;
+  color: var(--sicro-fg-dim);
+}
+.mixedTag {
+  align-self: center;
+  font-size: 9px;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: var(--radius-sm);
+  padding: 2px 5px;
+  color: var(--sicro-warning);
+  border: 1px solid rgba(230, 180, 80, 0.4);
+  background: rgba(230, 180, 80, 0.1);
+}

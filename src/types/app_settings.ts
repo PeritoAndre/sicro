@@ -47,6 +47,11 @@ export interface AiSettings {
   model_path: string;
   vad_model_path: string;
   whisper_version: string;
+  /** Separação de locutores (sherpa-onnx local). */
+  diar_bin_path: string;
+  diar_segmentation_path: string;
+  diar_embedding_path: string;
+  diar_version: string;
 }
 
 /** Documentoscopia — motor de OCR (Tesseract) + idiomas instalados. */
@@ -123,6 +128,10 @@ export function defaultAppSettings(): AppSettings {
       model_path: "",
       vad_model_path: "",
       whisper_version: "",
+      diar_bin_path: "",
+      diar_segmentation_path: "",
+      diar_embedding_path: "",
+      diar_version: "",
     },
     ocr: {
       engine_bin_path: "",

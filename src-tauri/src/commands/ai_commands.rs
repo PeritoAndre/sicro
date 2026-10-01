@@ -149,6 +149,11 @@ pub struct AiStatus {
     pub model_path: String,
     pub model_ok: bool,
     pub installed_models: Vec<InstalledModel>,
+    /// Separação de locutores: pacote disponível para este sistema?
+    pub diar_available: bool,
+    pub diar_ok: bool,
+    pub diar_version: String,
+    pub diar_approx_mb: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -241,7 +246,15 @@ fn http_agent() -> Result<ureq::Agent> {
 }
 
 /// Download em streaming, com SHA-256 e progresso (`ai-download-progress`).
-fn download_with_progress(app: &AppHandle, url: &str, dest: &Path, id: &str) -> Result<String> {
+/// `base`/`grand_total` somam vários arquivos numa barra só (0 = só este).
+fn download_with_progress(
+    app: &AppHandle,
+    url: &str,
+    dest: &Path,
+    id: &str,
+    base: u64,
+    grand_total: u64,
+) -> Result<String> {
     let agent = http_agent()?;
     let resp = agent
         .get(url)
@@ -270,19 +283,185 @@ fn download_with_progress(app: &AppHandle, url: &str, dest: &Path, id: &str) -> 
         hasher.update(&buf[..n]);
         received += n as u64;
         if received - last >= 1_500_000 {
-            let _ = app.emit(
-                "ai-download-progress",
-                ProgressPayload { id: id.to_string(), received, total },
-            );
+            let _ = app.emit("ai-download-progress", progress(id, base + received, total, grand_total));
             last = received;
         }
     }
     file.flush().ok();
-    let _ = app.emit(
-        "ai-download-progress",
-        ProgressPayload { id: id.to_string(), received, total },
-    );
+    let _ = app.emit("ai-download-progress", progress(id, base + received, total, grand_total));
     Ok(format!("{:x}", hasher.finalize()))
+}
+
+fn progress(id: &str, received: u64, total: u64, grand_total: u64) -> ProgressPayload {
+    ProgressPayload {
+        id: id.to_string(),
+        received,
+        total: if grand_total > 0 { grand_total } else { total },
+    }
+}
+
+/// Extrai um .tar.bz2 em `dest` (`unpack_in` recusa caminhos que saiam dele).
+fn extract_tar_bz2(path: &Path, dest: &Path) -> Result<()> {
+    std::fs::create_dir_all(dest)
+        .map_err(|e| SicroError::Filesystem(format!("criar {}: {e}", dest.display())))?;
+    let file = std::fs::File::open(path)
+        .map_err(|e| SicroError::Filesystem(format!("abrir pacote: {e}")))?;
+    let mut archive = tar::Archive::new(bzip2::read::BzDecoder::new(std::io::BufReader::new(file)));
+    let entries = archive
+        .entries()
+        .map_err(|e| SicroError::Validation(format!("pacote inválido: {e}")))?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| SicroError::Validation(format!("pacote inválido: {e}")))?;
+        entry
+            .unpack_in(dest)
+            .map_err(|e| SicroError::Filesystem(format!("extrair: {e}")))?;
+    }
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Separação de locutores (sherpa-onnx) — programa + 2 modelos, de fontes
+// oficiais (GitHub k2-fsa/sherpa-onnx), com tamanho e SHA-256 FIXOS: se o que
+// chegar não conferir, nada é instalado. Roda local e offline depois.
+
+const SHERPA_VERSION: &str = "v1.13.8";
+
+struct DiarFile {
+    url: &'static str,
+    filename: &'static str,
+    bytes: u64,
+    sha256: &'static str,
+}
+
+/// Programa para este sistema (Windows: CRT estático, sem runtime do VC++).
+fn diar_engine() -> Option<DiarFile> {
+    if cfg!(target_os = "windows") {
+        Some(DiarFile {
+            url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-win-x64-shared-MT-Release-no-tts.tar.bz2",
+            filename: "sherpa-onnx.tar.bz2",
+            bytes: 23_271_851,
+            sha256: "4b0a94f7b5c606b1b64a19a831c2127559e4b3d34e195465ebc7be73d9ed4783",
+        })
+    } else if cfg!(target_os = "linux") {
+        Some(DiarFile {
+            url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-v1.13.8-linux-x64-shared-no-tts.tar.bz2",
+            filename: "sherpa-onnx.tar.bz2",
+            bytes: 24_802_494,
+            sha256: "d0f96c8b65c6cd0974fada22737e337de81bc8cd2abbec2e39caf358b1eec5fc",
+        })
+    } else {
+        None
+    }
+}
+
+/// Segmentação (pyannote 3.0, licença MIT): onde há fala e troca de voz.
+const DIAR_SEGMENTATION: DiarFile = DiarFile {
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-segmentation-models/sherpa-onnx-pyannote-segmentation-3-0.tar.bz2",
+    filename: "segmentacao.tar.bz2",
+    bytes: 6_958_444,
+    sha256: "24615ee884c897d9d2ba09bb4d30da6bb1b15e685065962db5b02e76e4996488",
+};
+
+/// Assinatura de voz (WeSpeaker ResNet34, VoxCeleb — vozes de vários idiomas).
+const DIAR_EMBEDDING: DiarFile = DiarFile {
+    url: "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/wespeaker_en_voxceleb_resnet34_LM.onnx",
+    filename: "wespeaker_en_voxceleb_resnet34_LM.onnx",
+    bytes: 26_530_550,
+    sha256: "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
+};
+
+const DIAR_EXE: &str = "sherpa-onnx-offline-speaker-diarization";
+
+fn diar_total_bytes() -> u64 {
+    diar_engine().map_or(0, |e| e.bytes) + DIAR_SEGMENTATION.bytes + DIAR_EMBEDDING.bytes
+}
+
+/// Baixa e instala o separador de locutores (uma barra para os 3 arquivos).
+#[tauri::command]
+pub async fn install_diarization(app: AppHandle) -> Result<AiStatus> {
+    let engine = diar_engine().ok_or_else(|| {
+        SicroError::Validation("separação de locutores não disponível neste sistema".into())
+    })?;
+    let dir = ai_base_dir(&app)?.join("diarizacao");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| SicroError::Filesystem(format!("criar pasta IA: {e}")))?;
+
+    let app2 = app.clone();
+    let dir2 = dir.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(PathBuf, PathBuf, PathBuf)> {
+        let total = diar_total_bytes();
+        let mut base = 0u64;
+        let mut fetch = |f: &DiarFile| -> Result<PathBuf> {
+            let tmp = dir2.join(format!("{}.part", f.filename));
+            let sha = download_with_progress(&app2, f.url, &tmp, "diarizacao", base, total)?;
+            base += f.bytes;
+            if sha != f.sha256 {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(SicroError::Validation(format!(
+                    "o arquivo baixado ({}) não confere com o hash esperado — download corrompido ou alterado; nada foi instalado",
+                    f.filename
+                )));
+            }
+            let fin = dir2.join(f.filename);
+            std::fs::rename(&tmp, &fin)
+                .map_err(|e| SicroError::Filesystem(format!("finalizar download: {e}")))?;
+            Ok(fin)
+        };
+        let eng = fetch(&engine)?;
+        let seg = fetch(&DIAR_SEGMENTATION)?;
+        let emb = fetch(&DIAR_EMBEDDING)?;
+
+        extract_tar_bz2(&eng, &dir2.join("programa"))?;
+        let _ = std::fs::remove_file(&eng);
+        extract_tar_bz2(&seg, &dir2)?;
+        let _ = std::fs::remove_file(&seg);
+
+        let exe = find_executable(&dir2.join("programa"), DIAR_EXE).ok_or_else(|| {
+            SicroError::Validation(format!("{DIAR_EXE} não encontrado no pacote baixado"))
+        })?;
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755));
+        }
+        let seg_model = dir2.join("sherpa-onnx-pyannote-segmentation-3-0").join("model.onnx");
+        if !seg_model.is_file() {
+            return Err(SicroError::Validation("modelo de segmentação ausente no pacote".into()));
+        }
+        Ok((exe, seg_model, emb))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))?;
+
+    let (exe, seg_model, emb) = match result {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(e);
+        }
+    };
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.diar_bin_path = exe.to_string_lossy().to_string();
+    s.ai.diar_segmentation_path = seg_model.to_string_lossy().to_string();
+    s.ai.diar_embedding_path = emb.to_string_lossy().to_string();
+    s.ai.diar_version = SHERPA_VERSION.to_string();
+    save_app_settings(app.clone(), s).await?;
+    tracing::info!("separação de locutores instalada: sherpa-onnx {SHERPA_VERSION}");
+    get_ai_status(app).await
+}
+
+/// Remove o separador de locutores e limpa a configuração.
+#[tauri::command]
+pub async fn remove_diarization(app: AppHandle) -> Result<AiStatus> {
+    let _ = std::fs::remove_dir_all(ai_base_dir(&app)?.join("diarizacao"));
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.diar_bin_path = String::new();
+    s.ai.diar_segmentation_path = String::new();
+    s.ai.diar_embedding_path = String::new();
+    s.ai.diar_version = String::new();
+    save_app_settings(app.clone(), s).await?;
+    get_ai_status(app).await
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +504,9 @@ pub async fn get_ai_status(app: AppHandle) -> Result<AiStatus> {
             }
         }
     }
+    let diar_ok = [&s.ai.diar_bin_path, &s.ai.diar_segmentation_path, &s.ai.diar_embedding_path]
+        .iter()
+        .all(|p| !p.is_empty() && Path::new(p.as_str()).is_file());
     Ok(AiStatus {
         whisper_bin_path,
         whisper_ok,
@@ -332,6 +514,10 @@ pub async fn get_ai_status(app: AppHandle) -> Result<AiStatus> {
         model_path,
         model_ok,
         installed_models,
+        diar_available: diar_engine().is_some(),
+        diar_ok,
+        diar_version: s.ai.diar_version,
+        diar_approx_mb: (diar_total_bytes() / 1_000_000) as u32,
     })
 }
 
@@ -352,7 +538,7 @@ pub async fn install_ai_asset(app: AppHandle, asset_id: String) -> Result<AiStat
     let app2 = app.clone();
     let tmp2 = tmp.clone();
     let sha = tauri::async_runtime::spawn_blocking(move || {
-        download_with_progress(&app2, &url, &tmp2, &id)
+        download_with_progress(&app2, &url, &tmp2, &id, 0, 0)
     })
     .await
     .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))??;
@@ -513,7 +699,7 @@ pub async fn update_whisper_engine(app: AppHandle) -> Result<AiStatus> {
     let app2 = app.clone();
     let tmp2 = tmp.clone();
     let sha = tauri::async_runtime::spawn_blocking(move || {
-        download_with_progress(&app2, &url, &tmp2, &id)
+        download_with_progress(&app2, &url, &tmp2, &id, 0, 0)
     })
     .await
     .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))??;
@@ -536,4 +722,34 @@ pub async fn update_whisper_engine(app: AppHandle) -> Result<AiStatus> {
     save_app_settings(app.clone(), s).await?;
     tracing::info!("motor IA atualizado para {latest} sha256={sha}");
     get_ai_status(app).await
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extrai_tar_bz2_numa_pasta_nova() {
+        let dir = std::env::temp_dir().join(format!("sicro-tarbz2-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pkg = dir.join("p.tar.bz2");
+        {
+            let enc = bzip2::write::BzEncoder::new(std::fs::File::create(&pkg).unwrap(), bzip2::Compression::fast());
+            let mut b = tar::Builder::new(enc);
+            let data = b"ola";
+            let mut h = tar::Header::new_gnu();
+            h.set_size(data.len() as u64);
+            h.set_mode(0o755);
+            h.set_cksum();
+            b.append_data(&mut h, "pacote/bin/programa", &data[..]).unwrap();
+            b.into_inner().unwrap().finish().unwrap();
+        }
+        // Destino ainda não existe (como "programa/" na instalação).
+        extract_tar_bz2(&pkg, &dir.join("nova").join("programa")).unwrap();
+        let out = dir.join("nova/programa/pacote/bin/programa");
+        assert_eq!(std::fs::read(&out).unwrap(), b"ola");
+        assert!(find_executable(&dir.join("nova"), "programa").is_some());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

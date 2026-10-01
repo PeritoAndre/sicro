@@ -19,7 +19,8 @@ pub mod video_distance;
 pub mod video_speed;
 
 pub use audio::{
-    AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment, TranscriptSegmentInput,
+    AudioDiarization, AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment,
+    DiarTurn, TranscriptSegmentInput,
 };
 pub use croqui::{Croqui, CroquiDoc, CroquiStatus, ExportCroquiPngInput, NewCroquiInput};
 pub use documentoscopia::{

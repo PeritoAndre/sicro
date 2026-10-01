@@ -161,7 +161,7 @@ const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "perfil", label: "Perfil", sub: "Dados pessoais e profissionais", Icon: User },
   { id: "aparencia", label: "Aparência", sub: "Tema, cores e personalização", Icon: Palette },
   { id: "backup", label: "Backup geral", sub: "Cópia de todos os casos", Icon: Archive },
-  { id: "iaocr", label: "IA (degravação)", sub: "Transcrição local de áudio", Icon: Cpu },
+  { id: "iaocr", label: "IA (degravação)", sub: "Transcrição e locutores, local", Icon: Cpu },
   { id: "atalhos", label: "Atalhos de teclado", sub: "Customizáveis por ação", Icon: Keyboard },
   { id: "diagnostico", label: "Diagnóstico", sub: "Onde os dados ficam", Icon: Info },
 ];

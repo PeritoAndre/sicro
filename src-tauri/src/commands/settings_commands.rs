@@ -115,6 +115,15 @@ pub struct AiSettings {
     pub vad_model_path: String,
     #[serde(default)]
     pub whisper_version: String,
+    /// Separação de locutores (sherpa-onnx, local): executável e modelos.
+    #[serde(default)]
+    pub diar_bin_path: String,
+    #[serde(default)]
+    pub diar_segmentation_path: String,
+    #[serde(default)]
+    pub diar_embedding_path: String,
+    #[serde(default)]
+    pub diar_version: String,
 }
 
 /// Documentoscopia — motor de OCR (Tesseract) + dados de idioma instalados pelo
