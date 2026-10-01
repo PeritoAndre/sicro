@@ -252,7 +252,6 @@ interface Props {
   onToggleBackgroundLock: () => void;
   bgOpacity: number;
   onChangeBackgroundOpacity: (v: number) => void;
-  onInsertInLaudo?: () => void;
   onSave: () => void;
   onExportPng: () => void;
   /** MVP 9 — variante sem carimbo, ideal para inserir no laudo. */
@@ -286,7 +285,6 @@ export function Toolbar({
   onToggleBackgroundLock,
   bgOpacity,
   onChangeBackgroundOpacity,
-  onInsertInLaudo,
   onSave,
   onExportPng,
   onExportPngClean,
@@ -592,15 +590,6 @@ export function Toolbar({
           title="Exporta sem carimbo — ideal para inserir no corpo do laudo"
         >
           PNG limpo
-        </Button>
-      )}
-      {onInsertInLaudo && (
-        <Button
-          variant="secondary"
-          leftIcon={<Square size={14} />}
-          onClick={onInsertInLaudo}
-        >
-          Abrir Laudo
         </Button>
       )}
     </aside>

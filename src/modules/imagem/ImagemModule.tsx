@@ -2,7 +2,7 @@
  * ImagemModule — MVP 7 (Editor de Imagem Pericial).
  *
  * Tela de entrada do módulo: lista de análises da ocorrência ativa +
- * picker de origem para criar nova análise (foto do Dossiê, frame de
+ * picker de origem para criar nova análise (foto do caso, frame de
  * vídeo, arquivo local).
  *
  * Quando uma análise está aberta no store, delega para `ImageEditor`.
@@ -42,8 +42,6 @@ import type { VideoStoryboardFrame } from "@domain/video";
 import { useImagemStore } from "./store/imagemStore";
 import { ImageEditor } from "./editor/ImageEditor";
 import { assetUrl, formatDateTime } from "./editor/shared";
-import { useImageEditRoundtripStore } from "@stores/imageEditRoundtripStore";
-import { joinWorkspace } from "@core/paths";
 import styles from "./ImagemModule.module.css";
 
 type PickerTab = "dossie" | "frames" | "file";
@@ -77,7 +75,7 @@ const IMAGEM_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <Share2 size={18} />,
     title: "Integra à suíte",
-    desc: "O derivado tratado aparece no painel Produção do Laudo, pronto para copiar ao Word, com proveniência.",
+    desc: "Analise fotos do caso e quadros coletados dos vídeos; o derivado tratado sai com proveniência.",
   },
 ];
 
@@ -97,70 +95,10 @@ export function ImagemModule() {
   const [error, setError] = useState<string | null>(null);
   const [showPicker, setShowPicker] = useState(false);
 
-  // Pós-laudo S — Round-trip Laudo → Imagem.
-  //
-  // Quando o perito clicou "Editar" numa foto do laudo, o store de
-  // roundtrip foi setado com a source_relative_path da foto + workspace.
-  // Aqui detectamos isso e auto-criamos uma análise a partir desse path
-  // (uma vez só por roundtrip; o flag local evita re-disparar enquanto
-  // o store permanece "editing").
-  const roundtripState = useImageEditRoundtripStore((s) => s.state);
-  const roundtripRequest = useImageEditRoundtripStore((s) => s.request);
-  const [roundtripBootstrapped, setRoundtripBootstrapped] = useState(false);
-
   useEffect(() => {
     if (!workspacePath) return;
     void loadList(workspacePath);
   }, [workspacePath, loadList]);
-
-  useEffect(() => {
-    if (
-      roundtripState !== "editing" ||
-      !roundtripRequest ||
-      !workspacePath ||
-      roundtripBootstrapped ||
-      activeAnalysis // já tem análise aberta — não duplica
-    ) {
-      return;
-    }
-    // Marca antes do await pra evitar segunda invocação concorrente.
-    setRoundtripBootstrapped(true);
-    void (async () => {
-      try {
-        const absolutePath = joinWorkspace(
-          roundtripRequest.workspace_path,
-          roundtripRequest.source_relative_path,
-        );
-        const title = roundtripRequest.laudo_title
-          ? `Edição de foto — ${roundtripRequest.laudo_title}`
-          : `Edição de foto do laudo`;
-        const row = await createFromFile(workspacePath, {
-          source_path: absolutePath,
-          title,
-        });
-        await openAnalysis(workspacePath, row.id);
-      } catch (err) {
-        setError(
-          `Falha ao abrir foto vinda do laudo: ${toSicroError(err).message}`,
-        );
-        // Reset flag pra usuário poder tentar de novo via "Voltar".
-        setRoundtripBootstrapped(false);
-      }
-    })();
-  }, [
-    roundtripState,
-    roundtripRequest,
-    workspacePath,
-    roundtripBootstrapped,
-    activeAnalysis,
-    createFromFile,
-    openAnalysis,
-  ]);
-
-  // Resetar flag quando roundtrip terminar (state → idle).
-  useEffect(() => {
-    if (roundtripState === "idle") setRoundtripBootstrapped(false);
-  }, [roundtripState]);
 
   const handleOpen = useCallback(
     async (analysisId: string) => {
@@ -438,7 +376,7 @@ function SourcePicker({
             className={`${styles.dialogTab} ${tab === "dossie" ? styles.dialogTabActive : ""}`}
             onClick={() => setTab("dossie")}
           >
-            <Camera size={12} /> Dossiê (fotos)
+            <Camera size={12} /> Fotos do caso
           </button>
           <button
             type="button"
@@ -460,7 +398,7 @@ function SourcePicker({
             <>
               {photos === null && <p className={styles.dim}>Carregando…</p>}
               {photos?.length === 0 && (
-                <p className={styles.dim}>Nenhuma foto importada no Dossiê.</p>
+                <p className={styles.dim}>Nenhuma foto no caso (vêm do pacote .sicroapp importado no Início).</p>
               )}
               {photos?.map((p) => (
                 <button

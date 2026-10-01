@@ -3,8 +3,8 @@ import { HashRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppShell } from "./AppShell";
 import { WorkspaceProvider } from "./WorkspaceProvider";
 import { HomeView } from "@modules/home/HomeView";
-import { LaudoModule } from "@modules/laudo/LaudoModule";
-import { DossieModule } from "@modules/dossie/DossieModule";
+import { IntegridadeModule } from "@modules/integridade/IntegridadeModule";
+import { lastMidiaAba } from "@modules/midia/midiaNav";
 import { ConfiguracoesModule } from "@modules/configuracoes/ConfiguracoesModule";
 import { useSettingsStore } from "@stores/settingsStore";
 import { Toaster } from "@/components/toast/Toaster";
@@ -15,8 +15,7 @@ import { installContextMenuGuard } from "@components/ContextMenu/ContextMenu";
 //   - Croqui carrega Konva (~280 KB) + Leaflet (~180 KB) → lazy.
 //   - Imagem carrega Konva → lazy.
 //   - Video / Lab spike → lazy.
-// Home, Laudo e Dossiê (que agora inclui o modo Integridade, ex-Evidências)
-// ficam no main bundle pois são frequentemente usados juntos no fluxo pericial.
+// Home e Integridade ficam no main bundle.
 const CroquiModule = lazy(() =>
   import("@modules/croqui/CroquiModule").then((m) => ({
     default: m.CroquiModule,
@@ -32,11 +31,6 @@ const ImagemModule = lazy(() =>
     default: m.ImagemModule,
   })),
 );
-const EstatisticasModule = lazy(() =>
-  import("@modules/estatisticas/EstatisticasModule").then((m) => ({
-    default: m.EstatisticasModule,
-  })),
-);
 const AudioModule = lazy(() =>
   import("@modules/audio/AudioModule").then((m) => ({
     default: m.AudioModule,
@@ -45,11 +39,6 @@ const AudioModule = lazy(() =>
 const DegravacaoView = lazy(() =>
   import("@modules/audio/DegravacaoView").then((m) => ({
     default: m.DegravacaoView,
-  })),
-);
-const DocumentoscopiaModule = lazy(() =>
-  import("@modules/documentoscopia/DocumentoscopiaModule").then((m) => ({
-    default: m.DocumentoscopiaModule,
   })),
 );
 // Ajuda carrega o manual (texto) + marked → lazy pra ficar fora do bundle main.
@@ -76,6 +65,10 @@ function ModuleLoading() {
   );
 }
 
+function MidiaRedirect() {
+  return <Navigate to={lastMidiaAba()} replace />;
+}
+
 export function App() {
   // Carrega as configurações globais (perfil, instituição, aparência) uma vez
   // no boot e aplica o tema + cor de destaque ao documento.
@@ -99,37 +92,22 @@ export function App() {
           <Suspense fallback={<ModuleLoading />}>
             <Routes>
               <Route path="/" element={<HomeView />} />
-              <Route path="/dossie" element={<DossieModule />} />
-              <Route path="/laudo" element={<LaudoModule />} />
+              <Route path="/integridade" element={<IntegridadeModule />} />
               <Route path="/croqui" element={<CroquiModule />} />
+              {/* Vídeo e Áudio: um módulo só, com as abas Vídeos / Áudios na
+                  barra do topo. /midia volta à aba usada por último. */}
+              <Route path="/midia" element={<MidiaRedirect />} />
               <Route path="/video" element={<VideoModule />} />
               <Route path="/audio" element={<AudioModule />} />
               <Route
                 path="/audio/degravacao/:audioId"
                 element={<DegravacaoView />}
               />
-              {/* Evidências foi unificado ao Dossiê (modo Integridade). Mantemos
-                  o redirect para não quebrar links/atalhos antigos. */}
-              <Route
-                path="/evidencias"
-                element={<Navigate to="/dossie?modo=integridade" replace />}
-              />
               <Route path="/imagem" element={<ImagemModule />} />
-              <Route
-                path="/imagens"
-                element={<Navigate to="/imagem" replace />}
-              />
-              {/* "Mídias" foi removido: sua função (biblioteca de evidências
-                  com hash e vínculos) já vive no Dossiê → modo Integridade. */}
-              <Route
-                path="/midias"
-                element={<Navigate to="/dossie?modo=integridade" replace />}
-              />
-              <Route
-                path="/documentoscopia"
-                element={<DocumentoscopiaModule />}
-              />
-              <Route path="/estatisticas" element={<EstatisticasModule />} />
+              {/* Endereços de módulos que saíram no 4.0 (ou foram renomeados). */}
+              <Route path="/imagens" element={<Navigate to="/imagem" replace />} />
+              <Route path="/evidencias" element={<Navigate to="/integridade" replace />} />
+              <Route path="/midias" element={<Navigate to="/integridade" replace />} />
               <Route path="/configuracoes" element={<ConfiguracoesModule />} />
               <Route path="/ajuda" element={<AjudaModule />} />
               <Route path="*" element={<Navigate to="/" replace />} />

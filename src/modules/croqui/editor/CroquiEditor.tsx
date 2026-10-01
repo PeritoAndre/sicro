@@ -56,7 +56,6 @@ import {
   type ParityMarcacao,
   type ParitySuperficie,
 } from "../engine/road-parity";
-import { useNavigate } from "react-router-dom";
 import { useNavGuard } from "@app/navGuard";
 import { useShortcuts } from "@core/useShortcuts";
 import { Toolbar } from "./Toolbar";
@@ -85,7 +84,6 @@ export function CroquiEditor() {
   const isExportStale = useCroquiStore((s) => s.isExportStale);
   const lastExportedAt = useCroquiStore((s) => s.lastExportedAt);
 
-  const navigate = useNavigate();
   const registerNavGuard = useNavGuard((s) => s.register);
   const unregisterNavGuard = useNavGuard((s) => s.unregister);
 
@@ -847,7 +845,6 @@ export function CroquiEditor() {
     // Exportação.
     "croqui.exportPng": () => void handleExportPng("tecnico"),
     "croqui.exportPngClean": () => void handleExportPng("limpo"),
-    "croqui.openLaudo": () => handleInsertInLaudo(),
   });
 
   if (!workspacePath || !activeCroqui || !doc) {
@@ -989,74 +986,6 @@ export function CroquiEditor() {
   const handleBackToList = () =>
     tryNavigateAway(() => clearCurrent(), "a lista de croquis");
 
-  // MVP 9 Round 3 — `ensureCroquiExportFresh`:
-  //
-  //   - if the croqui is dirty → save it first;
-  //   - if there's no recorded export or the export is older than the
-  //     doc (`isExportStale`), generate a fresh PNG (technical variant);
-  //   - return true on success, false on failure.
-  //
-  // The Laudo flow ("Abrir Laudo") calls this before navigating so the
-  // panel on the other side always sees the most recent PNG. Avoids the
-  // "salvei o croqui mas o laudo ainda mostra o PNG antigo" bug the
-  // user reported.
-  const ensureExportFresh = useCallback(async (): Promise<boolean> => {
-    if (!workspacePath || !doc || !activeCroqui || !stageRef.current) {
-      return false;
-    }
-    // Step 1 — flush dirty state.
-    if (dirty) {
-      const ok = await handleSave();
-      if (!ok) return false;
-    }
-    // Step 2 — re-export only when the recorded PNG is older than the
-    // last save (or doesn't exist at all).
-    if (!isExportStale(activeCroqui.id) && activeCroqui.last_export_relative_path) {
-      return true;
-    }
-    setExporting(true);
-    try {
-      const rawDataUrl = stageRef.current.toPng(2);
-      if (!rawDataUrl) throw new Error("toDataURL retornou null");
-      const final = await stampPng(rawDataUrl, {
-        title: activeCroqui.title,
-        occurrence,
-        scaleLabel: doc.scale
-          ? `Escala 1 m = ${doc.scale.px_per_m.toFixed(2)} px`
-          : "Escala não definida",
-        timestamp: new Date(),
-      });
-      await exportPng(workspacePath, final);
-      return true;
-    } catch (err) {
-      setFeedback(
-        `Falha ao gerar PNG atualizado: ${toSicroError(err).message}`,
-      );
-      return false;
-    } finally {
-      setExporting(false);
-    }
-  }, [
-    workspacePath,
-    doc,
-    activeCroqui,
-    occurrence,
-    dirty,
-    isExportStale,
-    handleSave,
-    exportPng,
-  ]);
-
-  const handleInsertInLaudo = () => {
-    // Run the freshness pipeline first; only navigate if it succeeded
-    // so the Laudo always sees a PNG matching the current .sicrocroqui.
-    void (async () => {
-      const ok = await ensureExportFresh();
-      if (!ok) return;
-      navigate("/laudo");
-    })();
-  };
-
   // Modal handlers ---------------------------------------------------------
   const handleModalSaveAndLeave = async () => {
     if (!pendingNav) return;
@@ -1109,7 +1038,6 @@ export function CroquiEditor() {
         onToggleBackgroundLock={handleToggleBackgroundLock}
         bgOpacity={doc.background_image?.opacity ?? 0.6}
         onChangeBackgroundOpacity={handleChangeBackgroundOpacity}
-        onInsertInLaudo={handleInsertInLaudo}
         onSave={() => void handleSave()}
         onExportPng={() => void handleExportPng("tecnico")}
         onExportPngClean={() => void handleExportPng("limpo")}

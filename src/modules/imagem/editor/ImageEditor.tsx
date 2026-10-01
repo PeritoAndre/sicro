@@ -67,9 +67,7 @@ import {
   XSquare,
   type LucideIcon,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 import { useShortcuts } from "@core/useShortcuts";
-import { useImageEditRoundtripStore } from "@stores/imageEditRoundtripStore";
 import {
   Circle,
   Ellipse,
@@ -291,14 +289,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   const analysis = useImagemStore((s) => s.activeAnalysis)!;
   const initialDoc = useImagemStore((s) => s.activeDoc)!;
   const saveActive = useImagemStore((s) => s.saveActive);
-
-  // Pós-laudo S — Round-trip Laudo ↔ Imagem.
-  const navigate = useNavigate();
-  const roundtripState = useImageEditRoundtripStore((s) => s.state);
-  const roundtripRequest = useImageEditRoundtripStore((s) => s.request);
-  const completeRoundtrip = useImageEditRoundtripStore((s) => s.completeEdit);
-  const isRoundtripActive = roundtripState === "editing" && !!roundtripRequest;
-  const [returningToLaudo, setReturningToLaudo] = useState(false);
 
   const [doc, setDoc] = useState<SicroImageDoc>(initialDoc);
   // G12.22 — Modal de relatório pericial.
@@ -1525,84 +1515,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     [doc, htmlImage, workspacePath, clearSelection],
   );
 
-  // ----- Round-trip: Salvar e voltar pro laudo (pós-laudo S) -----
-  const handleReturnToLaudo = async () => {
-    if (!roundtripRequest) return;
-    setReturningToLaudo(true);
-    setFeedback("Salvando e exportando…");
-    try {
-      // Salva o doc atual (com processing_stack incluindo o crop).
-      const metadata = {
-        annotations_count: doc.annotations.length,
-        has_scale: !!doc.scale,
-        view_adjustments: doc.view_adjustments,
-        roundtrip: true,
-      };
-      await saveActive(workspacePath, doc, JSON.stringify(metadata));
-
-      // Compõe o PNG visual via Konva — só a região da imagem (com
-      // crop aplicado, ou natural). ANTES capturava o stage inteiro
-      // (com viewport + padding em volta), e o resultado virava uma
-      // PNG enorme com a imagem cortada perdida no meio — quando
-      // voltava pro laudo, ficava minúscula. Agora, calculamos o
-      // bounding box exato da KonvaImage em coords de stage e
-      // pedimos só essa área. PixelRatio normalizado pra 2x da
-      // resolução source (independente do zoom).
-      const dataUrl: string | null = (() => {
-        if (!stageRef.current || !htmlImage) return null;
-        const imageWorldW = cropApplied ? cropApplied.width : htmlImage.width;
-        const imageWorldH = cropApplied
-          ? cropApplied.height
-          : htmlImage.height;
-        const scale = viewport.scale || 1;
-        return stageRef.current.toDataURL({
-          x: viewport.x,
-          y: viewport.y,
-          width: imageWorldW * scale,
-          height: imageWorldH * scale,
-          // pixelRatio normaliza: queremos PNG do tamanho source × 2
-          // (alta resolução pra preservar qualidade). A região
-          // capturada em stage coords é (imageWorldW × scale).
-          // Pra obter output de imageWorldW × 2, pixelRatio = 2/scale.
-          pixelRatio: 2 / scale,
-          mimeType: "image/png",
-        });
-      })();
-      const composedBase64 = dataUrl
-        ? dataUrl.replace(/^data:image\/png;base64,/, "")
-        : null;
-
-      const exp = await commands.exportImageDerivative(
-        workspacePath,
-        analysis.id,
-        {
-          apply_backend_adjustments: false,
-          composed_png_base64: composedBase64,
-          adjustments: doc.view_adjustments,
-          operations: [],
-          format: "png",
-          operation_summary_json: JSON.stringify({
-            roundtrip_source: roundtripRequest.source_relative_path,
-            laudo_id: roundtripRequest.laudo_id,
-            crop_applied: cropApplied,
-            annotations: doc.annotations.length,
-          }),
-        },
-      );
-
-      // Sinaliza o store: o laudo vai pegar isso ao montar.
-      completeRoundtrip({
-        output_relative_path: exp.output_relative_path,
-        source_relative_path: roundtripRequest.source_relative_path,
-      });
-      // Volta pro laudo. O LaudoEditorView aplica o novo path nas figures.
-      navigate("/laudo");
-    } catch (err) {
-      setFeedback(`Falha ao voltar para o laudo: ${toSicroError(err).message}`);
-      setReturningToLaudo(false);
-    }
-  };
-
   // ----- Actions -----
   const handleSave = async (): Promise<boolean> => {
     setSaving(true);
@@ -1949,34 +1861,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
 
   return (
     <div className={styles.wrap}>
-      {/* Pós-laudo S — Banner do round-trip Laudo↔Imagem. */}
-      {isRoundtripActive && roundtripRequest && (
-        <div
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(14,165,233,0.15), rgba(14,165,233,0.05))",
-            borderBottom: "1px solid rgba(14,165,233,0.4)",
-            padding: "8px 16px",
-            display: "flex",
-            alignItems: "center",
-            gap: 12,
-            fontSize: 12,
-            color: "var(--sicro-fg)",
-          }}
-        >
-          <CropIcon size={14} color="#0ea5e9" />
-          <strong>Editando foto do laudo</strong>
-          {roundtripRequest.laudo_title && (
-            <span style={{ color: "var(--sicro-fg-dim)" }}>
-              — {roundtripRequest.laudo_title}
-            </span>
-          )}
-          <span style={{ marginLeft: "auto", color: "var(--sicro-fg-dim)" }}>
-            Clique <strong>Salvar e voltar</strong> para devolver ao laudo
-            com as edições aplicadas.
-          </span>
-        </div>
-      )}
       <header className={styles.topBar}>
         <button
           type="button"
@@ -2035,29 +1919,14 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           >
             Relatório
           </Button>
-          {isRoundtripActive ? (
-            // Pós-laudo S — Botão dedicado de round-trip. Substitui o
-            // botão "Exportar" enquanto o roundtrip estiver ativo —
-            // o perito só precisa decidir Salvar+voltar, não exportação
-            // genérica.
-            <Button
-              variant="primary"
-              leftIcon={<Check size={14} />}
-              onClick={() => void handleReturnToLaudo()}
-              disabled={returningToLaudo}
-            >
-              {returningToLaudo ? "Voltando…" : "Salvar e voltar pro laudo"}
-            </Button>
-          ) : (
-            <Button
-              variant="primary"
-              leftIcon={<FileImage size={14} />}
-              onClick={() => void handleExport()}
-              disabled={exporting}
-            >
-              {exporting ? "Exportando…" : "Exportar"}
-            </Button>
-          )}
+          <Button
+            variant="primary"
+            leftIcon={<FileImage size={14} />}
+            onClick={() => void handleExport()}
+            disabled={exporting}
+          >
+            {exporting ? "Exportando…" : "Exportar"}
+          </Button>
         </div>
       </header>
 

@@ -9,16 +9,11 @@
  * o perfil mostra exatamente o que está salvo em Configurações — nada inventado.
  */
 
-import { NavLink, useNavigate, type NavigateFunction } from "react-router-dom";
+import { NavLink, useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   ArrowRight,
-  BarChart3,
-  FileStack,
-  FileText,
-  Film,
-  FolderOpen,
-  Headphones,
+  Clapperboard,
   HelpCircle,
   Home as HomeIcon,
   ImagePlus,
@@ -30,6 +25,7 @@ import {
 import { useSettingsStore } from "@stores/settingsStore";
 import styles from "./ActivityRail.module.css";
 import { useNavGuard } from "./navGuard";
+import { isMidiaPath, lastMidiaAba } from "@modules/midia/midiaNav";
 // Versão real do build: vem do package.json (não escrever à mão).
 import { version as APP_VERSION } from "../../package.json";
 
@@ -37,19 +33,17 @@ interface RailItem {
   to: string;
   label: string;
   icon: LucideIcon;
+  /** Ativo também nestes caminhos (o módulo Vídeo e Áudio tem duas telas). */
+  activeWhen?: (pathname: string) => boolean;
 }
 
 const primary: RailItem = { to: "/", label: "Início", icon: HomeIcon };
 
+// SICRO 4.0: três módulos, um por tipo de trabalho técnico.
 const modules: RailItem[] = [
-  { to: "/dossie", label: "Dossiê", icon: FolderOpen },
-  { to: "/laudo", label: "Laudos", icon: FileText },
   { to: "/croqui", label: "Croquis", icon: MapIcon },
-  { to: "/video", label: "Vídeos", icon: Film },
-  { to: "/audio", label: "Áudios", icon: Headphones },
+  { to: "/midia", label: "Vídeo e Áudio", icon: Clapperboard, activeWhen: isMidiaPath },
   { to: "/imagem", label: "Imagens", icon: ImagePlus },
-  { to: "/documentoscopia", label: "Documentoscopia", icon: FileStack },
-  { to: "/estatisticas", label: "Estatísticas", icon: BarChart3 },
 ];
 
 const settingsItem: RailItem = {
@@ -142,15 +136,18 @@ export function ActivityRail() {
   );
 }
 
-function RailLink({ to, label, icon: Icon }: RailItem) {
+function RailLink({ to, label, icon: Icon, activeWhen }: RailItem) {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  // Vídeo e Áudio: o link aponta direto para a aba usada por último.
+  const target = to === "/midia" ? lastMidiaAba() : to;
   return (
     <NavLink
-      to={to}
+      to={target}
       end={to === "/"}
       aria-label={label}
       className={({ isActive }) =>
-        [styles.item, isActive ? styles.itemActive : null]
+        [styles.item, isActive || activeWhen?.(pathname) ? styles.itemActive : null]
           .filter(Boolean)
           .join(" ")
       }
@@ -158,7 +155,7 @@ function RailLink({ to, label, icon: Icon }: RailItem) {
         const guard = useNavGuard.getState().guard;
         if (!guard) return; // deixa o NavLink navegar normalmente
         e.preventDefault();
-        void useNavGuard.getState().attemptNavigation(() => navigate(to));
+        void useNavGuard.getState().attemptNavigation(() => navigate(target));
       }}
     >
       <Icon size={18} aria-hidden className={styles.itemIcon} />

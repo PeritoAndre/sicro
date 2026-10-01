@@ -72,7 +72,6 @@ export const CROQUI_ACTIONS: ShortcutAction[] = [
   // Exportação / saída.
   { id: "croqui.exportPng", scope: "croqui", group: "Croqui · Exportação", label: "Exportar PNG técnico", defaultBinding: "Ctrl+E" },
   { id: "croqui.exportPngClean", scope: "croqui", group: "Croqui · Exportação", label: "Exportar PNG limpo", defaultBinding: "Ctrl+Shift+E" },
-  { id: "croqui.openLaudo", scope: "croqui", group: "Croqui · Exportação", label: "Atualizar PNG e abrir Laudo", defaultBinding: "Ctrl+L" },
 
   // Geral.
   { id: "croqui.cancel", scope: "croqui", group: "Croqui · Geral", label: "Cancelar ferramenta / seleção", defaultBinding: "Esc" },

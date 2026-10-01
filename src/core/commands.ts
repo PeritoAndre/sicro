@@ -15,9 +15,7 @@ import type {
   OccurrenceStatus,
   RecentOccurrence,
 } from "@domain/occurrence";
-import type { Laudo, LaudoDocPayload, NewLaudoInput } from "@domain/laudo";
-import type { Export } from "@domain/export";
-import type { AppSettings, HeaderTemplate } from "@domain/app_settings";
+import type { AppSettings } from "@domain/app_settings";
 import type { CaseIndexEntry } from "@domain/case_index";
 import type {
   Import,
@@ -26,16 +24,6 @@ import type {
   ImportSicroappInput,
   MediaAsset,
 } from "@domain/import";
-import type {
-  ChecklistItem,
-  DossieSummary,
-  Entity,
-  FieldNote,
-  Measurement,
-  RehydrateOutcome,
-  TimelineEvent,
-  Trace,
-} from "@domain/dossie";
 import type {
   Croqui,
   CroquiDocPayload,
@@ -71,11 +59,7 @@ import type {
   CreateDistanceMeasurementInput,
   VideoDistanceMeasurement,
 } from "@domain/video_distance";
-import type {
-  EvidenceAsset,
-  EvidenceLink,
-  RecordEvidenceLinkInput,
-} from "@domain/evidence";
+import type { EvidenceLink } from "@domain/evidence";
 import type {
   IntegrityReportArtifact,
   VerifyOptions,
@@ -98,7 +82,6 @@ import type {
   ImportLocalImageInput,
   SaveImageAnalysisInput,
 } from "@domain/image_analysis";
-import type { PhotoImportResult } from "@domain/photo_drop";
 import type {
   BackupArtifact,
   GlobalBackupReport,
@@ -119,23 +102,7 @@ import type {
   WhisperStatus,
 } from "@domain/audio";
 import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
-import type { LibreOfficeStatus } from "@domain/libreoffice";
-import type {
-  ComparisonSession,
-  DetectedField,
-  DocumentCaseFile,
-  DocumentLog,
-  DocumentRegion,
-  FieldInput,
-  OcrRun,
-  OcrRunInput,
-  OcrRunResult,
-  OcrTextBlock,
-  RegionInput,
-} from "@domain/documentoscopia";
-import type { OcrCatalog, OcrStatus, OcrUpdateInfo } from "@domain/ocr";
 import { toSicroError, type SicroError } from "./errors";
-import { getUiZoom } from "./uiZoom";
 
 async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -145,13 +112,6 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
   }
 }
 
-type Rect = { x: number; y: number; width: number; height: number };
-
-/** CSS px do webview principal → px lógicos da janela (desfaz o zoom da interface). */
-function cssToWindowPx(r: Rect): Rect {
-  const z = getUiZoom();
-  return { x: r.x * z, y: r.y * z, width: r.width * z, height: r.height * z };
-}
 
 export const commands = {
   /** Returns the currently loaded occurrence for a given workspace path. */
@@ -217,134 +177,19 @@ export const commands = {
 
   // ----- Laudo (Spike B) -----
 
-  /** Creates a fresh laudo row + empty .sicrodoc on disk. */
-  createLaudo(
-    workspacePath: string,
-    input: NewLaudoInput,
-  ): Promise<LaudoDocPayload> {
-    return safeInvoke<LaudoDocPayload>("create_laudo", {
-      workspacePath,
-      input,
-    });
-  },
 
-  /**
-   * POC — Importa um `.docx` do Word como um novo laudo (mão única,
-   * melhor-esforço). Cria a linha + grava o `.sicrodoc` convertido.
-   */
-  importDocxAsLaudo(
-    workspacePath: string,
-    sourcePath: string,
-    title?: string,
-  ): Promise<LaudoDocPayload> {
-    return safeInvoke<LaudoDocPayload>("import_docx_as_laudo", {
-      workspacePath,
-      sourcePath,
-      title: title ?? null,
-    });
-  },
 
-  /** Lists every laudo registered in the workspace's SQLite. */
-  listLaudos(workspacePath: string): Promise<Laudo[]> {
-    return safeInvoke<Laudo[]>("list_laudos", { workspacePath });
-  },
 
-  /** Reads a laudo (row + full .sicrodoc envelope). */
-  readLaudo(workspacePath: string, laudoId: string): Promise<LaudoDocPayload> {
-    return safeInvoke<LaudoDocPayload>("read_laudo", {
-      workspacePath,
-      laudoId,
-    });
-  },
 
-  /** Overwrites the `.sicrodoc` on disk and bumps `updated_at`. */
-  saveLaudo(
-    workspacePath: string,
-    laudoId: string,
-    doc: unknown,
-  ): Promise<Laudo> {
-    return safeInvoke<Laudo>("save_laudo", {
-      workspacePath,
-      laudoId,
-      doc,
-    });
-  },
 
-  /**
-   * Remove o laudo do workspace: apaga a linha em `laudos` e o
-   * arquivo `.sicrodoc` em disco. Idempotente para o arquivo
-   * (NotFound é tratado como sucesso). Grava `laudo.deleted` no
-   * audit log antes da remoção.
-   */
-  deleteLaudo(workspacePath: string, laudoId: string): Promise<void> {
-    return safeInvoke<void>("delete_laudo", {
-      workspacePath,
-      laudoId,
-    });
-  },
 
-  /**
-   * H — Importa um PDF assinado (gov.br ou SIGDOCS) de volta para o
-   * workspace. Grava em `laudos/<id>/assinados/<filename>.pdf`,
-   * computa SHA-256 e devolve metadados para o frontend persistir em
-   * `doc.finalization.signature`.
-   */
-  importSignedPdf(
-    workspacePath: string,
-    input: {
-      laudo_id: string;
-      source_absolute_path: string;
-      preferred_filename?: string | null;
-    },
-  ): Promise<{
-    relative_path: string;
-    sha256: string;
-    size_bytes: number;
-  }> {
-    return safeInvoke("import_signed_pdf", { workspacePath, input });
-  },
 
   // ----- I — Integração SIGDOCS -----
 
-  /** Resolve a URL do SIGDOCS efetiva do workspace (manifest ou default). */
-  getSigdocsUrl(
-    workspacePath: string,
-  ): Promise<{ url: string; source: "manifest" | "default" }> {
-    return safeInvoke("get_sigdocs_url", { workspacePath });
-  },
 
-  /** Onda 1 — abre o SIGDOCS numa janela secundária do SO. */
-  openSigdocsWindow(url?: string): Promise<void> {
-    return safeInvoke("open_sigdocs_window", { url: url ?? null });
-  },
 
-  /**
-   * Onda 3 — "Cover mode": abre o SIGDOC num webview borderless que
-   * cobre EXATAMENTE a área de conteúdo do editor (entre topbar e
-   * statusbar, à direita da rail). `bounds` em CSS px relativos ao
-   * webview principal — convertidos aqui para px lógicos da janela (o zoom
-   * da interface faz 1 CSS px valer `getUiZoom()` px na tela).
-   */
-  openSigdocsCover(
-    url: string | null,
-    bounds: { x: number; y: number; width: number; height: number },
-  ): Promise<void> {
-    return safeInvoke("open_sigdocs_cover", { url, bounds: cssToWindowPx(bounds) });
-  },
 
-  /** Reposiciona o cover quando a área disponível muda (resize, route change). */
-  updateSigdocsCoverBounds(bounds: {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  }): Promise<void> {
-    return safeInvoke("update_sigdocs_cover_bounds", { bounds: cssToWindowPx(bounds) });
-  },
 
-  closeSigdocsCover(): Promise<void> {
-    return safeInvoke("close_sigdocs_cover", {});
-  },
 
   /**
    * Abre o Explorer do SO (Windows/macOS/Linux) na pasta de um
@@ -357,30 +202,8 @@ export const commands = {
 
   // K — Credenciais SIGDOC (Windows Credential Manager)
 
-  /**
-   * Salva email + senha do SIGDOC no Windows Credential Manager
-   * (criptografado per-user). O autofill é injetado automaticamente
-   * quando o cover do SIGDOC abre.
-   */
-  saveSigdocCredentials(email: string, password: string): Promise<void> {
-    return safeInvoke("save_sigdoc_credentials", { email, password });
-  },
 
-  /**
-   * Lê o status das credenciais — retorna o email cadastrado e SE há
-   * senha no keyring. NUNCA retorna a senha em si por segurança.
-   */
-  getSigdocCredentialsStatus(): Promise<{
-    email: string | null;
-    has_password: boolean;
-  }> {
-    return safeInvoke("get_sigdoc_credentials_status", {});
-  },
 
-  /** Remove email + senha do SIGDOC do storage. */
-  deleteSigdocCredentials(): Promise<void> {
-    return safeInvoke("delete_sigdoc_credentials", {});
-  },
 
   // ----- Configurações globais do app (o "cofrinho" fora do .sicro) -----
 
@@ -394,23 +217,8 @@ export const commands = {
     return safeInvoke("save_app_settings", { settings });
   },
 
-  /**
-   * Cabeçalhos oficiais — pasta dedicada `<app_config_dir>/cabecalhos/`
-   * (1 arquivo `.json` por cabeçalho). Lista os salvos.
-   */
-  listHeaderTemplates(): Promise<HeaderTemplate[]> {
-    return safeInvoke<HeaderTemplate[]>("list_header_templates", {});
-  },
 
-  /** Grava/atualiza um cabeçalho (arquivo `<id>.json`, escrita atômica). */
-  saveHeaderTemplate(template: HeaderTemplate): Promise<void> {
-    return safeInvoke("save_header_template", { template });
-  },
 
-  /** Remove um cabeçalho salvo (idempotente). */
-  deleteHeaderTemplate(templateId: string): Promise<void> {
-    return safeInvoke("delete_header_template", { templateId });
-  },
 
   /** Caminho absoluto do arquivo app-settings.json (diagnóstico). */
   getSettingsFilePath(): Promise<string> {
@@ -438,21 +246,6 @@ export const commands = {
 
   // ----- Estatísticas (exportação do dashboard) -----
 
-  /**
-   * Grava uma exportação do dashboard de estatísticas em
-   * `<workspace>/exports/estatisticas/` e devolve o caminho relativo.
-   */
-  saveStatisticsExport(
-    workspacePath: string,
-    format: "html" | "csv" | "json",
-    content: string,
-  ): Promise<string> {
-    return safeInvoke<string>("save_statistics_export", {
-      workspacePath,
-      format,
-      content,
-    });
-  },
 
   // ----- Índice global de casos (estatísticas gerais) -----
 
@@ -461,19 +254,6 @@ export const commands = {
     return safeInvoke<CaseIndexEntry[]>("get_case_index", {});
   },
 
-  /**
-   * Grava a exportação das estatísticas GERAIS em
-   * `Documentos/SICRO/estatisticas-gerais/`. Devolve o caminho absoluto.
-   */
-  saveGeneralStatisticsExport(
-    format: "html" | "csv" | "json",
-    content: string,
-  ): Promise<string> {
-    return safeInvoke<string>("save_general_statistics_export", {
-      format,
-      content,
-    });
-  },
 
   /** Insere/atualiza um caso no índice global (idempotente por id). */
   upsertCaseIndex(entry: CaseIndexEntry): Promise<void> {
@@ -490,80 +270,10 @@ export const commands = {
 
   // ----- Export (Spike C) -----
 
-  /** Writes the rendered HTML to `<workspace>/exports/html/`. */
-  exportLaudoHtml(
-    workspacePath: string,
-    laudoId: string,
-    html: string,
-  ): Promise<Export> {
-    return safeInvoke<Export>("export_laudo_html", {
-      workspacePath,
-      laudoId,
-      html,
-    });
-  },
 
-  /** Renders the HTML to PDF via headless Edge and writes to `exports/pdf/`. */
-  exportLaudoPdf(
-    workspacePath: string,
-    laudoId: string,
-    html: string,
-    /** Rodapé "Folha X de Y" (HTML com spans pageNumber/totalPages) impresso em
-     *  toda página via CDP. Passado quando o laudo usa os campos {page}/{pages}. */
-    pageFooter?: string | null,
-  ): Promise<Export> {
-    return safeInvoke<Export>("export_laudo_pdf", {
-      workspacePath,
-      laudoId,
-      html,
-      pageFooter: pageFooter ?? null,
-    });
-  },
 
-  /** Walks the `.sicrodoc` and produces a DOCX in `exports/docx/`.
-   *  `fieldValues` = mapa {campo: valor} já resolvido pelo front (metadata +
-   *  occurrence + catálogo), pra trocar as pílulas `{numero_laudo}` etc. pelo
-   *  valor real no .docx. page/pages ficam vazios (viram campo nativo do Word). */
-  exportLaudoDocx(
-    workspacePath: string,
-    laudoId: string,
-    fieldValues?: Record<string, string>,
-  ): Promise<Export> {
-    return safeInvoke<Export>("export_laudo_docx", {
-      workspacePath,
-      laudoId,
-      fieldValues: fieldValues ?? null,
-    });
-  },
 
-  /** Exporta PDF via LibreOffice (DOCX→PDF headless): diagramação estilo Word
-   * (numeração no lugar/tabela/cabeçalho repetindo). Requer LibreOffice.
-   * `fieldValues`: ver exportLaudoDocx (mesmo mapa resolvido pelo front). */
-  exportLaudoPdfLibreoffice(
-    workspacePath: string,
-    laudoId: string,
-    /** true → gera PDF/A (ISO 19005, arquivamento de longo prazo). */
-    pdfA = false,
-    fieldValues?: Record<string, string>,
-  ): Promise<Export> {
-    return safeInvoke<Export>("export_laudo_pdf_libreoffice", {
-      workspacePath,
-      laudoId,
-      pdfA,
-      fieldValues: fieldValues ?? null,
-    });
-  },
 
-  /** Lists every export already produced for a given laudo (newest first). */
-  listLaudoExports(
-    workspacePath: string,
-    laudoId: string,
-  ): Promise<Export[]> {
-    return safeInvoke<Export[]>("list_laudo_exports", {
-      workspacePath,
-      laudoId,
-    });
-  },
 
   // ----- Importer (Spike D — .sicroapp) -----
 
@@ -596,54 +306,18 @@ export const commands = {
   /** Lists the photos imported into a workspace (newest captured first). */
   // ----- Dossiê Operacional (MVP 3) -----
 
-  /** Aggregated summary: occurrence + latest import + counts + stats. */
-  getDossieSummary(workspacePath: string): Promise<DossieSummary> {
-    return safeInvoke<DossieSummary>("get_dossie_summary", { workspacePath });
-  },
 
   /** Same as listWorkspacePhotos — kept for symmetry with the rest of the dossier API. */
   listDossiePhotos(workspacePath: string): Promise<MediaAsset[]> {
     return safeInvoke<MediaAsset[]>("list_dossie_photos", { workspacePath });
   },
 
-  listDossieChecklist(workspacePath: string): Promise<ChecklistItem[]> {
-    return safeInvoke<ChecklistItem[]>("list_dossie_checklist", {
-      workspacePath,
-    });
-  },
 
-  listDossieEntities(workspacePath: string): Promise<Entity[]> {
-    return safeInvoke<Entity[]>("list_dossie_entities", { workspacePath });
-  },
 
-  listDossieTraces(workspacePath: string): Promise<Trace[]> {
-    return safeInvoke<Trace[]>("list_dossie_traces", { workspacePath });
-  },
 
-  listDossieMeasurements(workspacePath: string): Promise<Measurement[]> {
-    return safeInvoke<Measurement[]>("list_dossie_measurements", {
-      workspacePath,
-    });
-  },
 
-  listDossieNotes(workspacePath: string): Promise<FieldNote[]> {
-    return safeInvoke<FieldNote[]>("list_dossie_notes", { workspacePath });
-  },
 
-  listDossieTimeline(workspacePath: string): Promise<TimelineEvent[]> {
-    return safeInvoke<TimelineEvent[]>("list_dossie_timeline", {
-      workspacePath,
-    });
-  },
 
-  /**
-   * Re-extract every dossier table from the staged
-   * `imports/<id>/original_package.sicroapp`. Used by the "Recarregar
-   * dados do pacote" button on the Import tab.
-   */
-  rehydrateDossie(workspacePath: string): Promise<RehydrateOutcome> {
-    return safeInvoke<RehydrateOutcome>("rehydrate_dossie", { workspacePath });
-  },
 
   // ----- Croqui (Spike E) -----
 
@@ -993,35 +667,7 @@ export const commands = {
 
   // ----- Evidência → Laudo (MVP 4) -----
 
-  /**
-   * Grava uma linha em `evidence_links` quando o perito insere uma
-   * evidência no laudo. Os atributos completos continuam nos próprios
-   * nodes do `.sicrodoc`; esta tabela é índice / audit log.
-   */
-  recordEvidenceLink(
-    workspacePath: string,
-    input: RecordEvidenceLinkInput,
-  ): Promise<EvidenceLink> {
-    return safeInvoke<EvidenceLink>("record_evidence_link", {
-      workspacePath,
-      input,
-    });
-  },
 
-  /**
-   * Lê bytes de um asset de evidência e retorna base64. Usado pelo
-   * renderer para inlinear data URIs no HTML/PDF (não funciona com
-   * convertFileSrc dentro de iframe srcdoc / headless Edge).
-   */
-  readEvidenceAsset(
-    workspacePath: string,
-    relativePath: string,
-  ): Promise<EvidenceAsset> {
-    return safeInvoke<EvidenceAsset>("read_evidence_asset", {
-      workspacePath,
-      relativePath,
-    });
-  },
 
   // ----- Central de Evidências + Integridade (MVP 5) -----
 
@@ -1104,53 +750,7 @@ export const commands = {
     });
   },
 
-  /**
-   * O — Drag & drop de fotos no editor de laudo. Recebe um lote de
-   * paths de arquivo (vindos do `onDragDropEvent` do Tauri). Para cada
-   * foto: copia pra `<workspace>/laudos/<id>/evidencias/photos/`,
-   * calcula SHA-256, lê dimensões + EXIF, escreve sidecar JSON, e
-   * retorna metadata pra inserir no doc.
-   *
-   * O command NUNCA aborta o lote: itens inválidos vão no array
-   * `errors` com a razão; itens válidos vão no `imported`.
-   */
-  importDraggedPhotosToLaudo(
-    workspacePath: string,
-    laudoId: string,
-    filePaths: string[],
-  ): Promise<PhotoImportResult> {
-    return safeInvoke<PhotoImportResult>("import_dragged_photos_to_laudo", {
-      input: {
-        workspace_path: workspacePath,
-        laudo_id: laudoId,
-        file_paths: filePaths,
-      },
-    });
-  },
 
-  /**
-   * T — Paste (Ctrl+V) de fotos no editor de laudo. Mesma fundação do
-   * drag&drop, mas as fotos vêm como bytes (base64) em vez de paths.
-   * Cobre dois casos do clipboard:
-   *   1. Bitmap raw (screenshot do Windows, "copy image" do browser).
-   *   2. Arquivo copiado do Explorer entregue como `File` pelo
-   *      `DataTransfer.files` no evento `paste`.
-   *
-   * O command NUNCA aborta o lote: bytes inválidos vão no array `errors`.
-   */
-  importPastedPhotosToLaudo(
-    workspacePath: string,
-    laudoId: string,
-    photos: { bytes_base64: string; filename: string }[],
-  ): Promise<PhotoImportResult> {
-    return safeInvoke<PhotoImportResult>("import_pasted_photos_to_laudo", {
-      input: {
-        workspace_path: workspacePath,
-        laudo_id: laudoId,
-        photos,
-      },
-    });
-  },
 
   listImageAnalyses(workspacePath: string): Promise<ImageAnalysis[]> {
     return safeInvoke<ImageAnalysis[]>("list_image_analyses", {
@@ -1526,391 +1126,7 @@ export const commands = {
 
   // ----- Documentoscopia (OCR, layout, campos, regiões, comparação) -----
 
-  /** Importa um documento (PDF/imagem) preservando o original (cópia + hash). */
-  importDocument(
-    workspacePath: string,
-    filePath: string,
-    docType?: string,
-    title?: string,
-  ): Promise<DocumentCaseFile> {
-    return safeInvoke<DocumentCaseFile>("import_document", {
-      workspacePath,
-      filePath,
-      docType,
-      title,
-    });
-  },
-  listDocuments(workspacePath: string): Promise<DocumentCaseFile[]> {
-    return safeInvoke<DocumentCaseFile[]>("list_documents", { workspacePath });
-  },
-  getDocument(workspacePath: string, documentId: string): Promise<DocumentCaseFile> {
-    return safeInvoke<DocumentCaseFile>("get_document", { workspacePath, documentId });
-  },
-  deleteDocument(workspacePath: string, documentId: string): Promise<void> {
-    return safeInvoke<void>("delete_document", { workspacePath, documentId });
-  },
-  updateDocumentMeta(
-    workspacePath: string,
-    documentId: string,
-    title: string,
-    docType: string,
-    notes: string,
-  ): Promise<DocumentCaseFile> {
-    return safeInvoke<DocumentCaseFile>("update_document_meta", {
-      workspacePath,
-      documentId,
-      title,
-      docType,
-      notes,
-    });
-  },
-  setDocumentPageinfo(
-    workspacePath: string,
-    documentId: string,
-    pageCount: number,
-    hasTextLayer: boolean,
-    metadataJson: string,
-  ): Promise<DocumentCaseFile> {
-    return safeInvoke<DocumentCaseFile>("set_document_pageinfo", {
-      workspacePath,
-      documentId,
-      pageCount,
-      hasTextLayer,
-      metadataJson,
-    });
-  },
-  saveOcrRun(
-    workspacePath: string,
-    documentId: string,
-    run: OcrRunInput,
-  ): Promise<OcrRunResult> {
-    return safeInvoke<OcrRunResult>("save_ocr_run", { workspacePath, documentId, run });
-  },
-  /** Roda o motor de OCR sobre um documento **imagem** (RapidOCR/PP-OCRv5 se o
-   * pacote de modelos foi baixado; senão, rascunho mock rotulado). PDFs usam
-   * `runOcrPageImage` (página rasterizada pelo pdf.js). */
-  runOcr(
-    workspacePath: string,
-    documentId: string,
-    pageNumber?: number,
-    language?: string,
-  ): Promise<OcrRunResult> {
-    return safeInvoke<OcrRunResult>("run_ocr", {
-      workspacePath,
-      documentId,
-      pageNumber,
-      language,
-    });
-  },
-  /** Roda o OCR sobre uma página de PDF **já rasterizada no frontend** (pdf.js):
-   * envia o PNG em base64 (sem o prefixo `data:`); o backend grava um temporário,
-   * roda o RapidOCR e persiste a execução (registra `source = pdf_raster`). */
-  runOcrPageImage(
-    workspacePath: string,
-    documentId: string,
-    pageNumber: number,
-    imageBase64: string,
-    language?: string,
-  ): Promise<OcrRunResult> {
-    return safeInvoke<OcrRunResult>("run_ocr_page_image", {
-      workspacePath,
-      documentId,
-      pageNumber,
-      imageBase64,
-      language,
-    });
-  },
-  listOcrRuns(workspacePath: string, documentId: string): Promise<OcrRun[]> {
-    return safeInvoke<OcrRun[]>("list_ocr_runs", { workspacePath, documentId });
-  },
-  getRunBlocks(workspacePath: string, runId: string): Promise<OcrTextBlock[]> {
-    return safeInvoke<OcrTextBlock[]>("get_run_blocks", { workspacePath, runId });
-  },
-  reviewTextBlock(
-    workspacePath: string,
-    blockId: string,
-    correctedText: string | null,
-    reviewed: boolean,
-  ): Promise<void> {
-    return safeInvoke<void>("review_text_block", {
-      workspacePath,
-      blockId,
-      correctedText,
-      reviewed,
-    });
-  },
-  /** Cria um bloco de texto MANUAL (perito) onde o OCR não detectou nada.
-   * `bbox` normalizado 0..1. Entra na execução mais recente. */
-  addManualBlock(
-    workspacePath: string,
-    documentId: string,
-    pageNumber: number,
-    text: string,
-    bbox: { x: number; y: number; w: number; h: number },
-  ): Promise<OcrTextBlock> {
-    return safeInvoke<OcrTextBlock>("add_manual_block", {
-      workspacePath,
-      documentId,
-      pageNumber,
-      text,
-      bboxX: bbox.x,
-      bboxY: bbox.y,
-      bboxW: bbox.w,
-      bboxH: bbox.h,
-    });
-  },
-  deleteTextBlock(workspacePath: string, blockId: string): Promise<void> {
-    return safeInvoke<void>("delete_text_block", { workspacePath, blockId });
-  },
-  /** Atualiza posição/tamanho (bbox 0..1) de um bloco (move/redimensiona). */
-  setBlockBbox(
-    workspacePath: string,
-    blockId: string,
-    bbox: { x: number; y: number; w: number; h: number },
-  ): Promise<void> {
-    return safeInvoke<void>("set_block_bbox", {
-      workspacePath,
-      blockId,
-      bboxX: bbox.x,
-      bboxY: bbox.y,
-      bboxW: bbox.w,
-      bboxH: bbox.h,
-    });
-  },
-  /** Gera um PDF pesquisável (imagem + camada de texto invisível) a partir das
-   * páginas fornecidas (imagem em base64/data-URL + blocos posicionados).
-   * Retorna o caminho relativo do PDF no workspace. */
-  exportSearchablePdf(
-    workspacePath: string,
-    documentId: string,
-    pages: {
-      image_base64: string;
-      width: number;
-      height: number;
-      blocks: {
-        text: string;
-        bbox_x: number;
-        bbox_y: number;
-        bbox_w: number;
-        bbox_h: number;
-      }[];
-    }[],
-  ): Promise<string> {
-    return safeInvoke<string>("export_searchable_pdf", {
-      workspacePath,
-      documentId,
-      pages,
-    });
-  },
-  saveFields(
-    workspacePath: string,
-    documentId: string,
-    fields: FieldInput[],
-    replaceSource?: string,
-  ): Promise<DetectedField[]> {
-    return safeInvoke<DetectedField[]>("save_fields", {
-      workspacePath,
-      documentId,
-      fields,
-      replaceSource,
-    });
-  },
-  listFields(workspacePath: string, documentId: string): Promise<DetectedField[]> {
-    return safeInvoke<DetectedField[]>("list_fields", { workspacePath, documentId });
-  },
-  reviewField(
-    workspacePath: string,
-    fieldId: string,
-    correctedValue: string | null,
-    reviewed: boolean,
-  ): Promise<void> {
-    return safeInvoke<void>("review_field", {
-      workspacePath,
-      fieldId,
-      correctedValue,
-      reviewed,
-    });
-  },
-  saveRegion(
-    workspacePath: string,
-    documentId: string,
-    region: RegionInput,
-  ): Promise<DocumentRegion> {
-    return safeInvoke<DocumentRegion>("save_region", {
-      workspacePath,
-      documentId,
-      region,
-    });
-  },
-  listRegions(workspacePath: string, documentId: string): Promise<DocumentRegion[]> {
-    return safeInvoke<DocumentRegion[]>("list_regions", { workspacePath, documentId });
-  },
-  deleteDocRegion(workspacePath: string, regionId: string): Promise<void> {
-    return safeInvoke<void>("delete_region", { workspacePath, regionId });
-  },
-  /** Fase 4 — aplica pré-processamento (ids: cinza/endireitar/clahe/niveis/
-   * otsu/inverter) e devolve a imagem processada em base64 PNG (sem prefixo). */
-  preprocessImage(imageBase64: string, ops: string[]): Promise<string> {
-    return safeInvoke<string>("preprocess_image", { imageBase64, ops });
-  },
-  /** Fase 5 (Bloco B) — ELA (Error Level Analysis). Heatmap PNG base64 (sem
-   * prefixo). Indício, não conclusão (§13). */
-  docEla(imageBase64: string, quality?: number, gain?: number): Promise<string> {
-    return safeInvoke<string>("doc_ela", { imageBase64, quality, gain });
-  },
-  /** Fase 5 (Bloco B) — mapa de ruído (energia local de alta frequência).
-   * Heatmap PNG base64 (sem prefixo). Indício, não conclusão (§13). */
-  docNoiseMap(imageBase64: string, window?: number): Promise<string> {
-    return safeInvoke<string>("doc_noise_map", { imageBase64, window });
-  },
-  /** Fase 5 (Bloco B) — copy-move (regiões clonadas na mesma imagem). Heatmap
-   * PNG base64. Indício, não conclusão (§13). */
-  docCopyMove(imageBase64: string, block?: number, step?: number): Promise<string> {
-    return safeInvoke<string>("doc_copy_move", { imageBase64, block, step });
-  },
-  /** Fase 5 (Bloco B) — salva um heatmap de indício na bandeja do workspace
-   * (documentoscopia/indicios). Retorna o caminho relativo. */
-  saveDocIndicio(
-    workspacePath: string,
-    pngBase64: string,
-    fileName: string,
-  ): Promise<string> {
-    return safeInvoke<string>("save_doc_indicio", {
-      workspacePath,
-      pngBase64,
-      fileName,
-    });
-  },
-  /** Fase 5 (Bloco B) — lista os indícios salvos (para a aba Evidências do laudo). */
-  listDocIndicios(
-    workspacePath: string,
-  ): Promise<{ relative_path: string; file_name: string; created_at: string }[]> {
-    return safeInvoke("list_doc_indicios", { workspacePath });
-  },
-  /** Fase 6 — gera o relatório técnico do documento (anexo do laudo): proveniência,
-   * OCR, campos, regiões/códigos e histórico, em linguagem indiciária (§13).
-   * Devolve os caminhos relativos do HTML e do PDF (PDF é best-effort). */
-  generateDocReport(
-    workspacePath: string,
-    documentId: string,
-  ): Promise<{ html_relative_path: string; pdf_relative_path: string | null }> {
-    return safeInvoke("generate_doc_report", { workspacePath, documentId });
-  },
-  /** Fase 5 (Bloco B) — extrai o JPEG embutido (DCTDecode) de uma página de PDF
-   * escaneado, em base64. `null` se a página não tiver imagem JPEG. */
-  extractPdfJpeg(
-    workspacePath: string,
-    relativePath: string,
-    page: number,
-  ): Promise<string | null> {
-    return safeInvoke<string | null>("extract_pdf_jpeg", {
-      workspacePath,
-      relativePath,
-      page,
-    });
-  },
-  /** Fase 5 (Bloco B) — gera uma amostra-teste de ELA (controle positivo) no
-   * workspace; devolve o caminho absoluto do .jpg para importar. */
-  generateElaTestSample(workspacePath: string): Promise<string> {
-    return safeInvoke<string>("generate_ela_test_sample", { workspacePath });
-  },
-  /** Fase 4 — corrige perspectiva a partir de 4 cantos normalizados (0..1),
-   * em ordem horária a partir do superior-esquerdo. Devolve base64 PNG. */
-  perspectiveImage(
-    imageBase64: string,
-    points: [number, number][],
-  ): Promise<string> {
-    return safeInvoke<string>("perspective_image", { imageBase64, points });
-  },
-  /** Fase 3 — detecta QR/código de barras (decodificados) + candidato a tabela
-   * na página e persiste como regiões. */
-  detectLayout(
-    workspacePath: string,
-    documentId: string,
-    pageNumber: number,
-    imageBase64: string,
-  ): Promise<DocumentRegion[]> {
-    return safeInvoke<DocumentRegion[]>("detect_layout", {
-      workspacePath,
-      documentId,
-      pageNumber,
-      imageBase64,
-    });
-  },
-  /** Fase 3 — tenta decodificar QR/código de barras dentro de uma região
-   * (recorte isolado + ampliado). Devolve {region_type,label} ou null. */
-  decodeRegion(
-    imageBase64: string,
-    bbox: { x: number; y: number; w: number; h: number },
-  ): Promise<{ region_type: string; label: string } | null> {
-    return safeInvoke<{ region_type: string; label: string } | null>(
-      "decode_region",
-      {
-        imageBase64,
-        bboxX: bbox.x,
-        bboxY: bbox.y,
-        bboxW: bbox.w,
-        bboxH: bbox.h,
-      },
-    );
-  },
-  saveComparison(
-    workspacePath: string,
-    questionedDocumentId: string,
-    referenceDocumentId: string,
-    comparisonType: string,
-    resultsJson: string,
-    summary: string,
-  ): Promise<ComparisonSession> {
-    return safeInvoke<ComparisonSession>("save_comparison", {
-      workspacePath,
-      questionedDocumentId,
-      referenceDocumentId,
-      comparisonType,
-      resultsJson,
-      summary,
-    });
-  },
-  listComparisons(workspacePath: string): Promise<ComparisonSession[]> {
-    return safeInvoke<ComparisonSession[]>("list_comparisons", { workspacePath });
-  },
-  /** Salva o PNG composto de um confronto no workspace; retorna o caminho relativo. */
-  saveConfrontoImage(
-    workspacePath: string,
-    pngBase64: string,
-    fileName: string,
-  ): Promise<string> {
-    return safeInvoke<string>("save_confronto_image", {
-      workspacePath,
-      pngBase64,
-      fileName,
-    });
-  },
-  listDocumentLog(workspacePath: string, documentId: string): Promise<DocumentLog[]> {
-    return safeInvoke<DocumentLog[]>("list_document_log", { workspacePath, documentId });
-  },
 
-  // ----- Gerenciador de OCR (Documentoscopia — Tesseract + idiomas) -----
-  getOcrCatalog(): Promise<OcrCatalog> {
-    return safeInvoke<OcrCatalog>("get_ocr_catalog", {});
-  },
-  getOcrStatus(): Promise<OcrStatus> {
-    return safeInvoke<OcrStatus>("get_ocr_status", {});
-  },
-  installOcrAsset(assetId: string): Promise<OcrStatus> {
-    return safeInvoke<OcrStatus>("install_ocr_asset", { assetId });
-  },
-  removeOcrAsset(assetId: string): Promise<OcrStatus> {
-    return safeInvoke<OcrStatus>("remove_ocr_asset", { assetId });
-  },
-  /** OPT-IN: compara o pacote de modelos instalado com a release mais nova do oar-ocr. */
-  checkOcrUpdates(): Promise<OcrUpdateInfo> {
-    return safeInvoke<OcrUpdateInfo>("check_ocr_updates", {});
-  },
-  /** OPT-IN: baixa o pacote de modelos da release mais nova (troca a versão na URL). */
-  updateOcrModels(): Promise<OcrStatus> {
-    return safeInvoke<OcrStatus>("update_ocr_models", {});
-  },
 
   /** Adiciona um marcador temporal (timestamp + rótulo) a um áudio. */
   addAudioMarker(
@@ -2061,78 +1277,12 @@ export const commands = {
     return safeInvoke<AiStatus>("update_whisper_engine", {});
   },
 
-  /** Status do LibreOffice (instalado? versão? + metadados de download). */
-  getLibreofficeStatus(): Promise<LibreOfficeStatus> {
-    return safeInvoke<LibreOfficeStatus>("get_libreoffice_status", {});
-  },
-  /** Baixa o instalador oficial (.msi) com progresso via evento
-   * "libreoffice-download-progress" (cache temporário, fora do backup) e abre-o. */
-  downloadLibreofficeInstaller(): Promise<void> {
-    return safeInvoke<void>("download_libreoffice_installer", {});
-  },
 
   // ----- SICRO 3.0 — Laudo como `.docx` (registro + ponte com o Word) -----
 
-  /**
-   * Cria um novo laudo já materializado como `.docx`. O FRONT monta o
-   * `envelope` (JSON estilo `.sicrodoc`: `content`/`layout`/`header`/`footer`
-   * opcional) e o mapa `fieldValues` ({campo: valor} já resolvido). O backend
-   * injeta os valores, renderiza o `.docx` via `render_doc_to_docx` e registra
-   * a linha do laudo. Retorna o `Laudo`.
-   */
-  createLaudoDocx(
-    workspacePath: string,
-    title: string,
-    templateId: string,
-    envelope: unknown,
-    fieldValues?: Record<string, string>,
-  ): Promise<Laudo> {
-    return safeInvoke<Laudo>("create_laudo_docx", {
-      workspacePath,
-      title,
-      templateId,
-      envelope,
-      fieldValues: fieldValues ?? null,
-    });
-  },
 
-  /** Abre o `.docx` do laudo no aplicativo padrão do SO (Word / LibreOffice). */
-  openLaudoExternal(workspacePath: string, laudoId: string): Promise<void> {
-    return safeInvoke<void>("open_laudo_external", {
-      workspacePath,
-      laudoId,
-    });
-  },
 
-  /**
-   * Registra um `.docx` que o perito já escreveu por fora: copia-o para dentro
-   * do workspace + cria a linha do laudo. `sourceAbsolutePath` é absoluto.
-   */
-  registerExistingDocx(
-    workspacePath: string,
-    title: string,
-    sourceAbsolutePath: string,
-  ): Promise<Laudo> {
-    return safeInvoke<Laudo>("register_existing_docx", {
-      workspacePath,
-      title,
-      sourceAbsolutePath,
-    });
-  },
 
-  /**
-   * Copia uma imagem do workspace (caminho relativo) para a área de
-   * transferência como bitmap, para o perito colar (Ctrl+V) no `.docx` aberto.
-   */
-  copyImageToClipboard(
-    workspacePath: string,
-    relativePath: string,
-  ): Promise<void> {
-    return safeInvoke<void>("copy_image_to_clipboard", {
-      workspacePath,
-      relativePath,
-    });
-  },
 } as const;
 
 export type { SicroError };

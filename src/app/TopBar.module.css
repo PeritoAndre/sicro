@@ -40,3 +40,35 @@
 .spacer {
   flex: 1;
 }
+
+/* Abas do módulo Vídeo e Áudio */
+.tabs {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  margin-left: var(--space-2);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+}
+.tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+  font-family: inherit;
+  padding: 3px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+}
+.tabs button:hover {
+  color: var(--sicro-fg);
+}
+.tabs .tabOn {
+  background: var(--sicro-accent);
+  color: #111;
+  font-weight: 600;
+}

@@ -20,12 +20,10 @@ import {
   Boxes,
   Camera,
   Film,
-  FileScan,
   FileSearch,
   Headphones,
   ImagePlus,
   Layers,
-  Link as LinkIcon,
   Map as MapIcon,
   ScrollText,
   ShieldCheck,
@@ -45,7 +43,6 @@ import { CroquisTab } from "./tabs/CroquisTab";
 import { VideosTab } from "./tabs/VideosTab";
 import { FramesTab } from "./tabs/FramesTab";
 import { KindTab } from "./tabs/KindTab";
-import { LaudosLinksTab } from "./tabs/LaudosLinksTab";
 import { IntegrityTab } from "./tabs/IntegrityTab";
 import { LogsTab } from "./tabs/LogsTab";
 import styles from "./EvidenciasModule.module.css";
@@ -59,8 +56,6 @@ type TabKey =
   | "frames"
   | "audios"
   | "imagens"
-  | "documentos"
-  | "laudos"
   | "integrity"
   | "logs";
 
@@ -183,20 +178,6 @@ export function IntegridadePanel({ workspacePath }: Props) {
               ).length,
             )
           : null,
-      },
-      {
-        key: "documentos",
-        label: "Documentoscopia",
-        icon: FileScan,
-        badge: items
-          ? String(items.filter((i) => i.kind === "document").length)
-          : null,
-      },
-      {
-        key: "laudos",
-        label: "Laudos & vínculos",
-        icon: LinkIcon,
-        badge: s ? `${s.laudos}/${s.linked_in_laudos}` : null,
       },
       {
         key: "integrity",
@@ -325,21 +306,6 @@ export function IntegridadePanel({ workspacePath }: Props) {
                 workspacePath={workspacePath}
                 kinds={["image_analysis", "image_export"]}
                 emptyHint="Nenhuma análise de imagem neste caso."
-              />
-            )}
-            {tab === "documentos" && (
-              <KindTab
-                items={items}
-                workspacePath={workspacePath}
-                kinds={["document"]}
-                emptyHint="Nenhum documento (Documentoscopia) neste caso."
-              />
-            )}
-            {tab === "laudos" && (
-              <LaudosLinksTab
-                items={items}
-                workspacePath={workspacePath}
-                brokenLinks={report?.broken_laudo_links ?? []}
               />
             )}
             {tab === "integrity" && (

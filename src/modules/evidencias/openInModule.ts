@@ -9,9 +9,7 @@ import type { NavigateFunction } from "react-router-dom";
 
 import { useCroquiStore } from "@modules/croqui/store/croquiStore";
 import { useImagemStore } from "@modules/imagem/store/imagemStore";
-import { useLaudoStore } from "@modules/laudo/store/laudoStore";
 import { useVideoStore } from "@modules/video/store/videoStore";
-import { useDocumentsStore } from "@stores/documentsStore";
 import type { EvidenceRegistryItem } from "@domain/evidence_registry";
 
 export interface ModuleTarget {
@@ -24,8 +22,6 @@ export function moduleTargetFor(item: EvidenceRegistryItem): ModuleTarget | null
   switch (item.kind) {
     case "video":
       return { route: "/video", moduleLabel: "Vídeo" };
-    case "laudo":
-      return { route: "/laudo", moduleLabel: "Laudo" };
     case "croqui":
     case "croqui_export":
       return { route: "/croqui", moduleLabel: "Croqui" };
@@ -34,10 +30,9 @@ export function moduleTargetFor(item: EvidenceRegistryItem): ModuleTarget | null
       return { route: "/imagem", moduleLabel: "Imagem" };
     case "audio":
       return { route: "/audio", moduleLabel: "Áudio" };
-    case "document":
-      return { route: "/documentoscopia", moduleLabel: "Documentoscopia" };
     default:
-      // photo, storyboard_frame, laudo_export, imported_package, other
+      // photo, storyboard_frame, laudo/documento (módulos que saíram no 4.0),
+      // laudo_export, imported_package, other: só o arquivo
       return null;
   }
 }
@@ -61,14 +56,6 @@ export async function openInModule(
     case "video":
       await useVideoStore.getState().openMedia(workspacePath, sourceId(item));
       navigate("/video");
-      return;
-    case "laudo":
-      // SICRO 3.0 — laudo é `.docx`: só seleciona a linha (mostra a
-      // BridgeView). NÃO carrega `.sicrodoc` para edição (editor aposentado).
-      await useLaudoStore
-        .getState()
-        .selectLaudoById(workspacePath, sourceId(item));
-      navigate("/laudo");
       return;
     case "croqui":
       await useCroquiStore.getState().openCroqui(workspacePath, sourceId(item));
@@ -99,10 +86,6 @@ export async function openInModule(
     case "audio":
       // O módulo Áudio abre pela lista; sem ação de "abrir item" dedicada.
       navigate("/audio");
-      return;
-    case "document":
-      useDocumentsStore.getState().select(sourceId(item));
-      navigate("/documentoscopia");
       return;
     default:
       return;

@@ -64,6 +64,7 @@ import {
 import type { CaseIndexEntry } from "@domain/case_index";
 import { NewOccurrenceDialog } from "./NewOccurrenceDialog";
 import { ImportSicroappDialog } from "./ImportSicroappDialog";
+import { lastWorkModule } from "@modules/midia/midiaNav";
 import type { Occurrence, OccurrenceStatus } from "@domain/occurrence";
 import type { SystemHealthSnapshot } from "@domain/alpha";
 import styles from "./HomeView.module.css";
@@ -234,7 +235,7 @@ export function HomeView() {
               hasWs={hasWs}
               loading={loadingSnap}
               integrity={integrity}
-              onVerify={() => navigate("/dossie?modo=integridade")}
+              onVerify={() => navigate("/integridade")}
             />
           </div>
         </header>
@@ -264,7 +265,7 @@ export function HomeView() {
               occurrence={occurrence}
               workspacePath={workspacePath}
               lastOpened={lastOpened}
-              onContinue={() => navigate("/dossie")}
+              onContinue={() => navigate(lastWorkModule())}
             />
           ) : (
             <EmptyWorkspaceCard
@@ -281,7 +282,7 @@ export function HomeView() {
             onNew={() => setDialogOpen(true)}
             onBrowse={() => void handleBrowse()}
             onImport={() => setImportOpen(true)}
-            onVerify={() => navigate("/dossie?modo=integridade")}
+            onVerify={() => navigate("/integridade")}
             onBackup={() => void handleBackup()}
             onProperties={() => setPropsOpen(true)}
             onReveal={() => void handleReveal()}
@@ -860,7 +861,7 @@ function HistoryCard({
             <>
               Excluir <strong>{indexLabel(pendingDelete)}</strong>? Isto remove{" "}
               <strong>permanentemente</strong> a pasta <code>.sicro</code> do
-              disco — laudos, croquis, fotos e todas as evidências do caso.
+              disco — croquis, vídeos, áudios, imagens e todas as evidências do caso.
             </>
           ) : (
             ""

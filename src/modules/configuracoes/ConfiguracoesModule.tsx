@@ -1,12 +1,11 @@
 /**
  * ConfiguracoesModule — Configurações GLOBAIS do app (o "cofrinho" fora do
- * `.sicro`). v1: Perfil do perito, Instituição/marca, Aparência (tema + cor + zoom),
- * Integração SIGDOC (credenciais) e Caminhos padrão.
+ * `.sicro`): Perfil do perito, Instituição/marca, Aparência (tema + cor + zoom),
+ * Caminhos padrão, Backup geral, IA de degravação, Atalhos e Diagnóstico.
  *
  * Persistência: `settingsStore` (→ `app-settings.json` no app_config_dir).
  * A aparência aplica e salva na hora; os campos de texto salvam no botão
- * "Salvar". Credenciais do SIGDOC reusam os comandos existentes (senha vai
- * para o Windows Credential Manager, nunca para o JSON).
+ * "Salvar".
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -16,13 +15,10 @@ import {
   Cpu,
   FolderCog,
   Info,
-  KeyRound,
   Keyboard,
   Palette,
   Save,
   Settings,
-  ShieldCheck,
-  Trash2,
   User,
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -33,8 +29,6 @@ import { useSettingsStore } from "@stores/settingsStore";
 import { clampUiZoom } from "@core/uiZoom";
 import { MUNICIPIOS_AP } from "@domain/pericia";
 import { AiManagerCard } from "./AiManagerCard";
-import { OcrManagerCard } from "./OcrManagerCard";
-import { LibreOfficeManagerCard } from "./LibreOfficeManagerCard";
 import { GlobalBackupCard } from "./GlobalBackupCard";
 import type {
   AppSettings,
@@ -163,7 +157,6 @@ type CatId =
   | "perfil"
   | "instituicao"
   | "aparencia"
-  | "integracoes"
   | "caminhos"
   | "backup"
   | "iaocr"
@@ -174,10 +167,9 @@ const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "perfil", label: "Perfil", sub: "Dados pessoais e profissionais", Icon: User },
   { id: "instituicao", label: "Instituição & marca", sub: "Cabeçalho, unidade e brasões", Icon: Building2 },
   { id: "aparencia", label: "Aparência", sub: "Tema, cores e personalização", Icon: Palette },
-  { id: "integracoes", label: "Integrações", sub: "SIGDOC e credenciais", Icon: KeyRound },
   { id: "caminhos", label: "Caminhos padrão", sub: "Pastas e diretórios", Icon: FolderCog },
   { id: "backup", label: "Backup geral", sub: "Cópia de todos os casos", Icon: Archive },
-  { id: "iaocr", label: "Dependências", sub: "LibreOffice, IA e OCR", Icon: Cpu },
+  { id: "iaocr", label: "IA (degravação)", sub: "Transcrição local de áudio", Icon: Cpu },
   { id: "atalhos", label: "Atalhos de teclado", sub: "Customizáveis por ação", Icon: Keyboard },
   { id: "diagnostico", label: "Diagnóstico", sub: "Onde os dados ficam", Icon: Info },
 ];
@@ -193,15 +185,6 @@ export function ConfiguracoesModule() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // SIGDOC (credenciais reaproveitam os comandos K1–K6 existentes).
-  const [credStatus, setCredStatus] = useState<{
-    email: string | null;
-    has_password: boolean;
-  }>({ email: null, has_password: false });
-  const [credEmail, setCredEmail] = useState("");
-  const [credPass, setCredPass] = useState("");
-  const [credBusy, setCredBusy] = useState(false);
-
   const [cfgPath, setCfgPath] = useState("");
 
   useEffect(() => {
@@ -213,13 +196,6 @@ export function ConfiguracoesModule() {
   }, [settings]);
 
   useEffect(() => {
-    void commands
-      .getSigdocCredentialsStatus()
-      .then((s) => {
-        setCredStatus(s);
-        setCredEmail(s.email ?? "");
-      })
-      .catch(() => {});
     void commands.getSettingsFilePath().then(setCfgPath).catch(() => {});
   }, []);
 
@@ -257,39 +233,6 @@ export function ConfiguracoesModule() {
     };
     setDraft(next);
     void doPersist(next);
-  };
-
-  const handleSaveCred = async () => {
-    if (!credEmail.trim() || !credPass) return;
-    setCredBusy(true);
-    setError(null);
-    try {
-      await commands.saveSigdocCredentials(credEmail.trim(), credPass);
-      const s = await commands.getSigdocCredentialsStatus();
-      setCredStatus(s);
-      setCredPass("");
-      setFeedback("Credenciais do SIGDOC salvas.");
-      setTimeout(() => setFeedback(null), 2500);
-    } catch (e) {
-      setError(toSicroError(e).message);
-    } finally {
-      setCredBusy(false);
-    }
-  };
-
-  const handleDeleteCred = async () => {
-    setCredBusy(true);
-    setError(null);
-    try {
-      await commands.deleteSigdocCredentials();
-      setCredStatus({ email: null, has_password: false });
-      setCredEmail("");
-      setCredPass("");
-    } catch (e) {
-      setError(toSicroError(e).message);
-    } finally {
-      setCredBusy(false);
-    }
   };
 
   return (
@@ -548,72 +491,6 @@ export function ConfiguracoesModule() {
         </section>
           )}
 
-          {/* Integração SIGDOC */}
-          {activeCat === "integracoes" && (
-        <section className={styles.card}>
-          <div className={styles.cardHead}>
-            <KeyRound size={15} aria-hidden />
-            <h2 className={styles.cardTitle}>Integração SIGDOC</h2>
-          </div>
-          <p className={styles.cardDesc}>
-            E-mail e senha do SIGDOC para autopreenchimento do login. A senha é
-            guardada no <strong>Gerenciador de Credenciais do Windows</strong>{" "}
-            (criptografada) — nunca em texto claro.
-          </p>
-          <div style={{ marginBottom: "var(--space-3)" }}>
-            {credStatus.has_password ? (
-              <span className={`${styles.statusPill} ${styles.statusOk}`}>
-                <ShieldCheck size={11} /> credenciais salvas
-                {credStatus.email ? ` · ${credStatus.email}` : ""}
-              </span>
-            ) : (
-              <span className={`${styles.statusPill} ${styles.statusOff}`}>
-                nenhuma credencial salva
-              </span>
-            )}
-          </div>
-          <div className={styles.grid}>
-            <Field
-              label="E-mail / usuário"
-              value={credEmail}
-              onChange={(v) => setCredEmail(v)}
-              placeholder="seu.email@policiacientifica.ap.gov.br"
-            />
-            <div className={styles.field}>
-              <label className={styles.label}>Senha</label>
-              <input
-                className={styles.input}
-                type="password"
-                value={credPass}
-                onChange={(e) => setCredPass(e.target.value)}
-                placeholder={
-                  credStatus.has_password ? "•••••••• (manter atual)" : ""
-                }
-              />
-            </div>
-          </div>
-          <div className={styles.actionsRow}>
-            <Button
-              variant="primary"
-              onClick={() => void handleSaveCred()}
-              disabled={credBusy || !credEmail.trim() || !credPass}
-            >
-              {credBusy ? "Salvando…" : "Salvar credenciais"}
-            </Button>
-            {credStatus.has_password && (
-              <Button
-                variant="secondary"
-                leftIcon={<Trash2 size={14} />}
-                onClick={() => void handleDeleteCred()}
-                disabled={credBusy}
-              >
-                Remover
-              </Button>
-            )}
-          </div>
-        </section>
-          )}
-
           {/* Caminhos padrão */}
           {activeCat === "caminhos" && (
         <section className={styles.card}>
@@ -622,7 +499,7 @@ export function ConfiguracoesModule() {
             <h2 className={styles.cardTitle}>Caminhos padrão</h2>
           </div>
           <p className={styles.cardDesc}>
-            Pastas sugeridas ao criar ocorrências e exportar laudos.
+            Pastas sugeridas ao criar ocorrências e ao exportar.
             <span className={styles.soon}>entra em vigor em breve</span>
           </p>
           <div className={styles.grid}>
@@ -644,14 +521,8 @@ export function ConfiguracoesModule() {
         </section>
           )}
 
-          {/* Dependências: LibreOffice (PDF estilo Word) + IA + OCR */}
-          {activeCat === "iaocr" && (
-            <>
-              <LibreOfficeManagerCard />
-              <AiManagerCard />
-              <OcrManagerCard />
-            </>
-          )}
+          {/* IA de degravação (whisper.cpp local, usado pelos Áudios) */}
+          {activeCat === "iaocr" && <AiManagerCard />}
 
           {/* Atalhos de teclado */}
           {activeCat === "atalhos" && (
