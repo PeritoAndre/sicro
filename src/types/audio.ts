@@ -52,7 +52,25 @@ export interface AudioTranscriptSegment {
   t_end: number | null;
   speaker: string;
   text: string;
+  /** Rascunho da IA guardado com o trecho; null se escrito pelo perito. */
+  ai: TranscriptAi | null;
   created_at: string;
+}
+
+/** Palavra do rascunho da IA: tempo no áudio original e confiança (0..1). */
+export interface TranscriptWord {
+  text: string;
+  t_start: number;
+  t_end: number;
+  p: number;
+}
+
+/** O que a IA deixou num trecho (persistido em `ai_json`). */
+export interface TranscriptAi {
+  /** Ainda não revisado pelo perito. */
+  draft: boolean;
+  confidence: number | null;
+  words: TranscriptWord[];
 }
 
 /** Status da ferramenta whisper.cpp (Fase 2 — transcrição local). */
@@ -70,6 +88,8 @@ export interface TranscriptCandidate {
   text: string;
   /** Confiança média (0..1) da IA neste trecho; null se indisponível. */
   confidence: number | null;
+  /** Palavras com tempo e confiança (para ouvir de novo as duvidosas). */
+  words: TranscriptWord[];
 }
 
 // W12 (paridade Audacity) — Análise forense (espelho de `audio/analysis.rs`).

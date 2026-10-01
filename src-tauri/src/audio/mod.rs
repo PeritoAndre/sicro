@@ -119,6 +119,19 @@ pub struct WhisperSegment {
     pub text: String,
     /// Confiança média (0..1) dos tokens reais do trecho; `None` se indisponível.
     pub confidence: Option<f64>,
+    /// Palavras com tempo (no áudio original) e confiança — para o perito ouvir
+    /// de novo as duvidosas.
+    pub words: Vec<WhisperWord>,
+}
+
+/// Uma palavra do rascunho da IA: tempo no áudio original e confiança (0..1,
+/// a menor entre os pedaços que a formam).
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+pub struct WhisperWord {
+    pub text: String,
+    pub t_start: f64,
+    pub t_end: f64,
+    pub p: f64,
 }
 
 /// Roda o whisper.cpp sobre um WAV 16 kHz mono e devolve os segmentos do JSON.
@@ -163,59 +176,188 @@ pub fn transcribe_wav(
         return Err(SicroError::Validation(format!("whisper.cpp falhou: {tail}")));
     }
 
-    let raw = std::fs::read_to_string(&out_json).map_err(|e| {
+    // Lido como bytes: um token pode cortar um caractere UTF-8 ao meio.
+    let raw = std::fs::read(&out_json).map_err(|e| {
         SicroError::Validation(format!("não foi possível ler a saída do whisper: {e}"))
     })?;
     let _ = std::fs::remove_file(&out_json);
+    parse_whisper_output(&String::from_utf8_lossy(&raw), &String::from_utf8_lossy(&output.stderr))
+}
 
-    let v: serde_json::Value = serde_json::from_str(&raw)
+/// Lê o JSON completo do whisper.cpp (`-ojf`): trechos, confiança e palavras.
+///
+/// Com VAD, o whisper.cpp devolve o tempo dos TRECHOS no áudio original, mas o
+/// das PALAVRAS (tokens) no áudio só de fala (silêncios cortados). O mapa vem
+/// das linhas `vad_segment_info` do log e é aplicado como o próprio whisper faz
+/// nos trechos — só quando encaixa as palavras no trecho melhor que o tempo cru
+/// (se uma versão futura já corrigir, não corrige duas vezes).
+pub fn parse_whisper_output(json_text: &str, stderr: &str) -> Result<Vec<WhisperSegment>> {
+    let v: serde_json::Value = serde_json::from_str(json_text)
         .map_err(|e| SicroError::Validation(format!("JSON do whisper inválido: {e}")))?;
-    let mut segs = Vec::new();
-    if let Some(arr) = v.get("transcription").and_then(|t| t.as_array()) {
-        for item in arr {
-            let from = item
-                .get("offsets")
-                .and_then(|o| o.get("from"))
-                .and_then(|x| x.as_f64());
-            let to = item
-                .get("offsets")
-                .and_then(|o| o.get("to"))
-                .and_then(|x| x.as_f64());
-            let text = item
-                .get("text")
-                .and_then(|x| x.as_str())
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            // Confiança = média do `p` dos tokens REAIS (ignora [_BEG_], [_TT_*]…).
-            let confidence = item.get("tokens").and_then(|t| t.as_array()).map(|toks| {
-                let ps: Vec<f64> = toks
-                    .iter()
-                    .filter(|tok| {
-                        let t = tok.get("text").and_then(|x| x.as_str()).unwrap_or("");
-                        !t.trim_start().starts_with("[_")
+    let vad_map = vad_map_from_log(stderr);
+    let mut parsed: Vec<(f64, f64, String, Option<f64>, Vec<Token>)> = Vec::new();
+    let Some(arr) = v.get("transcription").and_then(|t| t.as_array()) else {
+        return Ok(Vec::new());
+    };
+    for item in arr {
+        let off = |k: &str| item.get("offsets").and_then(|o| o.get(k)).and_then(|x| x.as_f64());
+        let (Some(from), Some(to)) = (off("from"), off("to")) else { continue };
+        let text = item.get("text").and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+        if text.is_empty() {
+            continue;
+        }
+        let (t_start, t_end) = (from / 1000.0, to / 1000.0);
+        // Tokens REAIS (ignora [_BEG_], [_TT_*]…): (texto, início, fim, p).
+        let toks: Vec<Token> = item
+            .get("tokens")
+            .and_then(|t| t.as_array())
+            .map(|toks| {
+                toks.iter()
+                    .filter_map(|tok| {
+                        let t = tok.get("text")?.as_str()?;
+                        if t.trim_start().starts_with("[_") {
+                            return None;
+                        }
+                        let o = tok.get("offsets")?;
+                        Some((
+                            t.to_string(),
+                            o.get("from")?.as_f64()? / 1000.0,
+                            o.get("to")?.as_f64()? / 1000.0,
+                            tok.get("p")?.as_f64()?,
+                        ))
                     })
-                    .filter_map(|tok| tok.get("p").and_then(|x| x.as_f64()))
-                    .collect();
-                if ps.is_empty() {
-                    1.0
-                } else {
-                    ps.iter().sum::<f64>() / ps.len() as f64
+                    .collect()
+            })
+            .unwrap_or_default();
+        // Confiança = média do `p` dos tokens reais.
+        let confidence = item.get("tokens").and_then(|t| t.as_array()).map(|_| {
+            if toks.is_empty() {
+                1.0
+            } else {
+                toks.iter().map(|t| t.3).sum::<f64>() / toks.len() as f64
+            }
+        });
+        parsed.push((t_start, t_end, text, confidence, toks));
+    }
+
+    // Decide UMA vez para a rodada (é comportamento da versão do whisper):
+    // aplica o mapa se ele encaixa mais palavras nos seus trechos. Empate: se
+    // algum tempo cru passa do fim do áudio só de fala, ele já é o original.
+    let use_map = !vad_map.is_empty() && {
+        let fits = |f: &dyn Fn(f64) -> f64| -> usize {
+            parsed
+                .iter()
+                .map(|(a, b, _, _, toks)| {
+                    toks.iter().filter(|t| f(t.1) >= a - 0.5 && f(t.2) <= b + 0.5).count()
+                })
+                .sum()
+        };
+        let mapped = fits(&|t| vad_to_original(t, &vad_map));
+        let raw = fits(&|t| t);
+        let vad_end = vad_map.last().map_or(0.0, |p| p.0);
+        let raw_past_end = parsed.iter().flat_map(|p| &p.4).any(|t| t.1 > vad_end + 1.0);
+        mapped > raw || (mapped == raw && !raw_past_end)
+    };
+    Ok(parsed
+        .into_iter()
+        .map(|(t_start, t_end, text, confidence, toks)| {
+            let toks: Vec<Token> = if use_map {
+                toks.into_iter()
+                    .map(|(x, a, b, p)| (x, vad_to_original(a, &vad_map), vad_to_original(b, &vad_map), p))
+                    .collect()
+            } else {
+                toks
+            };
+            WhisperSegment { t_start, t_end, text, confidence, words: words_from_tokens(&toks) }
+        })
+        .collect())
+}
+
+/// Token real do whisper: (texto, início s, fim s, probabilidade).
+type Token = (String, f64, f64, f64);
+
+/// Pontos (tempo no áudio só de fala, tempo original), em segundos, ordenados.
+fn vad_map_from_log(stderr: &str) -> Vec<(f64, f64)> {
+    let num = |line: &str, key: &str| -> Option<f64> {
+        let rest = &line[line.find(key)? + key.len()..];
+        rest.trim_start().split(|c: char| c == ',' || c.is_whitespace()).next()?.parse().ok()
+    };
+    let segs: Vec<(f64, f64, f64, f64)> = stderr
+        .lines()
+        .filter(|l| l.contains("vad_segment_info:"))
+        .filter_map(|l| {
+            Some((num(l, "orig_start:")?, num(l, "orig_end:")?, num(l, "vad_start:")?, num(l, "vad_end:")?))
+        })
+        .collect();
+    let mut pts = Vec::new();
+    for (i, &(os, oe, vs, ve)) in segs.iter().enumerate() {
+        pts.push((vs, os));
+        pts.push((ve, oe));
+        // Entre um trecho e o próximo o whisper põe 0,1 s de silêncio, que
+        // corresponde à pausa original inteira.
+        if let Some(&(_, _, next_vs, _)) = segs.get(i + 1) {
+            pts.push((next_vs - 0.10, oe));
+        }
+    }
+    pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+    pts.dedup_by(|a, b| (a.0 - b.0).abs() < 1e-9);
+    pts
+}
+
+fn vad_to_original(t: f64, map: &[(f64, f64)]) -> f64 {
+    let (Some(first), Some(last)) = (map.first(), map.last()) else { return t };
+    if t <= first.0 {
+        return first.1;
+    }
+    if t >= last.0 {
+        return last.1;
+    }
+    let i = map.partition_point(|p| p.0 < t);
+    let (lo, hi) = (map[i - 1], map[i]);
+    if hi.0 - lo.0 <= 0.0 {
+        return lo.1;
+    }
+    lo.1 + (t - lo.0) * (hi.1 - lo.1) / (hi.0 - lo.0)
+}
+
+/// Junta os tokens em palavras (um token que começa com espaço abre palavra
+/// nova). A confiança da palavra é a MENOR entre os seus pedaços com letra ou
+/// número (pontuação não conta).
+fn words_from_tokens(toks: &[Token]) -> Vec<WhisperWord> {
+    let mut words: Vec<WhisperWord> = Vec::new();
+    let mut cur: Option<WhisperWord> = None;
+    for &(ref text, a, b, ref p) in toks {
+        let has_alnum = text.chars().any(char::is_alphanumeric);
+        let starts_word = text.starts_with(' ') && has_alnum;
+        match cur.as_mut() {
+            Some(w) if !starts_word => {
+                w.text.push_str(text);
+                // Pontuação não estica a palavra (o tempo dela cobre a pausa).
+                if has_alnum {
+                    w.t_end = w.t_end.max(b);
+                    w.p = if w.p.is_nan() { *p } else { w.p.min(*p) };
                 }
-            });
-            if let (Some(from), Some(to)) = (from, to) {
-                if !text.is_empty() {
-                    segs.push(WhisperSegment {
-                        t_start: from / 1000.0,
-                        t_end: to / 1000.0,
-                        text,
-                        confidence,
-                    });
+            }
+            _ => {
+                if let Some(w) = cur.take() {
+                    words.push(w);
                 }
+                cur = Some(WhisperWord {
+                    text: text.clone(),
+                    t_start: a,
+                    t_end: b,
+                    p: if has_alnum { *p } else { f64::NAN },
+                });
             }
         }
     }
-    Ok(segs)
+    words.extend(cur);
+    words
+        .into_iter()
+        .filter(|w| !w.p.is_nan())
+        .map(|w| WhisperWord { text: w.text.trim().to_string(), ..w })
+        .filter(|w| !w.text.is_empty())
+        .collect()
 }
 
 /// Recorta o trecho [start_s, end_s] (segundos) do WAV → novo WAV PCM 16-bit.
@@ -439,5 +581,74 @@ mod tests {
         };
         assert!(has_audio_stream(&com).unwrap());
         assert!(!has_audio_stream(&sem).unwrap());
+    }
+
+    /// Rodada real do whisper.cpp 1.8.5 (modelo base, VAD silero) sobre o
+    /// jfk.wav com 5 s de silêncio antes: o tempo das palavras vem no áudio
+    /// só de fala e precisa do mapa do log.
+    const LOG_VAD: &str = "\
+whisper_vad: vad_segment_info: orig_start: 5.31, orig_end: 7.23, vad_start: 0.00, vad_end: 1.92
+whisper_vad: vad_segment_info: orig_start: 8.26, orig_end: 9.41, vad_start: 2.12, vad_end: 3.27
+whisper_vad: vad_segment_info: orig_start: 10.40, orig_end: 12.67, vad_start: 3.47, vad_end: 5.74
+whisper_vad: vad_segment_info: orig_start: 13.15, orig_end: 15.58, vad_start: 5.94, vad_end: 8.37
+";
+
+    fn tok(text: &str, from: u32, to: u32, p: f64) -> serde_json::Value {
+        serde_json::json!({"text": text, "offsets": {"from": from, "to": to}, "p": p})
+    }
+
+    #[test]
+    fn palavras_juntam_pedacos_e_pontuacao_nao_conta() {
+        let j = serde_json::json!({"transcription": [{
+            "offsets": {"from": 0, "to": 3000},
+            "text": " Perícia, documento.",
+            "tokens": [
+                tok("[_BEG_]", 0, 0, 0.9),
+                tok(" Per", 100, 300, 0.9),
+                tok("ícia", 300, 600, 0.42),
+                tok(",", 600, 650, 0.05),
+                tok(" documento", 900, 1500, 0.97),
+                tok(".", 1500, 1550, 0.3),
+            ]
+        }]});
+        let segs = parse_whisper_output(&j.to_string(), "").unwrap();
+        let w = &segs[0].words;
+        assert_eq!(w.len(), 2);
+        assert_eq!(w[0].text, "Perícia,");
+        assert!((w[0].p - 0.42).abs() < 1e-9, "a vírgula não pode puxar a confiança");
+        assert!((w[0].t_start - 0.1).abs() < 1e-9 && (w[0].t_end - 0.6).abs() < 1e-9);
+        assert_eq!(w[1].text, "documento.");
+        assert!((w[1].p - 0.97).abs() < 1e-9);
+    }
+
+    #[test]
+    fn com_vad_o_tempo_das_palavras_volta_ao_audio_original() {
+        // Segundo trecho da rodada real: "ask what you can do for your country."
+        let j = serde_json::json!({"transcription": [{
+            "offsets": {"from": 13210, "to": 15510},
+            "text": " ask what you can do for your country.",
+            "tokens": [tok(" ask", 6020, 6210, 0.89), tok(" what", 6370, 6490, 0.97), tok(" country", 7830, 8100, 0.99)]
+        }]});
+        let segs = parse_whisper_output(&j.to_string(), LOG_VAD).unwrap();
+        let w = &segs[0].words;
+        // Sem VAD o whisper dá ask 13,19 · what 13,63 · country 15,00.
+        for (word, real) in w.iter().zip([13.19, 13.63, 15.00]) {
+            assert!((word.t_start - real).abs() < 0.3, "{} em {:.2} (real {real})", word.text, word.t_start);
+        }
+        // Sem as linhas do log, fica o tempo cru (nada a corrigir).
+        let cru = parse_whisper_output(&j.to_string(), "").unwrap();
+        assert!((cru[0].words[0].t_start - 6.02).abs() < 1e-9);
+    }
+
+    #[test]
+    fn nao_corrige_duas_vezes_se_o_whisper_ja_der_o_tempo_original() {
+        let j = serde_json::json!({"transcription": [{
+            "offsets": {"from": 13210, "to": 15510},
+            "text": " ask what",
+            "tokens": [tok(" ask", 13190, 13400, 0.89), tok(" what", 13630, 13800, 0.97)]
+        }]});
+        let segs = parse_whisper_output(&j.to_string(), LOG_VAD).unwrap();
+        assert!((segs[0].words[0].t_start - 13.19).abs() < 1e-9);
+        assert!((segs[0].words[1].t_start - 13.63).abs() < 1e-9);
     }
 }

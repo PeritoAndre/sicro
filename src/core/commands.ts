@@ -101,6 +101,7 @@ import type {
   TranscriptCandidate,
   WhisperStatus,
   SpectroImage,
+  TranscriptAi,
 } from "@domain/audio";
 import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
 import { toSicroError, type SicroError } from "./errors";
@@ -1225,6 +1226,7 @@ export const commands = {
       t_end: number | null;
       speaker: string;
       text: string;
+      ai: TranscriptAi | null;
     }[],
   ): Promise<AudioTranscriptSegment[]> {
     return safeInvoke<AudioTranscriptSegment[]>("save_audio_transcript", {

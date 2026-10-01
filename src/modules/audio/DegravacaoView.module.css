@@ -350,3 +350,55 @@
   border-color: rgba(220, 80, 80, 0.45);
   background: rgba(220, 80, 80, 0.14);
 }
+
+/* palavras em que a IA teve dúvida — sob o texto do trecho */
+.doubts {
+  grid-column: 3 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: -2px;
+}
+.doubtsLabel {
+  font-size: 10.5px;
+  color: var(--sicro-fg-dim);
+}
+.doubt,
+.doubtsOk {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.doubt span {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  opacity: 0.8;
+}
+.doubt[data-level="mid"] {
+  color: var(--sicro-warning);
+  border-color: rgba(230, 180, 80, 0.4);
+  background: rgba(230, 180, 80, 0.1);
+}
+.doubt[data-level="lo"] {
+  color: var(--sicro-danger);
+  border-color: rgba(220, 80, 80, 0.45);
+  background: rgba(220, 80, 80, 0.12);
+}
+.doubt:hover {
+  filter: brightness(1.25);
+}
+.doubtsOk {
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  border-color: var(--sicro-border);
+}
+.doubtsOk:hover {
+  color: var(--sicro-fg);
+}

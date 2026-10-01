@@ -69,6 +69,8 @@ pub struct AudioTranscriptSegment {
     pub t_end: Option<f64>,
     pub speaker: String,
     pub text: String,
+    /// Rascunho da IA (draft, confidence, words) — `None` se escrito pelo perito.
+    pub ai: Option<serde_json::Value>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -82,4 +84,6 @@ pub struct TranscriptSegmentInput {
     pub speaker: String,
     #[serde(default)]
     pub text: String,
+    #[serde(default)]
+    pub ai: Option<serde_json::Value>,
 }

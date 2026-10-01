@@ -849,6 +849,8 @@ pub struct TranscriptCandidate {
     pub speaker: String,
     pub text: String,
     pub confidence: Option<f64>,
+    /// Palavras com tempo e confiança (para ouvir de novo as duvidosas).
+    pub words: Vec<crate::audio::WhisperWord>,
 }
 
 /// Diz se o whisper.cpp está disponível (PATH ou caminho informado). Não roda nada.
@@ -947,6 +949,7 @@ pub async fn transcribe_audio(
             speaker: String::new(),
             text: s.text,
             confidence: s.confidence,
+            words: s.words,
         })
         .collect())
 }

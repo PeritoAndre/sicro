@@ -545,6 +545,15 @@ Abra **Degravar**: toque o áudio, **capture trechos** e digite a transcrição
 texto; **cada linha
 precisa ser revisada** antes de ir ao laudo.
 
+- Cada trecho da IA leva a etiqueta **IA** e a **confiança média** (%). Editar o
+  trecho marca-o como revisado. Isso fica gravado no caso: ao reabrir, o que
+  ainda é rascunho continua marcado.
+- **Ouvir de novo:** embaixo do trecho aparecem as **palavras em que a IA teve
+  menos de 50% de confiança** (amarelo; vermelho abaixo de 30%). Um clique toca
+  o áudio a partir de 0,7 s antes da palavra (o tempo por palavra do whisper é
+  aproximado, ±0,3 s). **Conferido** tira a marcação daquele trecho.
+- Re-rodar o rascunho substitui só o que ainda não foi revisado.
+
 > ⚠️ **§13:** realce e análises são determinísticos e offline. O rascunho de IA
 > pode errar ou "inventar" texto em ruído/silêncio — é sugestão, não verdade.
 

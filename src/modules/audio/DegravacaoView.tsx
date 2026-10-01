@@ -12,7 +12,17 @@ import { useNavigate, useParams } from "react-router-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { mediaSrc } from "@core/mediaSrc";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { AlertTriangle, ArrowLeft, Bot, ClipboardCopy, Flag, Plus, Trash2 } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowLeft,
+  Bot,
+  Check,
+  ClipboardCopy,
+  Flag,
+  Plus,
+  Trash2,
+  Volume2,
+} from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { EmptyState } from "@components/EmptyState/EmptyState";
 import { commands } from "@core/commands";
@@ -23,7 +33,7 @@ import {
   useWorkspaceStore,
 } from "@stores/workspaceStore";
 import { useSettingsStore } from "@stores/settingsStore";
-import type { AudioMedia } from "@domain/audio";
+import type { AudioMedia, TranscriptWord } from "@domain/audio";
 import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
 import { formatTranscript } from "./transcriptFormat";
 import styles from "./DegravacaoView.module.css";
@@ -38,7 +48,15 @@ interface LocalSeg {
   draft?: boolean;
   /** Confiança da IA (0..1) — só nos trechos vindos da transcrição automática. */
   confidence?: number | null;
+  /** Palavras da IA com tempo e confiança (as duvidosas viram "ouvir de novo"). */
+  words?: TranscriptWord[];
 }
+
+/** Abaixo disto a palavra é marcada para ouvir de novo; abaixo de LOW, em vermelho. */
+const DOUBT_P = 0.5;
+const DOUBT_LOW_P = 0.3;
+/** "Ouvir de novo" começa um pouco antes (o tempo por palavra do whisper é aproximado). */
+const LISTEN_PREROLL_S = 0.7;
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
@@ -93,6 +111,9 @@ export function DegravacaoView() {
             t_end: s.t_end,
             speaker: s.speaker,
             text: s.text,
+            draft: s.ai?.draft ?? false,
+            confidence: s.ai?.confidence ?? null,
+            words: s.ai?.words ?? [],
           })),
         );
         setSaveState(segs.length > 0 ? "saved" : "idle");
@@ -116,6 +137,10 @@ export function DegravacaoView() {
       t_end: s.t_end,
       speaker: s.speaker,
       text: s.text,
+      ai:
+        s.draft || s.confidence != null || (s.words?.length ?? 0) > 0
+          ? { draft: !!s.draft, confidence: s.confidence ?? null, words: s.words ?? [] }
+          : null,
     }));
     setSaveState("saving");
     void commands
@@ -192,6 +217,19 @@ export function DegravacaoView() {
   const seek = useCallback((t: number) => {
     playerRef.current?.seekTo(t);
   }, []);
+
+  const listen = useCallback((t: number) => {
+    playerRef.current?.seekTo(Math.max(0, t - LISTEN_PREROLL_S));
+    playerRef.current?.play();
+  }, []);
+
+  // "Conferido": tira a marcação das palavras duvidosas (não mexe no texto).
+  const clearDoubts = useCallback(
+    (localId: string) => {
+      mutate((prev) => prev.map((s) => (s.localId === localId ? { ...s, words: [] } : s)));
+    },
+    [mutate],
+  );
 
   // ---- Atalhos de pedal (customizáveis, escopo `audio`) ------------------
   //
@@ -360,6 +398,7 @@ export function DegravacaoView() {
           text: c.text,
           draft: true,
           confidence: c.confidence,
+          words: c.words,
         }));
         return [...kept, ...incoming].sort((a, b) => a.t_start - b.t_start);
       });
@@ -519,7 +558,9 @@ export function DegravacaoView() {
               <span>
                 {draftCount} trecho(s) são <strong>rascunho da IA</strong> (não revisados).
                 O whisper pode errar ou inventar texto em ruído/silêncio — revise cada um
-                antes de usar no laudo. Editar um trecho marca-o como revisado.
+                antes de usar no laudo. Editar um trecho marca-o como revisado. As
+                palavras em que a IA teve dúvida aparecem embaixo do trecho — clique para
+                ouvir de novo.
               </span>
             </div>
           )}
@@ -600,12 +641,61 @@ export function DegravacaoView() {
                       <Trash2 size={13} />
                     </button>
                   </div>
+                  <DoubtWords
+                    words={s.words}
+                    onListen={listen}
+                    onClear={() => clearDoubts(s.localId)}
+                  />
                 </div>
               ))
             )}
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+/** Palavras em que a IA teve pouca confiança — clique toca o áudio ali. */
+function DoubtWords({
+  words,
+  onListen,
+  onClear,
+}: {
+  words: TranscriptWord[] | undefined;
+  onListen: (t: number) => void;
+  onClear: () => void;
+}) {
+  const doubts = (words ?? []).filter((w) => w.p < DOUBT_P);
+  if (doubts.length === 0) return null;
+  return (
+    <div className={styles.doubts}>
+      <span
+        className={styles.doubtsLabel}
+        title={`Palavras em que a IA teve menos de ${Math.round(DOUBT_P * 100)}% de confiança`}
+      >
+        ouvir de novo:
+      </span>
+      {doubts.map((w, k) => (
+        <button
+          key={`${w.t_start}-${k}`}
+          type="button"
+          className={styles.doubt}
+          data-level={w.p < DOUBT_LOW_P ? "lo" : "mid"}
+          onClick={() => onListen(w.t_start)}
+          title={`Tocar a partir de ${fmtTime(Math.max(0, w.t_start - LISTEN_PREROLL_S))} — confiança ${Math.round(w.p * 100)}% (tempo aproximado)`}
+        >
+          <Volume2 size={11} aria-hidden /> {w.text} <span>{Math.round(w.p * 100)}%</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        className={styles.doubtsOk}
+        onClick={onClear}
+        title="Já conferi estas palavras — tirar a marcação"
+      >
+        <Check size={11} aria-hidden /> conferido
+      </button>
     </div>
   );
 }

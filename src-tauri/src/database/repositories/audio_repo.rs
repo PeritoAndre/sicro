@@ -214,7 +214,7 @@ pub fn list_enhancements_for_occurrence(
 // audio_transcript_segments (degravação manual — replace-all por áudio)
 
 const SEGMENT_COLS: &str =
-    "id, occurrence_id, audio_sha256, idx, t_start, t_end, speaker, text, created_at";
+    "id, occurrence_id, audio_sha256, idx, t_start, t_end, speaker, text, created_at, ai_json";
 
 pub fn list_segments(
     conn: &Connection,
@@ -237,6 +237,9 @@ pub fn list_segments(
                 t_end: row.get("t_end")?,
                 speaker: row.get("speaker")?,
                 text: row.get("text")?,
+                ai: row
+                    .get::<_, Option<String>>("ai_json")?
+                    .and_then(|s| serde_json::from_str(&s).ok()),
                 created_at: parse_dt(row.get::<_, String>("created_at")?)?,
             })
         })?
@@ -262,7 +265,7 @@ pub fn replace_segments(
         tx.execute(
             &format!(
                 "INSERT INTO audio_transcript_segments ({SEGMENT_COLS}) \
-                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9)"
+                 VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10)"
             ),
             params![
                 Uuid::new_v4().to_string(),
@@ -274,6 +277,7 @@ pub fn replace_segments(
                 s.speaker,
                 s.text,
                 now,
+                s.ai.as_ref().map(|v| v.to_string()),
             ],
         )?;
     }
