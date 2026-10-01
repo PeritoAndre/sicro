@@ -2,7 +2,7 @@
 
 <img src="public/branding/sicro-logo.png" alt="SICRO" width="116" />
 
-# SICRO 4.0
+# SICRO 4.1
 
 **Suíte pericial forense: offline, local e reproduzível.**
 

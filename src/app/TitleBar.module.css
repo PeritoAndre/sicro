@@ -35,10 +35,9 @@
   height: 100%;
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  /* Alinha o logo no mesmo x dos ícones dos módulos:
-   * padding-esquerdo do rail (--space-2) + padding-esquerdo do item (--space-3). */
-  padding-left: calc(var(--space-2) + var(--space-3));
+  /* Marca no CENTRO da coluna da sidebar (antes ficava encostada à esquerda,
+   * alinhada aos ícones dos módulos). */
+  justify-content: center;
 }
 /* Filhos da marca não capturam clique → arrastar a janela funciona a partir
  * da área da marca também (o clique "cai" no .brandSlot, que é drag-region). */

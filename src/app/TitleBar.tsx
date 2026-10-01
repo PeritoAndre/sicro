@@ -9,7 +9,7 @@
  *   - reabilita o REDIMENSIONAR pelas bordas (janela frameless perde isso no
  *     Windows): 8 "alças" finas nas bordas/cantos chamam `startResizeDragging`.
  *
- * O `title` da janela (`tauri.conf.json`) é "SICRO 4.0" — ele some da
+ * O `title` da janela (`tauri.conf.json`) é "SICRO 4.1" — ele some da
  * janela (não há barra nativa), mas segue identificando o app na barra de
  * tarefas / alt-tab.
  */

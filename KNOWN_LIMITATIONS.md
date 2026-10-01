@@ -1,6 +1,6 @@
-# Limitações conhecidas — SICRO 4.0
+# Limitações conhecidas — SICRO 4.1
 
-O que o SICRO 4.0 **não faz** ou faz com ressalvas. Não é lista de bugs: é o
+O que o SICRO 4.1 **não faz** ou faz com ressalvas. Não é lista de bugs: é o
 contrato honesto com quem usa.
 
 ## Instalação

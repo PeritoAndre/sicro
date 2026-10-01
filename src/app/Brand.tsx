@@ -1,5 +1,5 @@
 /**
- * Brand — marca SICRO (logo + nome "SICRO 4.0 / Suíte Pericial").
+ * Brand — marca SICRO (logo + nome "SICRO 4.1 / Suíte Pericial").
  *
  * O número vem do package.json (maior.menor) — subir a versão já atualiza.
  *

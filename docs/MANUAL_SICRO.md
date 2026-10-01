@@ -1,10 +1,10 @@
-# Manual do SICRO 4.0 — Suíte Pericial
+# Manual do SICRO 4.1 — Suíte Pericial
 
 > **Para quem é este manual:** peritos criminais e equipe técnica que usam o
 > SICRO no dia a dia. Ele ensina, módulo por módulo, **o que cada parte faz
 > e como usar** — com passos, dicas e os limites honestos de cada ferramenta.
 >
-> **O que é o SICRO 4.0:** uma suíte pericial **desktop, 100% offline**, para
+> **O que é o SICRO 4.1:** uma suíte pericial **desktop, 100% offline**, para
 > Windows e Linux, enxuta e objetiva: **Croquis**, **Vídeo e Áudio** e
 > **Imagens**, com a **integridade** de todas as evidências do caso. O laudo
 > continua no Word ou no LibreOffice; o SICRO entrega as figuras e as medições.
@@ -679,7 +679,7 @@ ilusões:
 
 ---
 
-*Manual do SICRO 4.0 (setembro de 2026), conferido com o código-fonte desta
+*Manual do SICRO 4.1 (outubro de 2026), conferido com o código-fonte desta
 versão. Algumas telas e rótulos evoluem entre versões; se algo divergir do que
 você vê no app, vale o app — e avise (botão **Feedback**, no rodapé do índice
 desta Ajuda) para atualizar este manual.*
