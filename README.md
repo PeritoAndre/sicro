@@ -66,8 +66,8 @@ no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 - **Arch e outras distribuições:** ainda sem pacote pronto. O AppImage ficou de fora porque as bibliotecas que ele leva embutidas quebram fora do Ubuntu. Para o Arch, o caminho previsto é um pacote no AUR; por enquanto, compile do código (abaixo).
 - Com placa **NVIDIA**, se a janela abrir em branco, rode com `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver proprietário).
 
-> Versão **beta**, em validação. Veja [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md)
-> e relate problemas na aba **Issues**.
+> Versão **beta**, em validação. As limitações conhecidas estão em
+> [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md); relate problemas na aba **Issues**.
 
 ---
 
@@ -131,7 +131,7 @@ cd src-tauri && cargo test --lib   # testes do backend
 
 As releases são compiladas pelo **GitHub Actions**
 ([`.github/workflows/release.yml`](./.github/workflows/release.yml)), em Linux
-(Ubuntu 24.04) e Windows.
+(Ubuntu 22.04) e Windows.
 Ninguém precisa compilar na própria máquina.
 
 1. Suba a versão em `package.json`, `src-tauri/Cargo.toml` e `src-tauri/tauri.conf.json`
@@ -140,6 +140,9 @@ Ninguém precisa compilar na própria máquina.
 3. Rode `scripts/release.sh`. Ele confere tudo e dispara o Actions, que deixa a
    release como **rascunho**, com o instalador do Windows, o `.deb` e o `SHA256SUMS.txt`.
 4. Conferido o rascunho, publique: `gh release edit v<versão> --draft=false`.
+
+> Enquanto o Actions compila, não envie ao `main` mudanças em `.github/workflows/`:
+> o GitHub recusa criar a release num commit cujo workflow difere do `main`.
 
 ---
 

@@ -1,144 +1,58 @@
-# Known Limitations — SICRO Desktop 2.0 Alpha
+# Limitações conhecidas — SICRO 4.0
 
-Versão: MVP 8 / Alpha-prep · Data: 2026-05-25.
+O que o SICRO 4.0 **não faz** ou faz com ressalvas. Não é lista de bugs: é o
+contrato honesto com quem usa.
 
-Este arquivo lista limitações **conhecidas** do SICRO Alpha. Não é
-uma lista de bugs ou de funcionalidades por fazer; é o contrato
-honesto com o operador.
+## Instalação
 
----
+- **Windows: instalador sem assinatura digital.** O SmartScreen pode mostrar "O
+  Windows protegeu o computador" — **Mais informações → Executar assim mesmo**.
+- **Linux: só `.deb` (Ubuntu 22.04+, Debian 12+).** Ainda não há AppImage: as
+  bibliotecas que ele leva embutidas (WebKit/GStreamer do Ubuntu) quebram em
+  distribuições mais novas. Para o Arch, o caminho previsto é um pacote no AUR.
+- **Linux com placa NVIDIA:** se a janela abrir em branco, rode com
+  `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver
+  proprietário).
 
-## 1. Exportação DOCX com imagens reais
+## Vídeo e Áudio
 
-**Status:** placeholder em vez da imagem real.
-**Origem:** MVP 4 (ressalva técnica), confirmada na validação manual.
-**Diagnóstico:** `docx-rs 0.4.x` aceita o `Pic` mas o resultado não
-aparece renderizado no Word (provavelmente faltam relacionamentos
-em `_rels/document.xml.rels` ou a função `add_image` está
-silenciosamente perdendo o stream).
-**Workaround:** use **PDF** como saída oficial. DOCX continua
-disponível como saída editável, mas com placeholder em vez da imagem.
-**Próximo passo recomendado:** Spike DOCX-imagens (ver
-`MVP4_EVIDENCIAS_NO_LAUDO_RELATORIO.md` §7).
+- **Quadro ≈ é estimado** pelo fps declarado do arquivo. Em vídeo com fps
+  variável, o número do quadro é aproximado; cada quadro coletado registra o
+  tempo real entregue pelo FFmpeg.
+- **Exportar trecho sem recompressão** começa no quadro-chave anterior à entrada
+  e pode levar alguns quadros depois da saída (o SICRO informa quanto).
+  **Recomprimir** corta exato, mas os pixels deixam de ser os do original.
+- **H.265 (HEVC) no Windows** depende do computador; se não tocar, instale as
+  "Extensões de Vídeo HEVC" da Microsoft Store.
+- **Esc com um menu aberto em tela cheia** também sai da tela cheia no Linux (o
+  WebKit trata o Esc antes da página).
+- **Velocidade e distância são medições com incerteza**: os pontos são marcados
+  pelo perito, não há rastreamento automático; o resultado é descritivo, com
+  intervalo de confiança quando as incertezas são informadas.
+- **Degravação por IA é rascunho**: pode errar ou "inventar" texto em ruído e
+  silêncio. Cada linha precisa ser revisada antes de ir ao laudo.
+- **ENF e realces de áudio** são apoio à escuta e indícios, não conclusão.
 
-## 2. Paginação do editor de Laudo é "soft"
+## Imagens
 
-**Status:** o editor renderiza uma única tira branca contínua com
-marcadores tracejados a cada 29,7 cm sinalizando onde cai a quebra
-de página no PDF final.
-**Origem:** decisão arquitetural do MVP 2 (paginação visual via
-paper stack).
-**Impacto:** o número de páginas exibido no editor é aproximado;
-o PDF final pode ter ±1 página em relação ao mostrado.
-**Workaround:** use o botão "Prévia HTML" do Laudo para conferir
-a paginação real antes de exportar.
+- Filtros forenses (ELA, realces) são **indícios** que exigem exame humano;
+  bordas e alto contraste podem dar falso-positivo.
 
-## 3. Vídeo — dependências externas
+## Casos e custódia
 
-**Status:** `ffmpeg` e `ffprobe` precisam estar no PATH.
-**Origem:** Spike F.
-**Impacto:** se uma das duas estiver ausente, o módulo Vídeo
-não consegue registrar mídia nem coletar frames.
-**Sinalização:** o AlphaDashboard mostra um pill "ausente" ao lado
-de `ffmpeg` / `ffprobe` quando não as encontra.
-**Próximo passo:** empacotar ambos no installer Alpha (futuro spike
-de empacotamento).
+- **Casos do 3.x:** o que Dossiê, Laudos, Documentoscopia e Estatísticas
+  guardaram continua na pasta do caso e aparece na **Integridade** (em
+  *Todas*), mas não há mais tela para abrir esses dados. A 3.1 segue disponível
+  para isso.
+- **Um caso por máquina:** não abra o mesmo `.sicro` em dois computadores ao
+  mesmo tempo; para levar um caso, use o backup (`.sicrobackup`).
+- **Pasta sincronizada** (OneDrive, Google Drive, Dropbox) pode corromper um caso
+  aberto; o SICRO avisa. Mantenha os casos em pasta local.
+- **Registro de operações** (aba Logs da Integridade) cobre vídeo e importação;
+  croqui e imagem ainda não registram log estruturado.
 
-## 4. Editor de Imagem — operações geométricas sem UI
+## Fora do escopo
 
-**Status:** o backend Rust (`image_editor/processor.rs`) suporta
-`rotate_90_cw/ccw`, `rotate_180`, `flip_h/v`, `crop`, `resize` —
-todos com testes. A UI do MVP 7 não expõe botões para eles.
-**Impacto:** o perito não consegue girar/cortar/redimensionar pela
-interface ainda. Só ajustes não destrutivos (brilho/contraste/gamma/
-saturação/grayscale/invert) e anotações.
-**Workaround:** nenhum por enquanto na UI; usar export e edição
-externa se necessário.
-**Próximo passo:** MVP 9 ou Spike "UI de operações geométricas".
-
-## 5. Editor de Imagem — sem FFT/Wavelets/CLAHE/autenticação profunda
-
-**Status:** o Editor MVP 7 entrega a **fundação** (canvas + camadas
-+ anotações + ajustes + escala + medida + tarja + export derivado +
-sidecar JSON). Filtros forenses avançados (Sobel/Canny/Laplaciano/
-CLAHE/blur gaussiano/mediana/Kuwahara/FFT/Wavelets) e detecção de
-manipulação ficaram **fora de escopo deliberado**.
-**Próximo passo:** MVP 9 — Filtros Forenses (Sobel/Canny/CLAHE/etc),
-extensível via o enum `BackendOperation` já em pé.
-
-## 6. EXIF não é lido
-
-**Status:** `get_image_metadata` retorna `exif_json: null`.
-**Origem:** decisão de escopo do MVP 7.
-**Workaround:** dimensões / mime / hash já são lidos. EXIF detalhado
-fica para spike próprio.
-
-## 7. Editor de Imagem — sem undo/redo persistente
-
-**Status:** ações destrutivas (delete de anotação) são imediatas.
-Não há histórico de undo dentro de uma sessão.
-**Workaround:** `image_operation_logs` registra auditoria
-operacional, mas não permite voltar ao estado anterior.
-
-## 8. Croqui Pericial — sem OSM / Google Maps / ortorretificação
-
-**Status:** o módulo Croqui MVP 6 usa imagem de fundo do disco ou
-do Dossiê. Não há integração com mapas externos nem correção de
-perspectiva de imagens aéreas (drone).
-**Workaround:** importe a imagem do drone como fundo e ajuste
-manualmente a escala.
-
-## 9. Croqui — sem edição de vértices individuais
-
-**Status:** linhas e polylines são arrastadas inteiras pelo
-Transformer. Não há edição por vértice (ainda).
-**Workaround:** apague a linha e desenhe nova.
-
-## 10. Performance — Konva > 500 objetos / imagens > 12 MP
-
-**Status:** o Croqui e o Editor de Imagem funcionam bem até ~500
-objetos / ~12 MP. Acima disso a interação fica mais pesada
-(zoom/pan mantém ok, drag de seleção fica notavelmente mais lento).
-**Workaround:** subdividir o trabalho em mais croquis / análises.
-
-## 11. Verificação profunda pode ser lenta em vídeos grandes
-
-**Status:** "Verificação profunda" da Central de Evidências
-(MVP 5) recompute SHA-256 de cada item. Em vídeos > 1 GB demora.
-Não há cancelamento.
-**Workaround:** rode em background ou só quando necessário.
-
-## 12. Instalador final ainda não validado
-
-**Status:** `pnpm tauri build` ainda não foi validado em múltiplas
-máquinas Windows. O empacotamento Alpha (instalador `.msi`/`.exe`)
-é trabalho de outro spike.
-**Workaround:** rode via `pnpm tauri dev` ou empacote manualmente
-com `pnpm tauri build` em sua máquina (deve funcionar mas sem
-garantias de bundle reproduzível).
-
-## 13. Não há IA / OCR / análise automática
-
-**Status:** decisão arquitetural permanente. O SICRO Desktop é
-ferramenta de suporte ao perito; **não interpreta** evidência, **não
-conclui** culpa, **não calcula** velocidade automaticamente, **não
-faz** OCR, **não detecta** manipulação. Tudo é controlado pelo
-operador.
-**Não é limitação técnica — é princípio do produto.**
-
-## 14. Alpha não substitui validação humana
-
-**Status:** mensagem que precisa ficar na cabeça do operador.
-A versão Alpha é para testes controlados em workspace descartável
-ou em ocorrências de baixo risco. **Todo laudo gerado precisa ser
-revisto pelo perito antes de ser usado oficialmente.**
-
----
-
-## Como reportar
-
-Crie um issue no GitHub do projeto (`SICRO-desktop`) com:
-- versão (visível no AlphaDashboard / Relatório de Saúde);
-- workspace de teste (NÃO compartilhe workspace com dados reais);
-- passos para reproduzir;
-- screenshots se aplicável.
+- O SICRO **não escreve nem assina laudo**: o laudo fica no Word ou no
+  LibreOffice, e a assinatura nos portais (SIGDOCS, gov.br).
+- Não há nuvem, conta ou sincronização: tudo é local e offline.
