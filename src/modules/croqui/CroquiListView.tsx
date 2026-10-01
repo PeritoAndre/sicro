@@ -54,7 +54,7 @@ const CROQUI_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <FileImage size={18} />,
     title: "Foto / drone de fundo",
-    desc: "Use uma imagem do Dossiê como referência, com opacidade e bloqueio.",
+    desc: "Use uma foto do caso (ou de drone) como referência, com opacidade e bloqueio.",
   },
   {
     icon: <Ruler size={18} />,

@@ -418,9 +418,9 @@ export function Toolbar({
           type="button"
           className={styles.actionBtn}
           onClick={onPickFromDossie}
-          title="Usar uma foto do Dossiê como fundo"
+          title="Usar uma foto do caso como fundo"
         >
-          <MapPin size={12} /> Do Dossiê
+          <MapPin size={12} /> Fotos do caso
         </button>
         {onImportDrone && (
           <button

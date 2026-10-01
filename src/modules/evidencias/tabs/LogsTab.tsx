@@ -200,10 +200,9 @@ export function LogsTab({ workspacePath, videos }: Props) {
 
       <p className={styles.tip}>
         O agregador desta aba consome logs de Vídeo (
-        <code>video_operation_logs</code>), Laudo (<code>evidence_links</code>) e
-        Importador (warnings/errors do <code>imports</code>). Outros
-        módulos (Croqui, Dossiê, Exportação) ainda não emitem log
-        estruturado — registrado como pendência no relatório do MVP 5.
+        <code>video_operation_logs</code>), vínculos de laudos antigos (
+        <code>evidence_links</code>) e Importador (warnings/errors do{" "}
+        <code>imports</code>). Croqui e Imagem ainda não emitem log estruturado.
       </p>
     </div>
   );

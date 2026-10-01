@@ -1,6 +1,6 @@
 [package]
 name = "sicro-desktop"
-version = "3.1.0"
+version = "4.0.0"
 description = "SICRO 3.0 — Sistema Integrado de Criminalística e Operações"
 authors = ["André Ricardo Barroso"]
 edition = "2021"
@@ -43,9 +43,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 # the XDG/KnownFolders APIs.
 directories = "5"
 
-# DOCX export (Spike C). Pure-Rust crate — no system dependencies.
-docx-rs = "0.4"
-
 # Spike D — .sicroapp importer.
 #   `zip`  reads the ZIP-wrapped pacote (`.sicroapp` is a ZIP renamed).
 #   `sha2` powers the streaming SHA-256 used both for the package integrity
@@ -53,11 +50,6 @@ docx-rs = "0.4"
 #         in `media_assets`.
 zip = { version = "0.6", default-features = false, features = ["deflate"] }
 sha2 = "0.10"
-
-# Importação de laudo a partir de .docx (Word) — leitor de OOXML.
-#   `roxmltree` é um parser XML read-only, puro-Rust, leve e namespace-aware.
-#   Usado para percorrer `word/document.xml` e converter para ProseMirror JSON.
-roxmltree = "0.20"
 
 # Spike E — Croqui Engine.
 #   `base64` decodes the PNG produced by the frontend (Konva.toDataURL).
@@ -91,7 +83,6 @@ kamadak-exif = "0.6"
 md-5 = "0.10"
 sha1 = "0.10"
 sha3 = "0.10"
-keyring = { version = "3.6.3", features = ["windows-native", "apple-native", "linux-native-sync-persistent"] }
 
 # Calculador de Velocidade (Fase 1) — matemática pura.
 #   `nalgebra`   — álgebra linear (SVD para resolver homografia via DLT).
@@ -114,27 +105,6 @@ rustfft = "6"
 #   Windows só com o MSVC já presente. Usado em `async_runtime::spawn_blocking`.
 ureq = { version = "2", default-features = false, features = ["native-tls", "json", "gzip"] }
 native-tls = "0.2"
-
-# Export PDF com rodapé "Folha X de Y": dirige o Edge headless pelo DevTools
-# Protocol (Page.printToPDF com footerTemplate) via WebSocket local (ws://127…).
-# Sem TLS (conexão localhost), então `tungstenite` mínimo. Fallback pro CLI
-# `--print-to-pdf` se o CDP falhar — o PDF nunca deixa de ser gerado.
-tungstenite = "0.24"
-
-# Documentoscopia — motor de OCR RapidOCR/PaddleOCR (PP-OCRv5) via ONNX.
-#   `oar-ocr` embrulha detecção + reconhecimento do PaddleOCR rodando sobre o
-#   ONNX Runtime (crate `ort`). Offline, SEM Python; o `ort` baixa e empacota a
-#   `onnxruntime.dll` no build. Apache-2.0. Os modelos (pacote latino: cobre
-#   PT/ES/EN/FR/IT/DE…) são resolvidos à parte (download/empacote).
-oar-ocr = "0.6"
-
-# Documentoscopia Fase 3 — detecção de QR e códigos de barras.
-#   `rxing` é o port Rust puro do ZXing (Apache-2.0): decodifica QR, Code128,
-#   EAN, etc. a partir de bytes de luminância. Determinístico e offline — usado
-#   para localizar e LER os códigos do documento (ex.: a chave da NF-e no QR e
-#   no código de barras do DANFE).
-rxing = "0.7"
-lopdf = "0.36.0"
 
 # Linux (WebKitGTK) — o player de mídia (GStreamer) não lê o asset protocol do
 # Tauri; <video>/<audio> vão por file:// e a página precisa ser "local" no

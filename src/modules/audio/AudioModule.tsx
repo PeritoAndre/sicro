@@ -524,7 +524,7 @@ export function AudioModule() {
           </h1>
           <p className={styles.subtitle}>
             Importe, extraia de vídeos e analise áudios — com hash e cadeia de
-            custódia. Transcrição assistida vem na próxima etapa.
+            custódia, realce para escuta e degravação.
           </p>
         </div>
         <div className={styles.headActions}>

@@ -1,7 +1,7 @@
 /**
  * ConfiguracoesModule — Configurações GLOBAIS do app (o "cofrinho" fora do
- * `.sicro`): Perfil do perito, Instituição/marca, Aparência (tema + cor + zoom),
- * Caminhos padrão, Backup geral, IA de degravação, Atalhos e Diagnóstico.
+ * `.sicro`): Perfil do perito, Aparência (tema + cor + zoom), Backup geral,
+ * IA de degravação, Atalhos e Diagnóstico.
  *
  * Persistência: `settingsStore` (→ `app-settings.json` no app_config_dir).
  * A aparência aplica e salva na hora; os campos de texto salvam no botão
@@ -11,9 +11,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Archive,
-  Building2,
   Cpu,
-  FolderCog,
   Info,
   Keyboard,
   Palette,
@@ -33,8 +31,6 @@ import { GlobalBackupCard } from "./GlobalBackupCard";
 import type {
   AppSettings,
   AppearanceSettings,
-  InstitutionSettings,
-  PathsSettings,
   PeritoProfile,
   ThemeMode,
 } from "@domain/app_settings";
@@ -155,9 +151,7 @@ function Field({
 /** Categorias do "Settings Center" — nav interna, sem scroll único. */
 type CatId =
   | "perfil"
-  | "instituicao"
   | "aparencia"
-  | "caminhos"
   | "backup"
   | "iaocr"
   | "atalhos"
@@ -165,9 +159,7 @@ type CatId =
 
 const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "perfil", label: "Perfil", sub: "Dados pessoais e profissionais", Icon: User },
-  { id: "instituicao", label: "Instituição & marca", sub: "Cabeçalho, unidade e brasões", Icon: Building2 },
   { id: "aparencia", label: "Aparência", sub: "Tema, cores e personalização", Icon: Palette },
-  { id: "caminhos", label: "Caminhos padrão", sub: "Pastas e diretórios", Icon: FolderCog },
   { id: "backup", label: "Backup geral", sub: "Cópia de todos os casos", Icon: Archive },
   { id: "iaocr", label: "IA (degravação)", sub: "Transcrição local de áudio", Icon: Cpu },
   { id: "atalhos", label: "Atalhos de teclado", sub: "Customizáveis por ação", Icon: Keyboard },
@@ -206,10 +198,6 @@ export function ConfiguracoesModule() {
 
   const setProfile = (p: Partial<PeritoProfile>) =>
     setDraft((d) => ({ ...d, profile: { ...d.profile, ...p } }));
-  const setInstitution = (p: Partial<InstitutionSettings>) =>
-    setDraft((d) => ({ ...d, institution: { ...d.institution, ...p } }));
-  const setPaths = (p: Partial<PathsSettings>) =>
-    setDraft((d) => ({ ...d, paths: { ...d.paths, ...p } }));
 
   const doPersist = async (next: AppSettings) => {
     setSaving(true);
@@ -295,8 +283,8 @@ export function ConfiguracoesModule() {
             <h2 className={styles.cardTitle}>Perfil</h2>
           </div>
           <p className={styles.cardDesc}>
-            Identifica a autoria e servirá para pré-preencher laudos e medições.
-            <span className={styles.soon}>pré-preenche laudos em breve</span>
+            Quem você é no SICRO. O município de atuação já vem preenchido nas
+            ocorrências novas.
           </p>
           <div className={styles.grid}>
             <Field
@@ -331,70 +319,9 @@ export function ConfiguracoesModule() {
             <Field
               wide
               pickFile
-              label="Imagem de assinatura"
-              value={draft.profile.signature_image_path}
-              onChange={(v) => setProfile({ signature_image_path: v })}
-              placeholder="Nenhum arquivo selecionado"
-            />
-            <Field
-              wide
-              pickFile
               label="Foto do perito"
               value={draft.profile.photo_path}
               onChange={(v) => setProfile({ photo_path: v })}
-              placeholder="Nenhum arquivo selecionado"
-            />
-          </div>
-        </section>
-          )}
-
-          {/* Instituição & marca */}
-          {activeCat === "instituicao" && (
-        <section className={styles.card}>
-          <div className={styles.cardHead}>
-            <Building2 size={15} aria-hidden />
-            <h2 className={styles.cardTitle}>Instituição & marca</h2>
-          </div>
-          <p className={styles.cardDesc}>
-            Padrão institucional que alimentará o cabeçalho dos laudos.
-            <span className={styles.soon}>alimenta o cabeçalho em breve</span>
-          </p>
-          <div className={styles.grid}>
-            <Field
-              label="Órgão"
-              value={draft.institution.organization}
-              onChange={(v) => setInstitution({ organization: v })}
-              placeholder="Polícia Científica do Amapá"
-            />
-            <Field
-              label="Unidade / setor"
-              value={draft.institution.unit}
-              onChange={(v) => setInstitution({ unit: v })}
-            />
-            <Field
-              wide
-              label="Endereço"
-              value={draft.institution.address}
-              onChange={(v) => setInstitution({ address: v })}
-            />
-            <Field
-              wide
-              label="Texto de rodapé"
-              value={draft.institution.footer_text}
-              onChange={(v) => setInstitution({ footer_text: v })}
-            />
-            <Field
-              pickFile
-              label="Brasão esquerdo"
-              value={draft.institution.brasao_left_path}
-              onChange={(v) => setInstitution({ brasao_left_path: v })}
-              placeholder="Nenhum arquivo selecionado"
-            />
-            <Field
-              pickFile
-              label="Brasão direito"
-              value={draft.institution.brasao_right_path}
-              onChange={(v) => setInstitution({ brasao_right_path: v })}
               placeholder="Nenhum arquivo selecionado"
             />
           </div>
@@ -491,36 +418,6 @@ export function ConfiguracoesModule() {
         </section>
           )}
 
-          {/* Caminhos padrão */}
-          {activeCat === "caminhos" && (
-        <section className={styles.card}>
-          <div className={styles.cardHead}>
-            <FolderCog size={15} aria-hidden />
-            <h2 className={styles.cardTitle}>Caminhos padrão</h2>
-          </div>
-          <p className={styles.cardDesc}>
-            Pastas sugeridas ao criar ocorrências e ao exportar.
-            <span className={styles.soon}>entra em vigor em breve</span>
-          </p>
-          <div className={styles.grid}>
-            <Field
-              wide
-              label="Pasta padrão de workspaces (.sicro)"
-              value={draft.paths.default_workspace_dir}
-              onChange={(v) => setPaths({ default_workspace_dir: v })}
-              placeholder="C:\\SICRO\\Ocorrências"
-            />
-            <Field
-              wide
-              label="Pasta padrão de exportação"
-              value={draft.paths.default_export_dir}
-              onChange={(v) => setPaths({ default_export_dir: v })}
-              placeholder="C:\\SICRO\\Exportações"
-            />
-          </div>
-        </section>
-          )}
-
           {/* IA de degravação (whisper.cpp local, usado pelos Áudios) */}
           {activeCat === "iaocr" && <AiManagerCard />}
 
@@ -534,8 +431,8 @@ export function ConfiguracoesModule() {
           <p className={styles.cardDesc}>
             <strong>Todos os atalhos são customizáveis</strong>: clique numa
             tecla e pressione a combinação que preferir (Esc cancela). Estão
-            organizados na <strong>ordem dos módulos</strong> — Dossiê, Laudo,
-            Croqui, Vídeo, Áudio, Imagem e Documentoscopia. Cada atalho vale na
+            organizados na <strong>ordem dos módulos</strong> — Croqui, Vídeo,
+            Áudio e Imagem (e a Integridade). Cada atalho vale na
             tela do seu módulo, então a mesma tecla pode se repetir entre módulos
             sem conflito (eles nunca estão ativos ao mesmo tempo).
           </p>

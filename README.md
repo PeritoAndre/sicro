@@ -2,12 +2,12 @@
 
 <img src="public/branding/sicro-logo.png" alt="SICRO" width="116" />
 
-# SICRO 3.1
+# SICRO 4.0
 
 **Suíte pericial forense: offline, local e reproduzível.**
 
-Vídeo, áudio, imagem, croquis, documentoscopia e a custódia das evidências do
-laudo, num só programa e num único arquivo de caso `.sicro`.
+Croquis, vídeo e áudio e imagem — com a custódia de cada evidência — num
+programa enxuto e num único arquivo de caso `.sicro`.
 
 ![versão](https://img.shields.io/github/v/release/PeritoAndre/sicro?label=vers%C3%A3o&color=d7a84f)
 ![plataforma](https://img.shields.io/badge/plataforma-Windows%20%7C%20Linux-1f6feb)
@@ -25,10 +25,10 @@ laudo, num só programa e num único arquivo de caso `.sicro`.
 
 ## O que é
 
-O SICRO é uma ferramenta de **apoio** ao perito criminal. Ele reúne o que
-normalmente fica espalhado por vários programas: tratar e medir vídeo, áudio e
-imagem, desenhar croquis, examinar documentos e manter a integridade de cada
-evidência. Cada caso fica isolado num workspace `.sicro`.
+O SICRO é uma ferramenta de **apoio** ao perito criminal, objetiva: **três
+módulos** para o trabalho técnico — desenhar o croqui, analisar vídeo e áudio,
+tratar e medir imagem — e a **integridade** de cada evidência do caso. Cada caso
+fica isolado num workspace `.sicro`.
 
 Ele realça, mede e organiza, mas **nunca altera o original, nunca fabrica prova
 e não tira conclusões**. A interpretação, a redação e a assinatura são do perito.
@@ -38,10 +38,10 @@ e não tira conclusões**. A interpretação, a redação e a assinatura são do
 - **Reproduzível e auditável:** cada resultado registra a ferramenta, os parâmetros e o momento.
 - **Honesto sobre limites:** estimativas aparecem como estimativas, com a margem de erro quando existe.
 
-> **O laudo é um `.docx`**, escrito no Word ou no LibreOffice. O SICRO não
-> substitui o editor de texto: ele gera o documento com cabeçalho institucional
-> e campos da ocorrência, guarda a custódia e entrega as figuras prontas para
-> colar. A redação fica onde sempre esteve; o trabalho técnico fica aqui.
+> **O laudo fica no Word ou no LibreOffice.** O SICRO não escreve laudo: ele
+> entrega o que vai dentro dele — o PNG do croqui, os quadros coletados dos
+> vídeos, as imagens tratadas, os tempos no formato de laudo — com hash e
+> proveniência. A redação fica onde sempre esteve; o trabalho técnico fica aqui.
 
 ---
 
@@ -52,7 +52,7 @@ Os pacotes ficam em **[Releases](https://github.com/PeritoAndre/sicro/releases/l
 | Sistema | Arquivo | Como instalar |
 |---|---|---|
 | **Windows 10/11 (64 bits)** | `SICRO-<versão>-windows-x64-setup.exe` | Execute. Instale só para você (sem administrador) ou para todos. O FFmpeg já vem junto. |
-| **Ubuntu 24.04+, Debian 13+ e derivados** | `sicro_<versão>_amd64.deb` | `sudo apt install ./sicro_<versão>_amd64.deb ffmpeg gstreamer1.0-libav gstreamer1.0-plugins-good` |
+| **Ubuntu 22.04+, Debian 12+ e derivados** | `sicro_<versão>_amd64.deb` | `sudo apt install ./sicro_<versão>_amd64.deb` (o apt já instala o ffmpeg e os plugins de vídeo) |
 
 Confira o download com o `SHA256SUMS.txt` da release: `sha256sum -c SHA256SUMS.txt`
 no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
@@ -62,8 +62,7 @@ no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 - O instalador não tem assinatura digital. Se aparecer "O Windows protegeu o computador", clique em **Mais informações → Executar assim mesmo**.
 
 **Linux**
-- Distribuição de 2024 em diante (o motor de OCR exige glibc 2.38 ou mais nova).
-- Vídeo e áudio usam o **ffmpeg** e o **GStreamer** do sistema (o comando da tabela instala os dois).
+- Vídeo e áudio usam o **ffmpeg** e o **GStreamer** do sistema; o `.deb` os declara como dependência.
 - **Arch e outras distribuições:** ainda sem pacote pronto. O AppImage ficou de fora porque as bibliotecas que ele leva embutidas quebram fora do Ubuntu. Para o Arch, o caminho previsto é um pacote no AUR; por enquanto, compile do código (abaixo).
 - Com placa **NVIDIA**, se a janela abrir em branco, rode com `WEBKIT_DISABLE_DMABUF_RENDERER=1` (limitação do WebKitGTK com o driver proprietário).
 
@@ -76,16 +75,17 @@ no Linux, ou `Get-FileHash <arquivo>` no PowerShell.
 
 | Módulo | O que faz |
 |---|---|
-| **Vídeo** | Registro com custódia (cópia local, SHA-256, `ffprobe`) e um reprodutor feito para perícia: **J/K/L** até 8×, quadro a quadro, **linha do tempo** com zoom até o quadro e altura ajustável, trecho em repetição, eventos, **lupa** até 8×, brilho/contraste/gama só na tela, **relógio da câmera** e tela cheia. **Coleta de quadros** exatamente iguais ao que aparece no player (PNG + JSON + hash), sequências e storyboard. **Comparar duas câmeras** lado a lado, vinculadas pelo mesmo acontecimento ou pelo relógio. **Exportar trecho** como cópia registrada, sem recompressão. **Calculador de velocidade** (homografia DLT ou linha de tráfego, Monte Carlo reprodutível) e **medidor de distância**. |
-| **Áudio** | Aquisição com custódia (original + WAV de análise, ambos com SHA-256), inclusive extraído dos vídeos do caso. Realce para escuta via FFmpeg (ruído, graves/agudos, normalização), **espectrograma**, medições objetivas (pico/RMS, fator de crista, clipping, **ENF**), recorte, compilação rotulada e **degravação** assistida offline (whisper.cpp; rascunho a revisar). |
-| **Imagem** | Realce e análise **não destrutivos** (original + derivado reversível + JSON): filtros forenses em Rust (bordas, desfoque, morfologia, CLAHE, níveis, nitidez, perspectiva de 4 pontos), máscaras, zoom no pixel, **EXIF**, medições com escala e múltiplos hashes (MD5, SHA-1, SHA-256, SHA-3). |
-| **Croqui** | Editor 2D técnico: **viário** (vias paramétricas, rotatórias, 24+ veículos, vestígios, mapa do **OpenStreetMap**), **corporal** (carta de lesões com numeração automática, 49 regiões) e **planta baixa** (paredes, mobiliário, evidências, trajetórias). Exporta PNG técnico com carimbo ou PNG limpo. |
-| **Documentoscopia** | Documentos e PDFs com cópia e hash, **OCR offline**, extração de campos, leitura de QR e código de barras, análise de metadados e **confronto** questionado × padrão. |
-| **Dossiê** | O caso em duas lentes: **Operacional** (coleta de campo importada do `.sicroapp`: fotos, checklist, vestígios, medições, linha do tempo) e **Integridade** (confere cada evidência em disco: existência, tamanho, SHA-256, vínculos). |
-| **Laudo** | Registro dos laudos `.docx` do caso e **ponte com o Word**: cria o documento-base, abre no editor, registra um `.docx` pronto e copia as figuras do caso para colar com `Ctrl+V`. A assinatura é feita fora do SICRO (gov.br / SIGDOCS). |
-| **Estatísticas** | Painel **descritivo** do que o caso guarda, por caso ou geral. Exporta HTML, CSV e JSON. |
+| **Croquis** | Editor 2D técnico: **viário** (vias paramétricas, rotatórias, 24+ veículos, vestígios, mapa do **OpenStreetMap**, fundo de foto ou drone), **corporal** (carta de lesões com numeração automática, 49 regiões) e **planta baixa** (paredes, mobiliário, evidências, trajetórias). Exporta PNG técnico com carimbo ou PNG limpo. |
+| **Vídeo e Áudio** | **Vídeos:** registro com custódia (cópia local, SHA-256, `ffprobe`) e um reprodutor feito para perícia — **J/K/L** até 8×, quadro a quadro, **linha do tempo** com zoom até o quadro, trecho em repetição, eventos, **lupa** até 8×, brilho/contraste/gama só na tela, **relógio da câmera**, tela cheia. **Coleta de quadros** idênticos ao que aparece no player (PNG + JSON + hash), sequências, storyboard, **comparar duas câmeras**, **exportar trecho** sem recompressão, **velocidade** (homografia DLT, Monte Carlo reprodutível) e **distância**. **Áudios:** original + WAV de análise com hash, extração dos vídeos do caso, realce para escuta, **espectrograma**, medições (pico/RMS, clipping, **ENF**), recortes, compilação rotulada e **degravação** assistida offline (whisper.cpp; rascunho a revisar). |
+| **Imagens** | Realce e análise **não destrutivos** (original + derivado reversível + JSON) de fotos do caso, quadros de vídeo ou arquivos: filtros forenses em Rust (bordas, desfoque, morfologia, CLAHE, níveis, nitidez, perspectiva de 4 pontos), máscaras, zoom no pixel, **EXIF**, medições com escala e múltiplos hashes (MD5, SHA-1, SHA-256, SHA-3). |
+| **Integridade** | Pelo Início: tudo o que o caso guarda, conferido no disco (existência, SHA-256, vínculos), com relatório HTML auditável. Só leitura. |
 | **Ajuda** | O [manual completo](./docs/MANUAL_SICRO.md) dentro do programa, com índice e busca. |
-| **Configurações** | Perfil do perito, instituição e brasões, tema, **zoom da interface** (Ctrl+Shift+= / − / 0), atalhos editáveis, credenciais no cofre do sistema (nunca em arquivo), diagnóstico e backup geral. |
+| **Configurações** | Perfil do perito, tema, **zoom da interface** (Ctrl+Shift+= / − / 0), backup geral e restauração, IA de degravação, atalhos editáveis e diagnóstico. |
+
+> **Do 3.x para o 4.0:** Dossiê, Laudos, Documentoscopia e Estatísticas saíram —
+> o SICRO ficou com o que é trabalho técnico. Os casos antigos abrem normalmente;
+> o que esses módulos guardaram continua no disco e aparece na Integridade. A
+> [3.1](https://github.com/PeritoAndre/sicro/releases/tag/v3.1.0) segue disponível.
 
 ---
 
@@ -156,7 +156,7 @@ sicro/
 │   ├── app/                       # janela, barra lateral, título
 │   ├── core/                      # comandos, atalhos, formatação
 │   ├── components/                # interface compartilhada
-│   └── modules/                   # vídeo, áudio, imagem, croqui, laudo, …
+│   └── modules/                   # croqui, vídeo, áudio, imagem, integridade, …
 └── src-tauri/                     # backend: Rust
     ├── src/video/                 # probe, quadros, trechos, velocidade, distância
     ├── src/audio/                 # realce, espectrograma, medições, degravação

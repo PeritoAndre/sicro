@@ -521,9 +521,9 @@ function LeftPanel({
             type="button"
             className={styles.dialogClose}
             onClick={onApplyDossie}
-            title="Usa as coordenadas registradas no Dossiê da ocorrência"
+            title="Usa as coordenadas registradas na ocorrência"
           >
-            Do Dossiê
+            Da ocorrência
           </button>
         )}
       </div>

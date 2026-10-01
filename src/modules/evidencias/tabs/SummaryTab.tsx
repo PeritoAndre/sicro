@@ -117,10 +117,13 @@ export function SummaryTab({ summary, report, workspacePath, onReload }: Props) 
           <Stat n={summary.croqui_exports} label="Croquis PNG" />
           <Stat n={summary.videos} label="Vídeos" />
           <Stat n={summary.storyboard_frames} label="Frames" />
-          <Stat n={summary.laudos} label="Laudos" />
-          <Stat n={summary.laudo_exports} label="Exports laudo" />
           <Stat n={summary.imported_packages} label="Pacotes importados" />
-          <Stat n={summary.linked_in_laudos} label="Inseridos em laudo" />
+          {/* Laudos só existem em casos do 3.x (o módulo saiu no 4.0). */}
+          {summary.laudos > 0 && <Stat n={summary.laudos} label="Laudos (3.x)" />}
+          {summary.laudo_exports > 0 && <Stat n={summary.laudo_exports} label="Exports laudo (3.x)" />}
+          {summary.linked_in_laudos > 0 && (
+            <Stat n={summary.linked_in_laudos} label="Inseridos em laudo (3.x)" />
+          )}
         </div>
       </div>
 

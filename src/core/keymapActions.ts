@@ -16,7 +16,8 @@ export type ActionScope =
   | "croqui"
   | "video"
   | "audio"
-  | "imagem";
+  | "imagem"
+  | "integridade";
 
 export interface ShortcutAction {
   id: string;
@@ -38,6 +39,12 @@ const GERAL: ShortcutAction[] = [
   { id: "geral.uiZoomReset", scope: "geral", group: "Geral · Interface", label: "Interface em 100%", defaultBinding: "Ctrl+Shift+0" },
 ];
 
+/** Integridade (Central de Provas) — trocar de aba. */
+const INTEGRIDADE: ShortcutAction[] = [
+  { id: "integridade.tab.prev", scope: "integridade", group: "Integridade · Navegação", label: "Aba anterior", defaultBinding: "Ctrl+PgUp" },
+  { id: "integridade.tab.next", scope: "integridade", group: "Integridade · Navegação", label: "Próxima aba", defaultBinding: "Ctrl+PgDn" },
+];
+
 // Geral primeiro; depois a ordem dos módulos (ActivityRail): Croqui → Vídeo e
 // Áudio → Imagem.
 export const SHORTCUT_ACTIONS: ShortcutAction[] = [
@@ -46,6 +53,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   ...VIDEO_ACTIONS,
   ...AUDIO_ACTIONS,
   ...IMAGEM_ACTIONS,
+  ...INTEGRIDADE,
 ];
 
 /** Mapa id → ação (lookup rápido). */

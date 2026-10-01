@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
   "productName": "SICRO",
-  "version": "3.1.0",
+  "version": "4.0.0",
   "identifier": "br.org.sicro.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SICRO 3.1",
+        "title": "SICRO 4.0",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
@@ -51,10 +51,13 @@
     "copyright": "© 2026 Polícia Científica do Amapá",
     "licenseFile": "installer/termo-de-uso.txt",
     "shortDescription": "Suíte pericial SICRO",
-    "longDescription": "Sistema Integrado de Criminalística e Operações — workspace pericial do perito criminal.",
+    "longDescription": "Sistema Integrado de Criminalística e Operações — croquis, vídeo e áudio e imagem para o perito criminal, com custódia das evidências.",
     "linux": {
       "appimage": {
         "bundleMediaFramework": true
+      },
+      "deb": {
+        "depends": ["ffmpeg", "gstreamer1.0-plugins-good", "gstreamer1.0-libav"]
       }
     },
     "windows": {

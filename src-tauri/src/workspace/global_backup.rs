@@ -4,10 +4,12 @@
 //! GB, recomprime tudo toda vez e, se corromper, leva tudo junto), o backup
 //! geral mantém uma PASTA-ESPELHO num destino escolhido (ex.: HD externo):
 //!
-//!     <destino>/
-//!         sicro-backup-index.json     ← índice do conjunto (+ fingerprints)
-//!         backup_<label>_<id8>.sicrobackup   (1 por caso)
-//!         ...
+//! ```text
+//! <destino>/
+//!     sicro-backup-index.json     ← índice do conjunto (+ fingerprints)
+//!     backup_<label>_<id8>.sicrobackup   (1 por caso)
+//!     ...
+//! ```
 //!
 //! Cada caso vira um `.sicrobackup` independente (reaproveita `create_backup`),
 //! portanto continua verificável e restaurável isoladamente.

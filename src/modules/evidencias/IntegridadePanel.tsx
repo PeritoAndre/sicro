@@ -218,8 +218,8 @@ export function IntegridadePanel({ workspacePath }: Props) {
     if (next) setTab(next);
   };
   useShortcuts({
-    "dossie.tab.next": () => cycleTab(1),
-    "dossie.tab.prev": () => cycleTab(-1),
+    "integridade.tab.next": () => cycleTab(1),
+    "integridade.tab.prev": () => cycleTab(-1),
   });
 
   return (

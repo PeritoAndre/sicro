@@ -26,7 +26,6 @@
 //! All path manipulation goes through `safe_zip::sanitize_zip_path` to refuse
 //! traversal (`..`) and absolute entries.
 
-pub mod docx_import;
 pub mod dossie_mapper;
 pub mod manifest_parser;
 pub mod orchestrator;
