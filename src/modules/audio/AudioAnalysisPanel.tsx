@@ -22,22 +22,26 @@ import type {
   SpectrumResult,
 } from "@domain/audio";
 import { AuthenticityView } from "./AuthenticityView";
+import { EnfView } from "./EnfView";
 
 interface Props {
   workspacePath: string;
   audioId: string;
   /** Leva o player ao instante (s) — instantes dos relatórios são clicáveis. */
   onSeek?: (t: number) => void;
+  /** Outros áudios do caso (referência da rede para o ENF). */
+  references?: { id: string; filename: string; duration_s: number | null }[];
 }
 
-export function AudioAnalysisPanel({ workspacePath, audioId, onSeek }: Props) {
+export function AudioAnalysisPanel({ workspacePath, audioId, onSeek, references = [] }: Props) {
   const [busy, setBusy] = useState<"" | "measure" | "spectrum" | "enf" | "auth">("");
   const [auth, setAuth] = useState<AuthenticityReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [measure, setMeasure] = useState<AudioMeasurements | null>(null);
   const [spectrum, setSpectrum] = useState<SpectrumResult | null>(null);
   const [enf, setEnf] = useState<EnfResult | null>(null);
-  const [nominalHz, setNominalHz] = useState<50 | 60>(60);
+  // null = automático (50/60 pelo zumbido).
+  const [nominalHz, setNominalHz] = useState<50 | 60 | null>(null);
 
   const run = async (
     which: "measure" | "spectrum" | "enf" | "auth",
@@ -126,9 +130,13 @@ export function AudioAnalysisPanel({ workspacePath, audioId, onSeek }: Props) {
         <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
           Rede:
           <select
-            value={nominalHz}
-            onChange={(e) => setNominalHz(Number(e.target.value) as 50 | 60)}
+            value={nominalHz ?? 0}
+            onChange={(e) => {
+              const v = Number(e.target.value);
+              setNominalHz(v === 50 || v === 60 ? v : null);
+            }}
           >
+            <option value={0}>automático</option>
             <option value={60}>60 Hz</option>
             <option value={50}>50 Hz</option>
           </select>
@@ -199,25 +207,13 @@ export function AudioAnalysisPanel({ workspacePath, audioId, onSeek }: Props) {
       )}
 
       {enf && (
-        <div style={{ fontSize: 12 }}>
-          <strong>ENF</strong> (nominal {enf.nominal_hz} Hz)
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
-            <tbody>
-              <Row k="Média" v={`${enf.mean_hz.toFixed(3)} Hz`} />
-              <Row k="Desvio-padrão" v={`${enf.std_hz.toFixed(4)} Hz`} />
-              <Row
-                k="Maior salto"
-                v={`${enf.max_jump_hz.toFixed(4)} Hz`}
-                warn={enf.max_jump_hz > 0.1}
-              />
-              <Row k="Quadros" v={`${enf.enf_hz.length}`} />
-            </tbody>
-          </table>
-          <p style={{ fontSize: 10.5, color: "var(--text-secondary, #9aa4b2)", margin: "4px 0 0" }}>
-            Saltos &gt; ~0,1 Hz sugerem descontinuidade (possível edição). Cruzamento
-            com banco de dados da rede elétrica é etapa separada (fora do app).
-          </p>
-        </div>
+        <EnfView
+          workspacePath={workspacePath}
+          audioId={audioId}
+          enf={enf}
+          references={references}
+          onSeek={onSeek}
+        />
       )}
     </section>
   );

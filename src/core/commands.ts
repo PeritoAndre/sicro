@@ -102,6 +102,7 @@ import type {
   WhisperStatus,
   AudioDiarization,
   AuthenticityReport,
+  EnfComparison,
   SpectroImage,
   TranscriptAi,
 } from "@domain/audio";
@@ -1100,10 +1101,26 @@ export const commands = {
     return safeInvoke<AuthenticityReport>("audio_authenticity", { workspacePath, audioId });
   },
 
+  /** Compara o ENF do áudio com o de uma gravação de referência da rede. */
+  audioEnfCompare(
+    workspacePath: string,
+    audioId: string,
+    referenceAudioId: string,
+    nominalHz: number | null,
+  ): Promise<EnfComparison> {
+    return safeInvoke<EnfComparison>("audio_enf_compare", {
+      workspacePath,
+      audioId,
+      referenceAudioId,
+      nominalHz,
+    });
+  },
+
+  /** ENF; `nominalHz` null/ausente = automático (50/60). */
   audioEnf(
     workspacePath: string,
     audioId: string,
-    nominalHz?: number,
+    nominalHz?: number | null,
   ): Promise<EnfResult> {
     return safeInvoke<EnfResult>("audio_enf", {
       workspacePath,

@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::audio::analysis::{self, AudioMeasurements, EnfResult, SpectrumResult};
+use crate::audio::analysis::{self, AudioMeasurements, SpectrumResult};
+use crate::audio::enf::{EnfMatch, EnfResult};
 use crate::audio::{convert_to_wav, extract_audio_to_wav, probe_audio};
 use crate::database::connection::open_connection;
 use crate::database::migrations::run_migrations;
@@ -356,8 +357,8 @@ pub async fn audio_spectrum(
     Ok(sp)
 }
 
-/// Extração da curva ENF (Electric Network Frequency) e checagem de
-/// continuidade (maior salto = indício de edição/splice). `nominal_hz` 50 ou 60.
+/// ENF (frequência da rede elétrica gravada como zumbido): curva, confiança,
+/// variações bruscas e trechos sem ENF. `nominal_hz` None = automático (50/60).
 #[tauri::command]
 pub async fn audio_enf(
     workspace_path: String,
@@ -369,8 +370,12 @@ pub async fn audio_enf(
     let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
-    let (samples, sr, _ch) = analysis::read_wav_mono(&wav_abs)?;
-    let e = analysis::enf(&samples, sr, nominal_hz.unwrap_or(60.0), 10.0, 5.0);
+    let e = tauri::async_runtime::spawn_blocking(move || -> Result<EnfResult> {
+        let (x, sr) = crate::audio::enf::load_for_enf(&wav_abs)?;
+        Ok(crate::audio::enf::extract(&x, sr, nominal_hz))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa do ENF: {e}")))??;
     audio_repo::insert_log(
         &conn,
         &manifest.occurrence_id,
@@ -378,13 +383,70 @@ pub async fn audio_enf(
         "audio.enf",
         &json!({
             "nominal_hz": e.nominal_hz,
+            "automatico": e.auto,
+            "harmonicos": e.harmonics.iter().map(|h| h.k).collect::<Vec<_>>(),
+            "confianca": e.confidence,
             "mean_hz": e.mean_hz,
             "std_hz": e.std_hz,
-            "max_jump_hz": e.max_jump_hz,
+            "variacoes_bruscas": e.jumps.len(),
+            "janela_s": e.window_s,
+            "passo_s": e.step_s,
         })
         .to_string(),
     )?;
     Ok(e)
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EnfComparison {
+    pub question: EnfResult,
+    pub reference: EnfResult,
+    /// None = curvas curtas/sem ENF suficiente para comparar.
+    pub matching: Option<EnfMatch>,
+}
+
+/// Compara o ENF do áudio com o de uma gravação de REFERÊNCIA da rede (outro
+/// áudio do caso, mais longo): onde o áudio se encaixa nela e quão bem.
+#[tauri::command]
+pub async fn audio_enf_compare(
+    workspace_path: String,
+    audio_id: String,
+    reference_audio_id: String,
+    nominal_hz: Option<f32>,
+) -> Result<EnfComparison> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    let (media, wav_q) = resolve_wav(&ws, &conn, &audio_id)?;
+    let (ref_media, wav_r) = resolve_wav(&ws, &conn, &reference_audio_id)?;
+    let cmp = tauri::async_runtime::spawn_blocking(move || -> Result<EnfComparison> {
+        let (xq, srq) = crate::audio::enf::load_for_enf(&wav_q)?;
+        let question = crate::audio::enf::extract(&xq, srq, nominal_hz);
+        let (xr, srr) = crate::audio::enf::load_for_enf(&wav_r)?;
+        let reference = crate::audio::enf::extract(&xr, srr, Some(question.nominal_hz));
+        let matching = crate::audio::enf::compare(&question, &reference);
+        Ok(EnfComparison { question, reference, matching })
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa do ENF: {e}")))??;
+    audio_repo::insert_log(
+        &conn,
+        &manifest.occurrence_id,
+        Some(&media.sha256),
+        "audio.enf.compare",
+        &json!({
+            "referencia_sha256": ref_media.sha256,
+            "referencia": ref_media.filename,
+            "nominal_hz": cmp.question.nominal_hz,
+            "encaixe_s": cmp.matching.as_ref().map(|m| m.offset_s),
+            "correlacao": cmp.matching.as_ref().map(|m| m.correlation),
+            "segunda_correlacao": cmp.matching.as_ref().map(|m| m.second_correlation),
+            "diferenca_media_hz": cmp.matching.as_ref().map(|m| m.mean_abs_diff_hz),
+        })
+        .to_string(),
+    )?;
+    Ok(cmp)
 }
 
 /// Relatório de autenticidade: estrutura do arquivo ORIGINAL (importado) ou do

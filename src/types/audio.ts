@@ -228,12 +228,46 @@ export interface AuthenticityReport {
 /** Curva ENF (Electric Network Frequency) + continuidade. */
 export interface EnfResult {
   nominal_hz: number;
+  /** Rede escolhida automaticamente (senão, informada). */
+  auto: boolean;
+  score_50_db: number;
+  score_60_db: number;
+  harmonics: { k: number; snr_db: number; weight: number }[];
   window_s: number;
   step_s: number;
   times_s: number[];
   enf_hz: number[];
+  /** SNR de cada quadro (dB); abaixo de 6 dB a frequência não é confiável. */
+  snr_db: number[];
   mean_hz: number;
   std_hz: number;
-  /** Maior salto frame-a-frame (Hz): descontinuidade = indício de edição. */
+  /** Maior variação quadro a quadro (Hz) entre quadros confiáveis. */
   max_jump_hz: number;
+  /** Fração dos quadros com ENF confiável (0..1). */
+  confidence: number;
+  /** Variações bruscas: [instante s, variação Hz]. */
+  jumps: [number, number][];
+  /** Trechos sem ENF confiável: [início s, fim s]. */
+  gaps: [number, number][];
+}
+
+export interface EnfMatch {
+  offset_s: number;
+  correlation: number;
+  mean_abs_diff_hz: number;
+  second_correlation: number | null;
+  second_mean_abs_diff_hz: number | null;
+  second_offset_s: number | null;
+  frames_used: number;
+  curve_offsets_s: number[];
+  curve_corr: (number | null)[];
+  /** Encaixe por partes de ~30 s (numa montagem, partes caem em pontos diferentes). */
+  parts: { start_s: number; end_s: number; offset_s: number; correlation: number }[];
+  parts_disagree: boolean;
+}
+
+export interface EnfComparison {
+  question: EnfResult;
+  reference: EnfResult;
+  matching: EnfMatch | null;
 }

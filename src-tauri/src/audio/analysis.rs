@@ -318,115 +318,6 @@ pub fn spectrum(samples: &[f32], sr: u32, fft_size: usize) -> SpectrumResult {
     }
 }
 
-// ---------------------------------------------------------------------------
-// R8 — ENF (Electric Network Frequency)
-
-#[derive(Debug, Clone, Serialize)]
-pub struct EnfResult {
-    /// Nominal da rede (50 ou 60 Hz).
-    pub nominal_hz: f32,
-    pub window_s: f32,
-    pub step_s: f32,
-    /// Tempo central de cada quadro (s) e frequência estimada (Hz).
-    pub times_s: Vec<f32>,
-    pub enf_hz: Vec<f32>,
-    pub mean_hz: f32,
-    pub std_hz: f32,
-    /// Maior salto frame-a-frame (Hz) — descontinuidade = indício de edição.
-    pub max_jump_hz: f32,
-}
-
-/// Extrai a curva ENF: por quadro longo (janela Hann), FFT com zero-pad,
-/// pega o pico na banda [nominal−1, nominal+1] Hz com interpolação parabólica
-/// (precisão sub-bin). Mede média/desvio e o maior salto (indicador de
-/// splice). Reprodutível; o cruzamento com banco de dados de rede fica fora
-/// de escopo (extração + continuidade são 100% locais e determinísticos).
-pub fn enf(samples: &[f32], sr: u32, nominal_hz: f32, window_s: f32, step_s: f32) -> EnfResult {
-    let nominal = if nominal_hz < 55.0 { 50.0 } else { 60.0 };
-    let win_s = window_s.clamp(2.0, 30.0);
-    let stp_s = step_s.clamp(0.5, win_s);
-    let win_n = ((sr as f32 * win_s) as usize).max(2);
-    let hop = ((sr as f32 * stp_s) as usize).max(1);
-    let fft_n = win_n.next_power_of_two();
-    let win = hann(win_n);
-
-    let mut planner = FftPlanner::<f32>::new();
-    let fft = planner.plan_fft_forward(fft_n);
-    let bin_hz = sr as f32 / fft_n as f32;
-    let lo_bin = ((nominal - 1.0) / bin_hz).floor().max(1.0) as usize;
-    let hi_bin = ((nominal + 1.0) / bin_hz).ceil() as usize;
-
-    let mut times = Vec::new();
-    let mut enf = Vec::new();
-    if samples.len() >= win_n {
-        let mut start = 0;
-        while start + win_n <= samples.len() {
-            let mut buf: Vec<Complex<f32>> = vec![Complex::new(0.0, 0.0); fft_n];
-            for i in 0..win_n {
-                buf[i] = Complex::new(samples[start + i] * win[i], 0.0);
-            }
-            fft.process(&mut buf);
-            // Pico na banda.
-            let mut peak_k = lo_bin;
-            let mut peak_m = 0.0f32;
-            for k in lo_bin..=hi_bin.min(fft_n / 2) {
-                let m = buf[k].norm();
-                if m > peak_m {
-                    peak_m = m;
-                    peak_k = k;
-                }
-            }
-            // Interpolação parabólica sub-bin.
-            let freq = if peak_k >= 1 && peak_k + 1 <= fft_n / 2 {
-                let a = buf[peak_k - 1].norm();
-                let b = buf[peak_k].norm();
-                let c = buf[peak_k + 1].norm();
-                let denom = a - 2.0 * b + c;
-                let delta = if denom.abs() > 1e-9 {
-                    0.5 * (a - c) / denom
-                } else {
-                    0.0
-                };
-                (peak_k as f32 + delta) * bin_hz
-            } else {
-                peak_k as f32 * bin_hz
-            };
-            times.push((start as f32 + win_n as f32 / 2.0) / sr as f32);
-            enf.push(freq);
-            start += hop;
-        }
-    }
-
-    let mean = if enf.is_empty() {
-        nominal
-    } else {
-        enf.iter().sum::<f32>() / enf.len() as f32
-    };
-    let std = if enf.len() > 1 {
-        (enf.iter().map(|v| (v - mean).powi(2)).sum::<f32>() / enf.len() as f32).sqrt()
-    } else {
-        0.0
-    };
-    let mut max_jump = 0.0f32;
-    for w in enf.windows(2) {
-        let j = (w[1] - w[0]).abs();
-        if j > max_jump {
-            max_jump = j;
-        }
-    }
-
-    EnfResult {
-        nominal_hz: nominal,
-        window_s: win_s,
-        step_s: stp_s,
-        times_s: times,
-        enf_hz: enf,
-        mean_hz: mean,
-        std_hz: std,
-        max_jump_hz: max_jump,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -487,23 +378,6 @@ mod tests {
             "pico em {} Hz",
             sp.peak_freq_hz
         );
-    }
-
-    #[test]
-    fn enf_tracks_steady_60hz() {
-        // "Rede" estável a 60 Hz → ENF média ~60, salto ~0.
-        let s = sine(60.0, 0.2, 12.0, 1000); // sr baixo basta p/ 60 Hz
-        let e = enf(&s, 1000, 60.0, 4.0, 2.0);
-        assert!(!e.enf_hz.is_empty());
-        assert!((e.mean_hz - 60.0).abs() < 0.5, "ENF média {}", e.mean_hz);
-        assert!(e.max_jump_hz < 0.5, "salto inesperado {}", e.max_jump_hz);
-    }
-
-    #[test]
-    fn enf_picks_50_or_60_band() {
-        let e50 = enf(&sine(50.0, 0.2, 12.0, 1000), 1000, 50.0, 4.0, 2.0);
-        assert!((e50.mean_hz - 50.0).abs() < 0.5, "ENF50 {}", e50.mean_hz);
-        assert_eq!(e50.nominal_hz, 50.0);
     }
 }
 

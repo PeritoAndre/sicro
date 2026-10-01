@@ -980,6 +980,9 @@ export function AudioModule() {
                           workspacePath={ws}
                           audioId={selected.id}
                           onSeek={(t) => playerRef.current?.seekTo(t)}
+                          references={items
+                            .filter((a) => a.id !== selected.id)
+                            .map((a) => ({ id: a.id, filename: a.filename, duration_s: a.duration_s }))}
                         />
                       )}
                     </>

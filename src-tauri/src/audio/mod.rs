@@ -17,6 +17,7 @@ use crate::error::{Result, SicroError};
 pub mod analysis;
 pub mod authenticity;
 pub mod diarize;
+pub mod enf;
 pub mod enhance;
 pub mod spectro;
 

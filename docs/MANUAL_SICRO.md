@@ -533,6 +533,21 @@ e os extraídos dos vídeos.
   (quantos bits o sinal usa de fato — 13 de 16 indica áudio que passou por
   menos resolução), o **loudness integrado EBU R128** (LUFS), a faixa de loudness,
   o **true peak** e o **mapa de silêncios** (< −50 dB por ≥ 0,5 s).
+- **ENF** (em Analisar): a frequência da rede elétrica que fica gravada como
+  zumbido. **Rede automático** escolhe 50 ou 60 Hz pelo zumbido; o SICRO usa os
+  harmônicos (1º ao 4º) pesados pela força de cada um, em janelas de 8 s a cada
+  1 s, e mostra a **curva** no tempo, a **confiança** (em quanto do áudio há
+  ENF utilizável), **variações bruscas** e **trechos sem ENF** (clique leva o
+  player).
+  - **Comparar com a referência da rede:** importe no caso uma gravação da rede
+    elétrica do período (mais longa que o áudio) e escolha-a na lista. O SICRO
+    acha onde o áudio se encaixa nela pela diferença de frequência (mHz) e
+    mostra a correlação, o segundo melhor lugar (se for quase tão bom, o
+    encaixe é pouco único) e o **encaixe por partes de ~30 s**: num áudio
+    montado, partes caem em pontos **diferentes** da referência.
+  - **Copiar como texto** gera o resumo para o laudo.
+  - Pouco zumbido (aparelho a bateria, filtro) = ENF pouco confiável; o SICRO
+    avisa.
 - **Autenticidade** (em Analisar): examina o arquivo **original** (o importado,
   ou o vídeo de onde o áudio foi extraído) e o sinal, e lista **indícios** com o
   instante de cada um (clique leva o player):
