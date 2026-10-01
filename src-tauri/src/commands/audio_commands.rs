@@ -387,6 +387,103 @@ pub async fn audio_enf(
     Ok(e)
 }
 
+/// Relatório de autenticidade: estrutura do arquivo ORIGINAL (importado) ou do
+/// vídeo de origem (extraído) e detectores sobre o sinal. Só indícios — o
+/// relatório não conclui sobre edição. Registrado no log do áudio.
+#[tauri::command]
+pub async fn audio_authenticity(
+    workspace_path: String,
+    audio_id: String,
+) -> Result<crate::audio::authenticity::Report> {
+    use crate::audio::authenticity as au;
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
+
+    let mut extra_notes = Vec::new();
+    let (kind, file) = match media.kind.as_str() {
+        "importado" => match media.original_relative_path.as_ref().map(|r| ws.join(r)) {
+            Some(p) if p.is_file() => ("original importado", p),
+            _ => {
+                extra_notes.push("O arquivo original importado não está na pasta do caso; a estrutura examinada é a do WAV de trabalho.".to_string());
+                ("WAV de trabalho", wav_abs.clone())
+            }
+        },
+        "extraido" => {
+            let video = match media.source_video_sha256.as_deref() {
+                Some(h) => crate::database::repositories::video_repo::find_media_by_sha256(&conn, &manifest.occurrence_id, h)?,
+                None => None,
+            };
+            match video.map(|v| ws.join(&v.relative_path)) {
+                Some(p) if p.is_file() => ("vídeo de origem", p),
+                _ => {
+                    extra_notes.push("O vídeo de origem não foi encontrado no caso; a estrutura examinada é a do WAV de trabalho.".to_string());
+                    ("WAV de trabalho", wav_abs.clone())
+                }
+            }
+        }
+        _ => {
+            extra_notes.push(format!(
+                "Este áudio foi gerado pelo SICRO ({}): a estrutura e parte dos sinais refletem o processamento. Para autenticidade, examine o áudio original.",
+                media.kind
+            ));
+            ("derivado do SICRO", wav_abs.clone())
+        }
+    };
+
+    let file2 = file.clone();
+    let wav2 = wav_abs.clone();
+    let mut report = tauri::async_runtime::spawn_blocking(move || -> Result<au::Report> {
+        let (structure, packets) = au::probe(&file2)?;
+        let (decode_errors, decode_error_samples) = au::decode_errors(&file2)?;
+        let (samples, sr, _) = analysis::read_wav_mono(&wav2)?;
+        let all_clicks = au::clicks(&samples, sr);
+        let silences = au::digital_silences(&samples, sr);
+        Ok(au::Report {
+            source_kind: String::new(),
+            source_file: String::new(),
+            structure,
+            packets,
+            decode_errors,
+            decode_error_samples,
+            bandwidth: au::bandwidth(&samples, sr),
+            clicks_total: all_clicks.len(),
+            clicks: all_clicks.into_iter().take(200).collect(),
+            digital_silences_total: silences.len(),
+            digital_silences: silences.into_iter().take(100).collect(),
+            noise_jumps: au::noise_jumps(&samples, sr),
+            notes: Vec::new(),
+        })
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa de autenticidade: {e}")))??;
+    report.source_kind = kind.to_string();
+    report.source_file = file.file_name().and_then(|f| f.to_str()).unwrap_or("").to_string();
+    report.notes = extra_notes;
+    report.notes.extend(au::notes(&report));
+
+    audio_repo::insert_log(
+        &conn,
+        &manifest.occurrence_id,
+        Some(&media.sha256),
+        "audio.authenticity",
+        &json!({
+            "examinado": report.source_kind,
+            "arquivo": report.source_file,
+            "corte_hz": report.bandwidth.cutoff_hz,
+            "lacunas_pacotes": report.packets.as_ref().map(|p| p.gaps.len()),
+            "erros_decodificacao": report.decode_errors,
+            "cliques": report.clicks_total,
+            "silencios_digitais": report.digital_silences_total,
+            "saltos_ruido": report.noise_jumps.len(),
+        })
+        .to_string(),
+    )?;
+    Ok(report)
+}
+
 // ---------------------------------------------------------------------------
 // Extração de trecho (Camada 4 — recorte com custódia)
 

@@ -976,8 +976,10 @@ export function AudioModule() {
 
                       {ws && (
                         <AudioAnalysisPanel
+                          key={selected.id}
                           workspacePath={ws}
                           audioId={selected.id}
+                          onSeek={(t) => playerRef.current?.seekTo(t)}
                         />
                       )}
                     </>

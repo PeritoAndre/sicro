@@ -176,6 +176,55 @@ export interface SpectrumResult {
   peak_db: number;
 }
 
+/** Relatório de autenticidade (estrutura do arquivo + detectores no sinal). */
+export interface AuthenticityReport {
+  source_kind: string;
+  source_file: string;
+  structure: {
+    format: string;
+    format_long: string;
+    duration_s: number | null;
+    bit_rate: number | null;
+    format_tags: Record<string, string>;
+    codec: string;
+    codec_long: string;
+    profile: string | null;
+    sample_rate: number | null;
+    channels: number | null;
+    channel_layout: string | null;
+    bits_per_sample: number | null;
+    stream_bit_rate: number | null;
+    start_time_s: number | null;
+    stream_tags: Record<string, string>;
+    lossless: boolean;
+  } | null;
+  packets: {
+    count: number;
+    gaps: [number, number][];
+    overlaps: number;
+    size_min: number;
+    size_max: number;
+    size_mode: string;
+  } | null;
+  decode_errors: number;
+  decode_error_samples: string[];
+  bandwidth: {
+    nyquist_hz: number;
+    cutoff_hz: number | null;
+    drop_db: number;
+    steep: boolean;
+    /** Banda ao longo do arquivo (blocos de 2 s agrupados). */
+    segments: { start_s: number; end_s: number; cutoff_hz: number | null }[];
+    varies: boolean;
+  };
+  clicks: number[];
+  clicks_total: number;
+  digital_silences: [number, number][];
+  digital_silences_total: number;
+  noise_jumps: { t_s: number; delta_db: number; band: string }[];
+  notes: string[];
+}
+
 /** Curva ENF (Electric Network Frequency) + continuidade. */
 export interface EnfResult {
   nominal_hz: number;

@@ -533,6 +533,21 @@ e os extraídos dos vídeos.
   (quantos bits o sinal usa de fato — 13 de 16 indica áudio que passou por
   menos resolução), o **loudness integrado EBU R128** (LUFS), a faixa de loudness,
   o **true peak** e o **mapa de silêncios** (< −50 dB por ≥ 0,5 s).
+- **Autenticidade** (em Analisar): examina o arquivo **original** (o importado,
+  ou o vídeo de onde o áudio foi extraído) e o sinal, e lista **indícios** com o
+  instante de cada um (clique leva o player):
+  - **Arquivo:** contêiner, codec (com/sem perdas), taxa, metadados (p. ex.
+    `encoder=Lavf…` indica conversão por programa), pacotes com **buracos na
+    linha de tempo** e **erros de decodificação**.
+  - **Banda:** corte **em degrau** (marca de codec com perdas); se o arquivo é
+    sem perdas mas tem esse corte, o conteúdo já foi comprimido antes; se a banda
+    **muda no meio**, há trechos de origens diferentes.
+  - **Silêncio digital** (amostras exatamente zero) no meio de som, **saltos ≥ 10
+    dB no ruído de fundo** (por faixa: grave, médio, agudo, muito agudo) e
+    **cliques** isolados.
+  - **Copiar como texto** gera o resumo para o laudo (vírgula decimal).
+  - Nenhum teste conclui que houve ou não edição: são pontos para ouvir e
+    conferir (com o ENF).
 - **Trechos:** recortar um trecho (A–B) e montar uma **compilação rotulada** de
   vários trechos.
 - **Ficha:** metadados técnicos e hashes.

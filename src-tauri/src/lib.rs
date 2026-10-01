@@ -138,6 +138,7 @@ pub fn run() {
             commands::audio_commands::diarize_audio,
             commands::audio_commands::get_audio_diarization,
             commands::audio_commands::save_diarization_names,
+            commands::audio_commands::audio_authenticity,
             commands::audio_commands::audio_enf,
             commands::audio_commands::extract_audio_clip,
             commands::audio_commands::compile_audio_clips,

@@ -101,6 +101,7 @@ import type {
   TranscriptCandidate,
   WhisperStatus,
   AudioDiarization,
+  AuthenticityReport,
   SpectroImage,
   TranscriptAi,
 } from "@domain/audio";
@@ -1094,6 +1095,11 @@ export const commands = {
   },
 
   /** W12 — Curva ENF + continuidade. `nominalHz` 50 ou 60 (default 60). */
+  /** Relatório de autenticidade do áudio (original/vídeo de origem + sinal). */
+  audioAuthenticity(workspacePath: string, audioId: string): Promise<AuthenticityReport> {
+    return safeInvoke<AuthenticityReport>("audio_authenticity", { workspacePath, audioId });
+  },
+
   audioEnf(
     workspacePath: string,
     audioId: string,

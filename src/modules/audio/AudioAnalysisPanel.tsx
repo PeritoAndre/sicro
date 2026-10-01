@@ -12,22 +12,27 @@
  */
 
 import { useState } from "react";
-import { Activity, AudioWaveform, Gauge, Loader2, Zap } from "lucide-react";
+import { Activity, AudioWaveform, Gauge, Loader2, ShieldQuestion, Zap } from "lucide-react";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import type {
   AudioMeasurements,
+  AuthenticityReport,
   EnfResult,
   SpectrumResult,
 } from "@domain/audio";
+import { AuthenticityView } from "./AuthenticityView";
 
 interface Props {
   workspacePath: string;
   audioId: string;
+  /** Leva o player ao instante (s) — instantes dos relatórios são clicáveis. */
+  onSeek?: (t: number) => void;
 }
 
-export function AudioAnalysisPanel({ workspacePath, audioId }: Props) {
-  const [busy, setBusy] = useState<"" | "measure" | "spectrum" | "enf">("");
+export function AudioAnalysisPanel({ workspacePath, audioId, onSeek }: Props) {
+  const [busy, setBusy] = useState<"" | "measure" | "spectrum" | "enf" | "auth">("");
+  const [auth, setAuth] = useState<AuthenticityReport | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [measure, setMeasure] = useState<AudioMeasurements | null>(null);
   const [spectrum, setSpectrum] = useState<SpectrumResult | null>(null);
@@ -35,7 +40,7 @@ export function AudioAnalysisPanel({ workspacePath, audioId }: Props) {
   const [nominalHz, setNominalHz] = useState<50 | 60>(60);
 
   const run = async (
-    which: "measure" | "spectrum" | "enf",
+    which: "measure" | "spectrum" | "enf" | "auth",
     fn: () => Promise<void>,
   ) => {
     setBusy(which);
@@ -105,6 +110,19 @@ export function AudioAnalysisPanel({ workspacePath, audioId }: Props) {
         >
           {busy === "enf" ? <Loader2 size={12} className="spin" /> : <Zap size={12} />} ENF
         </button>
+        <button
+          type="button"
+          disabled={!!busy}
+          title="Estrutura do arquivo original e detectores de corte de codec, cliques, silêncio digital e ruído de fundo"
+          onClick={() =>
+            run("auth", async () => {
+              setAuth(await commands.audioAuthenticity(workspacePath, audioId));
+            })
+          }
+        >
+          {busy === "auth" ? <Loader2 size={12} className="spin" /> : <ShieldQuestion size={12} />}{" "}
+          Autenticidade
+        </button>
         <label style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11 }}>
           Rede:
           <select
@@ -120,6 +138,8 @@ export function AudioAnalysisPanel({ workspacePath, audioId }: Props) {
       {error && (
         <p style={{ color: "var(--danger, #f87171)", fontSize: 12, margin: 0 }}>{error}</p>
       )}
+
+      {auth && <AuthenticityView report={auth} onSeek={onSeek} />}
 
       {measure && (
         <div style={{ fontSize: 12 }}>
