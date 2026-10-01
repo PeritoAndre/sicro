@@ -65,6 +65,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: src-tauri -> target
+          # Cache separado por imagem: um cache do ubuntu-24.04 (glibc mais nova)
+          # quebra os proc-macros no 22.04 ("can't find crate for glib_macros").
+          key: ${{ matrix.os }}
 
       - run: pnpm install --frozen-lockfile
 
