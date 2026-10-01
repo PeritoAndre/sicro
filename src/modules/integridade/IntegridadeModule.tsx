@@ -1,8 +1,8 @@
 /**
  * Integridade — a Central de Provas do caso em tela própria (no 3.x morava no
  * Dossiê). Lista tudo o que o caso guarda, confere existência e SHA-256 no
- * disco e gera o relatório de integridade. Abre pelo "Verificar integridade"
- * do Início.
+ * disco e gera o relatório de integridade. Abre pelo menu ⋯ do caso, no
+ * Início.
  */
 import { ShieldCheck } from "lucide-react";
 import { useWorkspaceStore, selectActiveWorkspacePath } from "@stores/workspaceStore";

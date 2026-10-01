@@ -79,6 +79,7 @@ pub async fn update_occurrence(
     let mut occ = opened.occurrence;
 
     // "" (vazio) → NULL, para a UI exibir "—" e não uma string vazia.
+    occ.titulo = none_if_blank(edit.titulo);
     occ.numero_bo = none_if_blank(edit.numero_bo);
     occ.protocolo = none_if_blank(edit.protocolo);
     occ.requisicao = none_if_blank(edit.requisicao);

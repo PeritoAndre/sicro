@@ -1,5 +1,5 @@
 /**
- * FeedbackButton — botão "Feedback" na Home.
+ * FeedbackButton — botão "Feedback" no rodapé do índice da Ajuda.
  *
  * Abre um diálogo com dois caminhos de contato:
  *   1. Issues do projeto no GitHub (reportar bug / sugerir);

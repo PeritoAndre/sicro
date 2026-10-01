@@ -4,7 +4,7 @@
 //! `RecentOccurrence` is the lightweight summary kept globally in the app's
 //! config dir (independent from any single workspace).
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -47,6 +47,10 @@ impl Default for OccurrenceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Occurrence {
     pub id: Uuid,
+    /// Nome livre do caso, dado pelo perito no Início ("Laudo 63404/26 —
+    /// Km 09"). É o rótulo principal; os demais campos são complemento.
+    #[serde(default)]
+    pub titulo: Option<String>,
     pub numero_bo: Option<String>,
     pub protocolo: Option<String>,
     pub requisicao: Option<String>,
@@ -94,6 +98,9 @@ pub struct Occurrence {
 /// even an entirely empty occurrence is valid (the perito fills it in later).
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct NewOccurrenceInput {
+    /// Nome do caso — o único campo que o Início pede (e mesmo ele é opcional).
+    #[serde(default)]
+    pub titulo: Option<String>,
     pub numero_bo: Option<String>,
     pub protocolo: Option<String>,
     /// Nº do ofício de requisição da Polícia Civil (origem externa) — distinto
@@ -115,6 +122,8 @@ pub struct NewOccurrenceInput {
 /// o pacote .sicroapp original permanece intacto no disco.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct OccurrenceEdit {
+    #[serde(default)]
+    pub titulo: Option<String>,
     pub numero_bo: Option<String>,
     pub protocolo: Option<String>,
     pub requisicao: Option<String>,
@@ -172,7 +181,13 @@ impl RecentOccurrence {
     }
 }
 
-fn build_label(o: &Occurrence) -> String {
+/// Rótulo do caso: o nome dado pelo perito; sem nome, "BO — tipo — município"
+/// (casos antigos); sem nada, a data de criação. Espelhado em
+/// `occurrenceLabel` (src/types/occurrence.ts) — mudar nos dois.
+pub fn build_label(o: &Occurrence) -> String {
+    if let Some(t) = o.titulo.as_deref().map(str::trim).filter(|t| !t.is_empty()) {
+        return t.to_string();
+    }
     let mut parts = Vec::new();
     if let Some(bo) = &o.numero_bo {
         parts.push(format!("BO {bo}"));
@@ -184,7 +199,10 @@ fn build_label(o: &Occurrence) -> String {
         parts.push(municipio.clone());
     }
     if parts.is_empty() {
-        format!("Ocorrência {}", &o.id.to_string()[..8])
+        format!(
+            "Caso de {}",
+            o.created_at.with_timezone(&Local).format("%d/%m/%Y")
+        )
     } else {
         parts.join(" — ")
     }

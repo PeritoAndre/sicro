@@ -87,7 +87,8 @@ redimensiona pelas bordas, como qualquer janela.
 
 A coluna fixa à esquerda é a navegação principal. Em **Módulos**:
 
-- **Início** — central de ocorrências (e, por ele, a **Integridade** do caso).
+- **Início** — nome do caso e os três módulos; abre ou cria um caso e já entra
+  (e, pelo menu ⋯ do caso, a **Integridade**).
 - **Croquis** — viário, corporal e planta baixa.
 - **Vídeo e Áudio** — análise de vídeo e de áudio, em duas abas.
 - **Imagens** — editor de imagem pericial.
@@ -114,77 +115,60 @@ ela traz as abas **Vídeos | Áudios** — o módulo lembra a última aba usada.
 
 ## 3. Início (Home)
 
-**Para que serve:** é a central de onde você cria, abre e administra ocorrências,
-e de onde dispara backup e verificação de integridade.
+**Para que serve:** responder uma pergunta só — *o que você vai fazer agora?*
+Um nome para o caso, os três módulos e os casos recentes. O SICRO não é um
+cadastro: é a bancada.
 
 ### 3.1 O que tem na tela
 
-- **Cartão do workspace ativo** (se um caso está aberto): rótulo do caso, caminho,
-  status e o botão **Continuar ocorrência**, que volta ao último módulo em que
-  você trabalhou.
-- **Estado vazio** (sem caso aberto): botões **Nova ocorrência** e **Abrir
-  workspace**.
-- **Painel de ações:** sempre *Nova ocorrência*, *Abrir workspace* e *Importar
-  .sicroapp*. Com um caso aberto, também *Concluir* (ou *Reabrir*) *ocorrência*,
-  *Propriedades*, *Verificar integridade*, *Gerar backup*, *Relatório de saúde*,
-  *Abrir pasta* e *Fechar ocorrência*.
-- **Histórico de ocorrências:** tabela de todos os casos, com busca e filtro de
-  data.
-- **Feedback** (no topo): abre as formas de relatar um problema ou sugerir algo
-  (GitHub ou e-mail).
+- **Sem caso aberto:** o campo **Nome do caso** e, abaixo, os três módulos
+  (**Croqui**, **Vídeo e Áudio**, **Imagem**). Clicar num módulo **cria o caso e
+  já entra nele**. **Enter** no nome abre no Croqui.
+- **Com caso aberto:** o **nome do caso** no topo (clique nele para editar os
+  dados), a data de criação e a pasta; os três módulos mostram quantos croquis,
+  vídeos, áudios e imagens o caso tem — clicar entra direto.
+- **Menu ⋯** ao lado do nome: *Dados do caso*, *Abrir pasta*, *Integridade*,
+  *Gerar backup*, *Concluir* (ou *Reabrir*) *caso*, *Fechar caso* e *Excluir do
+  disco*.
+- **Casos recentes** (ou **Outros casos**, com um aberto): uma linha por caso,
+  com a última abertura. Clicar **abre o caso e volta ao módulo em que ele foi
+  trabalhado por último** (se nunca foi, fica no Início com os módulos). A busca
+  só aparece quando a lista passa de 8 casos. O **⋯** da linha traz *Abrir
+  pasta*, *Tirar da lista* e *Excluir do disco*.
+- **Rodapé:** *Abrir pasta .sicro…* e *Importar .sicroapp…*.
 
-### 3.2 Criar uma nova ocorrência
+### 3.2 Criar um caso
 
-1. Clique **Nova ocorrência**.
-2. Preencha o diálogo:
-   - **Protocolo do ofício (nº do laudo)** — *o campo em destaque no topo*. É o
-     coração do caso: o número que o ofício recebeu no protocolo e que
-     identifica o laudo.
-   - **Tipo de perícia** — escolha na lista ou digite (ex.: *Sinistro de
-     Trânsito*, *Perícia Criminal*).
-   - **Município** — lista dos municípios do Amapá. **Dica:** se você configurar
-     seu *Município de atuação* em Configurações → Perfil, ele já vem
-     preenchido.
-   - **Número do BO** *(opcional)*.
-   - **Peritos** — separados por vírgula.
-   - **Pasta** *(opcional)* — onde criar o `.sicro`. Vazio = pasta local padrão.
-3. Clique **Criar ocorrência**. O caso é criado e fica ativo.
+1. Digite um nome (ex.: *Laudo 63404/26, Km 09 Duca Serra*). É opcional — sem
+   nome, o caso se chama *Caso de dd/mm/aaaa* até você dar um.
+2. Clique no módulo por onde quer começar (ou **Enter** para o Croqui).
 
-> ⚠️ **Aviso de pasta sincronizada:** se você escolher uma pasta dentro de
-> OneDrive/Google Drive/Dropbox, o SICRO avisa. Prefira pasta **local** e use o
-> backup para a nuvem.
+O caso é criado na pasta local padrão (`SICRO/Casos`) e o nome vira o nome da
+pasta `.sicro`. Protocolo, ofício, BO, tipo de perícia, município e peritos são
+**opcionais**: entram depois, em **⋯ → Dados do caso** (ou clicando no nome).
 
-### 3.3 Abrir uma ocorrência existente
+### 3.3 Abrir um caso
 
-- **Pelo histórico:** clique no **nome** da ocorrência (é clicável) ou no botão
-  **Abrir** da linha.
-- **Por pasta:** clique **Abrir workspace** e navegue até a pasta `.sicro`.
+- **Pela lista:** clique no nome do caso.
+- **Por pasta:** *Abrir pasta .sicro…* no rodapé e navegue até a pasta `.sicro`
+  (serve para casos em outra pasta ou vindos de outro computador).
 
-### 3.4 Histórico: busca e filtros
-
-- **Busca:** por BO, tipo, natureza, município, bairro ou perito (ignora acento
-  e maiúscula/minúscula).
-- **De / Até:** filtra por data do fato.
-- **Limpar:** zera busca e datas.
-- Cada linha traz **Abrir** e um menu **⋯** com *Abrir pasta* e *Excluir
-  ocorrência*.
-
-### 3.5 Importar de outro computador (`.sicroapp`)
+### 3.4 Importar de outro computador (`.sicroapp`)
 
 Casos coletados no **SICRO Operacional** (campo/mobile) chegam como um pacote
 `.sicroapp`. As fotos do pacote viram as **Fotos do caso**, usadas pelas Imagens
 e como fundo do croqui.
 
-1. **Importar .sicroapp** no painel de ações.
+1. *Importar .sicroapp…* no rodapé do Início.
 2. Selecione o arquivo (`.sicroapp` ou `.sicrocampo` legado).
 3. O SICRO valida o ZIP, confere os hashes das fotos, cria um novo workspace e
    copia tudo. Ao final, mostra um **relatório de importação** (fotos
    importadas, hashes OK/divergentes, avisos).
 4. Clique **Abrir ocorrência importada**.
 
-### 3.6 Backup
+### 3.5 Backup
 
-1. Com um caso aberto, **Gerar backup** no painel de ações.
+1. Com um caso aberto, **⋯ → Gerar backup**.
 2. O SICRO compacta todo o workspace num arquivo único **`.sicrobackup`** (ZIP
    com hash), salvo dentro do próprio caso.
 3. Esse arquivo é o que você leva para a nuvem ou HD externo — seguro contra
@@ -193,22 +177,21 @@ e como fundo do croqui.
 Para copiar **todos** os casos de uma vez (incremental) e para **restaurar** um
 backup, use **Configurações → Backup geral** (item 8).
 
-### 3.7 Verificar integridade / relatório de saúde
+### 3.6 Integridade
 
-- **Verificar integridade** abre a tela de **Integridade** do caso (item 4).
-- **Relatório de saúde** (painel de ações) gera um HTML com versão do app,
-  dependências (ffmpeg e ffprobe) e estado geral do caso.
+**⋯ → Integridade** abre a tela de **Integridade** do caso (item 4).
 
-> ⚠️ **§13:** excluir uma ocorrência apaga **permanentemente** a pasta `.sicro`
-> do disco (croquis, vídeos, áudios, fotos, tudo). É irreversível — só confirme
-> com certeza.
+> ⚠️ **§13:** *Excluir do disco* apaga **permanentemente** a pasta `.sicro`
+> (croquis, vídeos, áudios, fotos, tudo). É irreversível — só confirme com
+> certeza. *Tirar da lista* só esconde o caso da lista; a pasta continua no
+> disco e volta ao ser aberta de novo.
 
 ---
 
 ## 4. Integridade
 
 **Para que serve:** é a camada de **confiança** do caso — a Central de Provas.
-Abre pelo **Verificar integridade** do Início. Agrega tudo o que o caso guarda
+Abre pelo menu **⋯ → Integridade** do Início. Agrega tudo o que o caso guarda
 (fotos, croquis, vídeos, quadros, áudios, imagens tratadas) e confere no disco.
 
 - **Resumo:** contadores por tipo + status geral (íntegro / atenção / crítico).
@@ -642,7 +625,8 @@ Abas:
 Um caso típico, do campo à figura no laudo:
 
 1. **Campo (SICRO Operacional):** a coleta gera um `.sicroapp` (opcional).
-2. **Início:** *Nova ocorrência* ou *Importar .sicroapp*.
+2. **Início:** dê um nome ao caso e clique no módulo (ou *Importar
+   .sicroapp…*).
 3. **Vídeo e Áudio / Imagens:** trate, meça e analise as evidências (sempre de
    forma não-destrutiva); colete quadros e exporte trechos.
 4. **Croquis:** desenhe a cena (viário/corporal/planta) e exporte o PNG.
@@ -697,5 +681,5 @@ ilusões:
 
 *Manual do SICRO 4.0 (setembro de 2026), conferido com o código-fonte desta
 versão. Algumas telas e rótulos evoluem entre versões; se algo divergir do que
-você vê no app, vale o app — e avise (botão **Feedback** no Início) para
-atualizar este manual.*
+você vê no app, vale o app — e avise (botão **Feedback**, no rodapé do índice
+desta Ajuda) para atualizar este manual.*

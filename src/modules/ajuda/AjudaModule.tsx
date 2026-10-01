@@ -11,6 +11,7 @@ import { marked } from "marked";
 import { HelpCircle, Search } from "lucide-react";
 // Fonte única do manual (bundlada como texto). Editar o .md → atualiza a Ajuda.
 import manualMd from "../../../docs/MANUAL_SICRO.md?raw";
+import { FeedbackButton } from "./FeedbackButton";
 import styles from "./AjudaModule.module.css";
 
 interface TocItem {
@@ -117,6 +118,11 @@ export function AjudaModule() {
             <p className={styles.tocEmpty}>Nada encontrado no índice.</p>
           )}
         </nav>
+        {/* Relatar problema / sugerir — morava no Início; aqui é o lugar de
+            quem já veio procurar ajuda. */}
+        <div className={styles.tocFoot}>
+          <FeedbackButton />
+        </div>
       </aside>
 
       <article

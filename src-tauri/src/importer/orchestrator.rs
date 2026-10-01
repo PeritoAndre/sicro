@@ -613,6 +613,7 @@ fn build_occurrence(
 
     Occurrence {
         id,
+        titulo: None,
         numero_bo: bo,
         protocolo,
         requisicao,

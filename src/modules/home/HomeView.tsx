@@ -1,618 +1,261 @@
 /**
- * HomeView — tela inicial "Início" do SICRO 2.0.
+ * HomeView — tela inicial do SICRO 4.
  *
- * Reformulação (W22): a Home deixa de ser um dashboard estatístico (isso vive
- * na aba Estatísticas) e passa a ser uma CENTRAL DE TRABALHO operacional:
- *   1. Workspace ativo — o card dominante da tela;
- *   2. Ações rápidas — criar / abrir / importar / verificar / backup;
- *   3. Atalhos dos módulos da ocorrência ativa;
- *   4. Ocorrências recentes — tabela enxuta;
- *   5. Avisos do sistema — apenas o essencial e acionável.
+ * Uma pergunta só: o que você vai fazer agora? Um nome para o caso e os três
+ * módulos. Clicar num módulo cria o caso (quando não há um aberto) e já entra
+ * nele; abrir um caso recente volta ao módulo em que ele foi trabalhado por
+ * último. Dados do caso, backup, integridade, concluir e excluir ficam no
+ * menu ⋯ — o SICRO não é cadastro, é bancada.
  *
- * §13 (KNOWN_LIMITATIONS): só exibimos o que conseguimos sustentar. Nada de
- * "último backup às 08:15" fabricado, métricas de produtividade ou contadores
- * globais — o status de integridade vem do snapshot REAL; o backup é manual,
- * por caso; o modo é local/offline de fato.
+ * §13 (KNOWN_LIMITATIONS): nada inventado na tela — contagens vêm do banco do
+ * caso, datas do que foi gravado.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
-import type { ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { open as openDirDialog } from "@tauri-apps/plugin-dialog";
 import {
-  AlertTriangle,
-  ArrowRight,
-  Building2,
-  Calendar,
-  Car,
   CheckCircle2,
-  Clock,
-  Crosshair,
-  Database,
+  Clapperboard,
   Download,
-  FileText,
   FolderArchive,
   FolderOpen,
-  Info,
+  ImagePlus,
+  ListX,
   LogOut,
-  MapPin,
+  Map as MapIcon,
   MoreHorizontal,
+  Pencil,
   Plus,
   RotateCcw,
   Search,
-  Shield,
-  ShieldAlert,
   ShieldCheck,
   Trash2,
-  WifiOff,
-  X,
+  type LucideIcon,
 } from "lucide-react";
-import { Button } from "@components/Button/Button";
-import { StatusPill } from "@components/StatusPill/StatusPill";
 import { ConfirmDialog } from "@components/Dialog/ConfirmDialog";
-import { FeedbackButton } from "./FeedbackButton";
+import { pushToast } from "@/components/toast/toastStore";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
-import { formatDateTime, formatRelative } from "@core/formatters";
+import { formatDate, formatRelative } from "@core/formatters";
 import {
   selectActiveOccurrence,
   selectActiveWorkspacePath,
   selectRecents,
   useWorkspaceStore,
 } from "@stores/workspaceStore";
-import type { CaseIndexEntry } from "@domain/case_index";
-import { NewOccurrenceDialog } from "./NewOccurrenceDialog";
+import { occurrenceLabel, type RecentOccurrence } from "@domain/occurrence";
+import type { WorkspaceCounters } from "@domain/alpha";
+import { lastMidiaAba, lastWorkModuleOf } from "@modules/midia/midiaNav";
+import { CaseDataDialog } from "./CaseDataDialog";
 import { ImportSicroappDialog } from "./ImportSicroappDialog";
-import { lastWorkModule } from "@modules/midia/midiaNav";
-import type { Occurrence, OccurrenceStatus } from "@domain/occurrence";
-import type { SystemHealthSnapshot } from "@domain/alpha";
 import styles from "./HomeView.module.css";
+
+interface ModuleEntry {
+  label: string;
+  icon: LucideIcon;
+  /** Rota de entrada (Vídeo e Áudio volta à aba usada por último). */
+  to: () => string;
+  /** "3 croquis", "2 vídeos · 1 áudio"… `null` quando não há nada. */
+  summary: (c: WorkspaceCounters) => string | null;
+}
+
+// Os três módulos do 4.0, na ordem do trilho. Enter no nome abre no primeiro.
+const MODULES: ModuleEntry[] = [
+  {
+    label: "Croqui",
+    icon: MapIcon,
+    to: () => "/croqui",
+    summary: (c) => count(c.croquis, "croqui", "croquis"),
+  },
+  {
+    label: "Vídeo e Áudio",
+    icon: Clapperboard,
+    to: lastMidiaAba,
+    summary: (c) =>
+      [count(c.videos, "vídeo", "vídeos"), count(c.audios, "áudio", "áudios")]
+        .filter(Boolean)
+        .join(" · ") || null,
+  },
+  {
+    label: "Imagem",
+    icon: ImagePlus,
+    to: () => "/imagem",
+    summary: (c) => count(c.image_analyses, "imagem", "imagens"),
+  },
+];
+
+function count(n: number, one: string, many: string): string | null {
+  return n > 0 ? `${n} ${n === 1 ? one : many}` : null;
+}
 
 export function HomeView() {
   const navigate = useNavigate();
   const occurrence = useWorkspaceStore(selectActiveOccurrence);
   const workspacePath = useWorkspaceStore(selectActiveWorkspacePath);
   const recents = useWorkspaceStore(selectRecents);
+  const createOccurrence = useWorkspaceStore((s) => s.createOccurrence);
   const openOccurrence = useWorkspaceStore((s) => s.openOccurrence);
+  const closeOccurrence = useWorkspaceStore((s) => s.closeOccurrence);
   const setActiveStatus = useWorkspaceStore((s) => s.setActiveStatus);
-  const closeActiveOccurrence = useWorkspaceStore((s) => s.closeOccurrence);
+  const forgetRecent = useWorkspaceStore((s) => s.forgetRecent);
   const mutating = useWorkspaceStore((s) => s.isMutating);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
-  const [propsOpen, setPropsOpen] = useState(false);
-  const [concludeOpen, setConcludeOpen] = useState(false);
-  const [openError, setOpenError] = useState<string | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
-  const [snapshot, setSnapshot] = useState<SystemHealthSnapshot | null>(null);
-  const [loadingSnap, setLoadingSnap] = useState(false);
-  const [busy, setBusy] = useState<"none" | "backup" | "health">("none");
+  const hasCase = !!occurrence && !!workspacePath;
+  // "Novo caso" com um caso aberto: o campo de nome toma o lugar do cabeçalho.
+  const [newMode, setNewMode] = useState(false);
+  const creating = !hasCase || newMode;
 
-  const reloadSnapshot = useCallback(async () => {
-    if (!workspacePath) {
-      setSnapshot(null);
-      return;
-    }
-    setLoadingSnap(true);
-    try {
-      setSnapshot(await commands.getSystemHealthSnapshot(workspacePath));
-    } catch (e) {
-      setSnapshot(null);
-      setOpenError(toSicroError(e).message);
-    } finally {
-      setLoadingSnap(false);
-    }
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [counts, setCounts] = useState<WorkspaceCounters | null>(null);
+  const [dataOpen, setDataOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
+  const [concludeOpen, setConcludeOpen] = useState(false);
+  const [pendingDelete, setPendingDelete] = useState<RecentOccurrence | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // Trocou/fechou o caso → sai do modo "novo caso".
+  useEffect(() => {
+    setNewMode(false);
   }, [workspacePath]);
 
   useEffect(() => {
-    void reloadSnapshot();
-  }, [reloadSnapshot]);
+    if (creating) nameRef.current?.focus();
+  }, [creating]);
 
-  const openWs = async (path: string) => {
-    setOpenError(null);
+  // Quantos croquis, vídeos… o caso aberto tem (best-effort: sem isso a tela
+  // só fica sem os números).
+  useEffect(() => {
+    if (!workspacePath) {
+      setCounts(null);
+      return;
+    }
+    let cancelled = false;
+    commands
+      .getOccurrenceCounts(workspacePath)
+      .then((c) => {
+        if (!cancelled) setCounts(c);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [workspacePath]);
+
+  /** Entra no módulo; sem caso aberto (ou em "novo caso"), cria o caso antes. */
+  const enter = async (m: ModuleEntry) => {
+    if (busy) return;
+    if (!creating) {
+      navigate(m.to());
+      return;
+    }
+    setBusy(true);
     try {
-      await openOccurrence(path);
-      navigate("/");
+      await createOccurrence({ titulo: name.trim() || null });
+      setName("");
+      setNewMode(false);
+      navigate(m.to());
     } catch (e) {
-      setOpenError(toSicroError(e).message);
+      pushToast("error", toSicroError(e).message);
+    } finally {
+      setBusy(false);
     }
   };
 
-  const handleBrowse = async () => {
-    setOpenError(null);
+  const onNameKey = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      void enter(MODULES[0]!);
+    } else if (e.key === "Escape" && hasCase) {
+      setNewMode(false);
+      setName("");
+    }
+  };
+
+  /** Abre o caso e volta ao módulo em que ele foi trabalhado por último. */
+  const openCase = async (path: string) => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const loaded = await openOccurrence(path);
+      const last = lastWorkModuleOf(loaded.occurrence.id);
+      if (last) navigate(last);
+    } catch (e) {
+      pushToast("error", toSicroError(e).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const browse = async () => {
     try {
       const sel = await openDirDialog({
         directory: true,
         multiple: false,
-        title: "Selecione um workspace .sicro",
+        title: "Abrir uma pasta .sicro",
       });
-      if (typeof sel === "string") await openWs(sel);
+      if (typeof sel === "string") await openCase(sel);
     } catch (e) {
-      setOpenError(toSicroError(e).message);
+      pushToast("error", toSicroError(e).message);
     }
   };
 
-  const handleBackup = async () => {
+  const reveal = (path: string) => {
+    void commands
+      .revealPathInExplorer(path)
+      .catch((e) => pushToast("error", toSicroError(e).message));
+  };
+
+  const backup = async () => {
     if (!workspacePath) return;
-    setBusy("backup");
-    setFeedback(null);
-    setOpenError(null);
+    setBusy(true);
     try {
-      const bo = occurrence?.numero_bo?.trim() || undefined;
-      const a = await commands.generateWorkspaceBackup(workspacePath, undefined, bo);
-      setFeedback(
-        `Backup gerado: ${a.filename} (${a.file_count} arquivo(s), ${prettyBytes(a.size_bytes)}).`,
+      const a = await commands.generateWorkspaceBackup(
+        workspacePath,
+        undefined,
+        occurrence?.numero_bo?.trim() || undefined,
       );
-      void reloadSnapshot();
+      pushToast("success", `Backup gerado: ${a.filename}`);
     } catch (e) {
-      setOpenError(toSicroError(e).message);
+      pushToast("error", toSicroError(e).message);
     } finally {
-      setBusy("none");
+      setBusy(false);
     }
   };
 
-  const handleHealth = async () => {
-    if (!workspacePath) return;
-    setBusy("health");
-    setFeedback(null);
-    setOpenError(null);
-    try {
-      const a = await commands.generateSystemHealthReport(workspacePath);
-      setFeedback(`Relatório de saúde salvo em ${a.relative_path}.`);
-    } catch (e) {
-      setOpenError(toSicroError(e).message);
-    } finally {
-      setBusy("none");
-    }
-  };
-
-  const handleReveal = async () => {
-    if (!workspacePath) return;
-    try {
-      await commands.revealPathInExplorer(workspacePath);
-    } catch (e) {
-      setOpenError(toSicroError(e).message);
-    }
-  };
-
-  // --- Ciclo de vida da ocorrência (concluir / reabrir / fechar) ------------
-  // Concluir/reabrir mudam só o status (comando dedicado, sem zerar o cabeçalho).
-  // Fechar apenas desativa o caso ativo (não apaga nada) → volta ao estado vazio,
-  // de onde dá pra criar/abrir outra.
-  const handleConclude = async () => {
-    setFeedback(null);
-    setOpenError(null);
+  const conclude = async () => {
     try {
       await setActiveStatus("concluida");
-      setFeedback("Ocorrência concluída. Você pode reabri-la quando precisar.");
+      pushToast("success", "Caso concluído. Dá para reabrir quando precisar.");
     } catch (e) {
-      setOpenError(toSicroError(e).message);
+      pushToast("error", toSicroError(e).message);
     } finally {
       setConcludeOpen(false);
     }
   };
 
-  const handleReopen = async () => {
-    setFeedback(null);
-    setOpenError(null);
+  const reopen = async () => {
     try {
       await setActiveStatus("aberta");
-      setFeedback("Ocorrência reaberta.");
+      pushToast("success", "Caso reaberto.");
     } catch (e) {
-      setOpenError(toSicroError(e).message);
+      pushToast("error", toSicroError(e).message);
     }
   };
 
-  const handleCloseOccurrence = () => {
-    setFeedback(null);
-    setOpenError(null);
-    closeActiveOccurrence();
-  };
-
-  const hasWs = !!workspacePath && !!occurrence;
-  const lastOpened = useMemo(() => {
-    if (!occurrence) return null;
-    return recents.find((r) => r.workspace_id === occurrence.id)?.last_opened_at ?? null;
-  }, [recents, occurrence]);
-
-  const integrity = snapshot?.workspace?.integrity_overall_status ?? null;
-
-  return (
-    <div className={styles.page}>
-      <div className={styles.container}>
-        {/* 1. Cabeçalho da página + status resumido */}
-        <header className={styles.topBar}>
-          <div className={styles.titleBlock}>
-            <h1 className={styles.title}>Início</h1>
-            <p className={styles.subtitle}>Central de ocorrências e workspaces locais.</p>
-          </div>
-          <div
-            style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}
-          >
-            <FeedbackButton />
-            <HeaderStatus
-              hasWs={hasWs}
-              loading={loadingSnap}
-              integrity={integrity}
-              onVerify={() => navigate("/integridade")}
-            />
-          </div>
-        </header>
-
-        {(feedback || openError) && (
-          <div className={openError ? styles.bannerError : styles.bannerOk}>
-            {openError ? <AlertTriangle size={14} /> : <CheckCircle2 size={14} />}
-            <span>{openError ?? feedback}</span>
-            <button
-              type="button"
-              className={styles.bannerClose}
-              onClick={() => {
-                setOpenError(null);
-                setFeedback(null);
-              }}
-              aria-label="Fechar aviso"
-            >
-              <X size={13} />
-            </button>
-          </div>
-        )}
-
-        {/* 2. Linha principal: workspace ativo (dominante) + ações rápidas */}
-        <div className={styles.primaryRow}>
-          {hasWs && occurrence && workspacePath ? (
-            <WorkspaceCard
-              occurrence={occurrence}
-              workspacePath={workspacePath}
-              lastOpened={lastOpened}
-              onContinue={() => navigate(lastWorkModule())}
-            />
-          ) : (
-            <EmptyWorkspaceCard
-              onNew={() => setDialogOpen(true)}
-              onBrowse={() => void handleBrowse()}
-            />
-          )}
-
-          <QuickActions
-            hasWs={hasWs}
-            status={occurrence?.status ?? null}
-            backupBusy={busy === "backup"}
-            healthBusy={busy === "health"}
-            onNew={() => setDialogOpen(true)}
-            onBrowse={() => void handleBrowse()}
-            onImport={() => setImportOpen(true)}
-            onVerify={() => navigate("/integridade")}
-            onBackup={() => void handleBackup()}
-            onProperties={() => setPropsOpen(true)}
-            onReveal={() => void handleReveal()}
-            onHealth={() => void handleHealth()}
-            onConclude={() => setConcludeOpen(true)}
-            onReopen={() => void handleReopen()}
-            onCloseOccurrence={handleCloseOccurrence}
-          />
-        </div>
-
-        {/* 4. Histórico completo de ocorrências — busca por texto + data */}
-        <HistoryCard
-          activeId={occurrence?.id ?? null}
-          onOpen={(path) => void openWs(path)}
-          onNew={() => setDialogOpen(true)}
-          onBrowse={() => void handleBrowse()}
-        />
-      </div>
-
-      <NewOccurrenceDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onCreated={() => navigate("/")}
-      />
-      <ImportSicroappDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onOpenWorkspace={(p) => void openWs(p)}
-      />
-      {propsOpen && occurrence && workspacePath && (
-        <PropertiesModal
-          occurrence={occurrence}
-          workspacePath={workspacePath}
-          onReveal={() => void handleReveal()}
-          onClose={() => setPropsOpen(false)}
-        />
-      )}
-
-      <ConfirmDialog
-        open={concludeOpen}
-        busy={mutating}
-        title="Concluir ocorrência?"
-        confirmLabel="Concluir"
-        message={
-          <>
-            A ocorrência <strong>{occurrence ? occLabel(occurrence) : ""}</strong>{" "}
-            será marcada como <strong>Concluída</strong> e a data de encerramento
-            registrada.
-          </>
-        }
-        detail="Você pode reabri-la depois — nada é apagado."
-        onCancel={() => setConcludeOpen(false)}
-        onConfirm={() => void handleConclude()}
-      />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Cabeçalho — status resumido (integridade real, sem backup fabricado)
-// ---------------------------------------------------------------------------
-
-function HeaderStatus({
-  hasWs,
-  loading,
-  integrity,
-  onVerify,
-}: {
-  hasWs: boolean;
-  loading: boolean;
-  integrity: string | null;
-  onVerify: () => void;
-}) {
-  let icon: ReactNode = <Shield size={15} />;
-  let label = "Sem ocorrência ativa";
-  let cls = styles.chipNeutral;
-  if (loading) {
-    label = "Verificando…";
-  } else if (hasWs && integrity === "ok") {
-    icon = <ShieldCheck size={15} />;
-    label = "Sistema íntegro";
-    cls = styles.chipOk;
-  } else if (hasWs && integrity === "warning") {
-    icon = <ShieldAlert size={15} />;
-    label = "Atenção na integridade";
-    cls = styles.chipWarn;
-  } else if (hasWs && integrity === "critical") {
-    icon = <ShieldAlert size={15} />;
-    label = "Integridade crítica";
-    cls = styles.chipCrit;
-  } else if (hasWs) {
-    icon = <ShieldCheck size={15} />;
-    label = "Workspace ativo";
-    cls = styles.chipOk;
-  }
-  return (
-    <div className={styles.headerStatus}>
-      <span className={`${styles.statusChip} ${cls}`}>
-        {icon}
-        {label}
-      </span>
-      <Button
-        variant="secondary"
-        leftIcon={<Shield size={15} />}
-        onClick={onVerify}
-        disabled={!hasWs}
-      >
-        Verificar integridade
-      </Button>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Card dominante: Workspace Ativo
-// ---------------------------------------------------------------------------
-
-function WorkspaceCard({
-  occurrence,
-  workspacePath,
-  lastOpened,
-  onContinue,
-}: {
-  occurrence: Occurrence;
-  workspacePath: string;
-  lastOpened: string | null;
-  onContinue: () => void;
-}) {
-  return (
-    <section className={styles.wsCard} aria-label="Workspace ativo">
-      <div className={styles.sectionLabel}>Workspace ativo</div>
-      <div className={styles.wsHeader}>
-        <span className={styles.wsIcon}>
-          <FolderOpen size={26} />
-        </span>
-        <div className={styles.wsHeadText}>
-          <h2 className={styles.wsTitle}>{occLabel(occurrence)}</h2>
-          <code className={styles.wsPath} title={workspacePath}>
-            {workspacePath}
-          </code>
-        </div>
-      </div>
-
-      <div className={styles.wsChips}>
-        <span className={styles.chip}>
-          <Database size={12} aria-hidden /> Local
-        </span>
-        <span className={styles.chip}>
-          <WifiOff size={12} aria-hidden /> Offline
-        </span>
-        <span className={styles.chip}>
-          <Clock size={12} aria-hidden /> Atualizado {formatRelative(occurrence.updated_at)}
-        </span>
-        <StatusPill status={occurrence.status} />
-      </div>
-
-      <div className={styles.wsMeta}>
-        <MetaItem
-          icon={<Calendar size={14} />}
-          label="Última abertura"
-          value={lastOpened ? formatDateTime(lastOpened) : "—"}
-        />
-        <MetaItem
-          icon={<FileText size={14} />}
-          label="Tipo de perícia"
-          value={occurrence.tipo_pericia || "—"}
-        />
-        <MetaItem icon={<MapPin size={14} />} label="Local" value={localLabel(occurrence)} />
-      </div>
-
-      <div className={styles.wsActions}>
-        <Button variant="primary" leftIcon={<ArrowRight size={16} />} onClick={onContinue}>
-          Continuar ocorrência
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-function EmptyWorkspaceCard({ onNew, onBrowse }: { onNew: () => void; onBrowse: () => void }) {
-  return (
-    <section className={`${styles.wsCard} ${styles.wsEmpty}`} aria-label="Nenhum workspace ativo">
-      <span className={styles.wsIcon}>
-        <FolderOpen size={28} />
-      </span>
-      <h2 className={styles.wsEmptyTitle}>Nenhuma ocorrência ativa</h2>
-      <p className={styles.wsEmptyDesc}>
-        Crie uma nova ocorrência ou abra um workspace <code>.sicro</code> existente para começar a
-        trabalhar.
-      </p>
-      <div className={styles.wsActions}>
-        <Button variant="primary" leftIcon={<Plus size={16} />} onClick={onNew}>
-          Nova ocorrência
-        </Button>
-        <Button variant="secondary" leftIcon={<FolderOpen size={15} />} onClick={onBrowse}>
-          Abrir workspace
-        </Button>
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Ações rápidas (área de comando)
-// ---------------------------------------------------------------------------
-
-type QAItem = {
-  id: string;
-  icon: ReactNode;
-  title: string;
-  desc: string;
-  onClick: () => void;
-  disabled?: boolean;
-};
-
-/**
- * Painel único de ações. Agrega o que antes era "Ações rápidas" + o menu "⋯"
- * (escondido) do card do workspace. Quando há caso ativo, expõe TODAS as ações
- * do workspace (concluir/reabrir, propriedades, integridade, backup, relatório,
- * abrir pasta, fechar). Sem caso ativo, só as ações globais (nova/abrir/importar).
- */
-function QuickActions({
-  hasWs,
-  status,
-  backupBusy,
-  healthBusy,
-  onNew,
-  onBrowse,
-  onImport,
-  onVerify,
-  onBackup,
-  onProperties,
-  onReveal,
-  onHealth,
-  onConclude,
-  onReopen,
-  onCloseOccurrence,
-}: {
-  hasWs: boolean;
-  status: OccurrenceStatus | null;
-  backupBusy: boolean;
-  healthBusy: boolean;
-  onNew: () => void;
-  onBrowse: () => void;
-  onImport: () => void;
-  onVerify: () => void;
-  onBackup: () => void;
-  onProperties: () => void;
-  onReveal: () => void;
-  onHealth: () => void;
-  onConclude: () => void;
-  onReopen: () => void;
-  onCloseOccurrence: () => void;
-}) {
-  const globalItems: QAItem[] = [
-    { id: "new", icon: <Plus size={18} />, title: "Nova ocorrência", desc: "Criar do zero", onClick: onNew },
-    { id: "open", icon: <FolderOpen size={18} />, title: "Abrir workspace", desc: "Abrir existente", onClick: onBrowse },
-    { id: "import", icon: <Download size={18} />, title: "Importar .sicroapp", desc: "De outro computador", onClick: onImport },
-  ];
-  const wsItems: QAItem[] = hasWs
-    ? [
-        status === "concluida"
-          ? { id: "reopen", icon: <RotateCcw size={18} />, title: "Reabrir ocorrência", desc: "Voltar para Aberta", onClick: onReopen }
-          : { id: "conclude", icon: <CheckCircle2 size={18} />, title: "Concluir ocorrência", desc: "Marcar como Concluída", onClick: onConclude },
-        { id: "props", icon: <Info size={18} />, title: "Propriedades", desc: "Dados da ocorrência", onClick: onProperties },
-        { id: "verify", icon: <ShieldCheck size={18} />, title: "Verificar integridade", desc: "Checar arquivos", onClick: onVerify },
-        { id: "backup", icon: <FolderArchive size={18} />, title: backupBusy ? "Compactando…" : "Gerar backup", desc: "Do workspace ativo", onClick: onBackup, disabled: backupBusy },
-        { id: "health", icon: <FileText size={18} />, title: healthBusy ? "Gerando…" : "Relatório de saúde", desc: "Diagnóstico do caso", onClick: onHealth, disabled: healthBusy },
-        { id: "reveal", icon: <FolderOpen size={18} />, title: "Abrir pasta", desc: "No Explorer", onClick: onReveal },
-        { id: "close", icon: <LogOut size={18} />, title: "Fechar ocorrência", desc: "Sem excluir nada", onClick: onCloseOccurrence },
-      ]
-    : [];
-  const items = [...globalItems, ...wsItems];
-  return (
-    <section className={styles.qaCard} aria-label="Ações do workspace">
-      <div className={styles.sectionLabel}>
-        {hasWs ? "Ações do workspace" : "Ações"}
-      </div>
-      <div className={styles.qaGrid}>
-        {items.map((it) => (
-          <button
-            key={it.id}
-            type="button"
-            className={styles.qaItem}
-            onClick={it.onClick}
-            disabled={it.disabled}
-          >
-            <span className={styles.qaIcon}>{it.icon}</span>
-            <span className={styles.qaTitle}>{it.title}</span>
-            <span className={styles.qaDesc}>{it.desc}</span>
-          </button>
-        ))}
-      </div>
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Ocorrências recentes (tabela enxuta)
-// ---------------------------------------------------------------------------
-
-function HistoryCard({
-  activeId,
-  onOpen,
-  onNew,
-  onBrowse,
-}: {
-  activeId: string | null;
-  onOpen: (workspacePath: string) => void;
-  onNew: () => void;
-  onBrowse: () => void;
-}) {
-  const [cases, setCases] = useState<CaseIndexEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [query, setQuery] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
-  // Exclusão de ocorrência (destrutivo — exige confirmação).
-  const [pendingDelete, setPendingDelete] = useState<CaseIndexEntry | null>(null);
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
-  const closeOccurrence = useWorkspaceStore((s) => s.closeOccurrence);
-  const forgetRecent = useWorkspaceStore((s) => s.forgetRecent);
-  // Gatilho de reload do histórico: incrementa no store quando o índice de casos
-  // é (re)gravado (criar/abrir/editar/excluir ocorrência). Sem isto, criar uma
-  // ocorrência só aparecia aqui depois de navegar pra outro módulo e voltar.
-  const caseIndexVersion = useWorkspaceStore((s) => s.caseIndexVersion);
-
-  // Apaga a pasta .sicro do disco e limpa índice + recentes. Se a ocorrência
-  // excluída era a ativa, fecha-a. Mantém o popup aberto com a mensagem se falhar.
+  // Apaga a pasta .sicro do disco e tira o caso das listas. Se era o caso
+  // aberto, fecha. Em erro, o popup fica aberto com a mensagem.
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     const target = pendingDelete;
@@ -622,10 +265,7 @@ function HistoryCard({
       await commands.deleteOccurrence(target.workspace_path);
       await commands.removeCaseIndex(target.workspace_id).catch(() => {});
       await forgetRecent(target.workspace_id).catch(() => {});
-      if (target.workspace_id === activeId) closeOccurrence();
-      setCases((prev) =>
-        prev.filter((x) => x.workspace_id !== target.workspace_id),
-      );
+      if (target.workspace_path === workspacePath) closeOccurrence();
       setPendingDelete(null);
     } catch (e) {
       setDeleteError(toSicroError(e).message);
@@ -634,244 +274,207 @@ function HistoryCard({
     }
   };
 
-  useEffect(() => {
-    let cancelled = false;
-    commands
-      .getCaseIndex()
-      .then((idx) => {
-        if (!cancelled) setCases(idx);
-      })
-      .catch(() => {
-        /* índice ausente/ilegível → histórico vazio */
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-    // Recarrega o histórico ao mudar a versão do índice (nova ocorrência etc.).
-  }, [caseIndexVersion]);
+  // O caso aberto não repete na lista — ele já está no cabeçalho.
+  const activeRecent = useMemo(
+    () => recents.find((r) => r.workspace_path === workspacePath) ?? null,
+    [recents, workspacePath],
+  );
+  const others = useMemo(
+    () => recents.filter((r) => r.workspace_path !== workspacePath),
+    [recents, workspacePath],
+  );
 
-  const filtered = useMemo(() => {
-    const q = normalizeText(query.trim());
-    const rows = cases.filter((c) => {
-      if (q) {
-        const hay = normalizeText(
-          [
-            c.numero_bo,
-            c.tipo_pericia,
-            c.natureza,
-            c.municipio,
-            c.bairro,
-            ...(c.peritos ?? []),
-            c.workspace_id,
-          ]
-            .filter(Boolean)
-            .join(" "),
-        );
-        if (!hay.includes(q)) return false;
-      }
-      if (from || to) {
-        const d = (c.data_fato ?? c.created_at ?? "").slice(0, 10);
-        if (!d) return false;
-        if (from && d < from) return false;
-        if (to && d > to) return false;
-      }
-      return true;
-    });
-    return rows.sort((a, b) => {
-      const da = (a.data_fato ?? a.created_at ?? a.indexed_at ?? "").slice(0, 10);
-      const db = (b.data_fato ?? b.created_at ?? b.indexed_at ?? "").slice(0, 10);
-      return db.localeCompare(da);
-    });
-  }, [cases, query, from, to]);
-
-  const hasFilter = !!(query.trim() || from || to);
+  const caseMenu: MenuItem[] = occurrence
+    ? [
+        { label: "Dados do caso", icon: <Pencil size={14} />, onClick: () => setDataOpen(true) },
+        { label: "Abrir pasta", icon: <FolderOpen size={14} />, onClick: () => reveal(workspacePath!) },
+        { label: "Integridade", icon: <ShieldCheck size={14} />, onClick: () => navigate("/integridade") },
+        { label: "Gerar backup", icon: <FolderArchive size={14} />, onClick: () => void backup() },
+        occurrence.status === "concluida"
+          ? { label: "Reabrir caso", icon: <RotateCcw size={14} />, onClick: () => void reopen() }
+          : { label: "Concluir caso", icon: <CheckCircle2 size={14} />, onClick: () => setConcludeOpen(true) },
+        { label: "Fechar caso", icon: <LogOut size={14} />, onClick: closeOccurrence },
+        ...(activeRecent
+          ? [
+              {
+                label: "Excluir do disco",
+                icon: <Trash2 size={14} />,
+                danger: true,
+                onClick: () => {
+                  setDeleteError(null);
+                  setPendingDelete(activeRecent);
+                },
+              },
+            ]
+          : []),
+      ]
+    : [];
 
   return (
-    <section className={styles.recentsCard} aria-label="Histórico de ocorrências">
-      <div className={styles.cardHead}>
-        <h2 className={styles.cardTitle}>Histórico de ocorrências</h2>
-        <span className={styles.cardMeta}>
-          {loading
-            ? "carregando…"
-            : hasFilter
-              ? `${filtered.length} de ${cases.length}`
-              : `${cases.length} ocorrência(s)`}
-        </span>
-      </div>
-
-      <div className={styles.historyFilters}>
-        <div className={styles.searchBox}>
-          <Search size={15} aria-hidden />
-          <input
-            type="search"
-            className={styles.searchInput}
-            placeholder="Buscar por BO, tipo, natureza, município, bairro, perito…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <label className={styles.dateField}>
-          <span>De</span>
-          <input
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFrom(e.target.value)}
-          />
-        </label>
-        <label className={styles.dateField}>
-          <span>Até</span>
-          <input
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setTo(e.target.value)}
-          />
-        </label>
-        {hasFilter && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setQuery("");
-              setFrom("");
-              setTo("");
-            }}
-          >
-            Limpar
-          </Button>
-        )}
-      </div>
-
-      {loading ? (
-        <p className={styles.cardMeta} style={{ padding: "var(--space-3)" }}>
-          Carregando histórico…
-        </p>
-      ) : cases.length === 0 ? (
-        <div className={styles.recEmpty}>
-          <FolderOpen size={26} strokeWidth={1.5} aria-hidden />
-          <p>Nenhuma ocorrência no histórico ainda.</p>
-          <div className={styles.recEmptyActions}>
-            <Button variant="secondary" leftIcon={<FolderOpen size={15} />} onClick={onBrowse}>
-              Abrir existente
-            </Button>
-            <Button variant="primary" leftIcon={<Plus size={15} />} onClick={onNew}>
-              Criar nova
-            </Button>
-          </div>
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className={styles.recEmpty}>
-          <Search size={26} strokeWidth={1.5} aria-hidden />
-          <p>Nenhuma ocorrência corresponde à busca.</p>
-        </div>
-      ) : (
-        <div className={styles.tableWrap}>
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Nome / número</th>
-                <th>Tipo de perícia</th>
-                <th>Município</th>
-                <th>Data do fato</th>
-                <th>Status</th>
-                <th className={styles.thAction}>Ação</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((c) => (
-                <tr
-                  key={c.workspace_id}
-                  className={c.workspace_id === activeId ? styles.rowActive : ""}
+    <div className={styles.page}>
+      <div className={styles.column}>
+        {creating || !occurrence ? (
+          <section className={styles.hero} aria-label="Novo caso">
+            <div className={styles.heroHead}>
+              <span className={styles.sectionLabel}>Novo caso</span>
+              {hasCase && (
+                <button
+                  type="button"
+                  className={styles.linkBtn}
+                  onClick={() => {
+                    setNewMode(false);
+                    setName("");
+                  }}
                 >
-                  <td>
-                    <div className={styles.recName}>
-                      <button
-                        type="button"
-                        className={styles.recLabelBtn}
-                        onClick={() => onOpen(c.workspace_path)}
-                        title="Abrir esta ocorrência"
-                      >
-                        {indexLabel(c)}
-                      </button>
-                      <code className={styles.recPath} title={c.workspace_path}>
-                        {c.workspace_path}
-                      </code>
-                    </div>
-                  </td>
-                  <td>
-                    <span className={styles.recTipo}>
-                      {tipoIcon(c.tipo_pericia)}
-                      {c.tipo_pericia || "—"}
-                    </span>
-                  </td>
-                  <td className={styles.recCell}>{c.municipio || "—"}</td>
-                  <td className={styles.recDate}>
-                    {formatDateOnly(c.data_fato ?? c.created_at)}
-                  </td>
-                  <td>
-                    <StatusPill status={c.status as OccurrenceStatus} />
-                  </td>
-                  <td className={styles.tdAction}>
-                    <div className={styles.tdActionInner}>
-                      <Button variant="secondary" size="sm" onClick={() => onOpen(c.workspace_path)}>
-                        Abrir
-                      </Button>
-                      <PopMenu
-                        items={[
-                          {
-                            label: "Abrir pasta",
-                            icon: <FolderOpen size={14} />,
-                            onClick: () =>
-                              void commands
-                                .revealPathInExplorer(c.workspace_path)
-                                .catch(() => {}),
-                          },
-                          {
-                            label: "Excluir ocorrência",
-                            icon: <Trash2 size={14} />,
-                            danger: true,
-                            onClick: () => {
-                              setDeleteError(null);
-                              setPendingDelete(c);
-                            },
-                          },
-                        ]}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  Cancelar
+                </button>
+              )}
+            </div>
+            <input
+              ref={nameRef}
+              type="text"
+              className={styles.nameInput}
+              placeholder="Nome do caso — ex.: Laudo 63404/26, Km 09 Duca Serra"
+              aria-label="Nome do novo caso"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={onNameKey}
+              disabled={busy}
+              spellCheck={false}
+            />
+            <p className={styles.hint}>
+              Escolha por onde começar: o caso é criado e já abre lá. Enter abre no
+              Croqui. O nome é opcional e pode mudar depois.
+            </p>
+          </section>
+        ) : (
+          <section className={styles.hero} aria-label="Caso aberto">
+            <div className={styles.caseHead}>
+              <button
+                type="button"
+                className={styles.caseName}
+                onClick={() => setDataOpen(true)}
+                title="Dados do caso"
+              >
+                <span className={styles.caseNameText}>{occurrenceLabel(occurrence)}</span>
+                <Pencil size={15} className={styles.casePencil} aria-hidden />
+              </button>
+              <PopMenu items={caseMenu} label="Mais ações do caso" />
+            </div>
+            <p className={styles.caseSub}>
+              {occurrence.status === "concluida" && (
+                <span className={styles.badge}>concluído</span>
+              )}
+              criado {formatDate(occurrence.created_at)}
+              <span className={styles.caseSep} aria-hidden>
+                ·
+              </span>
+              <button
+                type="button"
+                className={styles.pathBtn}
+                onClick={() => reveal(workspacePath!)}
+                title={workspacePath!}
+              >
+                {compactPath(workspacePath!)}
+              </button>
+            </p>
+          </section>
+        )}
+
+        <div className={styles.modules} role="group" aria-label="Módulos">
+          {MODULES.map((m) => {
+            const summary = !creating && counts ? m.summary(counts) : null;
+            return (
+              <button
+                key={m.label}
+                type="button"
+                className={styles.module}
+                onClick={() => void enter(m)}
+                disabled={busy}
+              >
+                <m.icon size={30} strokeWidth={1.4} className={styles.moduleIcon} aria-hidden />
+                <span className={styles.moduleName}>{m.label}</span>
+                {summary && <span className={styles.moduleMeta}>{summary}</span>}
+              </button>
+            );
+          })}
         </div>
-      )}
+
+        <RecentsList
+          items={others}
+          title={hasCase ? "Outros casos" : "Casos recentes"}
+          busy={busy}
+          action={
+            hasCase && !newMode ? (
+              <button
+                type="button"
+                className={styles.linkBtn}
+                onClick={() => setNewMode(true)}
+              >
+                <Plus size={13} aria-hidden /> Novo caso
+              </button>
+            ) : null
+          }
+          onOpen={(r) => void openCase(r.workspace_path)}
+          onReveal={(r) => reveal(r.workspace_path)}
+          onForget={(r) => void forgetRecent(r.workspace_id)}
+          onDelete={(r) => {
+            setDeleteError(null);
+            setPendingDelete(r);
+          }}
+        />
+
+        <footer className={styles.footer}>
+          <button type="button" className={styles.linkBtn} onClick={() => void browse()}>
+            <FolderOpen size={13} aria-hidden /> Abrir pasta .sicro…
+          </button>
+          <button type="button" className={styles.linkBtn} onClick={() => setImportOpen(true)}>
+            <Download size={13} aria-hidden /> Importar .sicroapp…
+          </button>
+        </footer>
+      </div>
+
+      <CaseDataDialog open={dataOpen} onClose={() => setDataOpen(false)} />
+      <ImportSicroappDialog
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onOpenWorkspace={(p) => void openCase(p)}
+      />
+
+      <ConfirmDialog
+        open={concludeOpen}
+        busy={mutating}
+        title="Concluir caso?"
+        confirmLabel="Concluir"
+        message={
+          <>
+            <strong>{occurrence ? occurrenceLabel(occurrence) : ""}</strong> fica marcado como
+            concluído, com a data de hoje.
+          </>
+        }
+        detail="Nada é apagado — dá para reabrir depois."
+        onCancel={() => setConcludeOpen(false)}
+        onConfirm={() => void conclude()}
+      />
 
       <ConfirmDialog
         open={!!pendingDelete}
         destructive
         busy={deleting}
-        title="Excluir ocorrência?"
+        title="Excluir caso do disco?"
         confirmLabel="Excluir definitivamente"
         message={
           pendingDelete ? (
             <>
-              Excluir <strong>{indexLabel(pendingDelete)}</strong>? Isto remove{" "}
-              <strong>permanentemente</strong> a pasta <code>.sicro</code> do
-              disco — croquis, vídeos, áudios, imagens e todas as evidências do caso.
+              Excluir <strong>{pendingDelete.occurrence_label}</strong>? A pasta{" "}
+              <code>.sicro</code> some do disco com tudo o que há nela — croquis,
+              vídeos, áudios, imagens.
             </>
           ) : (
             ""
           )
         }
-        detail={
-          deleteError
-            ? `Falha ao excluir: ${deleteError}`
-            : "Esta ação não pode ser desfeita."
-        }
+        detail={deleteError ? `Falha ao excluir: ${deleteError}` : "Não dá para desfazer."}
         onCancel={() => {
           if (!deleting) {
             setPendingDelete(null);
@@ -880,60 +483,123 @@ function HistoryCard({
         }}
         onConfirm={() => void confirmDelete()}
       />
-    </section>
+    </div>
   );
 }
 
-/** Normaliza texto para busca: sem acento, minúsculas. */
-function normalizeText(s: string): string {
-  return s
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase();
-}
+// ---------------------------------------------------------------------------
+// Casos recentes — uma linha por caso; busca só aparece quando a lista cresce
+// ---------------------------------------------------------------------------
 
-/** Rótulo de uma entrada do índice (BO / tipo / município, com fallback). */
-function indexLabel(c: CaseIndexEntry): string {
-  const parts = [
-    c.numero_bo ? `BO ${c.numero_bo}` : null,
-    c.tipo_pericia,
-    c.municipio,
-  ].filter((p): p is string => !!p);
-  return parts.length
-    ? parts.join(" — ")
-    : `Ocorrência ${c.workspace_id.slice(0, 8)}`;
-}
+function RecentsList({
+  items,
+  title,
+  busy,
+  action,
+  onOpen,
+  onReveal,
+  onForget,
+  onDelete,
+}: {
+  items: RecentOccurrence[];
+  title: string;
+  busy: boolean;
+  action: ReactNode;
+  onOpen: (r: RecentOccurrence) => void;
+  onReveal: (r: RecentOccurrence) => void;
+  onForget: (r: RecentOccurrence) => void;
+  onDelete: (r: RecentOccurrence) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const searchable = items.length > 8;
+  const shown = useMemo(() => {
+    const q = normalizeText(query.trim());
+    if (!q || !searchable) return items;
+    return items.filter((r) => normalizeText(r.occurrence_label).includes(q));
+  }, [items, query, searchable]);
 
-/** Data (sem hora) em pt-BR; "—" quando ausente/inválida. */
-function formatDateOnly(iso: string | null): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("pt-BR");
+  return (
+    <section className={styles.recents} aria-label={title}>
+      <div className={styles.recentsHead}>
+        <span className={styles.sectionLabel}>{title}</span>
+        {action}
+      </div>
+
+      {searchable && (
+        <label className={styles.search}>
+          <Search size={14} aria-hidden />
+          <input
+            type="search"
+            placeholder="Buscar caso…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            aria-label="Buscar caso"
+          />
+        </label>
+      )}
+
+      {items.length === 0 ? (
+        <p className={styles.empty}>Nenhum caso ainda.</p>
+      ) : shown.length === 0 ? (
+        <p className={styles.empty}>Nenhum caso com esse nome.</p>
+      ) : (
+        <ul className={styles.recentList}>
+          {shown.map((r) => (
+            <li key={r.workspace_id} className={styles.recentRow}>
+              <button
+                type="button"
+                className={styles.recentBtn}
+                onClick={() => onOpen(r)}
+                disabled={busy}
+                title={r.workspace_path}
+              >
+                {r.occurrence_label}
+              </button>
+              {r.status === "concluida" && <span className={styles.badge}>concluído</span>}
+              <span className={styles.recentWhen}>{formatRelative(r.last_opened_at)}</span>
+              <span className={styles.recentMenu}>
+                <PopMenu
+                  label={`Mais ações: ${r.occurrence_label}`}
+                  items={[
+                    { label: "Abrir pasta", icon: <FolderOpen size={14} />, onClick: () => onReveal(r) },
+                    { label: "Tirar da lista", icon: <ListX size={14} />, onClick: () => onForget(r) },
+                    { label: "Excluir do disco", icon: <Trash2 size={14} />, danger: true, onClick: () => onDelete(r) },
+                  ]}
+                />
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Auxiliares
 // ---------------------------------------------------------------------------
 
-function PopMenu({
-  items,
-}: {
-  items: { label: string; icon?: ReactNode; onClick: () => void; danger?: boolean }[];
-}) {
+interface MenuItem {
+  label: string;
+  icon?: ReactNode;
+  onClick: () => void;
+  danger?: boolean;
+}
+
+function PopMenu({ items, label }: { items: MenuItem[]; label: string }) {
   const [open, setOpen] = useState(false);
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Posiciona o menu COM PORTAL no document.body — sai de qualquer container
-  // com overflow (ex.: .tableWrap), então não fica cortado nem fecha quando o
-  // perito tenta rolar. Reposiciona em scroll/resize e fecha em Esc.
+  // Menu em portal no document.body, posicionado pela viewport — não é cortado
+  // por nenhum overflow. Reposiciona em scroll/resize e fecha em Esc.
   useEffect(() => {
     if (!open) {
       setPos(null);
       return;
     }
     const MENU_W = 210;
-    const MENU_H_EST = 44 * Math.max(items.length, 1) + 12;
+    const MENU_H_EST = 40 * Math.max(items.length, 1) + 12;
     const compute = () => {
       const r = btnRef.current?.getBoundingClientRect();
       if (!r) return;
@@ -947,27 +613,26 @@ function PopMenu({
       setPos({ top, left });
     };
     compute();
-    const onScroll = () => compute();
-    const onKey = (e: KeyboardEvent) => {
+    const onKey = (e: globalThis.KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
-    window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", onScroll);
+    window.addEventListener("scroll", compute, true);
+    window.addEventListener("resize", compute);
     window.addEventListener("keydown", onKey);
     return () => {
-      window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", onScroll);
+      window.removeEventListener("scroll", compute, true);
+      window.removeEventListener("resize", compute);
       window.removeEventListener("keydown", onKey);
     };
   }, [open, items.length]);
 
   return (
-    <div className={styles.menuWrap}>
+    <>
       <button
         ref={btnRef}
         type="button"
         className={styles.iconBtn}
-        aria-label="Mais opções"
+        aria-label={label}
         aria-haspopup="menu"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
@@ -979,11 +644,7 @@ function PopMenu({
         createPortal(
           <>
             <div className={styles.menuBackdrop} onClick={() => setOpen(false)} />
-            <div
-              className={styles.menu}
-              role="menu"
-              style={{ top: pos.top, left: pos.left }}
-            >
+            <div className={styles.menu} role="menu" style={{ top: pos.top, left: pos.left }}>
               {items.map((it) => (
                 <button
                   key={it.label}
@@ -1003,130 +664,19 @@ function PopMenu({
           </>,
           document.body,
         )}
-    </div>
+    </>
   );
 }
 
-function PropertiesModal({
-  occurrence,
-  workspacePath,
-  onReveal,
-  onClose,
-}: {
-  occurrence: Occurrence;
-  workspacePath: string;
-  onReveal: () => void;
-  onClose: () => void;
-}) {
-  const rows: [string, string | null][] = [
-    ["Número do BO", occurrence.numero_bo],
-    ["Protocolo", occurrence.protocolo],
-    ["Requisição", occurrence.requisicao],
-    ["Ofício", occurrence.oficio],
-    ["Delegacia", occurrence.delegacia],
-    ["Tipo de perícia", occurrence.tipo_pericia],
-    ["Natureza", occurrence.natureza],
-    ["Município", occurrence.municipio],
-    ["Bairro", occurrence.bairro],
-    ["Logradouro", occurrence.logradouro],
-    ["Referência", occurrence.referencia],
-    ["Data do fato", occurrence.data_fato ? formatDateTime(occurrence.data_fato) : null],
-    [
-      "Encerrada em",
-      occurrence.data_encerramento ? formatDateTime(occurrence.data_encerramento) : null,
-    ],
-    ["Peritos", occurrence.peritos.length ? occurrence.peritos.join(", ") : null],
-    ["Criada em", formatDateTime(occurrence.created_at)],
-    ["Atualizada em", formatDateTime(occurrence.updated_at)],
-  ];
-  const shown = rows.filter(([, v]) => v != null && v !== "");
-
-  return (
-    <div className={styles.modalBackdrop} onClick={onClose}>
-      <div
-        className={styles.modal}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Propriedades da ocorrência"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className={styles.modalHead}>
-          <h3 className={styles.modalTitle}>Propriedades da ocorrência</h3>
-          <button type="button" className={styles.modalClose} onClick={onClose} aria-label="Fechar">
-            <X size={16} />
-          </button>
-        </div>
-        <div className={styles.modalBody}>
-          <div className={styles.propGrid}>
-            <div className={styles.propRow}>
-              <span className={styles.propKey}>Status</span>
-              <span className={styles.propVal}>
-                <StatusPill status={occurrence.status} />
-              </span>
-            </div>
-            {shown.map(([k, v]) => (
-              <div key={k} className={styles.propRow}>
-                <span className={styles.propKey}>{k}</span>
-                <span className={styles.propVal}>{v}</span>
-              </div>
-            ))}
-            <div className={`${styles.propRow} ${styles.propRowFull}`}>
-              <span className={styles.propKey}>Workspace</span>
-              <code className={styles.propPath}>{workspacePath}</code>
-            </div>
-          </div>
-        </div>
-        <div className={styles.modalActions}>
-          <Button variant="secondary" leftIcon={<FolderOpen size={15} />} onClick={onReveal}>
-            Abrir pasta
-          </Button>
-          <Button variant="primary" onClick={onClose}>
-            Fechar
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
+/** Busca sem acento nem caixa. */
+function normalizeText(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase();
 }
 
-function MetaItem({ icon, label, value }: { icon: ReactNode; label: string; value: string }) {
-  return (
-    <div className={styles.metaItem}>
-      <span className={styles.metaLabel}>
-        {icon}
-        {label}
-      </span>
-      <span className={styles.metaValue} title={value}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function occLabel(o: Occurrence): string {
-  const parts: string[] = [];
-  if (o.numero_bo) parts.push(`BO ${o.numero_bo}`);
-  if (o.tipo_pericia) parts.push(o.tipo_pericia);
-  if (o.municipio) parts.push(o.municipio);
-  return parts.length ? parts.join(" — ") : `Ocorrência ${o.id.slice(0, 8)}`;
-}
-
-function localLabel(o: Occurrence): string {
-  const parts = [o.municipio, o.bairro].filter((p): p is string => !!p);
-  return parts.length ? parts.join(" / ") : "—";
-}
-
-function tipoIcon(tipo: string | null): ReactNode {
-  const t = (tipo ?? "").toLowerCase();
-  if (t.includes("trâns") || t.includes("trans")) return <Car size={15} aria-hidden />;
-  if (t.includes("patrim")) return <Building2 size={15} aria-hidden />;
-  if (t.includes("crimin")) return <Crosshair size={15} aria-hidden />;
-  return <FileText size={15} aria-hidden />;
-}
-
-function prettyBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  if (n < 1024 * 1024 * 1024) return `${(n / 1024 / 1024).toFixed(1)} MB`;
-  return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
+/** Só o fim do caminho — o inteiro vai no title. */
+function compactPath(p: string, max = 64): string {
+  return p.length <= max ? p : "…" + p.slice(-(max - 1));
 }

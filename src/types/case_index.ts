@@ -24,6 +24,8 @@ export interface CaseCounts {
 export interface CaseIndexEntry {
   workspace_id: string;
   workspace_path: string;
+  /** Nome do caso. Ausente nos índices gravados antes da migration 022. */
+  titulo?: string | null;
   numero_bo: string | null;
   tipo_pericia: string | null;
   natureza: string | null;
@@ -50,6 +52,7 @@ export function caseEntryFromOccurrence(
   return {
     workspace_id: occurrence.id,
     workspace_path: workspacePath,
+    titulo: occurrence.titulo,
     numero_bo: occurrence.numero_bo,
     tipo_pericia: occurrence.tipo_pericia,
     natureza: occurrence.natureza,

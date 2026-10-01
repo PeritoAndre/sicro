@@ -18,7 +18,7 @@ const COLUMNS: &str = "
     data_fato, data_acionamento, data_chegada, data_encerramento,
     peritos, status, created_at, updated_at,
     import_id, original_mobile_id, primary_accuracy_m, resultado,
-    raw_case_json, raw_metadata_json, raw_location_json
+    raw_case_json, raw_metadata_json, raw_location_json, titulo
 ";
 
 pub fn insert(conn: &Connection, occ: &Occurrence) -> Result<()> {
@@ -27,7 +27,7 @@ pub fn insert(conn: &Connection, occ: &Occurrence) -> Result<()> {
             "INSERT INTO occurrences ({COLUMNS}) VALUES \
              (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, \
               ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, \
-              ?23, ?24, ?25, ?26, ?27, ?28, ?29)"
+              ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30)"
         ),
         params![
             occ.id.to_string(),
@@ -59,6 +59,7 @@ pub fn insert(conn: &Connection, occ: &Occurrence) -> Result<()> {
             occ.raw_case_json,
             occ.raw_metadata_json,
             occ.raw_location_json,
+            occ.titulo,
         ],
     )?;
     Ok(())
@@ -77,7 +78,7 @@ pub fn update_full(conn: &Connection, occ: &Occurrence) -> Result<()> {
             latitude = ?13, longitude = ?14,
             data_fato = ?15, data_acionamento = ?16, data_chegada = ?17,
             data_encerramento = ?18, peritos = ?19, status = ?20,
-            resultado = ?21, updated_at = ?22
+            resultado = ?21, updated_at = ?22, titulo = ?23
          WHERE id = ?1",
         params![
             occ.id.to_string(),
@@ -102,6 +103,7 @@ pub fn update_full(conn: &Connection, occ: &Occurrence) -> Result<()> {
             occ.status.as_str(),
             occ.resultado,
             occ.updated_at.to_rfc3339(),
+            occ.titulo,
         ],
     )?;
     if n == 0 {
@@ -141,6 +143,7 @@ fn row_to_occurrence(row: &Row<'_>) -> rusqlite::Result<Occurrence> {
 
     Ok(Occurrence {
         id,
+        titulo: row.get("titulo")?,
         numero_bo: row.get("numero_bo")?,
         protocolo: row.get("protocolo")?,
         requisicao: row.get("requisicao")?,

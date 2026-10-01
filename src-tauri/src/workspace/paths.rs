@@ -8,11 +8,19 @@ use crate::filesystem::sanitize_folder_name;
 /// Compute the folder name (no path, no extension) for a workspace from
 /// the data the user supplied. Falls back to "ocorrencia" if everything
 /// is empty.
+///
+/// Com nome do caso, a pasta é o próprio nome ("Laudo 63404_26.sicro") —
+/// `unique_workspace_path` cuida de colisão. Sem nome, o esquema antigo
+/// (BO + município + id curto).
 pub fn derive_workspace_name(
+    titulo: Option<&str>,
     numero_bo: Option<&str>,
     municipio: Option<&str>,
     short_id: &str,
 ) -> String {
+    if let Some(t) = titulo.map(str::trim).filter(|t| !t.is_empty()) {
+        return sanitize_folder_name(t);
+    }
     let mut parts: Vec<String> = Vec::new();
     if let Some(bo) = numero_bo {
         let bo = bo.trim();

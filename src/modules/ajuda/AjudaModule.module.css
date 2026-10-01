@@ -78,6 +78,10 @@
   font-size: 12px;
   color: var(--sicro-fg-faint);
 }
+.tocFoot {
+  padding: var(--space-2) var(--space-2);
+  border-top: 1px solid var(--sicro-divider);
+}
 
 /* ---- Manual renderizado ----
  * Coluna de leitura ALINHADA À ESQUERDA (max-width fixo). Todos os blocos e as

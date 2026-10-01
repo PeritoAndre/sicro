@@ -50,6 +50,9 @@ pub struct CaseIndexEntry {
     pub workspace_id: String,
     #[serde(default)]
     pub workspace_path: String,
+    /// Nome do caso (migration 022). `None` nos índices gravados antes.
+    #[serde(default)]
+    pub titulo: Option<String>,
     #[serde(default)]
     pub numero_bo: Option<String>,
     #[serde(default)]

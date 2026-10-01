@@ -78,6 +78,7 @@ pub fn create_workspace(
     let occurrence_id = workspace_id; // Spike A: 1 workspace = 1 occurrence.
     let short_id = workspace_id.to_string()[..8].to_string();
     let base_name = derive_workspace_name(
+        input.titulo.as_deref(),
         input.numero_bo.as_deref(),
         input.municipio.as_deref(),
         &short_id,
@@ -99,6 +100,10 @@ pub fn create_workspace(
     let now = Utc::now();
     let occurrence = Occurrence {
         id: occurrence_id,
+        titulo: input
+            .titulo
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty()),
         numero_bo: input.numero_bo.filter(|s| !s.trim().is_empty()),
         protocolo: input.protocolo.filter(|s| !s.trim().is_empty()),
         requisicao: None,

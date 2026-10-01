@@ -11,6 +11,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Film, Headphones } from "lucide-react";
 import { useWorkspaceStore } from "@stores/workspaceStore";
+import { occurrenceLabel } from "@domain/occurrence";
 import { isMidiaPath, rememberMidiaAba, rememberWorkModule } from "@modules/midia/midiaNav";
 import { prepareTabSwitch } from "@modules/midia/midiaLink";
 import { useNavGuard } from "./navGuard";
@@ -31,13 +32,14 @@ export function TopBar() {
   const occurrence = useWorkspaceStore((s) => s.activeOccurrence);
   const midia = isMidiaPath(pathname);
 
+  const caseId = occurrence?.id ?? null;
   useEffect(() => {
     rememberMidiaAba(pathname);
-    rememberWorkModule(pathname);
-  }, [pathname]);
+    rememberWorkModule(pathname, caseId);
+  }, [pathname, caseId]);
 
   const moduleLabel = midia ? "Vídeo e Áudio" : (moduleNames[pathname] ?? "—");
-  const occurrenceLabel = occurrence ? buildOccurrenceLabel(occurrence) : null;
+  const caseLabel = occurrence ? occurrenceLabel(occurrence) : null;
 
   const go = (to: "/video" | "/audio") => {
     if (pathname === to) return;
@@ -76,13 +78,13 @@ export function TopBar() {
             </button>
           </span>
         )}
-        {occurrenceLabel && (
+        {caseLabel && (
           <>
             <span className={styles.separator} aria-hidden>
               ▸
             </span>
-            <span className={styles.occurrenceLabel} title={occurrenceLabel}>
-              {occurrenceLabel}
+            <span className={styles.occurrenceLabel} title={caseLabel}>
+              {caseLabel}
             </span>
           </>
         )}
@@ -90,14 +92,4 @@ export function TopBar() {
       <div className={styles.spacer} />
     </header>
   );
-}
-
-function buildOccurrenceLabel(
-  o: NonNullable<ReturnType<typeof useWorkspaceStore.getState>["activeOccurrence"]>,
-): string {
-  const parts: string[] = [];
-  if (o.numero_bo) parts.push(`BO ${o.numero_bo}`);
-  if (o.tipo_pericia) parts.push(o.tipo_pericia);
-  if (o.municipio) parts.push(o.municipio);
-  return parts.length > 0 ? parts.join(" — ") : "Ocorrência sem identificação";
 }

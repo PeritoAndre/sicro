@@ -15,6 +15,8 @@ export type OccurrenceStatus =
 export interface Occurrence {
   /** UUID v4 — also used as workspace_id. */
   id: string;
+  /** Nome livre do caso, dado no Início. É o rótulo principal; o resto é complemento. */
+  titulo: string | null;
   numero_bo: string | null;
   protocolo: string | null;
   requisicao: string | null;
@@ -51,6 +53,8 @@ export interface Occurrence {
 
 /** Payload used when creating a new occurrence. */
 export interface NewOccurrenceInput {
+  /** Nome do caso — o único campo que o Início pede (e mesmo ele é opcional). */
+  titulo?: string | null;
   numero_bo?: string | null;
   protocolo?: string | null;
   /** Nº do ofício da Polícia Civil — distinto do protocolo (nº do laudo, PC). */
@@ -68,6 +72,7 @@ export interface NewOccurrenceInput {
  * (import_id, raw_*, etc.) nunca é tocada.
  */
 export interface OccurrenceEdit {
+  titulo?: string | null;
   numero_bo?: string | null;
   protocolo?: string | null;
   requisicao?: string | null;
@@ -101,4 +106,52 @@ export interface RecentOccurrence {
 export interface LoadedOccurrence {
   occurrence: Occurrence;
   workspace_path: string;
+}
+
+/**
+ * Rótulo do caso — espelho de `build_label` (src-tauri/src/models/occurrence.rs):
+ * o nome dado pelo perito; sem nome, "BO — tipo — município" (casos antigos);
+ * sem nada, a data de criação. Mudar nos dois.
+ */
+export function occurrenceLabel(
+  o: Pick<Occurrence, "titulo" | "numero_bo" | "tipo_pericia" | "municipio" | "created_at">,
+): string {
+  const t = o.titulo?.trim();
+  if (t) return t;
+  const parts: string[] = [];
+  if (o.numero_bo) parts.push(`BO ${o.numero_bo}`);
+  if (o.tipo_pericia) parts.push(o.tipo_pericia);
+  if (o.municipio) parts.push(o.municipio);
+  if (parts.length) return parts.join(" — ");
+  const d = new Date(o.created_at);
+  return Number.isNaN(d.getTime())
+    ? "Caso sem nome"
+    : `Caso de ${d.toLocaleDateString("pt-BR")}`;
+}
+
+/**
+ * Patch completo a partir do caso como está. `update_occurrence` sobrescreve
+ * TODOS os campos editáveis (campo ausente vira NULL), então quem muda um só
+ * campo parte daqui e troca o que quer — senão apaga o resto sem querer.
+ */
+export function editFromOccurrence(o: Occurrence): OccurrenceEdit {
+  return {
+    titulo: o.titulo,
+    numero_bo: o.numero_bo,
+    protocolo: o.protocolo,
+    requisicao: o.requisicao,
+    oficio: o.oficio,
+    delegacia: o.delegacia,
+    tipo_pericia: o.tipo_pericia,
+    natureza: o.natureza,
+    resultado: o.resultado ?? null,
+    municipio: o.municipio,
+    bairro: o.bairro,
+    logradouro: o.logradouro,
+    referencia: o.referencia,
+    latitude: o.latitude,
+    longitude: o.longitude,
+    status: o.status,
+    peritos: [...o.peritos],
+  };
 }

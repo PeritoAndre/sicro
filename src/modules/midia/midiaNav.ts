@@ -28,26 +28,31 @@ export function rememberMidiaAba(pathname: string): void {
   }
 }
 
-// ---- último módulo de trabalho (para o "Continuar ocorrência" do Início) ----
-const WORK_KEY = "sicro.ultimoModulo.v1";
+// ---- último módulo de trabalho de cada caso (o Início volta direto nele) ----
+const WORK_KEY = "sicro.ultimoModulo.v2";
 const WORK_PATHS = ["/croqui", "/imagem", "/video", "/audio"];
 
-export function rememberWorkModule(pathname: string): void {
+/** Guarda em que módulo o caso `caseId` foi trabalhado por último. */
+export function rememberWorkModule(pathname: string, caseId: string | null | undefined): void {
+  if (!caseId) return;
   const hit = WORK_PATHS.find((p) => pathname === p || pathname.startsWith(p + "/"));
   if (!hit) return;
   try {
-    localStorage.setItem(WORK_KEY, hit);
+    localStorage.setItem(`${WORK_KEY}.${caseId}`, hit);
   } catch {
     /* só não lembra */
   }
 }
 
-/** Onde o "Continuar ocorrência" leva: o último módulo usado (padrão: Vídeo e Áudio). */
-export function lastWorkModule(): string {
+/**
+ * Onde abrir o caso `caseId`: o último módulo usado nele, ou `null` se ainda
+ * não houve trabalho (o Início fica mostrando os módulos para escolher).
+ */
+export function lastWorkModuleOf(caseId: string): string | null {
   try {
-    const v = localStorage.getItem(WORK_KEY);
-    return v && WORK_PATHS.includes(v) ? v : lastMidiaAba();
+    const v = localStorage.getItem(`${WORK_KEY}.${caseId}`);
+    return v && WORK_PATHS.includes(v) ? v : null;
   } catch {
-    return "/video";
+    return null;
   }
 }
