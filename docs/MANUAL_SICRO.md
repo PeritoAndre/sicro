@@ -501,6 +501,19 @@ e os extraídos dos vídeos.
 ### 7.7 Player e abas
 
 - Player com **forma de onda**, marcadores e **loop A–B**.
+- **Espectrograma interativo** logo abaixo do player (o botão "Mostrar/Esconder
+  espectrograma" fica lembrado): tempo × frequência, intensidade em cor.
+  - A linha branca acompanha o player; um **clique** leva o player ao ponto.
+  - **Ctrl + roda** dá zoom no tempo (no ponto do cursor); com zoom, **arrastar**
+    ou a roda andam; **duplo clique** volta ao áudio inteiro.
+  - **Shift + arrastar** marca o trecho **A–B** no player — para ouvir em loop,
+    recortar ou usar como perfil de ruído no realce.
+  - Passando o mouse, a barra mostra **tempo · frequência · nível (dB)** do ponto.
+  - Ajustes: escala **logarítmica** (boa para voz) ou **linear**; **resolução** da
+    FFT (1024 separa melhor os instantes, 8192 as frequências); frequência
+    máxima (4 kHz para voz, 8 kHz ou tudo); **contraste** (o nível abaixo do qual
+    fica preto).
+  - Afastado, cada coluna guarda o pico do seu trecho: um clique curto não some.
 - **Realçar** gera um novo derivado (o original não muda), com a receita exata
   gravada no caso. Os filtros vêm agrupados e são aplicados sempre na mesma
   ordem, não na ordem em que você marca:

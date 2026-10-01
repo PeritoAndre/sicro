@@ -52,6 +52,7 @@ import {
 } from "@modules/midia/midiaLink";
 import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
 import { AudioAnalysisPanel } from "./AudioAnalysisPanel";
+import { AudioSpectrogram } from "./AudioSpectrogram";
 import styles from "./AudioModule.module.css";
 
 const AUDIO_EXT = ["opus", "mp3", "m4a", "wav", "amr", "aac", "ogg", "flac", "wma"];
@@ -219,6 +220,15 @@ function videoAudio(v: VideoMedia): "sim" | "nao" | "?" {
 /** Áudio aberto por último — volta selecionado ao retornar à aba. */
 let lastSelectedAudioId: string | null = null;
 
+const SPECTRO_OPEN_KEY = "sicro.audio.spectroOpen.v1";
+function loadSpectroOpen(): boolean {
+  try {
+    return localStorage.getItem(SPECTRO_OPEN_KEY) !== "0";
+  } catch {
+    return true;
+  }
+}
+
 export function AudioModule() {
   const ws = useWorkspaceStore(selectActiveWorkspacePath);
   const navigate = useNavigate();
@@ -253,6 +263,16 @@ export function AudioModule() {
   const [linkReq, setLinkReq] = useState<AudioHandoff | null>(null);
   const [linkNotice, setLinkNotice] = useState<string | null>(null);
   const [seekOnLoad, setSeekOnLoad] = useState<{ id: string; t: number } | null>(null);
+  // Espectrograma interativo sob o player (acompanha o tempo do player).
+  const [playerTime, setPlayerTime] = useState(0);
+  const [spectroOpen, setSpectroOpen] = useState(loadSpectroOpen);
+  useEffect(() => {
+    try {
+      localStorage.setItem(SPECTRO_OPEN_KEY, spectroOpen ? "1" : "0");
+    } catch {
+      /* só não lembra */
+    }
+  }, [spectroOpen]);
 
   const reload = useCallback(async () => {
     if (!ws) return;
@@ -784,7 +804,24 @@ export function AudioModule() {
                   workspacePath={ws}
                   audioSha256={selected.sha256}
                   initialTime={seekOnLoad?.id === selected.id ? seekOnLoad.t : null}
+                  onTimeChange={setPlayerTime}
                 />
+
+                <div className={styles.spectroToggle}>
+                  <button type="button" onClick={() => setSpectroOpen((o) => !o)}>
+                    <Activity size={12} aria-hidden /> {spectroOpen ? "Esconder espectrograma" : "Mostrar espectrograma"}
+                  </button>
+                </div>
+                {spectroOpen && (selected.duration_s ?? 0) > 0 && (
+                  <AudioSpectrogram
+                    workspacePath={ws}
+                    audioId={selected.id}
+                    duration={selected.duration_s ?? 0}
+                    time={playerTime}
+                    onSeek={(t) => playerRef.current?.seekTo(t)}
+                    onSelect={(a, b) => playerRef.current?.setLoop(a, b)}
+                  />
+                )}
 
                 {/* W16 — abas por intenção. O player fica sempre visível
                     acima; aqui embaixo só troca a "bancada" de ferramentas. */}

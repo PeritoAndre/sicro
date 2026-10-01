@@ -567,3 +567,24 @@
   color: var(--sicro-fg-dim);
   font-size: var(--text-sm);
 }
+
+/* botão do espectrograma sob o player */
+.spectroToggle {
+  display: flex;
+  justify-content: flex-end;
+  margin: -4px 0 -2px;
+}
+.spectroToggle button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+  font-family: inherit;
+  cursor: pointer;
+}
+.spectroToggle button:hover {
+  color: var(--sicro-fg);
+}

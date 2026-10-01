@@ -50,6 +50,8 @@ export interface AudioPlayerHandle {
   getTime: () => number;
   /** Trecho A-B atual (ordenado), ou null se não definido. */
   getLoop: () => { a: number; b: number } | null;
+  /** Define o trecho A-B (ex.: seleção feita no espectrograma). */
+  setLoop: (a: number, b: number) => void;
 }
 
 export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPlayer(
@@ -89,6 +91,10 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
         loopA != null && loopB != null
           ? { a: Math.min(loopA, loopB), b: Math.max(loopA, loopB) }
           : null,
+      setLoop: (a: number, b: number) => {
+        setLoopA(Math.min(a, b));
+        setLoopB(Math.max(a, b));
+      },
     }),
     [loopA, loopB],
   );

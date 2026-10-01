@@ -1,0 +1,166 @@
+.box {
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-md);
+  background: var(--sicro-surface-1);
+  padding: 8px 10px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  font-size: 11px;
+  color: var(--sicro-fg-muted);
+}
+.title {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg);
+}
+.bar label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.bar select {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  font-size: 11px;
+  padding: 1px 3px;
+}
+.bar input[type="range"] {
+  width: 90px;
+  accent-color: var(--sicro-accent);
+}
+.bar code {
+  font-family: var(--font-mono);
+  color: var(--sicro-fg);
+  min-width: 52px;
+}
+.bar button {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  color: var(--sicro-fg-muted);
+  width: 24px;
+  height: 22px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.bar button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.spacer {
+  flex: 1;
+}
+.readout {
+  font-family: var(--font-mono);
+  color: var(--sicro-fg);
+  white-space: nowrap;
+}
+.plot {
+  display: flex;
+  gap: 4px;
+}
+.fAxis {
+  position: relative;
+  width: 48px;
+  flex-shrink: 0;
+}
+.fAxis span {
+  position: absolute;
+  right: 2px;
+  transform: translateY(-50%);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--sicro-fg-dim);
+  white-space: nowrap;
+}
+.canvasWrap {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  background: #000;
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+.canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  image-rendering: auto;
+}
+.fLine {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  pointer-events: none;
+}
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: #fff;
+  box-shadow: 0 0 4px rgba(255, 255, 255, 0.6);
+  pointer-events: none;
+}
+.sel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(53, 196, 122, 0.22);
+  border-left: 1px solid rgba(53, 196, 122, 0.9);
+  border-right: 1px solid rgba(53, 196, 122, 0.9);
+  pointer-events: none;
+}
+.cross {
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.loading,
+.err {
+  position: absolute;
+  right: 6px;
+  top: 4px;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #ddd;
+  pointer-events: none;
+}
+.err {
+  color: #f88;
+}
+.tAxis {
+  position: relative;
+  height: 14px;
+  margin-left: 52px;
+}
+.tAxis span {
+  position: absolute;
+  transform: translateX(-50%);
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--sicro-fg-dim);
+  white-space: nowrap;
+}

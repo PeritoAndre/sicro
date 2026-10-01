@@ -16,6 +16,7 @@ use crate::error::{Result, SicroError};
 /// (medição, espectro, ENF). Determinístico e testável; não altera o áudio.
 pub mod analysis;
 pub mod enhance;
+pub mod spectro;
 
 /// Metadados técnicos lidos do áudio via ffprobe (best-effort).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

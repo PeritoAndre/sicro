@@ -304,6 +304,32 @@ pub async fn audio_measure(
     Ok(m)
 }
 
+/// Espectrograma interativo: a imagem (u8 em base64) da janela [t0, t1] do
+/// WAV de análise, no tamanho pedido pela tela. Só lê; não registra log (é
+/// chamado a cada zoom e arraste).
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+pub async fn audio_spectrogram_data(
+    workspace_path: String,
+    audio_id: String,
+    t0: f64,
+    t1: f64,
+    width: usize,
+    height: usize,
+    fft_size: usize,
+    log_freq: bool,
+    f_max: Option<f32>,
+) -> Result<crate::audio::spectro::SpectroImage> {
+    let ws = PathBuf::from(&workspace_path);
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+    let (_media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
+    let req = crate::audio::spectro::Request { t0, t1, width, height, fft_size, log_freq, f_max };
+    tauri::async_runtime::spawn_blocking(move || crate::audio::spectro::render(&wav_abs, &req))
+        .await
+        .map_err(|e| SicroError::Validation(format!("falha ao calcular o espectrograma: {e}")))?
+}
+
 /// Espectro (Welch FFT) de um áudio inteiro. `fft_size` potência de 2.
 #[tauri::command]
 pub async fn audio_spectrum(

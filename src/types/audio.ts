@@ -93,6 +93,22 @@ export interface AudioMeasurements {
   extended: ExtendedMeasurements | null;
 }
 
+/** Espectrograma interativo: imagem u8 (0 = −120 dB … 255 = 0 dB) da janela pedida. */
+export interface SpectroImage {
+  width: number;
+  height: number;
+  t0: number;
+  t1: number;
+  f_min: number;
+  f_max: number;
+  log_freq: boolean;
+  fft_size: number;
+  sample_rate: number;
+  duration_s: number;
+  /** width × height bytes, linha 0 = frequência mais alta. */
+  data_b64: string;
+}
+
 export interface ExtendedMeasurements {
   noise_floor_db: number | null;
   bit_depth_effective: number | null;

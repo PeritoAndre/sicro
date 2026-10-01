@@ -132,6 +132,7 @@ pub fn run() {
             commands::audio_commands::audio_spectrogram,
             commands::audio_commands::audio_measure,
             commands::audio_commands::audio_spectrum,
+            commands::audio_commands::audio_spectrogram_data,
             commands::audio_commands::audio_enf,
             commands::audio_commands::extract_audio_clip,
             commands::audio_commands::compile_audio_clips,

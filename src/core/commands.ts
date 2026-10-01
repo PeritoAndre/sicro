@@ -100,6 +100,7 @@ import type {
   SpectrumResult,
   TranscriptCandidate,
   WhisperStatus,
+  SpectroImage,
 } from "@domain/audio";
 import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
 import { toSicroError, type SicroError } from "./errors";
@@ -1059,6 +1060,25 @@ export const commands = {
   },
 
   /** W12 — Espectro (Welch FFT). `fftSize` potência de 2 (default 4096). */
+  /** Espectrograma interativo da janela [t0, t1] no tamanho da tela. */
+  audioSpectrogramData(
+    workspacePath: string,
+    audioId: string,
+    opts: { t0: number; t1: number; width: number; height: number; fftSize: number; logFreq: boolean; fMax: number | null },
+  ): Promise<SpectroImage> {
+    return safeInvoke<SpectroImage>("audio_spectrogram_data", {
+      workspacePath,
+      audioId,
+      t0: opts.t0,
+      t1: opts.t1,
+      width: opts.width,
+      height: opts.height,
+      fftSize: opts.fftSize,
+      logFreq: opts.logFreq,
+      fMax: opts.fMax,
+    });
+  },
+
   audioSpectrum(
     workspacePath: string,
     audioId: string,
