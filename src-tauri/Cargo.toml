@@ -105,6 +105,7 @@ rustfft = "6"
 #   Windows só com o MSVC já presente. Usado em `async_runtime::spawn_blocking`.
 ureq = { version = "2", default-features = false, features = ["native-tls", "json", "gzip"] }
 native-tls = "0.2"
+nnnoiseless = { version = "0.5.2", default-features = false }
 
 # Linux (WebKitGTK) — o player de mídia (GStreamer) não lê o asset protocol do
 # Tauri; <video>/<audio> vão por file:// e a página precisa ser "local" no

@@ -501,10 +501,25 @@ e os extraídos dos vídeos.
 ### 7.7 Player e abas
 
 - Player com **forma de onda**, marcadores e **loop A–B**.
-- **Realçar:** reduzir ruído, cortar graves/agudos, normalizar — gera um novo
-  derivado (não altera o original).
-- **Analisar:** espectrograma + medições (pico, RMS, clipping) e **ENF**
-  (frequência da rede elétrica — indício de continuidade).
+- **Realçar** gera um novo derivado (o original não muda), com a receita exata
+  gravada no caso. Os filtros vêm agrupados e são aplicados sempre na mesma
+  ordem, não na ordem em que você marca:
+  - **Limpeza:** recuperar saturação (picos estourados), tirar cliques e
+    **zumbido da rede** (60 Hz no Brasil, ou 50 Hz, com os harmônicos).
+  - **Ruído:** reduzir ruído (FFT, para chiado constante); **redutor de ruído de
+    fala (IA local)** — rede neural RNNoise embutida no SICRO, roda offline, boa
+    para ruído que varia (trânsito, vento); **ruído por amostra** — marque **A** e
+    **B** no player num trecho **só de ruído** (sem fala, ≥ 0,5 s) e o SICRO mede
+    esse ruído e o tira do áudio inteiro.
+  - **Faixa:** cortar graves (< 80 Hz), cortar agudos (> 8 kHz) ou **banda de voz**
+    (300–3400 Hz).
+  - **Volume:** normalizar.
+- **Analisar:** espectrograma + medições e **ENF** (frequência da rede elétrica
+  — indício de continuidade). As **medições** trazem pico, RMS, fator de crista,
+  offset DC, clipping e, pelo FFmpeg, o **piso de ruído**, os **bits efetivos**
+  (quantos bits o sinal usa de fato — 13 de 16 indica áudio que passou por
+  menos resolução), o **loudness integrado EBU R128** (LUFS), a faixa de loudness,
+  o **true peak** e o **mapa de silêncios** (< −50 dB por ≥ 0,5 s).
 - **Trechos:** recortar um trecho (A–B) e montar uma **compilação rotulada** de
   vários trechos.
 - **Ficha:** metadados técnicos e hashes.

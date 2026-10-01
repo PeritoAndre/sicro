@@ -12,7 +12,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::audio::analysis::{self, AudioMeasurements, EnfResult, SpectrumResult};
-use crate::audio::{convert_to_wav, enhance_to_wav, extract_audio_to_wav, probe_audio};
+use crate::audio::{convert_to_wav, extract_audio_to_wav, probe_audio};
 use crate::database::connection::open_connection;
 use crate::database::migrations::run_migrations;
 use crate::database::repositories::{audio_repo, occurrence_repo};
@@ -285,7 +285,9 @@ pub async fn audio_measure(
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
     let (samples, sr, ch) = analysis::read_wav_mono(&wav_abs)?;
-    let m = analysis::measure(&samples, sr, ch, 0.997);
+    let mut m = analysis::measure(&samples, sr, ch, 0.997);
+    // Ruído de fundo, loudness e silêncios (FFmpeg); sem ffmpeg, fica só o básico.
+    m.extended = crate::audio::extended_measure(&wav_abs, m.duration_s).ok();
     audio_repo::insert_log(
         &conn,
         &manifest.occurrence_id,
@@ -645,43 +647,11 @@ pub async fn delete_audio_marker(workspace_path: String, marker_id: String) -> R
 // ---------------------------------------------------------------------------
 // Realce (auxílio de escuta — NÃO-destrutivo)
 
-/// Converte chaves de filtro (do front) na cadeia FFmpeg `-af` correspondente.
-/// Cada filtro é padrão e reproduzível; nada interpreta o conteúdo.
-fn build_filter_chain(keys: &[String]) -> String {
-    let mut parts: Vec<&str> = Vec::new();
-    for k in keys {
-        match k.as_str() {
-            // Redução de ruído de banda larga (FFT denoise).
-            "denoise" => parts.push("afftdn"),
-            // Remove ronco/rumble de baixa frequência (< 80 Hz).
-            "highpass" => parts.push("highpass=f=80"),
-            // Corta sibilância/chiado acima de 8 kHz.
-            "lowpass" => parts.push("lowpass=f=8000"),
-            // Normalização dinâmica de volume (equaliza trechos baixos/altos).
-            "normalize" => parts.push("dynaudnorm"),
-            // W12 — Remove zumbido da rede elétrica (50 Hz + harmônicos) por
-            // bandreject (notch) estreito. Subtrativo: só REMOVE energia da rede.
-            "notch_hum_50" => {
-                parts.push("bandreject=f=50:width_type=h:width=4");
-                parts.push("bandreject=f=100:width_type=h:width=4");
-                parts.push("bandreject=f=150:width_type=h:width=4");
-            }
-            // Idem para 60 Hz (rede das Américas).
-            "notch_hum_60" => {
-                parts.push("bandreject=f=60:width_type=h:width=4");
-                parts.push("bandreject=f=120:width_type=h:width=4");
-                parts.push("bandreject=f=180:width_type=h:width=4");
-            }
-            // Banda de voz telefônica (300–3400 Hz): foca a inteligibilidade
-            // da fala cortando o que está fora dela.
-            "bandpass_voice" => {
-                parts.push("highpass=f=300");
-                parts.push("lowpass=f=3400");
-            }
-            _ => {}
-        }
-    }
-    parts.join(",")
+/// Trecho só de ruído (A–B do player) para a redução de ruído por amostra.
+#[derive(Debug, Clone, Copy, serde::Deserialize)]
+pub struct NoiseProfileInput {
+    pub start_s: f64,
+    pub end_s: f64,
 }
 
 /// Gera um DERIVADO realçado (auxílio de escuta) a partir do WAV de análise.
@@ -696,6 +666,7 @@ pub async fn enhance_audio(
     workspace_path: String,
     source_audio_id: String,
     filters: Vec<String>,
+    noise_profile: Option<NoiseProfileInput>,
 ) -> Result<AudioMedia> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
@@ -708,12 +679,6 @@ pub async fn enhance_audio(
     let source = audio_repo::find_media_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation("áudio de origem não encontrado".into()))?;
 
-    let chain = build_filter_chain(&filters);
-    if chain.is_empty() {
-        return Err(SicroError::Validation(
-            "selecione ao menos um filtro de realce".into(),
-        ));
-    }
 
     let src_abs = ws.join(&source.relative_path);
     if !src_abs.is_file() {
@@ -732,7 +697,11 @@ pub async fn enhance_audio(
     let out_name = unique_name(&wav_dir, &format!("{stem}-realce.wav"));
     let out_path = wav_dir.join(&out_name);
 
-    enhance_to_wav(&src_abs, &out_path, &chain)?;
+    let profile = noise_profile.map(|p| crate::audio::enhance::NoiseProfile {
+        start_s: p.start_s.min(p.end_s),
+        end_s: p.start_s.max(p.end_s),
+    });
+    let recipe = crate::audio::enhance::run(&src_abs, &out_path, &filters, profile)?;
     let sha256 = sha256_file(&out_path)?;
     if let Some(existing) = audio_repo::find_media_by_sha256(&conn, &occurrence_id, &sha256)? {
         let _ = std::fs::remove_file(&out_path);
@@ -761,7 +730,7 @@ pub async fn enhance_audio(
         occurrence_id,
         source_audio_sha256: source.sha256.clone(),
         output_audio_sha256: media.sha256.clone(),
-        filters_json: json!({ "keys": filters, "chain": chain }).to_string(),
+        filters_json: json!({ "keys": filters, "receita": recipe }).to_string(),
         created_at: Utc::now(),
     };
     audio_repo::insert_enhancement(&conn, &enh)?;

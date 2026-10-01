@@ -326,6 +326,36 @@
   flex-wrap: wrap;
   gap: var(--space-2) var(--space-4);
 }
+.realceGroups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-3) var(--space-4);
+}
+.realceGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.realceGroupTitle {
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sicro-fg-dim);
+}
+.realceSelect {
+  margin-left: 6px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  font-size: var(--text-xs);
+  padding: 2px 4px;
+}
+.realceHint {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
 .realceFilter {
   display: inline-flex;
   align-items: center;

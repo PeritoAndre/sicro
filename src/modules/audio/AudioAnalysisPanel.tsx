@@ -50,6 +50,8 @@ export function AudioAnalysisPanel({ workspacePath, audioId }: Props) {
   };
 
   const dbfs = (v: number) => (v <= -119 ? "−∞" : `${v.toFixed(1)} dBFS`);
+  const db = (v: number | null, unit: string) => (v == null ? "—" : `${v.toFixed(1)} ${unit}`);
+  const fmtS = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(1).padStart(4, "0")}`;
 
   return (
     <section
@@ -135,6 +137,33 @@ export function AudioAnalysisPanel({ workspacePath, audioId }: Props) {
                 v={`${measure.clipped_samples} amostras · ${measure.clipped_runs} trechos · ${measure.clipped_pct.toFixed(3)}%`}
                 warn={measure.clipped_samples > 0}
               />
+              {measure.extended && (
+                <>
+                  <Row k="Piso de ruído" v={db(measure.extended.noise_floor_db, "dB")} />
+                  <Row
+                    k="Bits efetivos"
+                    v={
+                      measure.extended.bit_depth_effective != null
+                        ? `${measure.extended.bit_depth_effective} de ${measure.extended.bit_depth_container ?? "?"} bits`
+                        : "—"
+                    }
+                  />
+                  <Row k="Loudness integrado (EBU R128)" v={db(measure.extended.integrated_lufs, "LUFS")} />
+                  <Row k="Faixa de loudness" v={db(measure.extended.loudness_range_lu, "LU")} />
+                  <Row k="True peak" v={db(measure.extended.true_peak_dbfs, "dBFS")} />
+                  <Row
+                    k={`Silêncios (< ${measure.extended.silence_threshold_db} dB, ≥ ${measure.extended.silence_min_s} s)`}
+                    v={
+                      measure.extended.silences.length === 0
+                        ? "nenhum"
+                        : `${measure.extended.silences.length} · ${measure.extended.silences
+                            .slice(0, 4)
+                            .map(([a, b]) => `${fmtS(a)}–${fmtS(b)}`)
+                            .join(", ")}${measure.extended.silences.length > 4 ? "…" : ""}`
+                    }
+                  />
+                </>
+              )}
             </tbody>
           </table>
         </div>

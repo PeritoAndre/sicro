@@ -91,6 +91,79 @@ pub struct AudioMeasurements {
     pub clipped_samples: u64,
     pub clipped_runs: u64,
     pub clipped_pct: f32,
+    /// Medições do FFmpeg (ruído de fundo, loudness, silêncios); None sem ffmpeg.
+    #[serde(default)]
+    pub extended: Option<ExtendedMeasurements>,
+}
+
+/// Medições objetivas feitas pelo FFmpeg (`astats`, `ebur128`, `silencedetect`).
+#[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
+pub struct ExtendedMeasurements {
+    /// Piso de ruído (dB) estimado pelo `astats`.
+    pub noise_floor_db: Option<f32>,
+    /// Profundidade de bits EFETIVA (usada pelo sinal) e a do arquivo.
+    pub bit_depth_effective: Option<u32>,
+    pub bit_depth_container: Option<u32>,
+    /// Loudness integrado (LUFS), faixa de loudness (LU) e true peak (dBFS) — EBU R128.
+    pub integrated_lufs: Option<f32>,
+    pub loudness_range_lu: Option<f32>,
+    pub true_peak_dbfs: Option<f32>,
+    /// Silêncios abaixo de `silence_threshold_db` por pelo menos `silence_min_s`.
+    pub silence_threshold_db: f32,
+    pub silence_min_s: f32,
+    pub silences: Vec<(f64, f64)>,
+}
+
+/// Lê a saída (stderr) do ffmpeg com `astats`, `ebur128` e `silencedetect`.
+pub fn parse_extended(stderr: &str, threshold_db: f32, min_s: f32, duration_s: f64) -> ExtendedMeasurements {
+    let num = |s: &str| -> Option<f32> {
+        s.split_whitespace().next().and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite())
+    };
+    let mut m = ExtendedMeasurements {
+        silence_threshold_db: threshold_db,
+        silence_min_s: min_s,
+        ..Default::default()
+    };
+    let mut in_overall = false;
+    let mut open: Option<f64> = None;
+    for line in stderr.lines() {
+        let l = line.trim();
+        if line.contains("Parsed_astats") {
+            if l.ends_with("Overall") {
+                in_overall = true;
+                continue;
+            }
+            if in_overall {
+                let body = l.splitn(2, "] ").nth(1).unwrap_or("");
+                if let Some(v) = body.strip_prefix("Noise floor dB:") {
+                    m.noise_floor_db = num(v);
+                } else if let Some(v) = body.strip_prefix("Bit depth:") {
+                    let parts: Vec<u32> = v.trim().split('/').filter_map(|x| x.trim().parse().ok()).collect();
+                    m.bit_depth_effective = parts.first().copied();
+                    m.bit_depth_container = parts.get(1).copied();
+                }
+            }
+        } else if let Some(v) = l.strip_prefix("I:") {
+            m.integrated_lufs = num(v);
+        } else if let Some(v) = l.strip_prefix("LRA:") {
+            m.loudness_range_lu = num(v);
+        } else if let Some(v) = l.strip_prefix("Peak:") {
+            m.true_peak_dbfs = num(v);
+        } else if let Some(i) = l.find("silence_start:") {
+            open = l[i + 14..].split_whitespace().next().and_then(|v| v.parse().ok());
+        } else if let Some(i) = l.find("silence_end:") {
+            let end: Option<f64> = l[i + 12..].split_whitespace().next().and_then(|v| v.parse().ok());
+            if let (Some(a), Some(b)) = (open.take(), end) {
+                m.silences.push((a.max(0.0), b));
+            }
+        }
+    }
+    // Silêncio que vai até o fim do arquivo não tem "silence_end".
+    if let Some(a) = open {
+        m.silences.push((a.max(0.0), duration_s));
+    }
+    // −inf (sinal digital zerado) vira None; o ffmpeg imprime "-inf".
+    m
 }
 
 /// Calcula as medições objetivas (§ Sample Data Export + Find Clipping do
@@ -147,6 +220,7 @@ pub fn measure(samples: &[f32], sr: u32, channels: u16, clip_threshold: f32) -> 
         } else {
             0.0
         },
+        extended: None,
     }
 }
 
@@ -430,5 +504,23 @@ mod tests {
         let e50 = enf(&sine(50.0, 0.2, 12.0, 1000), 1000, 50.0, 4.0, 2.0);
         assert!((e50.mean_hz - 50.0).abs() < 0.5, "ENF50 {}", e50.mean_hz);
         assert_eq!(e50.nominal_hz, 50.0);
+    }
+}
+
+#[cfg(test)]
+mod extended_tests {
+    use super::*;
+
+    #[test]
+    fn le_astats_ebur128_e_silencios() {
+        let err = "[Parsed_astats_0 @ 0x1] Channel: 1\n[Parsed_astats_0 @ 0x1] Noise floor dB: -70.0\n[Parsed_astats_0 @ 0x1] Overall\n[Parsed_astats_0 @ 0x1] Peak level dB: -16.08\n[Parsed_astats_0 @ 0x1] Noise floor dB: -61.25\n[Parsed_astats_0 @ 0x1] Bit depth: 13/16/16/16\n[silencedetect @ 0x2] silence_start: 1.5\n[silencedetect @ 0x2] silence_end: 3.25 | silence_duration: 1.75\n[silencedetect @ 0x2] silence_start: 9\n[Parsed_ebur128_1 @ 0x3] Summary:\n    I:         -21.8 LUFS\n    LRA:         4.2 LU\n    Peak:      -16.1 dBFS\n";
+        let m = parse_extended(err, -50.0, 0.5, 10.0);
+        assert_eq!(m.noise_floor_db, Some(-61.25));
+        assert_eq!(m.bit_depth_effective, Some(13));
+        assert_eq!(m.bit_depth_container, Some(16));
+        assert_eq!(m.integrated_lufs, Some(-21.8));
+        assert_eq!(m.loudness_range_lu, Some(4.2));
+        assert_eq!(m.true_peak_dbfs, Some(-16.1));
+        assert_eq!(m.silences, vec![(1.5, 3.25), (9.0, 10.0)]);
     }
 }

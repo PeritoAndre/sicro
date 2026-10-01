@@ -15,6 +15,7 @@ use crate::error::{Result, SicroError};
 /// W12 (paridade Audacity) — análise forense de áudio em Rust puro
 /// (medição, espectro, ENF). Determinístico e testável; não altera o áudio.
 pub mod analysis;
+pub mod enhance;
 
 /// Metadados técnicos lidos do áudio via ffprobe (best-effort).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -70,16 +71,6 @@ pub fn convert_to_wav(audio: &Path, out_wav: &Path) -> Result<()> {
     let i = audio.to_string_lossy();
     let o = out_wav.to_string_lossy();
     run_ffmpeg(&["-y", "-i", i.as_ref(), "-vn", "-acodec", "pcm_s16le", o.as_ref()])
-}
-
-/// Aplica uma cadeia de filtros FFmpeg (`-af`) ao WAV, gerando um DERIVADO de
-/// realce (auxílio de escuta). Determinístico/reproduzível dada a mesma cadeia.
-pub fn enhance_to_wav(src: &Path, out_wav: &Path, af_chain: &str) -> Result<()> {
-    let i = src.to_string_lossy();
-    let o = out_wav.to_string_lossy();
-    run_ffmpeg(&[
-        "-y", "-i", i.as_ref(), "-af", af_chain, "-acodec", "pcm_s16le", o.as_ref(),
-    ])
 }
 
 /// Converte um WAV para 16 kHz mono PCM 16-bit — formato exigido pelo whisper.cpp.
@@ -300,7 +291,7 @@ pub fn spectrogram_png(wav: &Path, out_png: &Path) -> Result<()> {
     ])
 }
 
-fn run_ffmpeg(args: &[&str]) -> Result<()> {
+pub(crate) fn run_ffmpeg(args: &[&str]) -> Result<()> {
     let ffmpeg = detect("ffmpeg")?;
     let output = crate::tools::command(&ffmpeg)
         .args(args)
@@ -313,6 +304,32 @@ fn run_ffmpeg(args: &[&str]) -> Result<()> {
         return Err(SicroError::Validation(format!("ffmpeg falhou: {tail}")));
     }
     Ok(())
+}
+
+/// Medições do FFmpeg (ruído de fundo, bits efetivos, EBU R128, true peak,
+/// silêncios) sobre o WAV de análise. Só lê; nada é gravado.
+pub fn extended_measure(wav: &Path, duration_s: f64) -> Result<analysis::ExtendedMeasurements> {
+    const SILENCE_DB: f32 = -50.0;
+    const SILENCE_MIN_S: f32 = 0.5;
+    let ffmpeg = detect("ffmpeg")?;
+    let af = format!(
+        "astats=measure_perchannel=none:measure_overall=Noise_floor+Bit_depth,ebur128=peak=true:framelog=verbose,silencedetect=n={SILENCE_DB}dB:d={SILENCE_MIN_S}"
+    );
+    let out = crate::tools::command(&ffmpeg)
+        .args(["-hide_banner", "-nostats", "-i"])
+        .arg(wav)
+        .args(["-af", &af, "-f", "null", "-"])
+        .output()
+        .map_err(|e| SicroError::Validation(format!("falha ao executar ffmpeg: {e}")))?;
+    if !out.status.success() {
+        return Err(SicroError::Validation("ffmpeg não conseguiu medir o áudio".into()));
+    }
+    Ok(analysis::parse_extended(
+        &String::from_utf8_lossy(&out.stderr),
+        SILENCE_DB,
+        SILENCE_MIN_S,
+        duration_s,
+    ))
 }
 
 /// Lê metadados de áudio com ffprobe. Best-effort: falha vira aviso, não erro.

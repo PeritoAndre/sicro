@@ -1169,11 +1169,14 @@ export const commands = {
     workspacePath: string,
     sourceAudioId: string,
     filters: string[],
+    /** Trecho só de ruído (A–B) para a redução por amostra. */
+    noiseProfile?: { start_s: number; end_s: number } | null,
   ): Promise<AudioMedia> {
     return safeInvoke<AudioMedia>("enhance_audio", {
       workspacePath,
       sourceAudioId,
       filters,
+      noiseProfile: noiseProfile ?? null,
     });
   },
 

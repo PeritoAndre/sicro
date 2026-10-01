@@ -89,6 +89,21 @@ export interface AudioMeasurements {
   clipped_samples: number;
   clipped_runs: number;
   clipped_pct: number;
+  /** Medições do FFmpeg (ruído de fundo, loudness, silêncios); null sem ffmpeg. */
+  extended: ExtendedMeasurements | null;
+}
+
+export interface ExtendedMeasurements {
+  noise_floor_db: number | null;
+  bit_depth_effective: number | null;
+  bit_depth_container: number | null;
+  integrated_lufs: number | null;
+  loudness_range_lu: number | null;
+  true_peak_dbfs: number | null;
+  silence_threshold_db: number;
+  silence_min_s: number;
+  /** [início, fim] em segundos. */
+  silences: [number, number][];
 }
 
 /** Espectro Welch (FFT janelada + média). */

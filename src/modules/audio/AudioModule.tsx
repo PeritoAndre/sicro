@@ -57,14 +57,54 @@ import styles from "./AudioModule.module.css";
 const AUDIO_EXT = ["opus", "mp3", "m4a", "wav", "amr", "aac", "ogg", "flac", "wma"];
 const VIDEO_EXT = ["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpg", "mpeg", "ts"];
 
-/** Filtros de realce — auxílio de escuta, todos padrão e determinísticos. */
-const REALCE_FILTERS: { key: string; label: string; hint: string }[] = [
-  { key: "denoise", label: "Reduzir ruído", hint: "afftdn — ruído de banda larga (chiado/ventilador)" },
-  { key: "highpass", label: "Cortar graves (<80 Hz)", hint: "highpass — remove ronco/rumble de fundo" },
-  { key: "lowpass", label: "Cortar agudos (>8 kHz)", hint: "lowpass — atenua sibilância/chiado agudo" },
-  { key: "normalize", label: "Normalizar volume", hint: "dynaudnorm — equaliza trechos baixos e altos" },
+/**
+ * Filtros de realce — auxílio de escuta, todos determinísticos e locais. A
+ * ordem de aplicação é fixa no backend (limpeza → zumbido/graves → ruído →
+ * faixa → volume), não a ordem em que são marcados.
+ */
+interface RealceFilter {
+  key: string;
+  label: string;
+  hint: string;
+}
+const REALCE_GROUPS: { title: string; filters: RealceFilter[] }[] = [
+  {
+    title: "Limpeza",
+    filters: [
+      { key: "declip", label: "Recuperar saturação", hint: "adeclip — reconstrói picos estourados (clipping)" },
+      { key: "declick", label: "Tirar cliques", hint: "adeclick — remove estalos e cliques curtos" },
+    ],
+  },
+  {
+    title: "Ruído",
+    filters: [
+      { key: "denoise", label: "Reduzir ruído (FFT)", hint: "afftdn — ruído de banda larga constante (chiado, ventilador)" },
+      {
+        key: "denoise_ai",
+        label: "Redutor de ruído de fala (IA local)",
+        hint: "RNNoise (nnnoiseless) — rede neural embutida no SICRO, roda offline; bom para ruído que varia (trânsito, vento)",
+      },
+      {
+        key: "noise_profile",
+        label: "Ruído por amostra (trecho A–B)",
+        hint: "Marque A e B no player num trecho SÓ de ruído (sem fala): o SICRO mede esse ruído e o tira do áudio inteiro",
+      },
+    ],
+  },
+  {
+    title: "Faixa",
+    filters: [
+      { key: "highpass", label: "Cortar graves (<80 Hz)", hint: "highpass — remove ronco/rumble de fundo" },
+      { key: "lowpass", label: "Cortar agudos (>8 kHz)", hint: "lowpass — atenua sibilância/chiado agudo" },
+      { key: "bandpass_voice", label: "Banda de voz (300–3400 Hz)", hint: "Mantém só a faixa da voz telefônica — foca a inteligibilidade" },
+    ],
+  },
+  {
+    title: "Volume",
+    filters: [{ key: "normalize", label: "Normalizar volume", hint: "dynaudnorm — equaliza trechos baixos e altos" }],
+  },
 ];
-const REALCE_KEYS = REALCE_FILTERS.map((f) => f.key);
+const REALCE_KEYS = REALCE_GROUPS.flatMap((g) => g.filters.map((f) => f.key));
 
 // W16 — abas do detalhe por INTENÇÃO (o player fica sempre visível acima).
 // Substitui a rolagem única onde tudo ficava empilhado.
@@ -197,9 +237,9 @@ export function AudioModule() {
   const [realceSel, setRealceSel] = useState<Record<string, boolean>>({
     denoise: true,
     highpass: true,
-    lowpass: false,
-    normalize: false,
   });
+  /** Zumbido da rede a remover (60 Hz no Brasil), ou null. */
+  const [humHz, setHumHz] = useState<50 | 60 | null>(null);
   const [spectro, setSpectro] = useState<{
     id: string;
     url: string;
@@ -407,14 +447,26 @@ export function AudioModule() {
   const handleEnhance = async () => {
     if (!ws || !selected) return;
     const filters = REALCE_KEYS.filter((k) => realceSel[k]);
+    if (humHz) filters.push(humHz === 50 ? "notch_hum_50" : "notch_hum_60");
     if (filters.length === 0) {
       setError("Selecione ao menos um filtro de realce.");
       return;
     }
+    let noiseProfile: { start_s: number; end_s: number } | null = null;
+    if (realceSel.noise_profile) {
+      const loop = playerRef.current?.getLoop();
+      if (!loop || loop.b - loop.a < 0.5) {
+        setError(
+          "Para o ruído por amostra, marque A e B no player num trecho só de ruído (sem fala), de pelo menos meio segundo.",
+        );
+        return;
+      }
+      noiseProfile = { start_s: loop.a, end_s: loop.b };
+    }
     setBusy("enhance");
     setError(null);
     try {
-      const m = await commands.enhanceAudio(ws, selected.id, filters);
+      const m = await commands.enhanceAudio(ws, selected.id, filters, noiseProfile);
       await reload();
       setSelectedId(m.id);
     } catch (e) {
@@ -763,7 +815,7 @@ export function AudioModule() {
                         <SlidersHorizontal size={13} aria-hidden /> Derivado de
                         realce
                         {selected.original_path ? ` (${selected.original_path})` : ""}.
-                        Filtros aplicados de forma determinística (FFmpeg); o WAV
+                        Filtros aplicados de forma determinística e local (receita gravada no caso); o WAV
                         de análise original permanece intacto e com hash próprio.
                       </div>
                     ) : (
@@ -775,27 +827,50 @@ export function AudioModule() {
                             <em>(auxílio, não-destrutivo)</em>
                           </span>
                         </div>
-                        <div className={styles.realceFilters}>
-                          {REALCE_FILTERS.map((f) => (
-                            <label
-                              key={f.key}
-                              className={styles.realceFilter}
-                              title={f.hint}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={!!realceSel[f.key]}
-                                onChange={(e) =>
-                                  setRealceSel((s) => ({
-                                    ...s,
-                                    [f.key]: e.target.checked,
-                                  }))
-                                }
-                              />
-                              {f.label}
-                            </label>
+                        <div className={styles.realceGroups}>
+                          {REALCE_GROUPS.map((g) => (
+                            <div key={g.title} className={styles.realceGroup}>
+                              <span className={styles.realceGroupTitle}>{g.title}</span>
+                              {g.filters.map((f) => (
+                                <label key={f.key} className={styles.realceFilter} title={f.hint}>
+                                  <input
+                                    type="checkbox"
+                                    checked={!!realceSel[f.key]}
+                                    onChange={(e) =>
+                                      setRealceSel((s) => ({ ...s, [f.key]: e.target.checked }))
+                                    }
+                                  />
+                                  {f.label}
+                                </label>
+                              ))}
+                              {g.title === "Limpeza" && (
+                                <label
+                                  className={styles.realceFilter}
+                                  title="bandreject — tira o zumbido da rede elétrica e seus harmônicos (60 Hz no Brasil)"
+                                >
+                                  Zumbido da rede
+                                  <select
+                                    className={styles.realceSelect}
+                                    value={humHz ?? ""}
+                                    onChange={(e) =>
+                                      setHumHz(e.target.value ? (Number(e.target.value) as 50 | 60) : null)
+                                    }
+                                  >
+                                    <option value="">não tirar</option>
+                                    <option value="60">60 Hz (Brasil)</option>
+                                    <option value="50">50 Hz</option>
+                                  </select>
+                                </label>
+                              )}
+                            </div>
                           ))}
                         </div>
+                        {realceSel.noise_profile && (
+                          <p className={styles.realceHint}>
+                            Ruído por amostra: marque <strong>A</strong> e <strong>B</strong> no player
+                            num trecho só de ruído (sem fala), de pelo menos meio segundo.
+                          </p>
+                        )}
                         <div className={styles.realceFoot}>
                           <Button
                             variant="secondary"
