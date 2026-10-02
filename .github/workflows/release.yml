@@ -1,15 +1,10 @@
 # Compila o SICRO para Linux e Windows e monta a release como RASCUNHO.
-#
-# Dispara com `scripts/release.sh` (ou Actions → Release → Run workflow), ou ao
-# empurrar uma tag v*. A versão vem do package.json; as notas, de
-# docs/releases/v<versão>.md. Conferido o rascunho, publica-se à mão:
-#   gh release edit v<versão> --draft=false
+# Dispara só pelo `scripts/release.sh` (ou Actions → Run workflow): a tag que a
+# publicação cria não deve rodar isto de novo. Publicar: gh release edit v<versão> --draft=false
 name: Release
 
 on:
   workflow_dispatch:
-  push:
-    tags: ["v*"]
 
 permissions:
   contents: write
