@@ -1,7 +1,4 @@
-//! G12.9 — Cálculo de histograma + estatísticas.
-//!
-//! Função pura sobre RgbaImage. Retorna 4 vetores de 256 bins (R, G, B,
-//! Luminância) + estatísticas por canal.
+//! Histograma (R, G, B, luminância; 256 bins) e estatísticas por canal.
 
 use image::RgbaImage;
 

@@ -1,8 +1,4 @@
-/**
- * Factories do croqui corporal — criação de documento e de marcadores de lesão.
- * IDs via crypto.randomUUID (com fallback pra ambientes de teste), igual ao
- * croqui viário (engine/factories.ts).
- */
+/** Factories do croqui corporal: documento e marcadores de lesão. */
 
 import { BODY_TEMPLATES, type BodyView } from "../assets/bodyTemplates";
 import type { LesaoTipo } from "./lesions";
@@ -21,7 +17,7 @@ function uid(prefix: string): string {
     .slice(2, 8)}`;
 }
 
-export interface MakeCorpoDocOptions {
+interface MakeCorpoDocOptions {
   template_id?: BodyView;
   title?: string;
   now?: string; // ISO; injetável pra testes determinísticos

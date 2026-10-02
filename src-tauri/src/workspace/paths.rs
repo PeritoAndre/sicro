@@ -5,13 +5,9 @@ use std::path::{Path, PathBuf};
 use crate::error::{Result, SicroError};
 use crate::filesystem::sanitize_folder_name;
 
-/// Compute the folder name (no path, no extension) for a workspace from
-/// the data the user supplied. Falls back to "ocorrencia" if everything
-/// is empty.
-///
-/// Com nome do caso, a pasta é o próprio nome ("Laudo 63404_26.sicro") —
-/// `unique_workspace_path` cuida de colisão. Sem nome, o esquema antigo
-/// (BO + município + id curto).
+/// Nome da pasta do workspace. Com nome do caso, é o próprio nome (colisão é
+/// tratada em `unique_workspace_path`); sem, "BO_<bo>_<município>_<id curto>";
+/// tudo vazio → "ocorrencia".
 pub fn derive_workspace_name(
     titulo: Option<&str>,
     numero_bo: Option<&str>,
@@ -38,8 +34,7 @@ pub fn derive_workspace_name(
     sanitize_folder_name(&parts.join("_"))
 }
 
-/// Compute the full path for a fresh workspace, ensuring it doesn't already
-/// exist (so we don't accidentally overwrite a sibling).
+/// Caminho novo que ainda não existe (não sobrescreve vizinho).
 pub fn unique_workspace_path(parent: &Path, base_name: &str) -> Result<PathBuf> {
     let mut candidate = parent.join(format!("{base_name}.sicro"));
     let mut suffix = 1;

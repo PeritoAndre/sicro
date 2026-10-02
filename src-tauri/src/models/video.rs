@@ -1,8 +1,4 @@
-//! Video models (Spike F — Video Engine).
-//!
-//! Mirrors the Python lab models (`SICRO_VIDEO_LAB_RELATORIO.md` §3)
-//! adapted to the SICRO Desktop wire format. Field names use snake_case;
-//! the frontend types in `src/types/video.ts` mirror them 1:1.
+//! Modelos do módulo Vídeo. Espelhados em `src/types/video.ts` — mudar nos dois.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -17,7 +13,7 @@ pub struct VideoMedia {
     pub occurrence_id: Uuid,
     /// Caminho original no disco do usuário (informativo).
     pub original_path: Option<String>,
-    /// Caminho relativo dentro do workspace: `videos/originais/<filename>`.
+    /// `videos/originais/<filename>`, relativo ao workspace.
     pub relative_path: String,
     pub filename: String,
     pub sha256: String,
@@ -28,7 +24,7 @@ pub struct VideoMedia {
     pub height: Option<u32>,
     pub pixel_format: Option<String>,
     pub fps_declared: Option<f64>,
-    /// String "30000/1001" — preservamos fidelidade técnica.
+    /// Fração "30000/1001" preservada como string (fidelidade técnica).
     pub avg_frame_rate: Option<String>,
     pub r_frame_rate: Option<String>,
     pub time_base: Option<String>,
@@ -48,7 +44,7 @@ pub struct VideoMedia {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct RegisterVideoInput {
-    /// Absolute path on the user's disk (returned by the OS file dialog).
+    /// Caminho absoluto (diálogo do SO).
     pub source_path: String,
 }
 
@@ -162,7 +158,7 @@ pub struct SetVideoClockInput {
 }
 
 // ---------------------------------------------------------------------------
-// VideoExport (PNG frame extraction)
+// VideoExport (frame PNG extraído)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VideoExport {
@@ -170,16 +166,16 @@ pub struct VideoExport {
     pub occurrence_id: Uuid,
     pub media_hash: String,
     pub event_id: Option<Uuid>,
-    /// 'frame_png' — reserved discriminator for future export kinds.
+    /// 'frame_png' — reservado para outros tipos de export.
     pub r#type: String,
     pub requested_timestamp_s: f64,
     pub actual_timestamp_s: Option<f64>,
     pub delta_s: Option<f64>,
-    /// Workspace-relative path: `videos/storyboards/frames/<filename>.png`.
+    /// `videos/storyboards/frames/<filename>.png`, relativo ao workspace.
     pub output_path: String,
     pub filename: String,
     pub sidecar_json_path: Option<String>,
-    /// Full extraction context (timestamp delta, ffmpeg version, etc.).
+    /// Contexto completo da extração (delta, versão do ffmpeg…).
     pub details_json: String,
     pub created_at: DateTime<Utc>,
 }
@@ -197,8 +193,8 @@ pub struct CollectFrameInput {
     pub notes: Option<String>,
 }
 
-/// Result of `collect_video_frame`: the export row + the storyboard row
-/// already linked, so the frontend can update both panels in one go.
+/// Export + frame do storyboard já vinculados: a UI atualiza os dois painéis
+/// numa ida só.
 #[derive(Debug, Clone, Serialize)]
 pub struct CollectFrameResult {
     pub export: VideoExport,
@@ -224,8 +220,7 @@ pub struct VideoStoryboardFrame {
     pub delta_s: Option<f64>,
     pub observed_frame_index: Option<i64>,
     pub estimated_total_frames: Option<i64>,
-    /// True when the frame index is an estimate (FPS-based), false when
-    /// FFmpeg returned a confident PTS-anchored position.
+    /// true = índice estimado por FPS; false = posição ancorada em PTS pelo FFmpeg.
     pub frame_index_is_estimated: bool,
     pub pts: Option<i64>,
     pub time_base: Option<String>,
@@ -258,8 +253,7 @@ pub struct VideoOperationLog {
 }
 
 // ---------------------------------------------------------------------------
-// Aggregated bundle returned by `open_video_media` so the UI can hydrate
-// the whole module in a single round-trip.
+// Pacote devolvido por `open_video_media`: o módulo inteiro numa ida só.
 
 #[derive(Debug, Clone, Serialize)]
 pub struct VideoBundle {

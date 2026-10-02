@@ -1,12 +1,4 @@
-//! `ffprobe` wrapper — Spike F.
-//!
-//! We shell out to the system `ffprobe` (no Rust bindings) and parse its
-//! JSON output. This mirrors the Python lab decision to treat ffprobe as
-//! the technical source of truth, distinct from the visual player.
-//!
-//! Detection: the binary is looked up in PATH. If not found, callers get
-//! a clear `SicroError::Validation`. The Spike F report documents the
-//! limitation; bundling ffprobe is a future step.
+//! `ffprobe` (shell-out, saída JSON): a fonte técnica de verdade sobre o vídeo.
 
 use std::path::{Path, PathBuf};
 
@@ -14,9 +6,7 @@ use serde_json::Value;
 
 use crate::error::{Result, SicroError};
 
-/// Parsed subset of ffprobe's JSON that the rest of the backend cares
-/// about. The original payload is preserved in `raw_json` so the UI can
-/// surface anything we don't model yet.
+/// Subconjunto do JSON do ffprobe; `raw_json` guarda o original inteiro.
 #[derive(Debug, Clone)]
 pub struct ParsedProbe {
     pub raw_json: String,
@@ -31,15 +21,13 @@ pub struct ParsedProbe {
     pub r_frame_rate: Option<String>,
     pub time_base: Option<String>,
     pub frame_count: Option<i64>,
-    /// Soft warnings (VFR likely, frame_count missing, etc.). NOT errors.
+    /// Avisos (VFR provável, frame_count ausente…), não erros.
     pub warnings: Vec<String>,
 }
 
-/// `format.start_time` do ffprobe (s): onde começa a linha do tempo do
-/// arquivo. Vídeo recortado costuma começar depois do 0 (trecho vazio / edit
-/// list). IMPORTANTE para o ffmpeg: `-ss` de ENTRADA é medido a partir daqui,
-/// enquanto o player, o ffprobe e o `-ss` de saída com `-copyts` usam o tempo
-/// absoluto — quem busca na entrada precisa descontar este valor.
+/// `format.start_time` (s): vídeo recortado costuma começar depois do 0. O
+/// `-ss` de ENTRADA do ffmpeg conta a partir daqui; player, ffprobe e `-ss` de
+/// saída com `-copyts` usam tempo absoluto — busca de entrada desconta isto.
 pub fn container_start_time(raw_probe_json: &str) -> f64 {
     serde_json::from_str::<serde_json::Value>(raw_probe_json)
         .ok()
@@ -62,8 +50,7 @@ pub fn read_start_time(path: &Path) -> Result<f64> {
     Ok(container_start_time(&String::from_utf8_lossy(&out.stdout)))
 }
 
-/// Look up an `ffprobe` binary that the orchestrator can call: the one
-/// bundled with SICRO (Windows installer) first, then the user's PATH.
+/// ffprobe empacotado com o SICRO (Windows) ou o do PATH.
 pub fn detect_ffprobe() -> Result<PathBuf> {
     if let Some(p) = crate::tools::bundled_ffmpeg_tool("ffprobe") {
         return Ok(p);
@@ -71,9 +58,7 @@ pub fn detect_ffprobe() -> Result<PathBuf> {
     which("ffprobe")
 }
 
-/// Run `ffprobe -show_format -show_streams -of json` against `path` and
-/// return the parsed subset. The video file MUST already exist locally
-/// (we don't reach the network).
+/// `ffprobe -show_format -show_streams -of json` num arquivo local.
 pub fn probe_media(path: &Path) -> Result<ParsedProbe> {
     if !path.is_file() {
         return Err(SicroError::Filesystem(format!(
@@ -126,7 +111,6 @@ fn parse_probe_output(raw: &str) -> Result<ParsedProbe> {
         .cloned()
         .unwrap_or_default();
 
-    // Pick the first video stream (most files have exactly one).
     let video_stream = streams
         .iter()
         .find(|s| s.get("codec_type").and_then(Value::as_str) == Some("video"))
@@ -187,7 +171,7 @@ fn parse_probe_output(raw: &str) -> Result<ParsedProbe> {
         .as_ref()
         .and_then(|s| s.get("nb_frames"))
         .and_then(|v| {
-            // ffprobe sometimes emits nb_frames as a numeric string.
+            // nb_frames às vezes vem como string numérica.
             v.as_i64().or_else(|| {
                 v.as_str().and_then(|s| s.parse::<i64>().ok())
             })
@@ -203,7 +187,7 @@ fn parse_probe_output(raw: &str) -> Result<ParsedProbe> {
         );
     }
     if let (Some(avg), Some(r)) = (avg_frame_rate.as_deref(), r_frame_rate.as_deref()) {
-        // Mobile-shot footage commonly reports a VFR-friendly avg ≠ r.
+        // avg ≠ r é típico de VFR (celular).
         if avg != r {
             warnings.push(format!(
                 "FPS possivelmente variável (avg_frame_rate={avg} ≠ r_frame_rate={r}) — VFR provável; trate índice de frame como estimativa"
@@ -266,8 +250,7 @@ fn first_int(candidates: &[Option<&Value>]) -> Option<i64> {
     None
 }
 
-/// Parse "30000/1001" or "30" into a float; returns None for "0/0" and
-/// other degenerate inputs.
+/// "30000/1001" ou "30" → f64; `None` para "0/0" e afins.
 pub fn parse_fraction(s: &str) -> Option<f64> {
     let s = s.trim();
     if let Some((num, den)) = s.split_once('/') {
@@ -282,8 +265,7 @@ pub fn parse_fraction(s: &str) -> Option<f64> {
     s.parse::<f64>().ok().filter(|v| v.is_finite() && *v > 0.0)
 }
 
-/// Cross-platform `which` — tries the literal name and then with platform
-/// extensions. Returns `Ok(path)` if any candidate is executable.
+/// `which` multiplataforma (nome literal e, no Windows, `.exe`/`.cmd`).
 fn which(name: &str) -> Result<PathBuf> {
     let path_env = std::env::var_os("PATH").ok_or_else(|| {
         SicroError::Filesystem("PATH environment variable is empty".to_string())
@@ -324,7 +306,6 @@ mod tests {
 
     #[test]
     fn parse_probe_warns_when_avg_differs_from_r() {
-        // Minimal probe blob — VFR-looking footage.
         let raw = r#"{
           "format": { "duration": "12.345", "bit_rate": "1000000" },
           "streams": [{

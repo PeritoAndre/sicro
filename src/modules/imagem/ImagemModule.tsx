@@ -1,11 +1,7 @@
 /**
- * ImagemModule — MVP 7 (Editor de Imagem Pericial).
- *
- * Tela de entrada do módulo: lista de análises da ocorrência ativa +
- * picker de origem para criar nova análise (foto do caso, frame de
- * vídeo, arquivo local).
- *
- * Quando uma análise está aberta no store, delega para `ImageEditor`.
+ * Tela de entrada do módulo Imagem: lista de análises da ocorrência + picker
+ * de origem (foto do caso, frame de vídeo, arquivo local). Com análise aberta
+ * no store, delega para `ImageEditor`.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -177,7 +173,6 @@ export function ImagemModule() {
     );
   }
 
-  // Quando uma análise está aberta, exibir o editor.
   if (activeAnalysis && activeDoc) {
     return (
       <ImageEditor
@@ -331,7 +326,7 @@ function SourcePicker({
               const bundle = await commands.openVideoMedia(workspacePath, v.id);
               allFrames.push(...bundle.storyboard);
             } catch {
-              /* ignore */
+              /* ignorado */
             }
           }
           if (!cancelled) setFrames(allFrames);

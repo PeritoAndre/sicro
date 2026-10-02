@@ -1,14 +1,6 @@
 /**
- * Atalhos customizáveis do módulo **Vídeo**. Escopo `video`.
- * Convenção: `group: "Vídeo · <subárea>"`, label PT-BR, `defaultBinding` na
- * forma canônica de `keymap.ts`.
- *
- * Estes atalhos são DISCRETOS (uma ação por toque) e só disparam enquanto a
- * aba "Reprodutor" do editor está visível. A navegação com as SETAS
- * esquerda/direita (toque = ±1 quadro · segurar = reproduz à frente / em ré ·
- * Shift = ±1 s) NÃO entra no catálogo: é um gesto com estado de
- * pressionar/segurar/soltar (keydown + keyup + temporizador) que o modelo
- * customizável (só keydown) não consegue representar — fica fixa no player.
+ * Atalhos do módulo Vídeo (só na aba "Reprodutor"). As setas ←/→ (toque/segurar/
+ * Shift) ficam fixas no player: gesto com keyup + temporizador não cabe no modelo só-keydown.
  */
 import type { ShortcutAction } from "../keymapActions";
 

@@ -1,11 +1,6 @@
 /**
- * ConfiguracoesModule — Configurações GLOBAIS do app (o "cofrinho" fora do
- * `.sicro`): Perfil do perito, Aparência (tema + cor + zoom), Backup geral,
- * IA de degravação, Atalhos e Diagnóstico.
- *
- * Persistência: `settingsStore` (→ `app-settings.json` no app_config_dir).
- * A aparência aplica e salva na hora; os campos de texto salvam no botão
- * "Salvar".
+ * Configurações globais do app (fora do `.sicro`). A aparência aplica e salva
+ * na hora; os campos de texto salvam no botão "Salvar".
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -51,7 +46,7 @@ const THEMES: { value: ThemeMode; label: string }[] = [
   { value: "auto", label: "Automático" },
 ];
 
-/** Tamanhos oferecidos na tela; os atalhos Ctrl+Shift+= / - andam por mais degraus. */
+/** Os atalhos Ctrl+Shift+= / - andam por mais degraus que estes. */
 const UI_ZOOMS = [0.9, 1, 1.1, 1.25, 1.5, 1.75];
 
 function zoomLabel(z: number): string {
@@ -69,9 +64,9 @@ interface FieldProps {
   placeholder?: string;
   wide?: boolean;
   type?: string;
-  /** Se presente, vira um dropdown (select) com estas opções. */
+  /** Presente → vira um select. */
   options?: readonly string[];
-  /** Se true, mostra um botão "Escolher…" que abre o seletor de imagem nativo. */
+  /** Botão "Escolher…" com o seletor de imagem nativo. */
   pickFile?: boolean;
 }
 
@@ -148,7 +143,6 @@ function Field({
   );
 }
 
-/** Categorias do "Settings Center" — nav interna, sem scroll único. */
 type CatId =
   | "perfil"
   | "aparencia"
@@ -213,7 +207,6 @@ export function ConfiguracoesModule() {
     }
   };
 
-  // Aparência é preferência instantânea: aplica e salva na hora.
   const setAppearance = (p: Partial<AppearanceSettings>) => {
     const next: AppSettings = {
       ...draft,
@@ -418,7 +411,7 @@ export function ConfiguracoesModule() {
         </section>
           )}
 
-          {/* IA de degravação (whisper.cpp local, usado pelos Áudios) */}
+          {/* IA de degravação */}
           {activeCat === "iaocr" && <AiManagerCard />}
 
           {/* Atalhos de teclado */}

@@ -1,10 +1,4 @@
-/**
- * Migration & schema tests for MVP 9 — bumped CURRENT_SCHEMA_VERSION to
- * "0.3", added view_settings / export_settings / stamp_metadata sections
- * + new vehicle / marker / line subtypes + mobiliario_urbano category.
- *
- * Confirms backward compatibility with v0.1 (Spike E) and v0.2 (MVP 6).
- */
+/** Schema 0.3: view/export/stamp settings e compatibilidade com envelopes 0.1 e 0.2. */
 
 import { describe, expect, it } from "vitest";
 import {

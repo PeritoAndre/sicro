@@ -1,14 +1,7 @@
 /**
- * W12 (paridade Audacity) — Painel de ANÁLISE FORENSE de áudio.
- *
- * Três análises determinísticas (backend Rust puro: hound + rustfft), todas
- * de MEDIÇÃO — não alteram o áudio (§13):
- *   - Medições: pico/RMS (dBFS), offset DC, clipping, fator de crista.
- *   - Espectro (Welch FFT): pico de frequência + mini-gráfico log.
- *   - ENF (Electric Network Frequency): média/desvio + maior salto
- *     (descontinuidade = indício de edição/splice).
- *
- * Cada chamada é registrada no log de auditoria do áudio pelo backend.
+ * Painel de análise forense do áudio: medições (pico/RMS/clipping), espectro
+ * (Welch FFT), ENF e autenticidade — tudo medição determinística no backend,
+ * registrada na auditoria; nada altera o áudio.
  */
 
 import { useState } from "react";

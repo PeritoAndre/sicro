@@ -1,7 +1,6 @@
 /**
- * `.sicroimage` serializer — coerce arbitrary JSON into a `SicroImageDoc`
- * with safe defaults. Mirror do padrão usado em `croqui/engine/serializer.ts`
- * e `laudo/document-engine/serializer.ts`.
+ * Serializer do `.sicroimage`: coerção de JSON arbitrário em `SicroImageDoc`
+ * com defaults seguros (mesmo padrão do croqui e do laudo).
  */
 
 import type { BackendAdjustments } from "@domain/image_analysis";
@@ -89,8 +88,7 @@ export function coerceSicroImage(raw: unknown): SicroImageDoc {
   const scale = coerceScale(o.scale);
   const selection = coerceSelection(o.selection);
   const exports = Array.isArray(o.exports) ? o.exports : [];
-  // G12.10 — processing_stack agora é tipado. Pré-G12 docs vinham com
-  // unknown[]; mantemos compat coercando shape mínima.
+  // Docs antigos traziam processing_stack sem tipo; a coerção de shape mínima mantém compat.
   const processing_stack = Array.isArray(o.processing_stack)
     ? (o.processing_stack as unknown[])
         .filter((op): op is Record<string, unknown> =>
@@ -181,8 +179,7 @@ function coerceAdjustments(raw: unknown): BackendAdjustments {
     saturation: numberField(o, "saturation") ?? 0,
     grayscale: boolField(o, "grayscale"),
     invert: boolField(o, "invert"),
-    // W14.2 — Matiz + canais. Canais default TRUE (visíveis) quando ausentes,
-    // para docs antigos não "sumirem" com nenhum canal.
+    // Canais default true quando ausentes, senão docs antigos abririam sem nenhum canal.
     hue: numberField(o, "hue") ?? 0,
     channel_r: boolFieldDefault(o, "channel_r", true),
     channel_g: boolFieldDefault(o, "channel_g", true),
@@ -207,8 +204,7 @@ function coerceScale(raw: unknown): SicroImageScale | null {
   };
 }
 
-/** W20 — coerce a SicroImageSelection; devolve null se inválido/ausente.
- * rect/ellipse exigem bbox positivo; polygon exige 3+ pontos. */
+/** Null se inválida/ausente: rect/ellipse exigem bbox positivo; polygon, 3+ pontos. */
 function coerceSelection(raw: unknown): SicroImageSelection | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -271,11 +267,7 @@ function boolFieldDefault(
   return typeof v === "boolean" ? v : fallback;
 }
 
-/**
- * Coerce uma camada com defaults seguros. W20 (S3): camadas de pixels
- * (`kind="pixels"`) carregam offset/dims/caminho do bitmap; uma camada de
- * pixels sem bitmap ou sem dimensão é inválida e descartada (defensivo).
- */
+/** Camada de pixels sem bitmap ou sem dimensão é inválida e é descartada. */
 function coerceLayer(raw: unknown): SicroImageLayer | null {
   if (!raw || typeof raw !== "object") return null;
   const o = raw as Record<string, unknown>;
@@ -315,7 +307,6 @@ function coerceLayer(raw: unknown): SicroImageLayer | null {
   return layer;
 }
 
-/** G12.10 — coerce a ProcessingOp with safe defaults. */
 function coerceProcessingOp(o: Record<string, unknown>): ProcessingOp {
   return {
     id:
@@ -328,7 +319,7 @@ function coerceProcessingOp(o: Record<string, unknown>): ProcessingOp {
         ? (o.params as Record<string, unknown>)
         : {},
     notes: stringField(o, "notes") ?? undefined,
-    // W20 (S2) — escopo + máscara congelada (defensivo: docs antigos não têm).
+    // Docs antigos não têm escopo/máscara.
     scope: o.scope === "selection" ? "selection" : "image",
     mask: o.scope === "selection" ? coerceSelection(o.mask) : null,
     created_at: stringField(o, "created_at") ?? new Date().toISOString(),

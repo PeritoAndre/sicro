@@ -1,16 +1,6 @@
-//! Aggregator — projects every module's rows into
-//! `EvidenceRegistryItem`s.
-//!
-//! Each kind has its own builder function that takes the rows it needs
-//! and emits items. The main `build_registry` function calls every
-//! builder and concatenates the result. Items are NOT verified here —
-//! `integrity::verify_workspace` is the only place that does
-//! filesystem I/O.
-//!
-//! Synthetic IDs follow the pattern `<kind>:<repo-id>`. They are
-//! intentionally NOT UUIDs because the same workspace can hold multiple
-//! rows of different kinds with overlapping UUID spaces, and we want
-//! the UI to identify an item by `(kind, source-id)` without ambiguity.
+//! Projeta as linhas de cada módulo em `EvidenceRegistryItem`. Não verifica
+//! nada (só `integrity::verify_workspace` toca o disco). Ids sintéticos
+//! `<kind>:<id>`: o mesmo UUID pode aparecer em kinds diferentes.
 
 use std::collections::HashMap;
 
@@ -65,8 +55,7 @@ pub fn build_registry(
     }
 
     // ------------------------------------------------------------------
-    // Croquis (.sicrocroqui) — one item per croqui row.
-    // The PNG export, when present, becomes a separate item below.
+    // Croquis; o PNG exportado vira item separado.
     let croquis = croqui_repo::list_by_occurrence(conn, occurrence_id)?;
     for c in &croquis {
         out.push(EvidenceRegistryItem {
@@ -145,7 +134,7 @@ pub fn build_registry(
             metadata_json: v.raw_probe_json.clone(),
         });
 
-        // Storyboard frames belonging to this video.
+        // Frames do storyboard deste vídeo.
         let frames =
             video_repo::list_storyboard_for_media(conn, occurrence_id, &v.sha256)?;
         for f in &frames {
@@ -255,11 +244,8 @@ pub fn build_registry(
     }
 
     // ------------------------------------------------------------------
-    // Image analyses + derived exports (MVP 7)
-    // ------------------------------------------------------------------
-    // Áudio (módulo Áudio). Para importado, a evidência é o ORIGINAL
-    // preservado; para extraído, o WAV derivado (a origem é o vídeo, já
-    // listado acima). A integridade é verificada genericamente pelo verifier.
+    // Áudio: importado → a evidência é o original preservado; extraído → o WAV
+    // (a origem é o vídeo, já listado).
     let audios = audio_repo::list_for_occurrence(conn, occurrence_id)?;
     for a in &audios {
         let imported = a.kind == "importado";
@@ -303,6 +289,8 @@ pub fn build_registry(
         });
     }
 
+    // ------------------------------------------------------------------
+    // Análises de imagem + imagens derivadas
     let analyses = image_analysis_repo::list_by_occurrence(conn, occurrence_id)?;
     for a in &analyses {
         out.push(EvidenceRegistryItem {
@@ -368,12 +356,8 @@ pub fn build_registry(
     }
 
     // ------------------------------------------------------------------
-    // Imported packages (.sicroapp)
-    //
-    // `imports` is workspace-scoped (one row per package brought in).
-    // The current `import_repo::list_all` lists every import in the
-    // SQLite db; since each workspace has its own SQLite, that is
-    // effectively per-occurrence.
+    // Pacotes .sicroapp. `list_all` lista o SQLite inteiro — que é por
+    // workspace, logo por ocorrência.
     let imports = import_repo::list_all(conn)?;
     for imp in &imports {
         out.push(EvidenceRegistryItem {
@@ -404,7 +388,7 @@ pub fn build_registry(
     }
 
     // ------------------------------------------------------------------
-    // Documentos (Documentoscopia) — um item por documento importado.
+    // Documentos (Documentoscopia)
     let documents = documentoscopia_repo::list_documents(conn, occurrence_id)?;
     for d in &documents {
         let title = if d.title.trim().is_empty() {
@@ -437,12 +421,8 @@ pub fn build_registry(
     }
 
     // ------------------------------------------------------------------
-    // Fold evidence_links → linked_laudos_count
-    //
-    // For each registry item we count how many DISTINCT laudos cite it
-    // (target_type=laudo). Counting per-laudo (rather than per-link)
-    // avoids inflating when the perito inserts the same photo twice in
-    // the same laudo.
+    // linked_laudos_count = laudos DISTINTOS que citam o item; por laudo, não
+    // por link, para não inflar quando a mesma foto entra duas vezes.
     let links = evidence_link_repo::list_for_occurrence(conn, occurrence_id)?;
     let counts = laudo_counts_per_source(&links);
     for item in out.iter_mut() {
@@ -495,10 +475,8 @@ pub fn build_summary(items: &[EvidenceRegistryItem]) -> RegistrySummary {
     s
 }
 
-/// Build a `registry-id → distinct-laudo-count` map from the links
-/// table. Each link has either a `media_asset_id`, `croqui_id`,
-/// `video_storyboard_frame_id` or `video_media_hash` — we project that
-/// back to the synthetic registry id used by [`build_registry`].
+/// Mapa `id sintético → nº de laudos distintos`, projetando cada link de volta
+/// ao id usado em `build_registry`.
 fn laudo_counts_per_source(
     links: &[crate::models::EvidenceLink],
 ) -> HashMap<String, u32> {
@@ -676,8 +654,7 @@ mod tests {
             link(EvidenceSourceKind::Photo, "laudo-2", media_uuid),
         ];
         let counts = laudo_counts_per_source(&links);
-        // Two distinct laudos cite the same photo → count == 2 even
-        // though there are three rows.
+        // Dois laudos distintos citam a mesma foto → 2, apesar de três linhas.
         assert_eq!(
             counts.get(&format!("photo:{}", media_uuid)).copied(),
             Some(2)
@@ -689,8 +666,7 @@ mod tests {
         let croqui_uuid = Uuid::new_v4();
         let links = vec![link(EvidenceSourceKind::Croqui, "laudo-1", croqui_uuid)];
         let counts = laudo_counts_per_source(&links);
-        // Note the synthetic id for croqui evidence is the EXPORT (PNG),
-        // not the .sicrocroqui — what actually ends up in the laudo.
+        // O id sintético do croqui é o EXPORT (PNG) — o que entra no laudo.
         assert_eq!(
             counts.get(&format!("croqui_export:{}", croqui_uuid)).copied(),
             Some(1)

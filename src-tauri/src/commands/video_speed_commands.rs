@@ -1,20 +1,6 @@
-//! Tauri commands do Calculador de Velocidade (Fase 3).
-//!
-//! Superfície:
-//!   - create_speed_calibration → resolve a homografia (DLT 4-pts OU linha),
-//!     calcula o RMS de reprojeção e persiste a calibração.
-//!   - compute_speed            → projeta a trajetória pixel→mundo pela
-//!     homografia, ajusta a velocidade (regressão por eixo p/ ≥3 pontos OU
-//!     média p/ 2 pontos), roda Monte Carlo quando aplicável e persiste.
-//!   - list_speed_calibrations / list_speed_calculations / get_speed_calculation
-//!
-//! Convenção (idêntica ao `video_commands`): o frontend passa apenas
-//! `workspace_path`; o `occurrence_id` vem SEMPRE do Manifest (backend),
-//! nunca do frontend.
-//!
-//! Reprodutibilidade pericial: quando o Monte Carlo roda, a semente
-//! (`mc_seed`) e os sigmas (`mc_sigmas`) são SEMPRE persistidos — reabrir o
-//! cálculo e reprocessar com a mesma semente reproduz o número exato.
+//! Comandos do Calculador de Velocidade: calibração (homografia) e cálculo.
+//! O `occurrence_id` vem sempre do Manifest, nunca do frontend. Quando o Monte
+//! Carlo roda, semente e sigmas são persistidos: reprocessar reproduz o número exato.
 
 use std::path::PathBuf;
 
@@ -48,7 +34,7 @@ const ALLOWED_REFERENCE_SOURCES: &[&str] = &["campo", "norma_viaria", "entre_eix
 const DEFAULT_MC_ITERATIONS: u32 = 10_000;
 
 // ===========================================================================
-// Comandos Tauri (plumbing fino: ws → manifest → conn; lógica nos *_impl)
+// Comandos Tauri (lógica nos *_impl)
 
 #[tauri::command]
 pub async fn create_speed_calibration(
@@ -101,9 +87,8 @@ pub async fn list_speed_calculations(
 }
 
 
-/// Lista TODOS os cálculos de velocidade da ocorrência (qualquer mídia),
-/// mais recentes primeiro. Usado pelo laudo para escolher um cálculo a
-/// transcrever na seção de metodologia, sem precisar saber o media_hash.
+/// Todos os cálculos da ocorrência (qualquer mídia), mais recentes primeiro —
+/// o laudo escolhe um sem precisar saber o media_hash.
 #[tauri::command]
 pub async fn list_speed_calculations_for_occurrence(
     workspace_path: String,
@@ -178,17 +163,15 @@ fn create_speed_calibration_impl(
             .sqrt();
             let h = line_calibration((p1.px, p1.py), (p2.px, p2.py), distance_m)
                 .map_err(|e| SicroError::Validation(format!("falha na calibração por linha: {e}")))?;
-            // Resíduo contra os alvos canônicos da linha (0,0)→(distance,0):
-            // afim exato em 2 pontos ⇒ ~0; registramos como qualidade do ajuste.
+            // Afim exato em 2 pontos ⇒ resíduo ~0; fica registrado como qualidade do ajuste.
             let img = [(p1.px, p1.py), (p2.px, p2.py)];
             let canon = [(0.0, 0.0), (distance_m, 0.0)];
             let rms = rms_reprojection(&h, &img, &canon)?;
             (h, Some(rms))
         }
         "cross_ratio" => {
-            // Razão cruzada: >= 3 pontos de controle COLINEARES sobre o eixo
-            // de tráfego. `world_x_m` = posição real ao longo da linha (m);
-            // `world_y_m` é ignorado (a referência está sobre a linha).
+            // ≥3 pontos colineares no eixo de tráfego: `world_x_m` é a posição
+            // ao longo da linha (m); `world_y_m` é ignorado.
             if input.control_points.len() < 3 {
                 return Err(SicroError::Validation(format!(
                     "calibração 'cross_ratio' exige pelo menos 3 pontos de controle colineares (recebido {})",
@@ -199,9 +182,8 @@ fn create_speed_calibration_impl(
                 input.control_points.iter().map(|c| (c.px, c.py)).collect();
             let world_scalars: Vec<f64> =
                 input.control_points.iter().map(|c| c.world_x_m).collect();
-            // Ajusta linha + projetividade 1D explicitamente para registrar o
-            // modelo no log; o lift produz a mesma 3×3 de
-            // `fit_cross_ratio_homography`.
+            // Ajuste explícito (linha + projetividade 1D) para registrar o modelo
+            // no log; o lift produz a mesma 3×3 de `fit_cross_ratio_homography`.
             let line = fit_traffic_line(&image_pts).map_err(|e| {
                 SicroError::Validation(format!("falha ao ajustar a linha de tráfego: {e}"))
             })?;
@@ -213,8 +195,7 @@ fn create_speed_calibration_impl(
                 SicroError::Validation(format!("falha ao ajustar a projetividade 1D: {e}"))
             })?;
             let h = lift_projectivity_to_homography(&line, &proj);
-            // Resíduo: projeta cada referência via a 3×3 e compara a
-            // (world_x_m, 0) — em metros, como nos demais modos.
+            // Resíduo em metros contra (world_x_m, 0), como nos demais modos.
             let world_pts: Vec<(f64, f64)> = world_scalars.iter().map(|&w| (w, 0.0)).collect();
             let rms = rms_reprojection(&h, &image_pts, &world_pts)?;
             model_log = Some(json!({
@@ -280,7 +261,6 @@ fn compute_speed_impl(
     occurrence_id: Uuid,
     input: ComputeSpeedInput,
 ) -> Result<VideoSpeedCalculation> {
-    // 1. Carrega calibração e valida pertencimento à ocorrência.
     let calibration = video_speed_repo::find_calibration_by_id(conn, &input.calibration_id)?
         .ok_or_else(|| {
             SicroError::Validation(format!("calibração {} não encontrada", input.calibration_id))
@@ -298,7 +278,6 @@ fn compute_speed_impl(
         )));
     }
 
-    // 2. Projeta cada ponto pixel→mundo pela homografia (row-major reconstruída).
     let homography = homography_from_row_major(&calibration.homography);
     let mut world_pts: Vec<(f64, f64)> = Vec::with_capacity(n);
     let mut times: Vec<f64> = Vec::with_capacity(n);
@@ -313,7 +292,6 @@ fn compute_speed_impl(
         times.push(p.actual_timestamp_s);
     }
 
-    // 3. Ressalvas comuns.
     let mut limitations: Vec<String> = vec![
         "Marcação manual da posição do veículo (sem tracking automático).".into(),
         "Estimativa assume movimento aproximadamente retilíneo e uniforme na janela analisada."
@@ -334,7 +312,7 @@ fn compute_speed_impl(
     let now = Utc::now();
     let author = input.author.clone().unwrap_or_default();
 
-    // 4. Velocidade por caso (2 pts: média; ≥3: regressão + Monte Carlo).
+    // 2 pontos: média; ≥3: regressão (+ Monte Carlo quando possível).
     let mut calc = if n == 2 {
         limitations.push(
             "2 pontos — sem incerteza estatística (mínimo 3 para regressão e Monte Carlo)."
@@ -382,7 +360,6 @@ fn compute_speed_impl(
     } else {
         let reg = regression_velocity(&world_pts, &times)
             .map_err(|e| SicroError::Validation(format!("regressão de velocidade: {e}")))?;
-        // Invariante: um resíduo por ponto.
         if reg.residuals.len() != n {
             return Err(SicroError::Validation(format!(
                 "invariante violada: nº de resíduos ({}) != nº de pontos ({n})",
@@ -425,12 +402,9 @@ fn compute_speed_impl(
             created_at: now,
         };
 
-        // Monte Carlo só roda com (1) calibração de plano (4 pontos
-        // coplanares) E (2) incertezas informadas pelo perito (≥1 σ > 0).
-        // Sem σ NÃO inventamos incerteza: rodar o MC com sigmas zerados
-        // produziria um intervalo de largura zero — falsa precisão. Nesse
-        // caso o resultado sai SÓ com o IC do ajuste, e a limitação fica
-        // registrada (a decisão de informar σ é do perito).
+        // Sem σ informado pelo perito o Monte Carlo NÃO roda: com sigmas zerados o
+        // intervalo sairia de largura zero (falsa precisão). Fica só o IC do ajuste
+        // e a limitação registrada.
         let sigmas_opt = input.mc_sigmas.clone();
         let has_sigmas = sigmas_opt.as_ref().map_or(false, |s| {
             s.calibration_px > 0.0
@@ -438,7 +412,6 @@ fn compute_speed_impl(
                 || s.trajectory_px > 0.0
                 || s.time_s > 0.0
         });
-        // MC só roda em modos capazes (plano 4-pts OU razão cruzada ≥3-pts).
         let mc_capable = calibration.method == "plane" || calibration.method == "cross_ratio";
         if !mc_capable {
             limitations.push(
@@ -458,9 +431,8 @@ fn compute_speed_impl(
             }
             // Reprodutibilidade: semente explícita, persistida como i64.
             let seed: u64 = rand::random();
-            // Ramifica por método: razão cruzada re-ajusta linha+projetividade
-            // (referências colineares — `solve_homography_dlt` NÃO serve);
-            // plano usa o DLT de 4 pontos.
+            // Razão cruzada re-ajusta linha+projetividade: referências colineares
+            // degeneram o DLT de 4 pontos.
             let mc = if calibration.method == "cross_ratio" {
                 let cfg =
                     build_cross_ratio_mc_config(&calibration, &input.points, &sigmas, mc_n, seed)?;
@@ -490,7 +462,6 @@ fn compute_speed_impl(
         calc
     };
 
-    // 5. Finaliza limitations + audit e persiste.
     let estimator = if n == 2 {
         "average_2pt"
     } else {
@@ -597,9 +568,8 @@ fn homography_from_row_major(a: &[f64; 9]) -> Homography {
     ))
 }
 
-/// Monta a config do Monte Carlo a partir de uma calibração de plano (4 pts)
-/// e da trajetória marcada. Compartilhado entre `compute_speed` e os testes de
-/// reprodutibilidade — por isso é determinístico dada a semente.
+/// Config do Monte Carlo (plano, 4 pts). Compartilhada com os testes de
+/// reprodutibilidade: determinística dada a semente.
 fn build_mc_config(
     calibration: &VideoSpeedCalibration,
     points: &[TrajectoryPoint],
@@ -628,10 +598,8 @@ fn build_mc_config(
     })
 }
 
-/// Monta a config do Monte Carlo no modo razão cruzada a partir das `>= 3`
-/// referências colineares da calibração + a trajetória. Compartilhado entre
-/// `compute_speed` e os testes de reprodutibilidade — determinístico dada a
-/// semente.
+/// Config do Monte Carlo no modo razão cruzada (≥3 referências colineares).
+/// Compartilhada com os testes: determinística dada a semente.
 fn build_cross_ratio_mc_config(
     calibration: &VideoSpeedCalibration,
     points: &[TrajectoryPoint],
@@ -769,8 +737,7 @@ mod tests {
     }
 
     // ----- Cenário sintético para o modo razão cruzada -----
-    // Linha em perspectiva na imagem: world (m) → escalar de imagem por uma
-    // Möbius conhecida; pontos colocados ao longo de uma direção 2D.
+    // world (m) → escalar de imagem por uma Möbius conhecida, ao longo de uma direção 2D.
     fn cr_dir() -> (f64, f64) {
         let inv = 1.0 / (10.0_f64).sqrt();
         (3.0 * inv, 1.0 * inv)
@@ -820,14 +787,12 @@ mod tests {
             .collect()
     }
 
-    /// End-to-end 'cross_ratio': cena 1D em perspectiva conhecida → velocidade
-    /// conhecida, exata sem ruído. Reusa a coluna homography_json (sem migração).
+    /// End-to-end 'cross_ratio': cena 1D em perspectiva conhecida → velocidade exata sem ruído.
     #[test]
     fn cross_ratio_end_to_end_recovers_known_velocity() -> Result<()> {
         let (conn, occ) = setup();
         let cal = create_speed_calibration_impl(&conn, occ, cr_calibration_input())?;
         assert_eq!(cal.method, "cross_ratio");
-        // Calibração exata em 3 pontos ⇒ RMS de reprojeção ~0.
         assert!(
             cal.residuals_px.unwrap() < 1e-6,
             "RMS esperado ~0, veio {:?}",
@@ -850,7 +815,6 @@ mod tests {
         );
         assert!(calc.vy_m_per_s.abs() < 1e-6, "vy = {}", calc.vy_m_per_s);
         assert_eq!(calc.mc_seed, None);
-        // Ressalva 1D obrigatória no modo razão cruzada.
         assert!(
             calc.limitations
                 .iter()
@@ -861,8 +825,7 @@ mod tests {
         Ok(())
     }
 
-    /// Reprodutibilidade do MC razão cruzada: a semente gravada, reaplicada no
-    /// mesmo cenário, reproduz exatamente o número.
+    /// MC razão cruzada: a semente gravada, reaplicada, reproduz exatamente o número.
     #[test]
     fn cross_ratio_mc_reproducible() -> Result<()> {
         let (conn, occ) = setup();
@@ -920,8 +883,7 @@ mod tests {
             calibration_id: cal.id,
             points: straight_trajectory(10.0, 5, 0.1),
             mc_n: Some(500),
-            // σ pequenos NÃO-NULOS: o MC só roda quando o perito informa
-            // incertezas (rodar com σ=0 seria falsa precisão).
+            // σ não-nulos: o MC só roda quando o perito informa incertezas.
             mc_sigmas: Some(McSigmas {
                 calibration_px: 0.2,
                 world_m: 0.0,
@@ -954,7 +916,6 @@ mod tests {
             calc.mc_mean_kmh
         );
 
-        // Persistiu e relê idêntico.
         let back = video_speed_repo::find_calculation_by_id(&conn, &calc.id)?.unwrap();
         assert_eq!(back, calc);
         Ok(())
@@ -975,7 +936,6 @@ mod tests {
             author: None,
         };
         let calc = compute_speed_impl(&conn, occ, input)?;
-        // IC do ajuste presente; MC ausente.
         assert!(calc.ci_low.is_some() && calc.ci_high.is_some());
         assert_eq!(calc.mc_seed, None);
         assert_eq!(calc.mc_mean_kmh, None);
@@ -989,8 +949,7 @@ mod tests {
         Ok(())
     }
 
-    /// Reprodutibilidade: a semente gravada, reaplicada no mesmo cenário,
-    /// reproduz exatamente o número do Monte Carlo persistido.
+    /// A semente gravada, reaplicada no mesmo cenário, reproduz o número do MC persistido.
     #[test]
     fn stored_seed_reproduces_monte_carlo_number() -> Result<()> {
         let (conn, occ) = setup();
@@ -1076,9 +1035,8 @@ mod tests {
         assert!(err.is_err(), "esperava rejeição, veio {err:?}");
     }
 
-    /// Cross-módulo: homografia resolvida pelo solver → persistida → relida →
-    /// usada na projeção dá AS MESMAS coordenadas de mundo. Valida a convenção
-    /// row-major ponta a ponta (Matrix3 column-major ↔ [f64;9] row-major).
+    /// Homografia resolvida → persistida → relida projeta as MESMAS coordenadas.
+    /// Valida a convenção row-major ponta a ponta (Matrix3 column-major ↔ [f64;9]).
     #[test]
     fn homography_row_major_round_trips_through_db() -> Result<()> {
         let (conn, occ) = setup();
@@ -1109,7 +1067,6 @@ mod tests {
         };
         let cal = create_speed_calibration_impl(&conn, occ, input)?;
 
-        // Relê e reconstrói a homografia a partir do array persistido.
         let reloaded = video_speed_repo::find_calibration_by_id(&conn, &cal.id)?.unwrap();
         let h_db = homography_from_row_major(&reloaded.homography);
 

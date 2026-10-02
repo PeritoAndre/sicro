@@ -1,8 +1,5 @@
-//! Occurrence domain model.
-//!
-//! `Occurrence` is the canonical row stored in each workspace's SQLite.
-//! `RecentOccurrence` is the lightweight summary kept globally in the app's
-//! config dir (independent from any single workspace).
+//! Ocorrência: `Occurrence` é a linha canônica no SQLite do workspace;
+//! `RecentOccurrence` é o resumo global guardado em `recent.json`.
 
 use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
@@ -47,8 +44,8 @@ impl Default for OccurrenceStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Occurrence {
     pub id: Uuid,
-    /// Nome livre do caso, dado pelo perito no Início ("Laudo 63404/26 —
-    /// Km 09"). É o rótulo principal; os demais campos são complemento.
+    /// Nome livre do caso dado pelo perito ("Laudo 63404/26 — Km 09");
+    /// é o rótulo principal, os demais campos são complemento.
     #[serde(default)]
     pub titulo: Option<String>,
     pub numero_bo: Option<String>,
@@ -73,8 +70,7 @@ pub struct Occurrence {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
-    // Spike D — fields populated when the occurrence is materialised from a
-    // .sicroapp. NULL for hand-created (Spike A) rows.
+    // Proveniência do .sicroapp; NULL em caso criado à mão.
     #[serde(default)]
     pub import_id: Option<Uuid>,
     #[serde(default)]
@@ -83,22 +79,21 @@ pub struct Occurrence {
     pub primary_accuracy_m: Option<f64>,
     #[serde(default)]
     pub resultado: Option<String>,
-    /// Verbatim payload of `caso.json` from the .sicroapp.
+    /// `caso.json` íntegro.
     #[serde(default)]
     pub raw_case_json: Option<String>,
-    /// Verbatim payload of `metadados.json` from the .sicroapp.
+    /// `metadados.json` íntegro.
     #[serde(default)]
     pub raw_metadata_json: Option<String>,
-    /// Verbatim payload of `localizacao.json` from the .sicroapp.
+    /// `localizacao.json` íntegro.
     #[serde(default)]
     pub raw_location_json: Option<String>,
 }
 
-/// Input payload accepted by `create_occurrence`. All fields are optional —
-/// even an entirely empty occurrence is valid (the perito fills it in later).
+/// Entrada de `create_occurrence`. Tudo opcional — ocorrência vazia é válida.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct NewOccurrenceInput {
-    /// Nome do caso — o único campo que o Início pede (e mesmo ele é opcional).
+    /// O único campo que o Início pede (e mesmo ele é opcional).
     #[serde(default)]
     pub titulo: Option<String>,
     pub numero_bo: Option<String>,
@@ -111,15 +106,13 @@ pub struct NewOccurrenceInput {
     pub municipio: Option<String>,
     #[serde(default)]
     pub peritos: Vec<String>,
-    /// If `None`, the workspace is created inside the user's Documents folder.
+    /// `None` = pasta Documentos do usuário.
     pub parent_directory: Option<String>,
 }
 
-/// Patch aceito por `update_occurrence`. O perito é a palavra final (caso de
-/// expediente nasce no Desktop; coleta de campo é corrigida depois). Todos os
-/// campos são opcionais; strings em branco viram NULL no comando. A proveniência
-/// (import_id, original_mobile_id, primary_accuracy_m, raw_*) NUNCA é tocada —
-/// o pacote .sicroapp original permanece intacto no disco.
+/// Patch de `update_occurrence`. O perito é a palavra final; strings em branco
+/// viram NULL no comando. A proveniência (import_id, original_mobile_id,
+/// primary_accuracy_m, raw_*) nunca é tocada — o .sicroapp original fica intacto.
 #[derive(Debug, Clone, Deserialize, Default)]
 pub struct OccurrenceEdit {
     #[serde(default)]
@@ -143,15 +136,14 @@ pub struct OccurrenceEdit {
     pub peritos: Option<Vec<String>>,
 }
 
-/// Returned by create/open commands so the front-end gets both the persistent
-/// data and the on-disk path in a single round-trip.
+/// Dados + caminho do workspace numa ida só.
 #[derive(Debug, Clone, Serialize)]
 pub struct LoadedOccurrence {
     pub occurrence: Occurrence,
     pub workspace_path: String,
 }
 
-/// Entry persisted in the global `recent.json`.
+/// Entrada do `recent.json` global.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RecentOccurrence {
     pub workspace_id: Uuid,

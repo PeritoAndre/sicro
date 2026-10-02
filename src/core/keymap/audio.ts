@@ -1,17 +1,11 @@
 /**
- * Atalhos customizáveis do módulo **Áudio / Degravação**. Escopo `audio`.
- * Convenção: `group: "Áudio · <subárea>"`, label PT-BR, `defaultBinding` na
- * forma canônica de `keymap.ts`.
- *
- * IMPORTANTE: a tela de degravação é cheia de campos de texto (locutor +
- * transcrição de cada trecho). Os atalhos do PEDAL usam Ctrl de propósito,
- * para conviver com a digitação — eles disparam MESMO com o cursor dentro de
- * um campo (o wiring usa `allowInInputs: true`). Por isso todos usam Ctrl.
+ * Atalhos do módulo Áudio / Degravação. Todos usam Ctrl de propósito: a tela
+ * é cheia de campos de texto e os atalhos disparam mesmo digitando (`allowInInputs`).
  */
 import type { ShortcutAction } from "../keymapActions";
 
 export const AUDIO_ACTIONS: ShortcutAction[] = [
-  // Pedal de transporte (valem enquanto degrava, mesmo digitando).
+  // Pedal de transporte.
   { id: "audio.playPause", scope: "audio", group: "Áudio · Reprodução", label: "Reproduzir / pausar", defaultBinding: "Ctrl+Space" },
   { id: "audio.back3s", scope: "audio", group: "Áudio · Reprodução", label: "Recuar 3 s", defaultBinding: "Ctrl+Left" },
   { id: "audio.fwd3s", scope: "audio", group: "Áudio · Reprodução", label: "Avançar 3 s", defaultBinding: "Ctrl+Right" },

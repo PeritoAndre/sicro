@@ -1,9 +1,4 @@
-//! Export artefact model.
-//!
-//! An `Export` row records ONE artefact produced by the Export Engine:
-//! HTML intermediate, PDF or DOCX. The file lives in the workspace under
-//! `exports/<kind>/`. Field names match the TypeScript side
-//! (`src/types/export.ts`).
+//! Artefato do Export Engine (HTML, PDF ou DOCX), guardado em `exports/<kind>/`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

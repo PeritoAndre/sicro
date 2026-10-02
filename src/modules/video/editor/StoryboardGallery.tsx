@@ -1,12 +1,6 @@
 /**
- * Galeria do storyboard em tela grande: o quadro coletado (PNG do ffmpeg, o
- * mesmo arquivo que vai ao laudo) em tamanho bom, com a faixa de miniaturas.
- *
- *   ← / →  anterior / seguinte    Home / End  primeiro / último
- *   Enter  levar o player a este quadro        Esc  fechar
- *
- * As teclas são tratadas aqui (captura) e não chegam ao player enquanto a
- * galeria estiver aberta.
+ * Galeria do storyboard em tela grande. As teclas são tratadas aqui (captura)
+ * e não chegam ao player enquanto a galeria estiver aberta.
  */
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Copy, Crosshair, X } from "lucide-react";

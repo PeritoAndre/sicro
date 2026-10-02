@@ -1,12 +1,5 @@
-//! G12.7 — EXIF reader (kamadak-exif).
-//!
-//! Lê as tags principais (DateTime, Camera Make/Model, GPS, ISO,
-//! Exposure, FocalLength, Flash, Software) de JPEG/TIFF/WebP/HEIC.
-//! Para PNG (que pode ter EXIF embarcado em chunks), kamadak-exif
-//! também lê.
-//!
-//! Retorna um JSON string com objeto `{ tags: { key: value, ... },
-//! gps: { lat, lon, alt }, datetime, camera, sw }`.
+//! Leitura de EXIF (kamadak-exif) de JPEG/TIFF/WebP/HEIC/PNG.
+//! Saída: `{ summary: { datetime, camera, gps, ... }, tags: { tag: valor } }`.
 
 use std::fs::File;
 use std::io::BufReader;
@@ -21,7 +14,6 @@ pub fn read_exif_json(path: &Path) -> Option<String> {
     serde_json::to_string(&value).ok()
 }
 
-/// Versão que retorna direto o Value (útil para outros relatórios).
 pub fn read_exif_value(path: &Path) -> Option<Value> {
     let file = File::open(path).ok()?;
     let mut bufreader = BufReader::new(file);
@@ -113,9 +105,8 @@ pub fn read_exif_value(path: &Path) -> Option<Value> {
         _ => Value::Null,
     };
 
-    // Verifica se exif está vazio (alguns containers retornam reader sem campos).
+    // Alguns containers devolvem reader sem campo nenhum: trata como "sem EXIF".
     if tags.is_empty() {
-        // Inserir flag textual ainda permite ao caller distinguir "vazio" vs "ausente".
         let _ = orientation;
         return None;
     }

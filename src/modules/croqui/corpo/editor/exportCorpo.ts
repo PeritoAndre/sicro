@@ -1,16 +1,12 @@
 /**
- * stampCorpoPng — compõe o PNG técnico do croqui corporal: cabeçalho + a
- * prancha com os marcadores + a TABELA DE LEGENDA numerada, tudo numa imagem
- * (que entra no laudo como uma figura, igual ao croqui de via). Espelha o
- * estilo de `stampPng` do CroquiEditor (bandas azul/cinza).
- *
- * §13: rodapé deixa explícito que é documento técnico sujeito a revisão e que
- * a prancha é um esquema ilustrativo (não escala métrica).
+ * PNG técnico do croqui corporal: cabeçalho + prancha com marcadores + legenda
+ * numerada, numa imagem só (entra no laudo como figura, no estilo do stampPng
+ * do croqui de via). O rodapé avisa que é esquema ilustrativo, sem escala.
  */
 
 import type { LegendRow } from "../engine";
 
-export interface CorpoStampMeta {
+interface CorpoStampMeta {
   title: string;
   occurrence: {
     numero_bo?: string | null;
@@ -19,8 +15,8 @@ export interface CorpoStampMeta {
   } | null;
   templateLabel: string;
   timestamp: Date;
-  /** Listas de regiões numeradas (POP Anexo 1) — colunas lado a lado entre a
-   *  prancha e a legenda de lesões. Só pranchas numeradas enviam isto. */
+  /** Listas de regiões do POP (colunas entre a prancha e a legenda); só
+   *  pranchas numeradas enviam. */
   regionLists?: Array<{ title: string; items: string[] }>;
 }
 
@@ -33,9 +29,8 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Bounding box do CONTEÚDO (pixels não-brancos) da prancha — a "folha" é
- *  branca pura, então isto recorta exatamente as figuras+números+legendas de
- *  vista, descartando a sobra da arte pra figura aproveitar a página. */
+/** Bounding box dos pixels não-brancos: descarta a sobra branca da arte pra
+ *  figura aproveitar a página. */
 function contentBBox(
   img: HTMLImageElement,
   margin: number,
@@ -99,10 +94,9 @@ const PAD = 20;
 const ROW_H = 26;
 const LEGEND_HEADER_H = 30;
 const MIN_W = 760;
-/** Margem ao redor do conteúdo recortado da prancha (px da arte nativa). */
+/** Margem ao redor do conteúdo recortado (px da arte nativa). */
 const BODY_MARGIN = 18;
-/** Largura-alvo da prancha já recortada — a figura preenche a página em vez
- *  de ficar pequena no meio da sobra branca da arte. */
+/** Largura-alvo da prancha recortada, pra figura preencher a página. */
 const BODY_TARGET_W = 820;
 
 /**
@@ -115,8 +109,7 @@ export async function stampCorpoPng(
   meta: CorpoStampMeta,
 ): Promise<string> {
   const body = await loadImage(bodyPng);
-  // Recorta a prancha ao conteúdo (descarta a sobra branca da arte) e escala
-  // pra largura-alvo: a figura fica grande e centrada na figura do laudo.
+  // Recorta ao conteúdo e escala pra largura-alvo.
   const bb = contentBBox(body, BODY_MARGIN);
   const bodyScale = BODY_TARGET_W / bb.w;
   const bodyDrawW = BODY_TARGET_W;
@@ -124,7 +117,6 @@ export async function stampCorpoPng(
 
   const legendBlockH =
     legend.length > 0 ? LEGEND_HEADER_H + legend.length * ROW_H + PAD : 0;
-  // Bloco das listas de regiões do POP (colunas lado a lado, linhas de 16px).
   const REGION_LINE_H = 16;
   const regionLists = meta.regionLists ?? [];
   const regionRows =
@@ -169,13 +161,13 @@ export async function stampCorpoPng(
   ctx.textAlign = "right";
   ctx.fillText(`Exportado em ${fmtDate(meta.timestamp)}`, canvasW - PAD, HEADER_H / 2);
 
-  // Prancha recortada ao conteúdo + escalada (centralizada).
+  // Prancha (centralizada)
   const bodyX = (canvasW - bodyDrawW) / 2;
   ctx.drawImage(body, bb.x, bb.y, bb.w, bb.h, bodyX, HEADER_H, bodyDrawW, bodyDrawH);
 
   let y = HEADER_H + bodyDrawH + PAD;
 
-  // Listas de regiões do POP (Anexo 1) — colunas lado a lado.
+  // Listas de regiões do POP (colunas lado a lado)
   if (regionLists.length > 0) {
     ctx.textAlign = "left";
     ctx.fillStyle = "#0f172a";

@@ -1,13 +1,4 @@
-/**
- * Python Parity Engine — testes de tipos + factories.
- *
- * Garantia mínima Fase H.1:
- *   - factories produzem objetos com o shape esperado;
- *   - validação de limites (clamp) funciona;
- *   - inner_color opcional comporta-se corretamente.
- *
- * Renderer NÃO existe ainda — H.2.
- */
+/** Testes das factories parity: shape, clamp de limites e `inner_color` opcional. */
 
 import { describe, expect, it } from "vitest";
 import {

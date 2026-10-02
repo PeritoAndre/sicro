@@ -1,10 +1,6 @@
 /**
- * TopBar — cabeçalho contextual. Mostra ONDE você está: módulo atual e, quando
- * há um caso aberto, a ocorrência ativa.
- *
- * No módulo Vídeo e Áudio ela leva as abas Vídeos / Áudios (as duas telas do
- * módulo) — sem tirar altura do player. As abas são irmãs: com um vídeo aberto,
- * Áudios abre o áudio dele; com o áudio de um vídeo, Vídeos abre o vídeo.
+ * Cabeçalho: módulo atual + ocorrência ativa. Em Vídeo e Áudio leva as abas
+ * Vídeos/Áudios (irmãs: com um vídeo aberto, Áudios abre o áudio dele e vice-versa).
  */
 
 import { useEffect } from "react";

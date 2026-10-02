@@ -1,18 +1,7 @@
 /**
- * Auto-backup ao FECHAR/TROCAR a ocorrência (Fase 2b do DR).
- *
- * Quando o perito sai de uma ocorrência (volta pra Home ou abre outra) e existe
- * uma "pasta de backup" configurada + a opção ligada, dispara o BACKUP GERAL
- * INCREMENTAL para essa pasta. Como é incremental, re-zipa só o que mudou — na
- * prática, o caso que acabou de fechar — e atualiza o snapshot de config.
- *
- * §13: não bloqueia o app (fire-and-forget, com guarda contra concorrência); o
- * backup é estático (sincroniza com segurança); o workspace original local nunca
- * é tocado. Honesto: avisa por toast e registra a hora do último auto-backup.
- *
- * Limite conhecido: cobre fechar/trocar a ocorrência. Fechar o APP com um caso
- * aberto não dispara (não bloqueamos o encerramento) — feche a ocorrência ou
- * use o backup manual antes de sair.
+ * Auto-backup ao fechar/trocar a ocorrência: backup geral incremental para a
+ * pasta configurada, sem bloquear o app. Fechar o APP com um caso aberto não
+ * dispara (não seguramos o encerramento).
  */
 
 import { commands } from "@core/commands";
@@ -24,8 +13,8 @@ const DEST_KEY = "sicro.globalBackup.destination";
 const AUTO_KEY = "sicro.globalBackup.autoOnClose";
 const LAST_KEY = "sicro.globalBackup.lastAuto";
 
-/** Pasta de backup configurada (mesma chave do card de Backup geral). */
-export function getBackupDestination(): string | null {
+/** Mesma chave do card de Backup geral. */
+function getBackupDestination(): string | null {
   return localStorage.getItem(DEST_KEY);
 }
 
@@ -56,11 +45,8 @@ function caseLabel(e: CaseIndexEntry): string {
 
 let running = false;
 
-/**
- * Roda o backup geral incremental para a pasta de backup configurada.
- * No-op silencioso se não há destino ou a opção está desligada.
- */
-export async function runAutoBackup(): Promise<void> {
+/** No-op silencioso se não há destino ou a opção está desligada. */
+async function runAutoBackup(): Promise<void> {
   if (running) return;
   const dest = getBackupDestination();
   if (!dest || !isAutoBackupOnCloseEnabled()) return;
@@ -99,11 +85,7 @@ export async function runAutoBackup(): Promise<void> {
   }
 }
 
-/**
- * Instala o observador: ao SAIR de uma ocorrência (activeWorkspacePath deixa de
- * apontar para o caso anterior), dispara o auto-backup. Retorna a função de
- * cleanup (unsubscribe).
- */
+/** Dispara ao sair de uma ocorrência; devolve o unsubscribe. */
 export function installAutoBackupWatcher(): () => void {
   return useWorkspaceStore.subscribe((state, prev) => {
     const left = prev.activeWorkspacePath;

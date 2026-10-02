@@ -1,10 +1,6 @@
 /**
- * VideoStoryboardPanel — cards com as fotos extraídas pelo ffmpeg.
- * Cada card mostra miniatura (servida via Tauri asset protocol),
- * timestamp, índice de frame (sempre estimado neste spike) e ações.
- *
- * Tamanho das miniaturas P / M / G (lembrado), galeria em tela grande e menu
- * no botão direito de cada quadro.
+ * Cards do storyboard (quadros extraídos pelo ffmpeg): miniatura P/M/G
+ * (lembrada), galeria em tela grande e menu de botão direito.
  */
 
 import { useEffect, useState } from "react";
@@ -15,7 +11,7 @@ import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMe
 import { formatDuration } from "./format";
 import styles from "./VideoStoryboardPanel.module.css";
 
-export type ThumbSize = "s" | "m" | "l";
+type ThumbSize = "s" | "m" | "l";
 const SIZE_KEY = "sicro.video.storyboardSize.v1";
 function loadSize(): ThumbSize {
   try {
@@ -200,8 +196,7 @@ function FrameCard({
           {frame.delta_s != null && Math.abs(frame.delta_s) > 0.001 && (
             <span
               className={styles.deltaChip}
-              // O quadro coletado é o que o player mostra no instante pedido: ele
-              // começa um pouco antes (até 1 quadro). Δ = início do quadro − pedido.
+              // Δ = início do quadro − instante pedido (o quadro começa até 1 quadro antes)
               title="O quadro coletado é o que aparece no instante pedido; ele começa Δ antes (no máximo a duração de 1 quadro)"
             >
               Δ {frame.delta_s.toFixed(3)}s

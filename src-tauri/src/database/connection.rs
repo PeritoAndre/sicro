@@ -1,8 +1,5 @@
-//! SQLite connection setup.
-//!
-//! Each workspace owns its own SQLite file. We open one connection per
-//! command — SQLite handles concurrent connections at OS level and the
-//! workspaces are single-process in Spike A, so a connection pool is overkill.
+//! Conexão SQLite: um arquivo por workspace, uma conexão por comando
+//! (processo único — pool seria exagero).
 
 use std::path::Path;
 
@@ -16,9 +13,8 @@ pub fn open_connection(path: &Path) -> Result<Connection> {
     Ok(conn)
 }
 
-/// Pragmas appropriate for desktop usage: WAL for durability under crashes,
-/// foreign keys on, normal synchronous (good balance for desktop), 1s busy
-/// timeout so transient locks don't surface as errors.
+/// WAL (durabilidade em queda), foreign keys on, synchronous NORMAL e
+/// busy_timeout de 1 s para lock transitório não virar erro.
 fn apply_pragmas(conn: &Connection) -> Result<()> {
     conn.pragma_update(None, "journal_mode", "WAL")?;
     conn.pragma_update(None, "synchronous", "NORMAL")?;

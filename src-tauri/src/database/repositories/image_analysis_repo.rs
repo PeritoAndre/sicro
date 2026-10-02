@@ -1,8 +1,4 @@
-//! Repositories for the Image Editor (MVP 7).
-//!
-//! Três tabelas (migration 009), três pequenos módulos lógicos no
-//! mesmo arquivo — mantém a árvore enxuta e segue o padrão do
-//! `video_repo.rs`.
+//! Repositório do Editor de Imagem (três tabelas da migration 009).
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};

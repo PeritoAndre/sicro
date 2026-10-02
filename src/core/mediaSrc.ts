@@ -1,15 +1,7 @@
 /**
- * URL de arquivo local para `<video>` / `<audio>`.
- *
- * - Windows (WebView2/Chromium): asset protocol do Tauri, como o resto do app.
- * - Linux (WebKitGTK): `file://`. O player de mídia do WebKitGTK (GStreamer)
- *   só lê http(s), blob e file — pelo asset protocol ele falha com
- *   "MediaError 4" mesmo com o codec instalado. O `lib.rs` registra o esquema
- *   `tauri` como local no setup para a página poder abrir `file://`.
- *   (No `tauri dev` a página é http://localhost e o file:// fica bloqueado.)
- *
- * Só para elementos de mídia: `fetch` (ex.: forma de onda) continua no asset
- * protocol, que funciona em todas as plataformas.
+ * URL de arquivo local só para `<video>` / `<audio>` (fetch continua no asset protocol).
+ * No Linux o GStreamer do WebKitGTK só lê http(s)/blob/file — pelo asset protocol
+ * dá "MediaError 4"; por isso `file://` (o lib.rs registra o esquema `tauri` como local).
  */
 import { convertFileSrc } from "@tauri-apps/api/core";
 
@@ -18,7 +10,7 @@ const IS_LINUX =
   /Linux/.test(navigator.userAgent) &&
   !/Android/.test(navigator.userAgent);
 
-/** `/home/a/b c.mp4` → `file:///home/a/b%20c.mp4` (cada trecho escapado). */
+/** `/home/a/b c.mp4` → `file:///home/a/b%20c.mp4`. */
 export function toFileUrl(absPath: string): string {
   return "file://" + absPath.split("/").map(encodeURIComponent).join("/");
 }

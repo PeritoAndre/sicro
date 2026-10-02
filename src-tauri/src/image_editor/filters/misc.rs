@@ -1,13 +1,8 @@
-//! G12 — Misc: Unsharp Mask, Threshold, Pixelize.
-//!
-//! Operações que não cabem nas outras categorias mas são essenciais
-//! num kit pericial.
+//! Unsharp mask, threshold e pixelize.
 
 use image::{Rgba, RgbaImage};
 
-/// Unsharp Mask = original + amount * (original - blurred).
-/// Sharpening fotográfico padrão. `sigma` controla a "frequência" do
-/// realce; `amount` ≈ 0.5..2.0 razoável.
+/// Unsharp mask = original + amount·(original − blur(σ)); `amount` ≈ 0.5..2.0.
 pub fn unsharp_mask(img: &RgbaImage, sigma: f32, amount: f32) -> RgbaImage {
     let blurred = super::blur::gaussian(img, sigma);
     let a = amount.clamp(0.0, 5.0);
@@ -38,9 +33,8 @@ pub fn threshold(img: &RgbaImage, value: u8) -> RgbaImage {
     out
 }
 
-/// Pixelize uma região: substitui cada bloco `block_size`x`block_size`
-/// pela média de seus pixels. Usado para anonimização de áreas
-/// (faces, placas, dados sensíveis).
+/// Substitui cada bloco `block_size`² da região pela média — anonimização de
+/// rostos, placas, dados sensíveis.
 pub fn pixelize_region(
     img: &RgbaImage,
     x0: u32,
@@ -112,11 +106,9 @@ mod tests {
             *p = Rgba([v, v, v, 255]);
         }
         let out = unsharp_mask(&img, 1.0, 1.5);
-        // Pixels altos ficam mais altos; baixos mais baixos.
         let center_in = img.get_pixel(2, 2).0[0];
         let center_out = out.get_pixel(2, 2).0[0];
-        // Centro tem vizinhança simétrica, então provavelmente pouca mudança;
-        // mas garantimos que extremos cresceram.
+        // Só garante que roda e preserva as dimensões.
         let _ = (center_in, center_out);
         assert_eq!(out.dimensions(), (5, 5));
     }

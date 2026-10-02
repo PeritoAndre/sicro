@@ -1,10 +1,4 @@
-/**
- * Mirror of Rust structs in src-tauri/src/models/occurrence.rs.
- * Keep these manually in sync until a code-generation strategy is adopted.
- *
- * The wire format is JSON (serde), so field names are snake_case as emitted
- * by serde's default serialization. Do NOT rename without changing the Rust side.
- */
+/** Espelha `src-tauri/src/models/occurrence.rs` (snake_case = wire do serde; não renomear sem mudar o Rust). */
 
 export type OccurrenceStatus =
   | "aberta"
@@ -13,9 +7,9 @@ export type OccurrenceStatus =
   | "arquivada";
 
 export interface Occurrence {
-  /** UUID v4 — also used as workspace_id. */
+  /** Também é o workspace_id. */
   id: string;
-  /** Nome livre do caso, dado no Início. É o rótulo principal; o resto é complemento. */
+  /** Nome livre do caso; é o rótulo principal. */
   titulo: string | null;
   numero_bo: string | null;
   protocolo: string | null;
@@ -40,8 +34,7 @@ export interface Occurrence {
   created_at: string;
   updated_at: string;
 
-  // ---- Spike D fields (only populated when the occurrence came from a
-  //      .sicroapp import; null for hand-created Spike A occurrences). ----
+  // Preenchidos só quando a ocorrência veio de um .sicroapp.
   import_id?: string | null;
   original_mobile_id?: string | null;
   primary_accuracy_m?: number | null;
@@ -51,26 +44,20 @@ export interface Occurrence {
   raw_location_json?: string | null;
 }
 
-/** Payload used when creating a new occurrence. */
 export interface NewOccurrenceInput {
-  /** Nome do caso — o único campo que o Início pede (e mesmo ele é opcional). */
   titulo?: string | null;
   numero_bo?: string | null;
   protocolo?: string | null;
-  /** Nº do ofício da Polícia Civil — distinto do protocolo (nº do laudo, PC). */
+  /** Ofício da Polícia Civil; distinto do protocolo (nº do laudo). */
   oficio?: string | null;
   tipo_pericia?: string | null;
   municipio?: string | null;
   peritos?: string[];
-  /** Where the .sicro folder should be created. If null, defaults to the OS Documents folder. */
+  /** null = pasta Documentos do SO. */
   parent_directory?: string | null;
 }
 
-/**
- * Patch enviado a `update_occurrence` (cabeçalho do caso editável no Dossiê).
- * O perito é a palavra final; "" vira NULL no backend. A proveniência
- * (import_id, raw_*, etc.) nunca é tocada.
- */
+/** Patch de `update_occurrence`: "" vira NULL no backend; proveniência (import_id, raw_*) nunca é tocada. */
 export interface OccurrenceEdit {
   titulo?: string | null;
   numero_bo?: string | null;
@@ -91,7 +78,6 @@ export interface OccurrenceEdit {
   peritos?: string[];
 }
 
-/** Entry shown in the "recent occurrences" list on Home. */
 export interface RecentOccurrence {
   workspace_id: string;
   workspace_path: string;
@@ -102,17 +88,12 @@ export interface RecentOccurrence {
   last_opened_at: string;
 }
 
-/** Returned by open/load operations: occurrence + path. */
 export interface LoadedOccurrence {
   occurrence: Occurrence;
   workspace_path: string;
 }
 
-/**
- * Rótulo do caso — espelho de `build_label` (src-tauri/src/models/occurrence.rs):
- * o nome dado pelo perito; sem nome, "BO — tipo — município" (casos antigos);
- * sem nada, a data de criação. Mudar nos dois.
- */
+/** Espelha `build_label` do Rust (mudar nos dois): título; senão "BO — tipo — município"; senão a data. */
 export function occurrenceLabel(
   o: Pick<Occurrence, "titulo" | "numero_bo" | "tipo_pericia" | "municipio" | "created_at">,
 ): string {
@@ -129,11 +110,7 @@ export function occurrenceLabel(
     : `Caso de ${d.toLocaleDateString("pt-BR")}`;
 }
 
-/**
- * Patch completo a partir do caso como está. `update_occurrence` sobrescreve
- * TODOS os campos editáveis (campo ausente vira NULL), então quem muda um só
- * campo parte daqui e troca o que quer — senão apaga o resto sem querer.
- */
+/** `update_occurrence` zera campo ausente: quem muda um só campo parte deste patch completo. */
 export function editFromOccurrence(o: Occurrence): OccurrenceEdit {
   return {
     titulo: o.titulo,

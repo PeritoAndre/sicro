@@ -1,9 +1,5 @@
-//! Repositories for the Dossiê Operacional (MVP 3).
-//!
-//! Kept as a single module because the seven tables introduced by
-//! `005_dossie.sql` share the same shape (occurrence_id + import_id + a
-//! couple of structured columns + raw_json). Splitting into seven files
-//! would be cargo-culting — one module is easier to audit.
+//! Repositórios do Dossiê: as sete tabelas da migration 005 têm a mesma forma,
+//! por isso ficam num módulo só.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -88,7 +84,7 @@ fn row_to_checklist_item(row: &Row<'_>) -> rusqlite::Result<ChecklistItem> {
     })
 }
 
-/// Derived counters for the checklist UI.
+/// Contadores da UI do checklist.
 pub fn summarise_checklist(items: &[ChecklistItem]) -> ChecklistSummary {
     let mut s = ChecklistSummary {
         total: items.len() as u32,

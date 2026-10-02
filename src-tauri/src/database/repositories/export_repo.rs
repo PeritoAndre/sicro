@@ -1,4 +1,4 @@
-//! Read/write helpers for the `exports` table.
+//! Tabela `exports`.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};

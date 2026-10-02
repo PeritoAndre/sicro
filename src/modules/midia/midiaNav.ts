@@ -1,11 +1,10 @@
 /**
- * "Vídeo e Áudio" — um módulo só no SICRO 4.0, com duas abas (Vídeos, Áudios)
- * na barra do topo. Cada aba é a tela de sempre (/video, /audio); aqui fica
- * qual aba foi usada por último, para a entrada do trilho voltar a ela.
+ * Abas Vídeos/Áudios do módulo Mídia: guarda a última aba usada, para a entrada
+ * do trilho voltar a ela; e o último módulo trabalhado em cada caso.
  */
 const KEY = "sicro.midia.aba.v1";
 
-export type MidiaAba = "/video" | "/audio";
+type MidiaAba = "/video" | "/audio";
 
 export function isMidiaPath(pathname: string): boolean {
   return pathname === "/video" || pathname === "/audio" || pathname.startsWith("/audio/");
@@ -28,7 +27,7 @@ export function rememberMidiaAba(pathname: string): void {
   }
 }
 
-// ---- último módulo de trabalho de cada caso (o Início volta direto nele) ----
+// último módulo de trabalho de cada caso (o Início volta direto nele)
 const WORK_KEY = "sicro.ultimoModulo.v2";
 const WORK_PATHS = ["/croqui", "/imagem", "/video", "/audio"];
 
@@ -44,10 +43,7 @@ export function rememberWorkModule(pathname: string, caseId: string | null | und
   }
 }
 
-/**
- * Onde abrir o caso `caseId`: o último módulo usado nele, ou `null` se ainda
- * não houve trabalho (o Início fica mostrando os módulos para escolher).
- */
+/** Último módulo usado no caso `caseId`, ou null se ainda não houve trabalho. */
 export function lastWorkModuleOf(caseId: string): string | null {
   try {
     const v = localStorage.getItem(`${WORK_KEY}.${caseId}`);

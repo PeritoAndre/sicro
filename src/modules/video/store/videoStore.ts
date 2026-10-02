@@ -1,8 +1,6 @@
 /**
- * videoStore — owns the list of videos of the active occurrence plus the
- * currently-open `VideoBundle`. Heavy editor state (player position,
- * selected event) is component-local; this store only keeps what
- * survives navigation.
+ * Lista de vídeos da ocorrência + o `VideoBundle` aberto: só o que sobrevive à
+ * navegação. Estado pesado do editor (posição, evento selecionado) é local.
  */
 
 import { create } from "zustand";
@@ -71,7 +69,7 @@ interface VideoState {
     deletePng?: boolean,
   ) => Promise<void>;
 
-  // ----- Calculador de Velocidade -----
+  // Calculador de Velocidade
   speedCalibrations: VideoSpeedCalibration[];
   speedCalculations: VideoSpeedCalculation[];
   loadSpeedData: (workspacePath: string, mediaHash: string) => Promise<void>;
@@ -84,7 +82,7 @@ interface VideoState {
     input: ComputeSpeedInput,
   ) => Promise<VideoSpeedCalculation>;
 
-  // ----- Medição de Distância (compartilha as calibrações da velocidade) -----
+  // Medição de Distância (compartilha as calibrações da velocidade)
   distanceMeasurements: VideoDistanceMeasurement[];
   loadDistanceData: (workspacePath: string, mediaHash: string) => Promise<void>;
   createDistanceMeasurement: (
@@ -310,8 +308,7 @@ export const useVideoStore = create<VideoState>((set) => ({
   },
 
   async loadDistanceData(workspacePath, mediaHash) {
-    // Carrega as medições E reatualiza as calibrações (compartilhadas com a
-    // velocidade) — a aba Medições consome a MESMA geometria de cena.
+    // Reatualiza também as calibrações: Medições consome a mesma geometria da Velocidade.
     try {
       const [calibrations, measurements] = await Promise.all([
         commands.listSpeedCalibrations(workspacePath, mediaHash),

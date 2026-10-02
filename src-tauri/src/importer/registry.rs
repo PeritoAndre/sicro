@@ -1,13 +1,5 @@
-//! Cross-workspace registry of imported `.sicroapp` packages.
-//!
-//! Each workspace's SQLite tracks its own `imports` table — but two
-//! different workspaces created from the same package would both think
-//! they're the original. To enforce "never import the same `.sicroapp`
-//! twice", we keep a small global index in the user's config directory
-//! (next to `recent.json` from Spike A).
-//!
-//! The file is tiny (one entry per import), human-readable, and rewritten
-//! atomically via `filesystem::atomic_write_bytes`.
+//! Índice global (`imports_index.json` no diretório de config) dos pacotes já
+//! importados: cada workspace só conhece seus próprios imports.
 
 use std::path::{Path, PathBuf};
 
@@ -37,8 +29,7 @@ struct RegistryFile {
     imports: Vec<GlobalImportRecord>,
 }
 
-/// A small abstraction so the orchestrator can be tested with a tempdir
-/// without poking at the user's real config directory.
+/// Abstração sobre o arquivo para testar com tempdir.
 pub struct ImportRegistry {
     path: PathBuf,
 }
@@ -50,7 +41,6 @@ impl ImportRegistry {
         }
     }
 
-    /// Returns the existing record for a given package hash, if any.
     pub fn find_by_sha256(&self, sha256: &str) -> Result<Option<GlobalImportRecord>> {
         let file = self.read()?;
         Ok(file
@@ -59,8 +49,7 @@ impl ImportRegistry {
             .find(|r| r.package_sha256.eq_ignore_ascii_case(sha256)))
     }
 
-    /// Append a fresh record. Newest first, no de-duplication (the caller
-    /// is expected to have refused duplicates before calling).
+    /// Insere no topo; não deduplica (o caller já recusou duplicatas).
     pub fn record(&self, entry: GlobalImportRecord) -> Result<()> {
         let mut file = self.read()?;
         file.imports.insert(0, entry);

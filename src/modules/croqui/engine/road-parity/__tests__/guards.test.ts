@@ -1,6 +1,4 @@
-/**
- * Python Parity Engine — testes de type guards.
- */
+/** Testes dos type guards parity. */
 
 import { describe, expect, it } from "vitest";
 import {

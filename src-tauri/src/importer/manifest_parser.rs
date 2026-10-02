@@ -1,15 +1,6 @@
-//! Tolerant parser for the `manifest.json` of a `.sicroapp`.
-//!
-//! The mobile contract (`docs/SICROAPP_COMPATIBILITY_POLICY.md`) is
-//! "additive only — never rename, move or remove". So this parser only reads
-//! what it understands and **preserves the raw payload verbatim** so future
-//! Desktop versions can mine fields we don't model today.
-//!
-//! Mobile v0.6 emits Portuguese keys. The auditoria report also proposes
-//! English aliases (`format`, `schema_version`, `exported_at`, `app_name`,
-//! `app_version`, `operator`, ...) for forward compatibility. The parser
-//! accepts both — Portuguese is the source of truth today, English is the
-//! upgrade path.
+//! Parser tolerante do `manifest.json`. O contrato mobile é só aditivo, então
+//! lê o que entende e guarda o JSON cru. Aceita chaves em português (fonte da
+//! verdade) e aliases em inglês.
 
 use serde_json::Value;
 
@@ -32,7 +23,7 @@ pub struct ParsedManifest {
     pub counts: Option<Value>,
     pub declared_files: Vec<String>,
 
-    /// Raw JSON of the manifest, preserved for audit/forward-compat.
+    /// JSON cru, para auditoria e campos futuros.
     pub raw_json: String,
 }
 
@@ -46,7 +37,7 @@ pub fn parse(raw_bytes: &[u8]) -> Result<ParsedManifest> {
 
     let format = first_string(obj, &["formato", "format"])
         .ok_or_else(|| SicroError::Validation("manifest is missing 'formato'".to_string()))?;
-    // Accept both 'sicroapp' (current) and 'sicrocampo' (legacy).
+    // 'sicrocampo' é o nome antigo do pacote.
     if format != "sicroapp" && format != "sicrocampo" {
         return Err(SicroError::Validation(format!(
             "unsupported manifest 'formato': {format:?}"
@@ -60,7 +51,6 @@ pub fn parse(raw_bytes: &[u8]) -> Result<ParsedManifest> {
     let app_name = first_string(obj, &["app_name"]);
     let app_version = first_string(obj, &["app_version"]);
 
-    // Nested ocorrencia block (mobile) — flatten the fields we care about.
     let occurrence_block = obj.get("ocorrencia").and_then(Value::as_object);
     let occurrence_id = occurrence_block
         .and_then(|o| o.get("id"))

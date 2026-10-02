@@ -1,15 +1,5 @@
-//! Tauri commands for the Croqui module (Spike E).
-//!
-//! Mirrors the Laudo command surface:
-//!   - create_croqui    → row in `croquis` + empty `.sicrocroqui` on disk
-//!   - list_croquis     → all croquis of the active occurrence
-//!   - read_croqui      → row + `.sicrocroqui` envelope
-//!   - save_croqui      → overwrites the `.sicrocroqui` file
-//!   - export_croqui_png → writes the PNG produced by Konva.toDataURL()
-//!                          into `croquis/exports/` and updates the row.
-//!
-//! The schema of `doc` lives on the frontend (`src/modules/croqui/engine/`).
-//! Rust treats the envelope as opaque JSON.
+//! Comandos Tauri do módulo Croqui (viário, corporal e planta). O schema do
+//! `doc` vive no frontend; Rust trata o envelope como JSON opaco.
 
 use std::path::{Path, PathBuf};
 
@@ -48,9 +38,8 @@ pub async fn create_croqui(
     let now = Utc::now();
     let id = Uuid::new_v4();
 
-    // Umbrella "Croquis": três sub-sistemas. "corporal" = carta de lesões
-    // (.sicrocorpo); "planta" = planta baixa / cena (.sicroplanta);
-    // "viario" (default) = croqui de via (.sicrocroqui).
+    // "corporal" = carta de lesões (.sicrocorpo); "planta" = planta baixa
+    // (.sicroplanta); "viario" (default) = croqui de via (.sicrocroqui).
     let kind = match input.kind.as_deref() {
         Some("corporal") => "corporal",
         Some("planta") => "planta",
@@ -103,8 +92,7 @@ pub async fn create_croqui(
         None,
     )?;
 
-    // Write the empty envelope so read-after-create never fails. O frontend
-    // (coerce do engine correspondente) preenche o resto ao abrir.
+    // Envelope vazio para read-after-create nunca falhar; o frontend preenche ao abrir.
     let envelope = match kind {
         "corporal" => empty_corpo_envelope(&croqui),
         "planta" => empty_planta_envelope(&croqui),
@@ -191,14 +179,8 @@ pub async fn save_croqui(
     Ok(croqui)
 }
 
-/// Remove o croqui do workspace: apaga a linha do SQLite e remove o
-/// arquivo `.sicrocroqui` em disco. Idempotente para o arquivo —
-/// `NotFound` é silencioso. O PNG exportado, se existir, NÃO é
-/// removido (continua disponível em `croquis/exports/` como
-/// artefato pericial; mantemos o mesmo comportamento de
-/// `delete_storyboard_frame`, que só remove o frame quando flagado).
-///
-/// Audit: registra `croqui.deleted` antes de remover a linha.
+/// Apaga a linha e o arquivo (NotFound é silencioso). O PNG exportado NÃO é
+/// removido: continua em `croquis/exports/` como artefato pericial.
 #[tauri::command]
 pub async fn delete_croqui(
     workspace_path: String,
@@ -238,9 +220,8 @@ pub async fn delete_croqui(
     }
 }
 
-/// Persist a PNG export. The frontend builds it via Konva's `toDataURL()`
-/// and ships the bytes base64-encoded. We write to `croquis/exports/` and
-/// update the croqui row with the new path.
+/// Grava o PNG exportado (Konva `toDataURL()`, base64) em `croquis/exports/`
+/// e atualiza a linha.
 #[tauri::command]
 pub async fn export_croqui_png(
     workspace_path: String,
@@ -257,7 +238,7 @@ pub async fn export_croqui_png(
     let croqui = croqui_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("croqui {} not found", id)))?;
 
-    // Decode base64 — accept either raw or "data:image/png;base64,..." prefix.
+    // Aceita base64 cru ou com prefixo `data:image/png;base64,`.
     let cleaned = input
         .png_base64
         .split(',')
@@ -310,16 +291,9 @@ pub async fn export_croqui_png(
 }
 
 // ---------------------------------------------------------------------------
-// Drone import (MVP 9 Round 4 — Quarta rodada)
-//
-// Reads an aerial photo (local absolute path), applies radial lens
-// correction at the given intensity, crops to the rectangle the perito
-// drew in the wizard, writes the derivative to
-// `croquis/backgrounds/drone_corrigido_<ts>.png`, generates a sidecar
-// JSON with hashes + parameters, and returns both relative paths so the
-// frontend can drop the derivative as the croqui background.
-//
-// The original file is NEVER mutated.
+// Importação de foto de drone: correção radial de lente + recorte → PNG em
+// `croquis/backgrounds/` com sidecar JSON (hashes + parâmetros). O original
+// nunca é alterado.
 
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -333,33 +307,26 @@ pub struct CropRectInput {
 #[derive(Debug, serde::Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DroneImportInput {
-    /// Absolute path to the source image on disk (drone export, dossier
-    /// photo, etc.). When the file already sits inside the workspace,
-    /// the sidecar will record a workspace-relative path.
+    /// Caminho absoluto da imagem de origem.
     pub source_absolute_path: String,
-    /// 0.0..=1.0 — slider position from the UI; 0 disables correction.
+    /// 0.0..=1.0; 0 desliga a correção.
     pub intensity: f32,
-    /// Crop applied to the *output* of the lens correction (same
-    /// dimensions as the input image).
+    /// Recorte aplicado à SAÍDA da correção (mesmas dimensões da entrada).
     pub crop: CropRectInput,
-    /// Optional — when known, recorded in the sidecar for audit.
+    /// Opcionais; vão para o sidecar (auditoria).
     pub croqui_id: Option<String>,
-    /// Optional — same, for audit traceability.
     pub occurrence_id: Option<String>,
 }
 
 #[derive(Debug, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub struct DroneImportResult {
-    /// Workspace-relative path of the corrected + cropped PNG, ready
-    /// to feed into `SicroCroquiBackgroundImage.source_path`.
+    /// PNG corrigido + recortado, relativo ao workspace (vira fundo do croqui).
     pub output_relative_path: String,
-    /// Workspace-relative path of the JSON sidecar describing the
-    /// processing pipeline (so the result is reproducible / auditable).
+    /// Sidecar JSON com o pipeline (reproduzível/auditável).
     pub sidecar_relative_path: String,
     pub output_width: u32,
     pub output_height: u32,
-    /// SHA-256 of the final PNG bytes.
     pub output_hash_sha256: String,
 }
 
@@ -377,12 +344,9 @@ pub async fn import_drone_image(
         )));
     }
 
-    // Hash the original BEFORE doing anything — the sidecar records it
-    // so the chain of custody is auditable end-to-end.
+    // Hash do original antes de qualquer coisa: vai para o sidecar (custódia).
     let original_hash = sha256_file(&source)?;
 
-    // Load + correct + crop, all in memory. The image crate dispatches
-    // by file extension; PNG / JPEG / WebP all work.
     let dyn_img = image::open(&source).map_err(|e| {
         SicroError::Filesystem(format!(
             "failed to decode drone image {}: {}",
@@ -407,8 +371,7 @@ pub async fn import_drone_image(
     })?;
     let (out_w, out_h) = final_img.dimensions();
 
-    // Encode the result as PNG into a byte buffer so we can both write
-    // it to disk and hash it without re-reading.
+    // PNG em memória: grava e faz hash sem reler.
     let mut png_bytes: Vec<u8> = Vec::new();
     {
         let mut cursor = std::io::Cursor::new(&mut png_bytes);
@@ -419,8 +382,7 @@ pub async fn import_drone_image(
             })?;
     }
 
-    // Stamp filenames with the same timestamp so the PNG and sidecar
-    // share a stable prefix the user can grep for.
+    // Mesmo timestamp no PNG e no sidecar: prefixo comum.
     let ts = Utc::now().format("%Y%m%d_%H%M%S").to_string();
     let png_filename = format!("drone_corrigido_{ts}.png");
     let sidecar_filename = format!("drone_corrigido_{ts}.sidecar.json");
@@ -438,10 +400,8 @@ pub async fn import_drone_image(
 
     let output_hash = sha256_bytes(&png_bytes);
 
-    // Sidecar — captures every parameter so the operation is
-    // reproducible / auditable. `original_relative_path` is best-effort:
-    // when the source already sits inside the workspace, we record the
-    // relative form; otherwise we store the absolute path verbatim.
+    // `original_relative_path` é best-effort: só quando a origem já está dentro
+    // do workspace; o caminho absoluto vai sempre.
     let original_relative = source
         .strip_prefix(&ws)
         .ok()
@@ -479,8 +439,6 @@ pub async fn import_drone_image(
     let sidecar_bytes = serde_json::to_vec_pretty(&sidecar)?;
     atomic_write_bytes(&sidecar_path, &sidecar_bytes)?;
 
-    // Audit log so the perito can later trace the import via the
-    // existing occurrence_audit view.
     if let Some(occ_id) = &input.occurrence_id {
         if let Ok(occ_uuid) = Uuid::parse_str(occ_id) {
             let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
@@ -518,9 +476,8 @@ fn write_doc(target: &Path, doc: &serde_json::Value) -> Result<()> {
     Ok(())
 }
 
-/// Empty `.sicrocroqui` envelope — valid JSON the frontend Croqui Engine
-/// can open immediately. The frontend's serializer will overwrite this on
-/// the first save.
+/// Envelope `.sicrocroqui` vazio que o engine do frontend abre direto; o
+/// serializer de lá sobrescreve no primeiro save.
 fn empty_envelope(c: &Croqui) -> serde_json::Value {
     serde_json::json!({
         "schema_version": c.schema_version,
@@ -545,9 +502,8 @@ fn empty_envelope(c: &Croqui) -> serde_json::Value {
     })
 }
 
-/// Empty `.sicrocorpo` envelope (croqui corporal / carta de lesões). Campos
-/// mínimos exigidos por `coerceCorpoDoc` no frontend; o resto (template,
-/// canvas, markers) é preenchido lá. Rust não conhece o schema completo.
+/// Envelope `.sicrocorpo` vazio: campos mínimos de `coerceCorpoDoc`; o resto
+/// é preenchido no frontend.
 fn empty_corpo_envelope(c: &Croqui) -> serde_json::Value {
     serde_json::json!({
         "schema_version": c.schema_version,
@@ -562,10 +518,8 @@ fn empty_corpo_envelope(c: &Croqui) -> serde_json::Value {
     })
 }
 
-/// Empty `.sicroplanta` envelope (croqui de planta baixa / cena). Campos mínimos
-/// exigidos por `coercePlantaDoc` no frontend; o `floorplan` (modelo do motor
-/// Pixi forkado do arcada) e os marcadores de evidência são preenchidos lá.
-/// Rust trata o arquivo como JSON opaco.
+/// Envelope `.sicroplanta` vazio: campos mínimos de `coercePlantaDoc`;
+/// `floorplan` e marcadores são preenchidos no frontend.
 fn empty_planta_envelope(c: &Croqui) -> serde_json::Value {
     serde_json::json!({
         "schema_version": c.schema_version,

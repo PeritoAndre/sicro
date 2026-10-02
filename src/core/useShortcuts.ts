@@ -1,7 +1,6 @@
 /**
- * Hook que liga AÇÕES de atalho a handlers. Resolve a combinação efetiva
- * (override do usuário ?? padrão), ignora digitação em campos de texto e só
- * dispara para ações cujo handler foi fornecido (escopo natural por tela).
+ * Liga ações de atalho a handlers: override do usuário ?? padrão, ignora
+ * digitação em campos de texto e só dispara para ações com handler na tela.
  */
 import { useEffect, useRef } from "react";
 
@@ -9,12 +8,11 @@ import { eventToBinding, isEditableTarget, normalizeBinding } from "@core/keymap
 import { ACTION_BY_ID } from "@core/keymapActions";
 import { useKeymapStore } from "@stores/keymapStore";
 
-export type ShortcutHandlers = Record<string, (e: KeyboardEvent) => void>;
+type ShortcutHandlers = Record<string, (e: KeyboardEvent) => void>;
 
 interface Options {
-  /** Desliga temporariamente os atalhos (ex.: enquanto um modal está aberto). */
   enabled?: boolean;
-  /** Permitir disparo mesmo com foco em campo de texto (raro; padrão false). */
+  /** Dispara mesmo com foco em campo de texto (raro). */
   allowInInputs?: boolean;
 }
 
@@ -23,8 +21,7 @@ export function useShortcuts(handlers: ShortcutHandlers, opts: Options = {}): vo
   const enabled = opts.enabled ?? true;
   const allowInInputs = opts.allowInInputs ?? false;
 
-  // Ref com os handlers atuais — evita re-assinar o listener a cada render
-  // (handlers normalmente são objeto literal recriado em cada render).
+  // Ref evita re-assinar o listener a cada render (handlers costuma ser objeto literal).
   const handlersRef = useRef<ShortcutHandlers>(handlers);
   handlersRef.current = handlers;
 

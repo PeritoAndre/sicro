@@ -1,15 +1,4 @@
-/**
- * Python Parity Engine — testes de serialização.
- *
- * Garantia: objetos parity sobrevivem round-trip
- * `JSON.stringify` → `JSON.parse` + `coerceCroquiDoc` sem perda.
- *
- * Fase S clean cut — Os objetos parity agora vivem no array principal
- * `doc.objects` (via union `SicroObject`). Os campos legacy
- * `road_engine_version` e `parity_objects` foram removidos do envelope
- * — quando o coercer encontra um envelope antigo que ainda carrega
- * `parity_objects`, absorve esses objetos no array principal.
- */
+/** Objetos parity sobrevivem ao round-trip JSON + coerceCroquiDoc; `parity_objects` antigo é absorvido. */
 
 import { describe, expect, it } from "vitest";
 import { coerceCroquiDoc, serializeCroquiDoc } from "../../serializer";
@@ -112,8 +101,6 @@ describe("road-parity / serializer round-trip", () => {
   });
 
   it("absorve `parity_objects` legacy do envelope pré-Fase S", () => {
-    // Envelope antigo (Fase H.1) carregava `parity_objects` separado.
-    // O coercer agora copia eles para o array `objects` principal.
     const road = makeParityRoad(0, 0, 100, 0);
     const legacyEnvelope = {
       schema_version: "0.3",

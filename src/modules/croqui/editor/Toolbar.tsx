@@ -1,22 +1,6 @@
 /**
- * Toolbar — left vertical strip with the available tools (Round 3 of
- * MVP 9 — Road Engine Pro, compact layout).
- *
- * The strip is now organised around **category buttons**: each major
- * category (Veículo, Vestígio, Mobiliário, Pessoa, Anotação, Via)
- * shows a single chip that opens a popover with the actual subtypes.
- * The chip remembers the most recently picked subtype so the user can
- * re-pick "the same kind I picked last time" with one click.
- *
- * Tools without enough variations to deserve a popover (Selecionar,
- * Pan, Medida, Escala, R1/R2) live in a small "Atalhos" group at the
- * top.
- *
- * The legacy "Via (linhas soltas)" group from Round 2 is gone — the
- * Road Engine Pro is the only path for creating new vias. Renderers
- * and serializers still accept `SicroLineObject` instances saved by
- * older croquis (read-side compat), but the toolbar doesn't surface
- * the old line subtypes anymore.
+ * Barra lateral de ferramentas. Cada categoria é um chip que abre um
+ * popover de subtipos e lembra o último escolhido.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -74,14 +58,13 @@ interface CategoryDef {
   id: string;
   label: string;
   icon: LucideIcon;
-  /** Pre-pickup state — used when the user has never picked a subtype yet. */
+  /** Usado enquanto o usuário ainda não escolheu um subtipo. */
   defaultTool: Tool;
-  /** Subtools shown in the popover. */
   subtools: SubTool[];
 }
 
 // ---------------------------------------------------------------------------
-// Atomic tools — surfaced directly without a popover.
+// Ferramentas diretas (sem popover)
 
 const ATOMIC_TOOLS: SubTool[] = [
   { key: "select", label: "Selecionar", icon: MousePointer2, hint: "V" },
@@ -96,7 +79,7 @@ const REFERENCIAL_TOOLS: SubTool[] = [
 ];
 
 // ---------------------------------------------------------------------------
-// Category buttons — each opens a popover with subtypes.
+// Categorias com popover
 
 const CATEGORIES: CategoryDef[] = [
   {
@@ -110,7 +93,6 @@ const CATEGORIES: CategoryDef[] = [
       { key: "road_highway", label: "Rodovia", icon: Route },
       { key: "road_dirt", label: "Estrada de terra", icon: Route },
       { key: "road_parking", label: "Estacionamento", icon: Square },
-      // Road Engine 2.0 Ciclo 2 — rotatória primitiva (single-click insert).
       { key: "roundabout", label: "Rotatória", icon: Circle },
     ],
   },
@@ -143,8 +125,7 @@ const CATEGORIES: CategoryDef[] = [
     ],
   },
   {
-    // Frota SVG do designer — pintura oficial fixa (a cor do Inspector não
-    // repinta viatura/ambulância/táxi; vide engine/vehicleArt.ts).
+    // Pintura oficial fixa: a cor do Inspector não repinta (ver engine/vehicleArt.ts).
     id: "viatura",
     label: "Viaturas",
     icon: Siren,
@@ -199,10 +180,8 @@ const CATEGORIES: CategoryDef[] = [
     icon: PersonStanding,
     defaultTool: "marker_pedestre_m_dorsal",
     subtools: [
-      // Frota SVG do designer — vítimas em decúbito, escala humana real.
-      // Os marcadores genéricos "Pedestre" e "Vítima / cadáver" saíram da
-      // trilha em favor das artes; os subtipos `pedestrian`/`body` seguem no
-      // schema e no renderer para abrir croquis antigos sem quebrar.
+      // Os genéricos `pedestrian`/`body` saíram da barra, mas seguem no
+      // schema e no renderer para abrir croquis antigos.
       { key: "marker_pedestre_m_dorsal", label: "Vítima M — dec. dorsal", icon: PersonStanding },
       { key: "marker_pedestre_m_lateral", label: "Vítima M — dec. lateral", icon: PersonStanding },
       { key: "marker_pedestre_m_ventral", label: "Vítima M — dec. ventral", icon: PersonStanding },
@@ -238,11 +217,8 @@ interface Props {
   onDuplicate: () => void;
   onImportBackground: () => void;
   onPickFromDossie: () => void;
-  /** MVP 9 Round 4 — open the drone pre-processing wizard. */
   onImportDrone?: () => void;
-  /** MVP 10 — open the OSM road import wizard. */
   onImportOsm?: () => void;
-  /** MVP 9 Round 5 — background framing helpers. */
   onCenterBackground?: () => void;
   onFitBackground?: () => void;
   onResetBackgroundRotation?: () => void;
@@ -254,7 +230,7 @@ interface Props {
   onChangeBackgroundOpacity: (v: number) => void;
   onSave: () => void;
   onExportPng: () => void;
-  /** MVP 9 — variante sem carimbo, ideal para inserir no laudo. */
+  /** Sem carimbo, para inserir no laudo. */
   onExportPngClean?: () => void;
   onBackToList: () => void;
   saving: boolean;
@@ -292,17 +268,13 @@ export function Toolbar({
   saving,
   exporting,
 }: Props) {
-  // The popover that's currently open. Only one at a time — picking a
-  // subtype on one closes it, clicking outside closes it, Esc closes it.
+  // Só um popover aberto por vez.
   const [openPopover, setOpenPopover] = useState<string | null>(null);
 
-  // Remember the most recently selected subtype per category — so the
-  // category chip shows it (and re-clicking the chip activates it
-  // directly, no popover needed).
+  // Último subtipo por categoria; o chip mostra e reativa esse.
   const [lastPick, setLastPick] = useState<Record<string, Tool>>({});
 
-  // When the parent flips the tool externally (keyboard shortcut, click
-  // on canvas, etc.), remember the new pick if it belongs to a category.
+  // Ferramenta trocada por fora (atalho, canvas) também atualiza o chip.
   useEffect(() => {
     for (const cat of CATEGORIES) {
       const found = cat.subtools.find((s) => s.key === activeTool);
@@ -315,7 +287,7 @@ export function Toolbar({
     }
   }, [activeTool]);
 
-  // Close popovers when the user clicks outside the toolbar.
+  // Clique fora da barra ou Esc fecha o popover.
   const rootRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (!openPopover) return;
@@ -473,7 +445,6 @@ export function Toolbar({
                 {Math.round(bgOpacity * 100)}%
               </span>
             </label>
-            {/* MVP 9 Round 5 — framing helpers */}
             {onCenterBackground && (
               <button
                 type="button"
@@ -563,7 +534,7 @@ export function Toolbar({
 
       <div className={styles.spacer} />
 
-      {/* Save + Export */}
+      {/* Salvar + exportar */}
       <Button
         variant="secondary"
         leftIcon={<Save size={14} />}
@@ -617,10 +588,7 @@ function CategoryButton({
     return m;
   }, [cat]);
 
-  // The category is "active" when the user currently has any of its
-  // subtools selected.
   const isCategoryActive = subtoolsByKey.has(activeTool);
-  // The label shown on the chip — last picked subtool, or the default.
   const chipKey =
     lastPick && subtoolsByKey.has(lastPick) ? lastPick : cat.defaultTool;
   const chipDisplay = subtoolsByKey.get(chipKey) ?? cat.subtools[0];
@@ -635,7 +603,7 @@ function CategoryButton({
         <CatIcon size={11} /> {cat.label}
       </div>
       <div className={styles.row}>
-        {/* Main chip: activates last-picked subtool */}
+        {/* Chip principal: reativa o último subtipo escolhido */}
         <button
           type="button"
           className={`${styles.tool} ${
@@ -647,7 +615,6 @@ function CategoryButton({
           <ChipIcon size={13} aria-hidden />
           <span>{chipDisplay.label}</span>
         </button>
-        {/* Disclosure caret: opens popover */}
         <button
           type="button"
           className={styles.actionBtn}

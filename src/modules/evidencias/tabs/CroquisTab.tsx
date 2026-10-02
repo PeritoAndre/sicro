@@ -1,7 +1,4 @@
-/**
- * CroquisTab — aba "Croquis". Lista cada `.sicrocroqui` em par com o
- * seu último PNG exportado (quando existe).
- */
+/** Aba Croquis: cada `.sicrocroqui` em par com o último PNG exportado. */
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -94,9 +91,7 @@ export function CroquisTab({ items, workspacePath }: Props) {
               const exportRel = export_?.relative_path ?? null;
               const updated =
                 source?.updated_at ?? export_?.updated_at ?? source?.created_at ?? null;
-              // Item representativo da linha: o .sicrocroqui (origem) quando
-              // existe, senão o export PNG. "Abrir no módulo" leva ao Croqui
-              // nos dois casos.
+              // "Abrir no módulo" leva ao Croqui nos dois casos.
               const primary = source ?? export_;
               return (
                 <tr key={id}>

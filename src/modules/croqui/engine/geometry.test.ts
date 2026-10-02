@@ -1,8 +1,4 @@
-/**
- * Unit tests for the pure geometry helpers — Spike E.
- * No DOM, no Konva. If the math is wrong here, every measurement on the
- * canvas is wrong.
- */
+/** Testes da geometria pura (escala e medições). */
 
 import { describe, expect, it } from "vitest";
 import {

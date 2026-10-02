@@ -15,7 +15,7 @@ export enum HandleType {
     Move
 }
 
-export interface IHandleConfig {
+interface IHandleConfig {
     size?: number,
     color?: number,
     type: HandleType,

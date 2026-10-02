@@ -1,17 +1,6 @@
 /**
- * TitleBar — barra de título CUSTOM (substitui a nativa do Windows).
- *
- * A janela roda com `decorations: false` (sem a moldura do SO). Esta barra:
- *   - é escura, na cor do chrome (`--sicro-surface-1`) — combina com o app;
- *   - NÃO mostra nome nem ícone (a marca SICRO fica só na sidebar);
- *   - traz os botões minimizar / maximizar-restaurar / fechar (estilo Windows);
- *   - tem área de arrastar (`data-tauri-drag-region`) — duplo-clique maximiza;
- *   - reabilita o REDIMENSIONAR pelas bordas (janela frameless perde isso no
- *     Windows): 8 "alças" finas nas bordas/cantos chamam `startResizeDragging`.
- *
- * O `title` da janela (`tauri.conf.json`) é "SICRO 4.1" — ele some da
- * janela (não há barra nativa), mas segue identificando o app na barra de
- * tarefas / alt-tab.
+ * Barra de título própria (janela com `decorations: false`). Janela frameless
+ * perde o redimensionar pelas bordas no Windows: as alças chamam `startResizeDragging`.
  */
 
 import { useEffect, useState } from "react";
@@ -19,8 +8,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Brand } from "./Brand";
 import styles from "./TitleBar.module.css";
 
-// Bordas (finas) + cantos (quadradinhos) com a direção de resize do Tauri.
-// `as const` deixa cada `dir` como literal — casa com o union ResizeDirection.
+// `as const` deixa cada `dir` literal, casando com o union ResizeDirection.
 const RESIZE_HANDLES = [
   { dir: "North", cls: "rN" },
   { dir: "South", cls: "rS" },
@@ -54,14 +42,11 @@ export function TitleBar() {
   return (
     <>
       <div className={styles.bar}>
-        {/* Marca (logo + nome) no canto superior esquerdo, sobre a coluna da
-            sidebar. data-tauri-drag-region: arrasta a janela a partir daqui
-            também (os filhos têm pointer-events:none pra o clique cair aqui). */}
+        {/* Os filhos têm pointer-events:none para o arrasto cair no drag-region. */}
         <div className={styles.brandSlot} data-tauri-drag-region>
           <Brand />
         </div>
-        {/* Área de arrastar do meio. Duplo-clique = maximizar (nativo do
-            drag-region, via permissão internal-toggle-maximize). */}
+        {/* Duplo-clique maximiza (permissão internal-toggle-maximize). */}
         <div className={styles.drag} data-tauri-drag-region />
         <div className={styles.controls}>
           <button
@@ -128,7 +113,6 @@ export function TitleBar() {
         </div>
       </div>
 
-      {/* Alças de redimensionamento — só quando NÃO maximizado. */}
       {!maximized && (
         <div className={styles.resizeLayer} aria-hidden>
           {RESIZE_HANDLES.map((h) => (

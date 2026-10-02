@@ -1,11 +1,6 @@
-//! Tauri command surface — anything callable from JavaScript lives here.
-//!
-//! We deliberately do NOT `pub use` the individual `#[tauri::command]` items
-//! at this level. The `tauri::generate_handler!` macro relies on macro-generated
-//! sibling symbols (`__cmd__*`) which live next to the function in their
-//! module; a `pub use` would silently shadow that path and break the handler
-//! registration. Always reference commands via their full module path:
-//! `commands::<module>::<name>`.
+//! Superfície de comandos Tauri. Sem `pub use` dos comandos aqui: o
+//! `generate_handler!` depende dos símbolos gerados (`__cmd__*`) ao lado da fn,
+//! e um re-export quebraria o registro. Sempre `commands::<módulo>::<nome>`.
 
 pub mod ai_commands;
 pub mod alpha_commands;

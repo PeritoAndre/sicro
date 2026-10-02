@@ -1,20 +1,9 @@
 /**
- * UnsavedChangesModal (Imagem) — diálogo "Salvar antes de sair?" levantado
- * pelo ImageEditor quando o perito tenta deixar o editor / trocar de módulo
- * com alterações não salvas (pilha de filtros, anotações, ajustes, título…).
- *
- * Três saídas:
- *   - **Salvar e sair**   → salva a análise e prossegue a navegação pendente.
- *   - **Sair sem salvar** → descarta as edições locais e prossegue.
- *   - **Cancelar**        → fecha o modal e permanece no editor.
- *
- * Autocontido (estilos inline) para não acoplar a outro módulo. §13: salvar
- * grava só o sidecar `.sicroimage` (operações não-destrutivas) — o arquivo
- * original da evidência nunca é alterado.
+ * Diálogo "Salvar antes de sair?" do editor de imagem. Salvar grava só o
+ * sidecar `.sicroimage`: o arquivo original da evidência nunca é alterado.
  */
 
 interface UnsavedChangesModalProps {
-  /** Se o pai está no meio de um salvamento. */
   saving: boolean;
   /** Texto contextual — para onde o usuário tentava ir. */
   destinationLabel?: string;

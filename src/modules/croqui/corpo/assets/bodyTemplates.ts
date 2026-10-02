@@ -1,22 +1,8 @@
 /**
- * Pranchas do croqui corporal — ARTE BITMAP (PNG) tratada pelo perito a
- * partir dos esquemas do POP LOCAL DE CRIME (SENASP/MJSP, 2024 — Anexo 1,
- * "Nômina Anatômica", fonte SCPe/IC/PCDF).
- *
- * CC-2 (reformulação): as 4 pranchas SVG esquemáticas deram lugar a 10
- * pranchas bitmap de alta qualidade. Cada prancha tem DUAS VISTAS lado a
- * lado (frente+costas, palma+dorso, anterior+posterior, perfis E/D…), com
- * bounding box MEDIDO por varredura de pixels (scanner de silhueta) — é
- * nesse box que a numeração do POP é projetada (vide engine/regionsPop.ts).
- *
- * Conforme o POP, SOMENTE os corpos inteiros frente+costas têm numeração
- * de regiões (frente 1–28, costas 1–21). As demais pranchas são gabaritos
- * de marcação livre (no manual elas aparecem em branco) — a classificação
- * anatômica continua disponível pelo inspector.
- *
- * Os PNGs viajam como assets do Vite (import → URL). O Konva carrega a URL
- * num HTMLImageElement e desenha em tamanho nativo; os marcadores de lesão
- * continuam em coordenadas lógicas da prancha (px da arte).
+ * Pranchas do croqui corporal: PNGs (assets do Vite) tratados pelo perito a
+ * partir do POP Local de Crime (SENASP/MJSP 2024, Anexo 1). Cada prancha tem
+ * vistas lado a lado com box medido por varredura de silhueta; só os corpos
+ * inteiros frente+costas recebem a numeração do POP, como no manual.
  */
 
 import corpoMascSrc from "./art/corpo-masculino-frente-costas.png";
@@ -43,38 +29,34 @@ export type BodyView =
   | "perna_esquerda"
   | "orelhas";
 
-/** Retângulo (px da arte) que delimita UMA vista dentro da prancha. */
-export interface ArtViewBox {
+/** Retângulo (px da arte) que delimita uma vista dentro da prancha. */
+interface ArtViewBox {
   x: number;
   y: number;
   w: number;
   h: number;
 }
 
-/** Uma vista nomeada da prancha (ex.: FRENTE, DORSO, PERFIL ESQUERDO…). */
+/** Uma vista nomeada da prancha (FRENTE, DORSO, PERFIL ESQUERDO…). */
 export interface BodyTemplateView {
   /** "frente" | "costas" | rótulos livres das demais pranchas. */
   id: string;
-  /** Título desenhado sob a vista (e usado nas listas do export). */
+  /** Título desenhado sob a vista e usado nas listas do export. */
   label: string;
   box: ArtViewBox;
 }
 
-export interface BodyTemplate {
+interface BodyTemplate {
   id: BodyView;
-  /** Nome no seletor de pranchas. */
   label: string;
-  /** Agrupador do seletor ("Corpo inteiro", "Mãos"…). */
   group: string;
-  /** Dimensões nativas da arte (px) — sistema de coordenadas dos markers. */
+  /** Dimensões nativas da arte (px): sistema de coordenadas dos markers. */
   width: number;
   height: number;
-  /** URL do PNG (asset do Vite). */
   src: string;
-  /** Recorte da arte (px do PNG ORIGINAL) — quando a prancha usa só uma
-   *  parte da imagem (ex.: perfil masc/fem dividem a mesma arte). Sem crop,
-   *  a arte inteira é a prancha. Com crop, `width`/`height` = dims do
-   *  recorte e os boxes das views são relativos ao RECORTE. */
+  /** Recorte (px do PNG original) quando a prancha usa só parte da imagem;
+   *  `width`/`height` viram as dims do recorte e os boxes das vistas são
+   *  relativos a ele. */
   crop?: ArtViewBox;
   views: BodyTemplateView[];
   /** true = recebe a numeração do POP (frente 1–28 / costas 1–21). */
@@ -109,8 +91,8 @@ export const BODY_TEMPLATES: Record<BodyView, BodyTemplate> = {
       { id: "costas", label: "COSTAS", box: { x: 949, y: 82, w: 246, h: 834 } },
     ],
   },
-  // Os dois perfis dividem a MESMA arte (corpo-lateral.png), recortada por
-  // figura — pranchas independentes, cada uma com suas marcações.
+  // Os dois perfis dividem a mesma arte (corpo-lateral.png), recortada por
+  // figura; são pranchas independentes, cada uma com suas marcações.
   corpo_lateral_masc: {
     id: "corpo_lateral_masc",
     label: "Masculino — em pé, perfil",
@@ -261,16 +243,13 @@ export const BODY_TEMPLATE_GROUPS: ReadonlyArray<{
   { group: "Orelhas", views: ["orelhas"] },
 ];
 
-/**
- * Mapa dos templates LEGADOS (pranchas SVG da 1ª geração) → prancha nova
- * equivalente. Usado pelo coerceCorpoDoc pra abrir `.sicrocorpo` antigos
- * sem quebrar (markers são re-escalados pro canvas novo).
- */
+/** Templates legados (pranchas SVG antigas) → prancha nova; o coerceCorpoDoc
+ *  re-escala os markers. */
 export const LEGACY_TEMPLATE_MAP: Record<string, BodyView> = {
   corpo_completo: "corpo_masc",
   anterior: "corpo_masc",
   posterior: "corpo_masc",
   cabeca_frontal: "cabeca_frontal_dorsal",
-  // Prancha intermediária da reformulação (perfis juntos) → perfil masculino.
+  // Prancha antiga com os dois perfis juntos → perfil masculino.
   corpo_lateral: "corpo_lateral_masc",
 };

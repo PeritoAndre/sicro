@@ -5,13 +5,13 @@ import { AddWallManager } from '../editor/editor/actions/AddWallManager';
 import { Tool } from '../editor/editor/constants';
 
 
-export enum ToolMode {
+enum ToolMode {
     FurnitureMode,
     WallMode,
     ViewMode
 };
 
-export interface EditorStore {
+interface EditorStore {
     mode:ToolMode,
     floor:number,
     activeTool:Tool,

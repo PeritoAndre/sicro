@@ -1,6 +1,4 @@
-/**
- * Shared helpers for the Evidências module.
- */
+/** Auxiliares do módulo Evidências. */
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { IntegrityStatus } from "@domain/evidence_registry";
@@ -43,7 +41,7 @@ export function statusLabel(status: IntegrityStatus): string {
   }
 }
 
-/** Build an asset URL the WebView can load (tauri:// protocol). */
+/** URL que o WebView consegue carregar (asset protocol). */
 export function assetUrl(
   workspacePath: string,
   relativePath: string,

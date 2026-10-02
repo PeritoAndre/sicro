@@ -1,16 +1,13 @@
 /**
- * Diálogos leves do editor de vídeo, desenhados DENTRO do painel do
- * reprodutor (continuam visíveis em tela cheia):
- *
- *   - ClockDialog: vincula o tempo do vídeo ao relógio que a câmera imprime.
- *   - SequenceDialog: coleta N quadros seguidos a partir do instante atual.
+ * Diálogos leves do editor de vídeo, desenhados DENTRO do painel do reprodutor
+ * para continuarem visíveis em tela cheia.
  */
 import { useState } from "react";
 import type { VideoClockCalibration } from "@domain/video";
 import { formatClock, formatDuration, parseClockInput } from "./format";
 import styles from "./AnalysisDialogs.module.css";
 
-// ---- relógio da câmera -------------------------------------------------------
+// relógio da câmera
 
 interface ClockProps {
   /** Instante atual do vídeo (onde o vínculo será feito). */
@@ -101,7 +98,7 @@ export function ClockDialog({ mediaTime, current, busy, onSave, onDelete, onClos
   );
 }
 
-// ---- sequência de quadros ------------------------------------------------------
+// sequência de quadros
 
 interface SeqProps {
   startTime: number;
@@ -196,7 +193,7 @@ export function SequenceDialog({ startTime, fps, duration, onStart, onClose }: S
   );
 }
 
-// ---- exportar trecho -----------------------------------------------------------
+// exportar trecho
 
 interface ClipProps {
   range: { a: number; b: number };

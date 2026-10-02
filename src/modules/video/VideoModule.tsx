@@ -1,9 +1,6 @@
 /**
- * VideoModule — Spike F shell.
- *
- * Same shape as the Croqui module: list vs editor. The active media id
- * lives in `videoStore`: o vídeo continua aberto ao ir para a aba Áudios (ou
- * outro módulo) e voltar; só fecha quando muda a ocorrência.
+ * Módulo Vídeo: lista ou editor. O id do vídeo aberto fica no `videoStore`:
+ * continua aberto ao ir para outra aba e voltar; só fecha quando muda a ocorrência.
  */
 
 import { useEffect } from "react";

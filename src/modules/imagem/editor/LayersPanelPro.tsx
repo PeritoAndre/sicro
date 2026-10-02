@@ -1,18 +1,7 @@
 /**
- * W20 (S3) — Painel de Camadas estilo Photoshop para o editor de Imagem.
- *
- * - Lista todas as camadas (base, anotações, e as **camadas de pixels** criadas
- *   a partir de seleções), com a do topo da pilha em cima (igual ao Photoshop).
- * - **Reordenar arrastando** (drag & drop) ou pelas setas ↑/↓ — muda a ordem de
- *   composição das camadas de pixels.
- * - **Selecionar** uma camada a destaca (no painel e no canvas, via handles).
- * - Cabeçalho com controles da camada selecionada: **nome** (duplo-clique para
- *   renomear), **opacidade** (slider) e **trava** (lock).
- * - Por linha: miniatura, visibilidade (olho), selo de origem
- *   (original/resultado) e excluir.
- *
- * É puramente apresentacional: todas as mutações sobem por callbacks para o
- * `ImageEditor`, que é dono do `doc`.
+ * Painel de camadas do editor de imagem (topo da pilha em cima; reordenar por
+ * arrasto ou setas; opacidade, trava, renomear). Puramente apresentacional:
+ * toda mutação sobe por callback para o `ImageEditor`, dono do `doc`.
  */
 import { useState } from "react";
 import {
@@ -109,7 +98,7 @@ export function LayersPanelPro({
         minHeight: 0,
       }}
     >
-      {/* Controles da camada selecionada (cabeçalho estilo Photoshop). */}
+      {/* Controles da camada selecionada. */}
       {selected ? (
         <div
           style={{

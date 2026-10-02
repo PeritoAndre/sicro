@@ -1,16 +1,6 @@
 /**
- * Espectrograma interativo do áudio (tempo × frequência, intensidade em cor).
- *
- *   - Acompanha o player (linha branca) e um clique leva o player ao ponto.
- *   - Ctrl + roda do mouse: zoom no tempo, no ponto do cursor; roda sozinha ou
- *     arrastar: anda quando aproximado; duplo clique: áudio inteiro.
- *   - Shift + arrastar: marca o trecho A–B no player (para ouvir em loop,
- *     recortar ou usar como perfil de ruído no realce).
- *   - Escala log/linear, resolução da FFT, frequência máxima e contraste.
- *   - Passando o mouse: tempo, frequência e nível (dB) do ponto.
- *
- * A imagem vem do backend (Rust, FFT) só da janela visível — zoom e arraste
- * pedem de novo. Só visualização: não mexe no áudio.
+ * Espectrograma interativo (tempo × frequência). A imagem vem do backend (Rust,
+ * FFT) só da janela visível — zoom e arraste pedem de novo. Só visualização.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";

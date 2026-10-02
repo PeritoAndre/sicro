@@ -1,31 +1,8 @@
 /**
- * ImageEditor — bancada do MVP 7 (Editor de Imagem Pericial).
- *
- * Layout (inspirado em Peritus, com Design System SICRO):
- *
- *   ┌──────────────────────────────────────────────────────────────┐
- *   │ ← Voltar  [Título]                          [Salvar][Export] │
- *   ├────┬────────────────────────────────────────────┬────────────┤
- *   │ T  │                                            │  Right     │
- *   │ b  │            Konva canvas                    │  panel     │
- *   │ ar │       (image base + annotations)           │  (tabs)    │
- *   │    │                                            │            │
- *   ├────┴────────────────────────────────────────────┴────────────┤
- *   │ zoom · x,y · ferramenta · tamanho · hash · status · feedback │
- *   └──────────────────────────────────────────────────────────────┘
- *
- * Tabs do painel direito:
- *   Camadas · Ajustes · Anotações · Histórico · Metadados.
- *
- * Decisão arquitetural (MVP):
- *   - Os ajustes (brightness/contrast/etc) são aplicados em **CSS
- *     filter** para o preview ao vivo — barato e instantâneo;
- *   - Na exportação enviamos os ajustes ao **backend Rust** que
- *     re-aplica via `image` crate produzindo bytes destrutivos
- *     reproduzíveis. O sidecar JSON registra exatamente os valores.
- *
- * As anotações são renderizadas em Konva por cima da imagem e ficam
- * no `.sicroimage` (não destrutivas).
+ * Bancada do editor de imagem pericial: canvas Konva (base + anotações), trilha
+ * de ferramentas, painel direito por modos e barra de status.
+ * Ajustes de visualização vão em CSS filter no preview; na exportação o backend
+ * Rust reaplica os mesmos valores, registrados no sidecar `.sicroimage`.
  */
 
 import {
@@ -162,14 +139,13 @@ type Tool =
   | "redaction"
   | "set_scale"
   | "crop"
-  // W20 — ferramentas de SELEÇÃO (região / máscara estilo Photoshop)
+  // ferramentas de seleção de região
   | "select_rect"
   | "select_ellipse"
   | "select_lasso"
   | "select_polygon"
   | "select_magnetic";
 
-/** W20 — true para as 5 ferramentas de seleção de região. */
 function isSelectionTool(t: Tool): boolean {
   return (
     t === "select_rect" ||
@@ -180,11 +156,7 @@ function isSelectionTool(t: Tool): boolean {
   );
 }
 
-/**
- * W20 (S2) — kinds GEOMÉTRICOS não podem ser confinados a uma seleção (mudam
- * a dimensão da imagem; mascarar não faz sentido). Só filtros/tonais/cor
- * recebem o escopo "seleção".
- */
+/** Kinds geométricos mudam a dimensão da imagem, então a máscara não alinharia: não são mascaráveis. */
 const NON_MASKABLE_KINDS: ReadonlySet<ProcessingOpKind> = new Set<ProcessingOpKind>(
   [
     "crop",
@@ -199,7 +171,7 @@ const NON_MASKABLE_KINDS: ReadonlySet<ProcessingOpKind> = new Set<ProcessingOpKi
   ],
 );
 
-/** W20 (S3) — carrega uma <img> a partir de uma URL/data-uri (promessa). */
+/** Carrega uma <img> a partir de uma URL/data-uri. */
 function loadImageEl(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const img = new window.Image();
@@ -211,10 +183,9 @@ function loadImageEl(src: string): Promise<HTMLImageElement> {
 }
 
 /**
- * W20 (S3) — desenha as camadas de pixels sobre uma imagem base (full-res),
- * devolvendo PNG base64 (sem prefixo). Usado no export com filtros, onde o
- * backend produz só a base filtrada e as camadas precisam ser compostas por
- * cima. Camadas em coords de px da imagem (= base full-res).
+ * Compõe as camadas de pixels sobre a base full-res e devolve PNG base64 (sem
+ * prefixo). No export com filtros o backend produz só a base filtrada, então
+ * as camadas precisam ser compostas por cima aqui.
  */
 function compositePixelLayersToBase64(
   base: HTMLImageElement,
@@ -247,8 +218,7 @@ function compositePixelLayersToBase64(
   return url.replace(/^data:image\/png;base64,/, "") || null;
 }
 
-// W14.1 — limites de zoom. Teto alto (64x, paridade com a Documentoscopia)
-// para inspeção em **nível de pixel** — o perito não deve se sentir limitado.
+// Teto alto (64x) para inspeção em nível de pixel.
 const ZOOM_MIN = 0.05;
 const ZOOM_MAX = 64;
 /** Acima deste zoom o render fica nítido (nearest-neighbor) para ver o pixel
@@ -261,9 +231,7 @@ interface Props {
   onClose: () => void;
 }
 
-// W13.3 — Painel direito reorganizado por INTENÇÃO em 3 modos (estilo
-// Lightroom/Affinity Personas), cada um com seções colapsáveis (accordion).
-// Substitui as 8 abas planas que misturavam fazer / inspecionar / gerenciar.
+// Painel direito organizado por intenção, cada modo com seções colapsáveis.
 type RightMode = "realcar" | "filtros" | "analisar" | "anotar";
 
 const RIGHT_MODES: Array<{ key: RightMode; label: string; hint: string }> = [
@@ -291,17 +259,13 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   const saveActive = useImagemStore((s) => s.saveActive);
 
   const [doc, setDoc] = useState<SicroImageDoc>(initialDoc);
-  // G12.22 — Modal de relatório pericial.
   const [reportOpen, setReportOpen] = useState(false);
   const [tool, setTool] = useState<Tool>("select");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pending, setPending] = useState<{ x: number; y: number } | null>(null);
-  // W20 — rascunho da seleção em andamento (rect/elipse arrastando, laço, ou
-  // polígono/magnética acumulando vértices). A seleção CONFIRMADA vive em
-  // `doc.selection`.
+  // Rascunho da seleção em andamento; a confirmada vive em `doc.selection`.
   const [selDraft, setSelDraft] = useState<SelDraft | null>(null);
-  // W20 — campo de gradiente (Sobel) reduzido para o snap da ferramenta
-  // magnética; computado sob demanda no 1º uso e memoizado por imagem.
+  // Campo de gradiente (Sobel) reduzido para o snap da magnética; computado no 1º uso e memoizado por imagem.
   const edgeFieldRef = useRef<{
     src: HTMLImageElement;
     buf: Float32Array;
@@ -310,37 +274,27 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     sx: number;
     sy: number;
   } | null>(null);
-  // W20 (S3) — bitmaps das camadas de pixels (id → <img> carregada), camada
-  // de pixels selecionada, e o diálogo de origem da cópia (original × resultado).
+  // Bitmaps das camadas de pixels (id → <img> carregada).
   const [pixelImages, setPixelImages] = useState<
     Record<string, HTMLImageElement>
   >({});
   const [selectedLayerId, setSelectedLayerId] = useState<string | null>(null);
   const [copyPrompt, setCopyPrompt] = useState(false);
   const [copyBusy, setCopyBusy] = useState(false);
-  // W20 (S3) — refs dos nós Konva das camadas de pixels + o Transformer
-  // (handles de redimensionar/rotacionar) que se prende à camada selecionada.
+  // Nós Konva das camadas de pixels + Transformer preso à camada selecionada.
   const pixelNodeRefs = useRef<Record<string, Konva.Image | null>>({});
   const pixelTransformerRef = useRef<Konva.Transformer | null>(null);
 
-  // Pós-laudo S — Crop tool state.
-  // O fluxo: clica "Cortar" → tool="crop" → um retângulo de seleção
-  // aparece já posicionado no centro da imagem (ou no crop atual, se
-  // houver um). O perito ajusta arrastando o retângulo inteiro (move)
-  // ou as 8 handles (4 cantos + 4 lados). "Aplicar" empurra a op
-  // pra processing_stack + atualiza `cropApplied` para que o
-  // KonvaImage renderize só a região recortada.
+  // Retângulo de crop em edição; "Aplicar" empurra a op para a processing_stack.
   const [cropPending, setCropPending] = useState<{
     x: number;
     y: number;
     width: number;
     height: number;
   } | null>(null);
-  // Limite mínimo do retângulo de crop em pixels (impede colapsos).
   const CROP_MIN_PX = 16;
 
-  // Crop ATIVO derivado do processing_stack: pega o último op crop habilitado
-  // e usa as params {x,y,width,height} pra crop o KonvaImage.
+  // Crop ativo = último op crop habilitado da pilha.
   const cropApplied = useMemo(() => {
     const ops = doc.processing_stack ?? [];
     for (let i = ops.length - 1; i >= 0; i--) {
@@ -365,7 +319,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     return null;
   }, [doc.processing_stack]);
   const [rightMode, setRightMode] = useState<RightMode>("realcar");
-  // W13.3 — seções abertas do accordion (várias podem ficar abertas).
+  // Seções abertas do accordion (várias ao mesmo tempo).
   const [openSections, setOpenSections] = useState<Set<string>>(
     () => new Set(["histogram", "annotations"]),
   );
@@ -382,31 +336,23 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   const [exporting, setExporting] = useState(false);
   const [pointer, setPointer] = useState({ x: 0, y: 0 });
   const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 });
-  // W13 — réguas (topo+esquerda) que seguem o mouse; ligadas por padrão.
   const [showRulers, setShowRulers] = useState(true);
-  // W13.2 — estilo padrão aplicado às novas anotações (barra de contexto).
   const [toolStyle, setToolStyle] = useState<ToolStyle>(DEFAULT_TOOL_STYLE);
-  // W13.4 — trilha em grupos com flyout: qual grupo está aberto e qual a
-  // ferramenta "lembrada" por grupo (estilo Photoshop: o slot mostra a última
-  // usada do grupo).
+  // Trilha em grupos com flyout: grupo aberto e última ferramenta usada por grupo.
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [groupRep, setGroupRep] = useState<Record<string, Tool>>({});
-  // W13.6 — paleta de comandos (⌘K).
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [logs, setLogs] = useState<ImageOperationLog[]>([]);
 
   const stageRef = useRef<Konva.Stage | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const objectsLayerRef = useRef<Konva.Layer | null>(null);
-  // W14.2 fix — camada da imagem base (recebe o CSS filter dos ajustes; o
-  // fundo do canvas e as anotações ficam de fora).
+  // Camada da imagem base: só ela recebe o CSS filter dos ajustes.
   const baseLayerRef = useRef<Konva.Layer | null>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const [stageSize, setStageSize] = useState({ width: 800, height: 600 });
 
-  // W18 — guarda de alterações não salvas (espelha o Croqui). `dirty` = doc
-  // atual difere do último snapshot salvo. Ao tentar sair (Voltar) ou trocar
-  // de módulo (ActivityRail), pergunta antes: Salvar / Sair sem salvar.
+  // Guarda de alterações não salvas: `dirty` = doc difere do último snapshot salvo.
   const [lastSavedJson, setLastSavedJson] = useState<string | null>(null);
   const dirty = useMemo(
     () => (lastSavedJson ? JSON.stringify(doc) !== lastSavedJson : false),
@@ -417,20 +363,17 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     label?: string;
     resolve?: (proceed: boolean) => void;
   }>(null);
-  // W18 — pilha (dock) pode ser recolhida para ganhar altura quando preciso.
   const [pipelineCollapsed, setPipelineCollapsed] = useState(false);
   const registerNavGuard = useNavGuard((s) => s.register);
   const unregisterNavGuard = useNavGuard((s) => s.unregister);
 
-  // ----- Sync doc when store changes (e.g. opened a different analysis) -----
-  // Também sincroniza o snapshot "salvo" para o `dirty` recomeçar limpo a cada
-  // análise aberta.
+  // ----- Sincroniza doc e snapshot salvo quando o store troca de análise -----
   useEffect(() => {
     setDoc(initialDoc);
     setLastSavedJson(JSON.stringify(initialDoc));
   }, [initialDoc]);
 
-  // ----- Resize observer for the canvas column -----
+  // ----- Resize observer da coluna do canvas -----
   useEffect(() => {
     const el = canvasWrapRef.current;
     if (!el) return;
@@ -445,7 +388,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // ----- Load the image and fit-to-screen on first paint -----
+  // ----- Carrega a imagem e enquadra no primeiro paint -----
   const imageUrl = useMemo(
     () => assetUrl(workspacePath, doc.source.original_relative_path),
     [workspacePath, doc.source.original_relative_path],
@@ -458,7 +401,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     img.src = imageUrl;
     img.onload = () => {
       setHtmlImage(img);
-      // Fit to screen if the source dimensions and stage are known.
+      // Enquadra na tela.
       const sw = img.width;
       const sh = img.height;
       const padding = 20;
@@ -474,14 +417,10 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     img.onerror = () => setHtmlImage(null);
   }, [imageUrl, stageSize.width, stageSize.height]);
 
-  // ----- W17 — Preview AO VIVO da pilha de filtros forenses -----
-  // Antes, a processing_stack (Sobel/CLAHE/ELA/DStretch/…) NUNCA era aplicada
-  // — adicionar filtro não mudava nada. Aqui o backend Rust aplica a pilha
-  // (na ordem, incluindo crop) sobre a imagem ORIGINAL e o resultado é
-  // renderizado no canvas; o export captura o canvas, então também sai com os
-  // filtros. Debounce p/ os sliders. §13: derivado reprodutível do original.
-  // `scale` = fator de downscale do preview (1 = sem reduzir). A imagem volta a
-  // ser desenhada no tamanho LÓGICO (÷scale), preservando coordenadas/anotações.
+  // ----- Preview ao vivo da pilha de filtros -----
+  // O backend aplica a pilha (na ordem, incluindo crop) sobre o original e o
+  // resultado vai para o canvas. `scale` = fator de downscale do preview; a
+  // imagem é desenhada no tamanho lógico (÷scale) para preservar coordenadas.
   const [previewImage, setPreviewImage] = useState<{
     image: HTMLImageElement;
     scale: number;
@@ -498,22 +437,12 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     let cancelled = false;
     setPreviewBusy(true);
     const timer = setTimeout(() => {
-      // §13: o preview é só VISUALIZAÇÃO; o derivado exportado é o fiel
-      // (reaplicado em resolução cheia no backend).
-      //
-      // O original pericial pode ter dezenas de megapixels. Reabri-lo, filtrar
-      // em resolução cheia, recodificar um PNG gigante e trafegar dezenas de MB
-      // por base64 no IPC a cada filtro custava MINUTOS — até para uma operação
-      // barata como "Níveis". Como a imagem já está decodificada no navegador
-      // (`htmlImage`), reduzimos no canvas e mandamos só o bitmap pequeno ao
-      // backend (apply_operation_stack_preview): decodificar/filtrar/codificar/
-      // trafegar fica trivial e o preview é rápido independentemente do tamanho
-      // do original.
+      // Originais com dezenas de megapixels levavam minutos por filtro quando o
+      // backend reabria e filtrava em resolução cheia. Como a imagem já está
+      // decodificada aqui, reduz-se no canvas e manda-se só o bitmap pequeno.
       const sw = doc.source.width || htmlImage?.naturalWidth || 0;
       const sh = doc.source.height || htmlImage?.naturalHeight || 0;
-      // Filtros O(w·h·k²) — mediana (raio ≥ 3) e bilateral — são caros; usam um
-      // teto menor. Os baratos (Sobel, CLAHE, ELA, limiar, níveis…) ficam
-      // nítidos no teto maior.
+      // Mediana (raio ≥ 3) e bilateral são O(w·h·k²): teto menor. Os baratos ficam nítidos no maior.
       const heavy = ops.some(
         (o) =>
           (o.kind === "blur_median" &&
@@ -527,13 +456,11 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       const pw = sc(sw);
       const ph = sc(sh);
 
-      // Operações: as coords de crop estão em px do original; como o bitmap vai
-      // reduzido por `k`, escala as coords de crop também.
+      // Coords de crop estão em px do original; o bitmap vai reduzido por `k`, então escala também.
       const buildOps = (): BackendOperation[] => {
         const out: BackendOperation[] = [];
         for (const o of ops) {
-          // W20 (S2) — passa as dims da fonte p/ normalizar a máscara da
-          // seleção (op com escopo "seleção" → wrapper `masked`).
+          // Dims da fonte normalizam a máscara da seleção (wrapper `masked`).
           const be = processingOpToBackendOperation(o, sw, sh) as Record<
             string,
             unknown
@@ -599,8 +526,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           .then((res) => onResult(res.image_base64, "image/png"))
           .catch(onFail);
       } else {
-        // Fallback: o backend abre o original e aplica (prepende um `resize`
-        // para reduzir). Caminho antigo, usado se o canvas não puder exportar.
+        // Fallback se o canvas não puder exportar: o backend abre o original e aplica (com `resize` na frente).
         const backendOps: BackendOperation[] = [];
         if (k < 1) {
           backendOps.push({ kind: "resize", width: pw, height: ph });
@@ -630,12 +556,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     htmlImage,
   ]);
 
-  // ----- Pós-laudo S — Inicializa o retângulo de crop ao entrar em modo -----
-  //
-  // Quando o perito ativa a tool "crop", o retângulo aparece pronto:
-  //   - se já existe um crop aplicado: começa por ele (deixa ajustar);
-  //   - senão: 80% centralizado da imagem.
-  // Saída do modo (tool muda) limpa cropPending.
+  // ----- Inicializa o retângulo de crop ao entrar no modo -----
+  // Começa pelo crop já aplicado, se houver; senão 80% centralizado.
   useEffect(() => {
     if (tool !== "crop") {
       setCropPending(null);
@@ -660,7 +582,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tool, htmlImage]);
 
-  // ----- Load logs when the Analisar mode opens (Histórico vive nele) -----
+  // ----- Carrega o histórico quando o modo Analisar abre -----
   useEffect(() => {
     if (rightMode !== "analisar") return;
     commands
@@ -669,7 +591,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       .catch(() => setLogs([]));
   }, [rightMode, workspacePath, analysis.id]);
 
-  // ----- Transformer wiring -----
+  // ----- Transformer -----
   useEffect(() => {
     const tr = transformerRef.current;
     const layer = objectsLayerRef.current;
@@ -688,11 +610,9 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }
   }, [selectedId, doc.annotations]);
 
-  // ----- Mutators -----
+  // ----- Mutadores -----
   const addAnnotation = (raw: SicroAnnotation) => {
-    // W13.2 — aplica o estilo atual da barra de contexto às anotações
-    // desenháveis. Marcador numerado e ponto mantêm a identidade de cor
-    // própria (não recebem o estilo padrão).
+    // Marcador numerado e ponto mantêm cor própria; os demais recebem o estilo da barra.
     const STYLEABLE = new Set([
       "arrow",
       "line",
@@ -739,14 +659,14 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }));
   };
 
-  // ----- Canvas click dispatcher -----
+  // ----- Clique no canvas -----
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
     if (e.target !== e.target.getStage()) {
       if (!isAddTool(tool)) return;
     }
     if (tool === "select") {
       setSelectedId(null);
-      setSelectedLayerId(null); // W20 (S3) — clique vazio solta a camada (some handles)
+      setSelectedLayerId(null); // clique vazio solta a camada (some handles)
       return;
     }
     if (tool === "pan") return;
@@ -759,15 +679,11 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       y: (screen.y - viewport.y) / viewport.scale,
     };
 
-    // W20 — Seleção: poligonal/magnética adicionam um vértice por clique
-    // (vértices ilimitados). Fecha de 3 formas: clicando de volta perto do
-    // 1º vértice, duplo-clique no último ponto, ou Enter. Magnética dá um
-    // "snap" do ponto à borda mais próxima. Rect/elipse/laço são por ARRASTO
-    // (mousedown→up), então o clique é no-op aqui.
+    // Poligonal/magnética: um vértice por clique; fecha clicando perto do 1º
+    // vértice, por duplo-clique ou Enter. Rect/elipse/laço são por arrasto.
     if (tool === "select_polygon" || tool === "select_magnetic") {
       const pt = tool === "select_magnetic" ? snapToEdge(world) : world;
-      // Fechar ao clicar de volta sobre o 1º vértice (≥ 3 pontos) — padrão
-      // das ferramentas poligonais. O raio de "imã" acompanha o zoom.
+      // Raio de "imã" do 1º vértice acompanha o zoom.
       if (selDraft?.mode === "polygon" && selDraft.points.length >= 3) {
         const first = selDraft.points[0];
         if (
@@ -793,9 +709,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       return;
     }
 
-    // Pós-laudo S — Em modo "crop", clique no canvas é no-op. O retângulo
-    // de seleção é manipulado direto via drag das handles + corpo (ver
-    // CropOverlayLayer abaixo).
+    // Em modo crop o retângulo é manipulado por arrasto (CropOverlayLayer).
     if (tool === "crop") return;
 
     if (tool === "marker") {
@@ -817,7 +731,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       setTool("select");
       return;
     }
-    // Two-click tools: arrow, line, rect, ellipse, measurement, redaction, set_scale
+    // Ferramentas de dois cliques
     if (!pending) {
       setPending(world);
       return;
@@ -863,7 +777,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     setTool("select");
   };
 
-  // ----- Mouse + zoom handlers -----
+  // ----- Mouse e zoom -----
   const handleStageMouseMove = () => {
     const stage = stageRef.current;
     if (!stage) return;
@@ -874,7 +788,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       y: (pos.y - viewport.y) / viewport.scale,
     };
     setPointer(world);
-    // W20 — atualiza o rascunho da seleção em andamento.
     setSelDraft((d) => {
       if (!d) return d;
       if (d.mode === "rect" || d.mode === "ellipse") {
@@ -895,8 +808,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     });
   };
 
-  // W20 — início do arrasto: rect/elipse iniciam a "borracha"; laço começa a
-  // coletar o traço. (Poligonal/magnética usam clique, não arrasto.)
+  // Início do arrasto: rect/elipse/laço (poligonal/magnética usam clique).
   const handleStageMouseDown = () => {
     if (
       tool !== "select_rect" &&
@@ -926,7 +838,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }
   };
 
-  // W20 — fim do arrasto: confirma rect/elipse/laço (≥ tamanho mínimo).
+  // Fim do arrasto: confirma rect/elipse/laço (≥ tamanho mínimo).
   const handleStageMouseUp = () => {
     if (!selDraft) return;
     if (selDraft.mode === "rect" || selDraft.mode === "ellipse") {
@@ -962,12 +874,9 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   const handleStageDblClick = () => {
     if (selDraft?.mode !== "polygon") return;
     const pts = selDraft.points;
-    // O Konva dispara `dblclick` sempre que dois cliques caem em < ~400ms,
-    // INDEPENDENTE da posição. Se fechássemos em qualquer dblclick, clicar
-    // vértices num ritmo normal encerraria o polígono cedo (era o bug dos
-    // "3 cliques"). Por isso só tratamos como "finalizar" quando os dois
-    // últimos vértices estão praticamente no mesmo ponto — ou seja, o 2º
-    // clique do duplo-clique. Aí removemos o vértice duplicado e fechamos.
+    // O Konva dispara `dblclick` para dois cliques em < ~400ms em qualquer posição;
+    // fechar em qualquer dblclick encerrava o polígono cedo. Só finaliza quando os
+    // dois últimos vértices coincidem (2º clique do duplo), removendo o duplicado.
     if (pts.length < 2) return;
     const a = pts[pts.length - 1];
     const b = pts[pts.length - 2];
@@ -1005,10 +914,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     });
   };
 
-  // ----- View / zoom helpers (teclado; o zoom por roda fica em handleWheel) ---
-  // Mesmos limites do handleWheel (ZOOM_MIN..ZOOM_MAX). Zoom in/out ancorado no
-  // centro visível; "1:1" volta para escala 1 centralizando a imagem;
-  // "enquadrar" recalcula o fit-to-screen (mesma fórmula do carregamento).
+  // ----- Vista / zoom (teclado; a roda fica em handleWheel) -----
   const fitToScreen = useCallback(() => {
     if (!htmlImage) return;
     const sw = htmlImage.width;
@@ -1067,14 +973,10 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }));
   }, []);
 
-  // ----- Keyboard shortcuts (customizáveis, escopo `imagem`) -----
-  // `useShortcuts` já ignora foco em INPUT/TEXTAREA/SELECT (mesmo guard do
-  // listener manual). handleSave / handleExport / applyCrop / cancelCrop são
-  // definidos mais abaixo; como só são lidos no disparo da tecla, a ordem de
-  // declaração não importa.
+  // ----- Atalhos de teclado (escopo `imagem`) -----
+  // handleSave/handleExport/applyCrop/cancelCrop são definidos abaixo; só são lidos no disparo.
   useShortcuts({
-    // Esc — unifica: em modo corte cancela o corte; senão limpa pending /
-    // seleção e volta pra ferramenta de seleção.
+    // Esc: rascunho → corte → seleção → pending/ferramenta.
     "imagem.cancel": () => {
       if (selDraft) {
         setSelDraft(null);
@@ -1109,7 +1011,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       setCropPending(null);
       setTool("crop");
     },
-    // W20 — ferramentas de seleção.
+    // Seleção.
     "imagem.tool.select_rect": () => selectTool("select_rect"),
     "imagem.tool.select_ellipse": () => selectTool("select_ellipse"),
     "imagem.tool.select_lasso": () => selectTool("select_lasso"),
@@ -1118,7 +1020,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     "imagem.selectInvert": () => invertSelection(),
     "imagem.selectClear": () => clearSelection(),
     "imagem.selectAll": () => selectAllSelection(),
-    // W20 (S3) — recortar a seleção numa nova camada de pixels.
     "imagem.duplicateSelectionLayer": () => {
       if (doc.selection) setCopyPrompt(true);
     },
@@ -1144,7 +1045,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     "imagem.commandPalette": () => setPaletteOpen(true),
   });
 
-  // ----- Crop tool actions (pós-laudo S) -----
+  // ----- Corte -----
   const applyCrop = () => {
     if (!cropPending) return;
     // Clamp ao tamanho da imagem natural (htmlImage).
@@ -1188,12 +1089,10 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     setFeedback("Corte removido — imagem original restaurada.");
   };
 
-  // W13.4 — seleciona uma ferramenta via trilha agrupada: lembra qual foi a
-  // última do grupo (para o slot exibi-la), fecha o flyout e preserva o reset
-  // do crop (o retângulo é reinicializado pelo useEffect ao limpar cropPending).
+  // Seleciona ferramenta pela trilha agrupada: lembra a última do grupo e fecha o flyout.
   const selectTool = useCallback((t: Tool) => {
     if (t === "crop") setCropPending(null);
-    setSelDraft(null); // W20 — abandona rascunho de seleção ao trocar de tool
+    setSelDraft(null); // abandona rascunho de seleção ao trocar de tool
     setTool(t);
     setOpenGroup(null);
     const g = TOOL_GROUPS.find((grp) => grp.tools.some((td) => td.tool === t));
@@ -1206,7 +1105,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     return groupRep[g.key] ?? g.tools[0]?.tool ?? "select";
   };
 
-  // ----- W20 — Seleção (estilo Photoshop): ações sobre `doc.selection` -----
+  // ----- Seleção: ações sobre `doc.selection` -----
   const commitSelection = useCallback(
     (geom: Omit<SicroImageSelection, "id" | "created_at" | "inverted">) => {
       setDoc((d) => ({
@@ -1269,8 +1168,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     });
   }, [commitSelection]);
 
-  // Snap magnético (básico): leva o ponto clicado ao pixel de MAIOR gradiente
-  // (borda) num raio pequeno, via buffer Sobel reduzido do htmlImage.
+  // Snap magnético: leva o ponto ao pixel de maior gradiente num raio pequeno (Sobel reduzido).
   const ensureEdgeField = useCallback(() => {
     const cur = edgeFieldRef.current;
     if (cur && cur.src === htmlImage) return cur;
@@ -1340,10 +1238,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     [ensureEdgeField],
   );
 
-  // W20 (S2) — cria um ProcessingOp e, se houver seleção ativa e o filtro for
-  // mascarável, já "congela" a máscara nele (escopo "seleção"). Assim o filtro
-  // recém-adicionado nasce confinado à região; o perito pode trocar p/ "imagem
-  // inteira" depois no card da pilha.
+  // Com seleção ativa e filtro mascarável, o op nasce confinado à seleção (máscara congelada).
   const makeScopedOp = useCallback(
     (kind: ProcessingOpKind): ProcessingOp => {
       const op = makeProcessingOp(kind);
@@ -1355,9 +1250,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     [doc.selection],
   );
 
-  // W20 (S3) — carrega os bitmaps das camadas de pixels (id → <img>) a partir
-  // do workspace. Bitmaps recém-criados são semeados direto no `pixelImages`
-  // (base64), então aqui só carregamos os que faltam (ex.: ao reabrir a sessão).
+  // Carrega os bitmaps de camadas de pixels que faltam (recém-criados já entram em base64).
   useEffect(() => {
     const pixelLayers = doc.layers.filter(
       (l) => l.kind === "pixels" && l.bitmap_relative_path,
@@ -1379,8 +1272,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [doc.layers, workspacePath]);
 
-  // W20 (S3) — prende o Transformer (handles) à camada de pixels selecionada.
-  // Só quando a ferramenta é "Selecionar", a camada está visível e destravada.
+  // Transformer preso à camada de pixels selecionada (só com "Selecionar", visível e destravada).
   useEffect(() => {
     const tr = pixelTransformerRef.current;
     if (!tr) return;
@@ -1395,7 +1287,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     tr.getLayer()?.batchDraw();
   }, [selectedLayerId, doc.layers, tool, pixelImages]);
 
-  // W20 (S3) — atualiza uma camada (ex.: mover/visibilidade/opacidade).
   const updateLayer = useCallback(
     (id: string, patch: Partial<SicroImageLayer>) => {
       setDoc((d) => ({
@@ -1415,8 +1306,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       return next;
     });
   }, []);
-  // W20 (S3) — reordena as camadas a partir da ordem TOPO-primeiro do painel
-  // (o painel mostra o topo da pilha em cima; `doc.layers` guarda fundo→topo).
+  // O painel entrega topo-primeiro; `doc.layers` guarda fundo→topo.
   const reorderLayers = useCallback((orderedTopFirst: string[]) => {
     setDoc((d) => {
       const byId = new Map(d.layers.map((l) => [l.id, l]));
@@ -1430,10 +1320,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     });
   }, []);
 
-  // W20 (S3) — recorta a seleção numa NOVA camada de pixels (estilo Photoshop
-  // "Layer via Copy"). `source` decide a origem: "original" (evidência fiel) ou
-  // "processed" (o resultado com filtros que o perito vê). A escolha vai na
-  // custódia (pixel_source). O bitmap é gravado em imagens/camadas/ pelo backend.
+  // Recorta a seleção numa nova camada de pixels. `source`: "original" (evidência
+  // fiel) ou "processed" (resultado com filtros); fica na custódia em pixel_source.
   const duplicateSelectionToLayer = useCallback(
     async (source: PixelLayerSource) => {
       const sel = doc.selection;
@@ -1497,8 +1385,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         setDoc((d) => ({ ...d, layers: [...d.layers, layer] }));
         setSelectedLayerId(layerId);
         setTool("select");
-        // Após criar a camada, a seleção cumpriu seu papel — limpa o marquee
-        // (não deve persistir na foto). A camada vira o novo foco.
+        // A seleção cumpriu seu papel: limpa o marquee e a camada vira o foco.
         clearSelection();
         setFeedback(
           `Camada criada (${res.width}×${res.height}px, ${
@@ -1515,7 +1402,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     [doc, htmlImage, workspacePath, clearSelection],
   );
 
-  // ----- Actions -----
+  // ----- Ações -----
   const handleSave = async (): Promise<boolean> => {
     setSaving(true);
     setFeedback(null);
@@ -1527,7 +1414,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         view_adjustments: doc.view_adjustments,
       };
       await saveActive(workspacePath, doc, JSON.stringify(metadata));
-      // W18 — marca este estado como "salvo" para limpar o `dirty`.
       setLastSavedJson(snapshot);
       setFeedback("Análise salva.");
       setTimeout(() => setFeedback(null), 2500);
@@ -1540,9 +1426,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }
   };
 
-  // W18 — guarda de alterações não salvas -----------------------------------
-  // Entrada única para qualquer saída do editor (botão Voltar). Sem `dirty`,
-  // navega direto; com `dirty`, abre o modal e estaciona o destino pendente.
+  // ----- Guarda de alterações não salvas -----
+  // Entrada única para sair do editor: sem `dirty` navega direto; com `dirty` abre o modal.
   const tryNavigateAway = useCallback(
     (target: () => void, label?: string) => {
       if (!dirty) {
@@ -1554,8 +1439,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     [dirty],
   );
 
-  // Registra um guard global enquanto há alterações: a ActivityRail consulta
-  // antes de levar o perito a outro módulo (resolve true=segue / false=fica).
+  // Guard global enquanto há alterações: a ActivityRail consulta antes de trocar de módulo (true = segue).
   useEffect(() => {
     if (!dirty) {
       unregisterNavGuard();
@@ -1601,27 +1485,17 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     setExporting(true);
     setFeedback(null);
     try {
-      // Save sessão antes do export para sidecar refletir o último estado.
+      // Salva antes do export para o sidecar refletir o último estado (e limpar o `dirty`).
       await saveActive(workspacePath, doc);
-      // W18 — exportar também persiste a sessão; limpa o `dirty`.
       setLastSavedJson(JSON.stringify(doc));
-      // Compose PNG client-side via Konva (image + annotations + filter
-      // via stage option pixelRatio + transform). The filter applied
-      // here is CSS, so we duplicate the math in the backend pipeline
-      // to keep the bytes truly reproducible. The backend will run the
-      // adjustments again on top of the composed PNG IF
-      // `apply_backend_adjustments=true`. To avoid double application
-      // we send composed PNG and skip backend adjustments.
-      // W17 — quando há filtros na pilha, o EXPORT é gerado em resolução
-      // CHEIA pelo backend (reaplica os ops sobre o ORIGINAL), não do canvas
-      // (que mostra o preview reduzido). Sem filtros, compõe o canvas (com
-      // anotações). §13: o derivado exportado é sempre o fiel.
+      // Com filtros na pilha, o export sai em resolução cheia pelo backend (reaplica
+      // os ops sobre o original), não do canvas (preview reduzido). Sem filtros, compõe
+      // o canvas (imagem + anotações) e pula os ajustes no backend para não aplicar duas vezes.
       const enabledOps = (doc.processing_stack ?? []).filter(
         (o) => o.enabled !== false,
       );
       const hasFilters = enabledOps.some((o) => o.kind !== "crop");
-      // W20 (S2) — export em resolução cheia: a máscara da seleção é
-      // normalizada com as dims da fonte (backend rasteriza no tamanho cheio).
+      // Máscara da seleção normalizada com as dims da fonte (o backend rasteriza em resolução cheia).
       const expSw = doc.source.width || htmlImage?.naturalWidth || 0;
       const expSh = doc.source.height || htmlImage?.naturalHeight || 0;
       const fullResOps = enabledOps.map(
@@ -1632,7 +1506,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             expSh,
           ) as unknown as BackendOperation,
       );
-      // W20 (S3) — camadas de pixels visíveis (com bitmap carregado).
+      // Camadas de pixels visíveis com bitmap carregado.
       const pixelLayers = doc.layers.filter(
         (l) =>
           l.kind === "pixels" && l.visible !== false && pixelImages[l.id],
@@ -1641,9 +1515,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       let opsForBackend: BackendOperation[] = [];
       let applyBackendAdj = false;
       if (hasFilters && pixelLayers.length > 0) {
-        // Filtros + camadas de pixels: pega o resultado full-res do backend e
-        // composita as camadas por cima no cliente (anotações já não entram no
-        // caminho com filtros — comportamento existente). Mantém fidelidade.
+        // Filtros + camadas: resultado full-res do backend com as camadas compostas
+        // por cima no cliente (anotações não entram no caminho com filtros).
         const stack = await commands.applyOperationStack(workspacePath, {
           relative_path: doc.source.original_relative_path,
           adjustments: doc.view_adjustments,
@@ -1690,7 +1563,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             has_scale: !!doc.scale,
             scale: doc.scale,
             view_adjustments: doc.view_adjustments,
-            // W17 — pilha de filtros aplicada (resolução cheia no backend).
+            // pilha aplicada (resolução cheia no backend)
             processing_stack: enabledOps.map((o) => ({
               kind: o.kind,
               params: o.params,
@@ -1717,9 +1590,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     (l) => l.id === "layer_annotations",
   )?.visible !== false;
 
-  // W14.2 fix — aplica o filtro de preview SÓ no <canvas> da imagem base
-  // (não no fundo do canvas nem nas anotações). Reaplica quando o filtro muda
-  // ou quando o canvas pode ter sido recriado (resize / nova imagem / crop).
+  // Filtro de preview só no <canvas> da imagem base; reaplica quando o canvas
+  // pode ter sido recriado (resize / nova imagem / crop).
   useEffect(() => {
     const layer = baseLayerRef.current;
     if (!layer) return;
@@ -1729,7 +1601,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     if (native) native.style.filter = cssFilter || "";
   }, [cssFilter, stageSize.width, stageSize.height, htmlImage, cropApplied]);
 
-  // W13.6 — comandos da paleta (⌘K): atalho para ações que já existem na UI.
+  // Comandos da paleta: atalhos para ações que já existem na UI.
   const paletteCommands: PaletteCommand[] = [
     ...TOOL_GROUPS.flatMap((g) =>
       g.tools.map(
@@ -1876,7 +1748,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           aria-label="Título da análise"
         />
         <div className={styles.topActions}>
-          {/* W13.7 — descobribilidade da paleta de comandos (⌘K). */}
           <button
             type="button"
             className={styles.cmdkBtn}
@@ -1911,7 +1782,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           >
             {saving ? "Salvando…" : "Salvar"}
           </Button>
-          {/* G12.22 — Botão de relatório pericial. */}
           <Button
             variant="secondary"
             leftIcon={<FileText size={14} />}
@@ -1930,8 +1800,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         </div>
       </header>
 
-      {/* W13.2 — Barra de contexto: opções da ferramenta ativa (ou estilo do
-          objeto selecionado). Faixa full-width entre o topo e o corpo. */}
+      {/* Opções da ferramenta ativa (ou estilo do objeto selecionado). */}
       <ToolOptionsBar
         tool={tool}
         toolStyle={toolStyle}
@@ -1944,8 +1813,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       />
 
       <div className={styles.body}>
-        {/* W13.4 — trilha em grupos com flyout (Navegar / Anotar / Medir /
-            Proteger / Recortar). O reset do crop é tratado em selectTool. */}
+        {/* Trilha de ferramentas em grupos com flyout. */}
         <aside className={styles.toolbar} aria-label="Ferramentas">
           {TOOL_GROUPS.map((g, i) => (
             <Fragment key={g.key}>
@@ -1976,7 +1844,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           ref={canvasWrapRef}
           style={{ position: "relative" }}
         >
-          {/* Pós-laudo S — Barra flutuante de Apply/Cancel do crop tool. */}
+          {/* Barra flutuante Aplicar/Cancelar do corte. */}
           {tool === "crop" && (
             <div
               style={{
@@ -2089,25 +1957,18 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                   : isSelectionTool(tool)
                     ? "crosshair"
                     : "default",
-              // W14.2 — o `filter` dos ajustes NÃO vai aqui (afetaria o fundo
-              // do canvas). É aplicado só no <canvas> da camada da imagem
-              // base, via baseLayerRef (useEffect abaixo).
+              // O `filter` dos ajustes não vai aqui (afetaria o fundo); vai só no <canvas> da camada base.
             }}
           >
-            {/* W14.2 — Camada da imagem base. O CSS `filter` dos ajustes é
-                aplicado SÓ no <canvas> desta camada (via baseLayerRef +
-                useEffect), de modo que o fundo do canvas e as anotações (em
-                outras camadas) NÃO são afetados. */}
+            {/* Camada da imagem base: só o <canvas> dela recebe o CSS filter (fundo e anotações ficam de fora). */}
             <Layer
               ref={baseLayerRef}
               listening={false}
               imageSmoothingEnabled={viewport.scale < PIXEL_CRISP_ZOOM}
             >
               {previewImage ? (
-                // W17 — resultado da pilha de filtros (backend) já com crop e
-                // ops aplicados na ordem. O bitmap pode vir reduzido (preview
-                // rápido); desenhamos no tamanho LÓGICO (÷scale) para manter
-                // as coordenadas e a sobreposição de anotações.
+                // Resultado da pilha (backend), já com crop. O bitmap pode vir
+                // reduzido; desenha no tamanho lógico (÷scale) para manter coordenadas.
                 <KonvaImage
                   image={previewImage.image}
                   x={0}
@@ -2116,10 +1977,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                   height={previewImage.image.height / previewImage.scale}
                 />
               ) : htmlImage && cropApplied ? (
-                // Pós-laudo S — crop aplicado: usa `crop` do Konva.Image pra
-                // limitar a região renderizada à do crop_op. x/y/width/height
-                // viram as dimensões cortadas — a imagem aparece "encolhida"
-                // pro tamanho do recorte.
+                // Crop aplicado: `crop` do Konva.Image limita a região renderizada ao recorte.
                 <KonvaImage
                   image={htmlImage}
                   x={0}
@@ -2143,9 +2001,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                 />
               ) : null}
             </Layer>
-            {/* W20 (S3) — Camadas de pixels (recortes de seleção) acima da
-                base, movíveis com a ferramenta de seleção. Em coords de px da
-                imagem (= mesma convenção das anotações). */}
+            {/* Camadas de pixels (recortes de seleção), em px da imagem, movíveis com "Selecionar". */}
             <Layer>
               {doc.layers
                 .filter((l) => l.kind === "pixels" && l.visible !== false)
@@ -2206,8 +2062,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                     />
                   );
                 })}
-              {/* W20 (S3) — Handles (redimensionar + rotacionar) presos à
-                  camada de pixels selecionada. */}
+              {/* Handles (redimensionar + rotacionar) da camada de pixels selecionada. */}
               <Transformer
                 ref={pixelTransformerRef}
                 rotateEnabled
@@ -2221,10 +2076,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                 }
               />
             </Layer>
-            {/* Pós-laudo S — Crop tool: retângulo arrastável + 8 handles +
-                dim outside. Tudo em escala de "imagem source" (coords
-                world). Os handles usam 1/viewport.scale pra ficar com
-                tamanho constante na tela mesmo quando o usuário dá zoom. */}
+            {/* Corte: retângulo arrastável + 8 handles em coords da imagem;
+                handles usam 1/viewport.scale para manter o tamanho na tela. */}
             {tool === "crop" && cropPending && htmlImage && (
               <CropOverlayLayer
                 imageWidth={htmlImage.width}
@@ -2255,8 +2108,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                 }}
               />
             </Layer>
-            {/* W20 — Marquee da seleção (marching ants). Entre objetos e
-                pending; não-interativa. */}
+            {/* Marquee da seleção (não interativo). */}
             <SelectionMarqueeLayer
               selection={doc.selection ?? null}
               draft={selDraft}
@@ -2271,10 +2123,8 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </Layer>
           </Stage>
 
-          {/* W14.2 — <filter> SVG do mix de canais (R/G/B). Referenciado por
-              `url(#…)` no `filter` do container do Konva. Matriz diagonal:
-              canal desligado → 0 na saída (GIMP-style). Só renderiza quando há
-              canal desligado. */}
+          {/* <filter> SVG do mix de canais: matriz diagonal zera o canal desligado.
+              Só existe quando há canal desligado. */}
           {!channelsAllOn(doc.view_adjustments) && (
             <svg
               aria-hidden
@@ -2294,7 +2144,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </svg>
           )}
 
-          {/* W13 — Réguas que seguem o mouse (topo + esquerda). */}
+          {/* Réguas que seguem o mouse. */}
           {showRulers && (
             <CanvasRulers
               imageWidth={doc.source.width}
@@ -2333,8 +2183,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             <Ruler size={12} /> Réguas
           </button>
 
-          {/* W20 — Indicador da seleção ativa (kind + área + inverter/limpar).
-              Flutua abaixo do toggle de réguas. */}
+          {/* Indicador da seleção ativa (tipo + área + inverter/limpar). */}
           {doc.selection &&
             (() => {
               const sel = doc.selection;
@@ -2429,7 +2278,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                       Limpar
                     </button>
                   </div>
-                  {/* W20 (S3) — recortar a seleção numa nova camada de pixels. */}
                   <button
                     type="button"
                     onClick={() => setCopyPrompt(true)}
@@ -2452,8 +2300,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               );
             })()}
 
-          {/* W20 — Dica enquanto desenha um polígono/laço-poligonal: mostra a
-              contagem de vértices e como fechar (vértices ilimitados). */}
+          {/* Dica enquanto desenha um polígono: contagem de vértices e como fechar. */}
           {selDraft?.mode === "polygon" && (
             <div
               style={{
@@ -2509,15 +2356,12 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </div>
           )}
 
-          {/* W20 (S3) — Diálogo de origem da cópia: o perito escolhe na hora
-              se a nova camada vem dos PIXELS ORIGINAIS (evidência fiel) ou do
-              RESULTADO com filtros (o que vê). A escolha vai na custódia. */}
+          {/* Diálogo de origem da cópia: pixels originais ou resultado com filtros; a escolha vai na custódia. */}
           {copyPrompt && (
             <div
               className={styles.previewOverlay}
-              // `previewOverlay` é passivo (pointer-events:none) p/ o overlay de
-              // "Aplicando filtros" não bloquear navegação. Aqui o diálogo é
-              // INTERATIVO — reabilita os cliques (senão atravessam pro canvas).
+              // `previewOverlay` é passivo (pointer-events: none); este diálogo é
+              // interativo, então reabilita os cliques.
               style={{ zIndex: 30, pointerEvents: "auto", cursor: "auto" }}
               onClick={() => !copyBusy && setCopyPrompt(false)}
             >
@@ -2616,10 +2460,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </div>
           )}
 
-          {/* W20.1 — overlay de processamento cobrindo a foto: chamativo, com
-              spinner + barra INDETERMINADA. O backend processa a pilha numa
-              única chamada e não reporta %; por isso a barra é animada/
-              indeterminada (honesta — não inventa porcentagem). */}
+          {/* Overlay de processamento. A barra é indeterminada porque o backend não reporta %. */}
           {previewBusy && (
             <div
               className={styles.previewOverlay}
@@ -2641,9 +2482,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </div>
           )}
 
-          {/* W19 — Camadas: a pilha de filtros como barra horizontal embaixo
-              do canvas (substitui o dock vertical do painel direito). Cada
-              filtro/crop vira uma camada; a galeria (aba Filtros) adiciona. */}
+          {/* Pilha de filtros como barra de camadas embaixo do canvas. */}
           <LayersBar
             stack={doc.processing_stack ?? []}
             onChange={(next) =>
@@ -2665,8 +2504,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         </div>
 
         <aside className={styles.right} aria-label="Painel direito">
-          {/* W19.1 — metade de cima: as 4 abas (Realçar/Filtros/Analisar/
-              Anotar). A metade de baixo é dedicada às Camadas. */}
+          {/* Metade de cima: as abas; a de baixo é das camadas. */}
           <div className={styles.rightTop}>
           <nav className={styles.rightTabs} role="tablist">
             {RIGHT_MODES.map((m) => (
@@ -2712,9 +2550,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               </>
             )}
             {rightMode === "filtros" && (
-              // W18 — só o CATÁLOGO (galeria buscável) na aba; a pilha ATIVA
-              // vive no dock sempre visível, abaixo. Assim a galeria não perde
-              // espaço conforme a pilha cresce.
+              // Só o catálogo na aba; a pilha ativa fica na LayersBar embaixo do canvas.
               <FilterGallery
                 onAdd={(kind) => {
                   setDoc((d) => ({
@@ -2796,9 +2632,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             )}
           </div>
           </div>
-          {/* W19.1 — Camadas (estilo Photoshop) na metade de baixo do painel,
-              separadas das 4 abas. Saiu da aba Anotar. Em S3 ganham as camadas
-              de pixels (copiar/colar). */}
+          {/* Camadas na metade de baixo do painel. */}
           <div className={styles.rightLayers}>
             <header className={styles.rightLayersHead}>
               <Layers size={13} />
@@ -2835,21 +2669,18 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           </div>
         </aside>
       </div>
-      {/* G12.22 — Modal global do relatório pericial */}
       <ReportPreviewDialog
         open={reportOpen}
         workspacePath={workspacePath}
         analysisId={analysis.id}
         onClose={() => setReportOpen(false)}
       />
-      {/* W13.6 — Paleta de comandos (⌘K) */}
       {paletteOpen && (
         <CommandPalette
           commands={paletteCommands}
           onClose={() => setPaletteOpen(false)}
         />
       )}
-      {/* W18 — guarda de alterações não salvas (Voltar / trocar de módulo) */}
       {pendingNav && (
         <UnsavedChangesModal
           saving={saving}
@@ -2864,7 +2695,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
 }
 
 // ---------------------------------------------------------------------------
-// Tool button
+// Botão de ferramenta
 
 function ToolBtn({
   icon,
@@ -2890,11 +2721,8 @@ function ToolBtn({
 }
 
 // ---------------------------------------------------------------------------
-// W13.4 — Trilha de ferramentas em GRUPOS com flyout (estilo Photoshop/
-// Affinity). Cada grupo ocupa um único slot que mostra a ferramenta ativa/
-// usada por último; ao passar o mouse, abre um flyout com as demais do grupo
-// (rótulo + atalho). Reduz a barra vertical de ~12 botões para 5 slots e
-// agrupa por INTENÇÃO, espelhando os 3 modos do painel direito.
+// Trilha de ferramentas em grupos com flyout: cada grupo ocupa um slot que mostra
+// a ferramenta ativa/última usada; ao passar o mouse abre as demais do grupo.
 
 interface ToolDef {
   tool: Tool;
@@ -3027,18 +2855,9 @@ function ToolGroupFlyout({
 }
 
 // ---------------------------------------------------------------------------
-// Pós-laudo S — Crop Overlay (Konva)
-//
-// Camada de seleção do crop tool. Renderiza:
-//   - 4 retângulos escuros cobrindo a área que será descartada (dim);
-//   - 1 retângulo brilhante (claro) com borda azul = a área que fica;
-//   - 8 handles (4 cantos + 4 lados) draggables.
-//
-// Todas as coordenadas estão no espaço da imagem source (mundo).
-// `viewportScale` escala os elementos visuais (handles, traços) para
-// manter tamanho constante na tela mesmo com zoom.
-//
-// O componente é totalmente controlado pelo pai via `crop` + `onChange`.
+// Crop overlay (Konva): dim fora da área, retângulo da área que fica e 8 handles.
+// Coords no espaço da imagem; `viewportScale` mantém handles/traços com tamanho
+// constante na tela. Controlado pelo pai via `crop` + `onChange`.
 
 interface CropRect {
   x: number;
@@ -3085,7 +2904,7 @@ function CropOverlayLayer({
     onChange(clampRect({ ...crop, x: nx, y: ny }));
   };
 
-  // Helpers para handles: cada um atualiza 1 ou 2 bordas (left, top, right, bottom).
+  // Cada handle atualiza 1 ou 2 bordas.
   type Edge = "l" | "t" | "r" | "b";
   const dragHandle = (edges: Edge[]) =>
     (e: Konva.KonvaEventObject<DragEvent>) => {
@@ -3261,7 +3080,7 @@ function CropOverlayLayer({
 }
 
 // ---------------------------------------------------------------------------
-// Annotation node (Konva)
+// Nó de anotação (Konva)
 
 function AnnotationNode({
   a,
@@ -3540,7 +3359,7 @@ function StatusBar({
 }
 
 // ---------------------------------------------------------------------------
-// Right panel — Accordion (W13.3): seção recolhível reaproveitada pelos 3 modos
+// Painel direito — seção recolhível (accordion)
 
 function AccordionSection({
   title,
@@ -3574,10 +3393,8 @@ function AccordionSection({
   );
 }
 
-// Right panel — Layers: ver `LayersPanelPro` (componente dedicado, W20 S3).
-
 // ---------------------------------------------------------------------------
-// Right panel — Adjustments
+// Painel direito — Ajustes
 
 function AdjustmentsPanel({
   adjustments,
@@ -3624,8 +3441,6 @@ function AdjustmentsPanel({
         value={adjustments.saturation}
         onChange={(v) => onChange({ saturation: v })}
       />
-      {/* W14.2 — Matiz (rotação de cor, graus). Útil para destacar dominantes
-          de cor sutis sem alterar a evidência. */}
       <Slider
         label="Matiz (°)"
         min={-180}
@@ -3634,8 +3449,7 @@ function AdjustmentsPanel({
         value={adjustments.hue ?? 0}
         onChange={(v) => onChange({ hue: v })}
       />
-      {/* W14.2 — Canais R/G/B (estilo GIMP): desligar zera o canal de saída,
-          isolando/realçando a contribuição de cor. */}
+      {/* Canais R/G/B: desligar zera o canal na saída. */}
       <div className={styles.channelRow}>
         <span className={styles.channelLabel}>Canais</span>
         {(["r", "g", "b"] as const).map((ch) => {
@@ -3719,7 +3533,7 @@ function Slider({
 }
 
 // ---------------------------------------------------------------------------
-// Right panel — Annotations list
+// Painel direito — lista de anotações
 
 function AnnotationsListPanel({
   doc,
@@ -3795,7 +3609,7 @@ function AnnotationsListPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Right panel — History
+// Painel direito — Histórico
 
 function HistoryPanel({ logs }: { logs: ImageOperationLog[] }) {
   if (logs.length === 0) {
@@ -3821,7 +3635,7 @@ function HistoryPanel({ logs }: { logs: ImageOperationLog[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Right panel — Metadata
+// Painel direito — Metadados
 
 function MetaPanel({ doc }: { doc: SicroImageDoc }) {
   return (

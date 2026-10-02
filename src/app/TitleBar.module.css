@@ -5,17 +5,14 @@
   width: 100%;
   display: flex;
   align-items: stretch;
-  /* Mesma cor do rail/sidebar → a title bar funde com a área da marca abaixo
-   * (sem linha divisória, visual integrado). */
+  /* Mesma cor do rail: a barra funde com a área da marca abaixo. */
   background: var(--sicro-surface-1);
   /* impede seleção de texto acidental ao arrastar */
   user-select: none;
   -webkit-user-select: none;
 }
 
-/* Linha divisória APENAS no trecho do conteúdo (da largura da sidebar pra
- * direita) — separa a title bar do cabeçalho "Início". Sobre a sidebar
- * (esquerda) NÃO há linha, pra a marca ficar integrada à barra. */
+/* Divisória só da largura da sidebar para a direita; sobre a marca não há linha. */
 .bar::after {
   content: "";
   position: absolute;
@@ -27,20 +24,17 @@
   pointer-events: none;
 }
 
-/* Slot da marca (esquerda) — ocupa exatamente a coluna da sidebar; a marca
- * fica centralizada nele e alinhada vertical com os botões da janela. */
+/* Slot da marca: exatamente a coluna da sidebar. */
 .brandSlot {
   flex: 0 0 var(--activity-rail-width);
   width: var(--activity-rail-width);
   height: 100%;
   display: flex;
   align-items: center;
-  /* Marca no CENTRO da coluna da sidebar (antes ficava encostada à esquerda,
-   * alinhada aos ícones dos módulos). */
+  /* Marca centralizada na coluna da sidebar. */
   justify-content: center;
 }
-/* Filhos da marca não capturam clique → arrastar a janela funciona a partir
- * da área da marca também (o clique "cai" no .brandSlot, que é drag-region). */
+/* Filhos sem clique: o arrasto cai no .brandSlot, que é drag-region. */
 .brandSlot > * {
   pointer-events: none;
 }
@@ -90,8 +84,7 @@
 }
 
 /* ---- Alças de redimensionamento (janela frameless) ----
- * Acima do chrome (z maior que a barra) pra pegar o pixel da borda; abaixo de
- * modais. `pointer-events` só nas alças (a camada é transparente). */
+ * Acima do chrome para pegar o pixel da borda, abaixo de modais; pointer-events só nas alças. */
 .resizeLayer {
   position: fixed;
   inset: 0;

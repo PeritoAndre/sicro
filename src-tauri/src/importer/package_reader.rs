@@ -1,12 +1,5 @@
-//! Read primitives for a `.sicroapp` zip archive.
-//!
-//! Everything that touches the ZIP goes through here so the orchestrator can
-//! stay focused on the import flow. Each entry name is normalised by
-//! `safe_zip::sanitize_zip_path` before any filesystem write.
-//!
-//! The reader keeps a `zip::ZipArchive` open against the staged copy of the
-//! package (the one in `imports/<id>/original_package.sicroapp`), not the
-//! user's original path — that file may move while the import runs.
+//! Leitura do ZIP `.sicroapp`. Abre a cópia em `imports/<id>/`, não o arquivo do
+//! usuário (que pode sumir durante o import); nomes passam por `sanitize_zip_path`.
 
 use std::collections::HashSet;
 use std::fs::File;
@@ -19,11 +12,9 @@ use zip::ZipArchive;
 use crate::error::{Result, SicroError};
 use crate::importer::safe_zip::sanitize_zip_path;
 
-/// Wraps a `zip::ZipArchive` open against a staged `.sicroapp` and offers
-/// the helpers the orchestrator needs.
 pub struct PackageReader {
     archive: ZipArchive<File>,
-    /// Sanitised relative paths of every regular file inside the ZIP.
+    /// Caminhos sanitizados de todo arquivo regular do ZIP.
     file_entries: Vec<String>,
 }
 
@@ -40,8 +31,6 @@ impl PackageReader {
             ))
         })?;
 
-        // Scan once so callers can list/test entry existence without
-        // re-walking the central directory.
         let mut entries = Vec::with_capacity(archive.len());
         for i in 0..archive.len() {
             let raw_name = {
@@ -69,8 +58,6 @@ impl PackageReader {
         })
     }
 
-    /// Sanitised list of every regular file in the archive (root-relative,
-    /// forward-slashes).
     pub fn list_files(&self) -> &[String] {
         &self.file_entries
     }
@@ -79,14 +66,12 @@ impl PackageReader {
         self.file_entries.iter().any(|e| e == sanitised_name)
     }
 
-    /// Read a JSON entry into memory. Returns `None` if missing.
+    /// Lê uma entrada para a memória; `None` se não existir.
     pub fn read_to_bytes(&mut self, sanitised_name: &str) -> Result<Option<Vec<u8>>> {
         if !self.contains(sanitised_name) {
             return Ok(None);
         }
-        // `zip::ZipArchive::by_name` accepts the same string the ZIP central
-        // directory used. We don't have that one because we already
-        // normalised slashes; resolve by index instead.
+        // `by_name` exige o nome original do ZIP; só temos o sanitizado, então vai por índice.
         let idx = self.find_index(sanitised_name)?;
         let mut entry = self
             .archive
@@ -99,9 +84,8 @@ impl PackageReader {
         Ok(Some(buf))
     }
 
-    /// Stream an entry into `target` (on the filesystem). Returns
-    /// `(bytes_written, sha256_hex_lowercase)`. The target's parent directory
-    /// must already exist. Refuses to overwrite an existing target.
+    /// Grava a entrada em `target` (pai já existente; não sobrescreve) e devolve
+    /// `(bytes, sha256 hex)`.
     pub fn extract_to(
         &mut self,
         sanitised_name: &str,
@@ -153,8 +137,7 @@ impl PackageReader {
         Ok((total, hex))
     }
 
-    /// Stream an entry through SHA-256 without writing to disk. Used when
-    /// verifying `hashes.json` against the ZIP contents.
+    /// SHA-256 da entrada sem gravar em disco (verificação do `hashes.json`).
     pub fn sha256(&mut self, sanitised_name: &str) -> Result<String> {
         let idx = self.find_index(sanitised_name)?;
         let mut entry = self
@@ -177,11 +160,8 @@ impl PackageReader {
     }
 
     fn find_index(&mut self, sanitised_name: &str) -> Result<usize> {
-        // The `archive` keeps entries in the same order we walked at `open`.
-        // We can't store indices in `file_entries` directly (the archive
-        // mutably borrows itself when reading), so re-derive here. The cost
-        // is one scan per read — fine for the JSON files; media extraction
-        // is dominated by I/O anyway.
+        // Não dá para guardar índices em `file_entries` (o archive se empresta
+        // mutável ao ler); uma varredura por leitura é barata frente ao I/O.
         for i in 0..self.archive.len() {
             let entry = self
                 .archive
@@ -203,8 +183,7 @@ impl PackageReader {
     }
 }
 
-/// Compute SHA-256 of the package file on disk, streaming so memory stays
-/// flat for multi-MB photos.
+/// SHA-256 do pacote em disco, em streaming.
 pub fn package_sha256(path: &Path) -> Result<String> {
     let mut file = File::open(path).map_err(|e| {
         SicroError::Filesystem(format!("cannot open {} for hashing: {}", path.display(), e))
@@ -223,8 +202,7 @@ pub fn package_sha256(path: &Path) -> Result<String> {
     Ok(hasher.finalize().iter().map(|b| format!("{b:02x}")).collect())
 }
 
-/// Copy the source `.sicroapp` to `target`, creating parents as needed.
-/// Returns the number of bytes written.
+/// Copia o pacote para `target` criando os pais; devolve bytes copiados.
 pub fn stage_package(src: &Path, target: &Path) -> Result<u64> {
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
@@ -246,8 +224,8 @@ pub fn stage_package(src: &Path, target: &Path) -> Result<u64> {
     Ok(n)
 }
 
-/// Walk `hashes.json` (mobile contract: `{ "algoritmo": "SHA-256", "arquivos": [{ "caminho": "...", "sha256": "..." }] }`)
-/// and return a vector of (sanitised_path, expected_hash).
+/// Lê `hashes.json` (`{ "algoritmo": "SHA-256", "arquivos": [{ "caminho", "sha256" }] }`)
+/// e devolve (caminho sanitizado, hash esperado).
 pub fn parse_hashes_json(raw: &[u8]) -> Result<Vec<(String, String)>> {
     let v: serde_json::Value = serde_json::from_slice(raw)
         .map_err(|e| SicroError::Validation(format!("hashes.json invalid: {e}")))?;
@@ -317,8 +295,7 @@ mod tests {
         assert!(parse_hashes_json(raw).is_err());
     }
 
-    /// In-memory ZIP smoke test: build a one-file ZIP, sha256 it via the
-    /// reader, then check `stage_package` + sha256.
+    /// ZIP de um arquivo: lê, confere e faz sha256 pelo reader.
     #[test]
     fn package_reader_reads_known_zip() -> std::io::Result<()> {
         let tmp = tempfile::tempdir()?;

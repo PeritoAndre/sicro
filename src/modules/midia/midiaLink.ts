@@ -1,13 +1,8 @@
 /**
- * Vídeos e Áudios como abas irmãs: a ponte entre as duas telas.
- *
- * - Vídeos → Áudios: com um vídeo aberto, a aba Áudios recebe o áudio DESSE
- *   vídeo (o já extraído, ou extrai na hora), no mesmo instante.
- * - Áudios → Vídeos: com o áudio de um vídeo aberto, a aba Vídeos reabre o vídeo
- *   de origem no instante em que o áudio estava.
- *
- * Cada tela registra "o que está aberto agora"; a barra do topo, ao trocar de
- * aba, deixa um pedido (handoff) que a outra tela consome ao montar.
+ * Ponte entre as abas irmãs Vídeos e Áudios: cada tela registra o que está
+ * aberto; a barra do topo, ao trocar de aba, deixa um pedido (handoff) que a
+ * outra consome ao montar — o áudio do vídeo aberto no mesmo instante, ou o
+ * vídeo de origem do áudio.
  */
 import { audioStreamStart } from "@modules/video/editor/format";
 import { savePosition } from "@modules/video/editor/resume";
@@ -23,7 +18,7 @@ export interface OpenVideo {
   time: number;
 }
 
-export interface OpenAudio {
+interface OpenAudio {
   sourceVideoSha256: string | null;
   /** Instante do player de áudio (tempo do WAV). */
   time: number;
@@ -33,7 +28,7 @@ export interface OpenAudio {
 export type AudioHandoff = OpenVideo;
 
 /** Pedido para a aba Vídeos: o vídeo com este SHA, neste instante do áudio. */
-export interface VideoHandoff {
+interface VideoHandoff {
   videoSha256: string;
   audioTime: number;
 }
@@ -78,10 +73,9 @@ export function audioToVideoTime(audioTime: number, rawProbeJson: string | null)
 }
 
 /**
- * Chamado pela barra do topo ANTES de trocar de aba. Vídeos → Áudios: deixa o
- * vídeo aberto como pedido. Áudios → Vídeos: deixa o vídeo de origem do áudio;
- * se ele já é o vídeo aberto, grava o instante na posição de retomada (o player
- * abre nele) — senão fecha o vídeo atual para a aba abrir o certo.
+ * Chamado pela barra do topo ANTES de trocar de aba. Áudios → Vídeos: se o vídeo
+ * de origem já é o aberto, grava o instante na posição de retomada; senão fecha
+ * o atual para a aba abrir o certo.
  */
 export function prepareTabSwitch(to: "/video" | "/audio"): void {
   if (to === "/audio") {

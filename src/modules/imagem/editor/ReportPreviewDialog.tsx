@@ -1,11 +1,6 @@
 /**
- * ReportPreviewDialog — modal com preview do relatório de análise
- * pericial em HTML.
- *
- * G12.22 — Renderiza o HTML retornado por `generate_image_analysis_report`
- * em um iframe sandbox isolado. Botões: Recarregar, Imprimir
- * (`window.print()` dentro do iframe), Abrir no arquivo (revela o
- * .html no explorador via comando `open_evidence_file`).
+ * Modal com preview do relatório de análise pericial (HTML do backend) em
+ * iframe sandbox; imprime via `window.print()` do próprio iframe.
  */
 
 import { useEffect, useState } from "react";
@@ -80,7 +75,7 @@ export function ReportPreviewDialog({
     void commands
       .revealEvidenceInFolder(workspacePath, artifact.output_relative_path)
       .catch(() => {
-        /* ignored */
+        /* ignorado */
       });
   };
 

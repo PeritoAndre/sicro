@@ -13,8 +13,6 @@
   overflow: hidden;
 }
 
-/* A marca SICRO (logo + nome) migrou para a barra de título (Brand.tsx /
- * Brand.module.css). A sidebar começa direto na navegação. */
 
 /* ---- Navegação ---- */
 .nav {

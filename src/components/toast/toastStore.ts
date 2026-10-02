@@ -1,20 +1,4 @@
-/**
- * toastStore — store global de toasts.
- *
- * F12.10 — Sistema minimalista de notificações temporárias. Zustand
- * store + helper functional `pushToast(...)` para chamar de qualquer
- * lugar. Renderizado uma única vez pelo `<Toaster />` na raiz do app.
- *
- * Variantes:
- *   - info     → azul, padrão
- *   - success  → verde, confirmações
- *   - warn     → âmbar, atenções não-fatais
- *   - error    → vermelho, falhas
- *   - progress → spinner em vez de ícone, default sticky
- *
- * Auto-dismiss após `durationMs` (default 4s). Progress toasts ficam
- * até serem explicitamente removidos via `dismissToast(id)`.
- */
+/** Store global de toasts; `pushToast(...)` serve de qualquer arquivo. Progress fica até `dismissToast(id)`. */
 
 import { create } from "zustand";
 
@@ -24,9 +8,8 @@ export interface Toast {
   id: number;
   kind: ToastKind;
   message: string;
-  /** Optional title/header. */
   title?: string;
-  /** Auto-dismiss in ms. 0 = sticky. */
+  /** 0 = fica até ser fechado. */
   durationMs: number;
   createdAt: number;
 }
@@ -63,7 +46,6 @@ interface PushOptions {
   durationMs?: number;
 }
 
-/** Helper imperativo para qualquer arquivo TS — sem precisar do hook. */
 export function pushToast(
   kind: ToastKind,
   message: string,
@@ -78,7 +60,6 @@ export function pushToast(
   });
 }
 
-/** Dismiss manual — usado para fechar toasts progressivos. */
 export function dismissToast(id: number): void {
   useToastStore.getState().dismiss(id);
 }

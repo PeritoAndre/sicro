@@ -1,18 +1,8 @@
 /**
- * FrameCanvas — Konva Stage para marcar pontos sobre um FRAME COLETADO (PNG),
- * espelhando o padrão do croqui (`croqui/editor/CanvasStage.tsx`):
- *
- *   - O "mundo" do Stage = coordenadas em PIXELS NATIVOS do frame (a mesma
- *     base em que a homografia de calibração foi resolvida). A imagem é
- *     desenhada em (0,0) no tamanho nativo; o Stage aplica viewport
- *     {scale,x,y}. Logo `toWorld(pointer) = (pointer - stage.xy) / scale`
- *     devolve pixel nativo direto — sem fatores de escala escondidos.
- *   - Wheel: Ctrl/⌘ → zoom ancorado no cursor; senão → pan (deltaX/Y),
- *     idêntico ao croqui (touchpad de precisão do Windows).
- *   - Clique (sem arraste) adiciona um ponto via `onAddPoint(px, py)`.
- *
- * Reutilizado tanto na calibração (2 ou 4 cantos) quanto na marcação da
- * trajetória (1 ponto por frame).
+ * Konva Stage para marcar pontos num frame coletado (PNG). O "mundo" do Stage
+ * é o pixel nativo do frame (a mesma base da homografia); o Stage só aplica o
+ * viewport {scale,x,y}, logo toWorld(pointer) = (pointer − stage.xy) / scale.
+ * Roda: Ctrl/⌘ = zoom no cursor; senão = pan.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -75,9 +65,7 @@ export function FrameCanvas({
   const [image, setImage] = useState<HTMLImageElement | null>(null);
   const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 });
 
-  // Measure the container in BOTH axes so the stage fills whatever space the
-  // layout gives it (the frame is the star of this tab). `height` is only a
-  // fallback for the first paint / a zero-height container.
+  // Mede o contêiner nos dois eixos; `height` é só fallback para o 1º paint.
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -92,7 +80,6 @@ export function FrameCanvas({
     return () => ro.disconnect();
   }, [height]);
 
-  // Load the frame image.
   useEffect(() => {
     if (!src) {
       setImage(null);
@@ -112,8 +99,7 @@ export function FrameCanvas({
   const natW = image?.naturalWidth || naturalWidth || 1280;
   const natH = image?.naturalHeight || naturalHeight || 720;
 
-  // Fit-to-container whenever the image or container size changes. Resets
-  // zoom per frame so the perito always starts from a full view.
+  // Ajusta ao contêiner a cada imagem/tamanho novo: cada frame começa na vista inteira.
   useEffect(() => {
     if (!image) return;
     const raw = Math.min(size.w / natW, size.h / natH);

@@ -1,11 +1,4 @@
-//! Tauri commands para a consolidação Alpha (MVP 8).
-//!
-//! Três commands:
-//!   - `generate_workspace_backup` — gera o `.sicrobackup` (zip).
-//!   - `get_system_health_snapshot` — devolve o snapshot JSON
-//!     (rápido, sem escrever em disco).
-//!   - `generate_system_health_report` — grava o HTML do snapshot
-//!     dentro de `<workspace>/reports/`.
+//! Comandos Tauri de backup/restauração (`.sicrobackup`) e diagnóstico do sistema.
 
 use std::path::PathBuf;
 
@@ -62,7 +55,6 @@ pub async fn generate_workspace_backup(
 
     let artifact = create_backup(&ws, dest.as_deref(), bo_label.as_deref())?;
 
-    // Audit log (best-effort).
     if let Ok(conn) = open_connection(&ws.join(SQLITE_FILENAME)) {
         let _ = occurrence_repo::record_audit(
             &conn,
@@ -78,10 +70,8 @@ pub async fn generate_workspace_backup(
     Ok(BackupArtifactJson::from(artifact))
 }
 
-/// Backup geral (todos os casos) — incremental, 1 `.sicrobackup` por caso,
-/// numa pasta-espelho no `destination`. Emite `global-backup-progress` por
-/// caso para a UI acompanhar. A varredura/zip roda em `spawn_blocking` para
-/// não travar o event loop.
+/// Backup geral (todos os casos): incremental, 1 `.sicrobackup` por caso numa
+/// pasta-espelho em `destination`. Emite `global-backup-progress` por caso.
 #[tauri::command]
 pub async fn generate_global_backup(
     app: AppHandle,
@@ -89,10 +79,8 @@ pub async fn generate_global_backup(
     destination: String,
 ) -> Result<GlobalBackupReport> {
     let dest = PathBuf::from(&destination);
-    // Snapshot do app-settings.json (perfil/instituição/cabeçalhos) para o
-    // conjunto carregar a "vida pericial" completa — não só os casos. Lido aqui
-    // (lado async, com AppHandle) e gravado dentro do spawn_blocking. Best-effort:
-    // usuário novo pode ainda não ter o arquivo.
+    // Snapshot do app-settings.json no conjunto (a "vida pericial", não só os casos).
+    // Lido aqui com o AppHandle; best-effort — usuário novo pode não ter o arquivo.
     let settings_bytes = crate::commands::settings_commands::settings_path(&app)
         .ok()
         .and_then(|p| std::fs::read(&p).ok());
@@ -114,12 +102,8 @@ pub async fn generate_global_backup(
     .map_err(|e| SicroError::Workspace(format!("backup geral (join): {e}")))?
 }
 
-/// Restaura um conjunto de backup (estrutura v2: `config/` + `casos/`) de
-/// QUALQUER origem — HD externo, pendrive, nuvem, rede. Descompacta cada caso na
-/// pasta local de casos (default: a pasta padrão do app), opcionalmente restaura
-/// a config (perfil/instituição/cabeçalhos), e reindexa os recentes. A origem
-/// nunca é tocada (§13); casos já existentes no destino são preservados (a menos
-/// que `overwrite`). Emite `restore-backup-progress` por caso.
+/// Restaura um conjunto v2 (`config/` + `casos/`) para a pasta local de casos e
+/// reindexa os recentes. A origem nunca é tocada; existentes só com `overwrite`.
 #[tauri::command]
 pub async fn restore_backup(
     app: AppHandle,
@@ -135,7 +119,6 @@ pub async fn restore_backup(
         .map(PathBuf::from)
         .unwrap_or_else(|| state.default_workspace_parent().to_path_buf());
 
-    // (1) Descompacta os casos (roda em spawn_blocking; emite progresso).
     let app_evt = app.clone();
     let source_cl = source.clone();
     let parent_cl = parent.clone();
@@ -147,7 +130,6 @@ pub async fn restore_backup(
     .await
     .map_err(|e| SicroError::Workspace(format!("restaurar (join): {e}")))??;
 
-    // (2) Config (perfil/instituição/cabeçalhos) — opcional.
     if restore_config {
         let cfg_src = source.join("config").join("app-settings.json");
         if cfg_src.is_file() {
@@ -160,7 +142,7 @@ pub async fn restore_backup(
         }
     }
 
-    // (3) Reindexa: cada caso restaurado entra nos recentes (aparece na Home).
+    // Casos restaurados entram nos recentes (aparecem na Home).
     for c in report.cases.iter().filter(|c| c.status == "restored") {
         if let Some(path) = &c.restored_path {
             if let Ok(opened) = open_workspace(&PathBuf::from(path)) {
@@ -201,7 +183,6 @@ pub async fn generate_system_health_report(
     let snapshot = build_snapshot(ws.as_deref())?;
     let artifact = render_and_save(ws.as_deref(), &snapshot)?;
 
-    // Audit log (best-effort, only when workspace given).
     if let Some(path) = ws.as_deref() {
         if let Ok(manifest) = Manifest::read(path) {
             if let Ok(mut conn) = open_connection(&path.join(SQLITE_FILENAME)) {

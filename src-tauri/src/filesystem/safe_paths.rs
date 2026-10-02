@@ -1,17 +1,8 @@
-//! Path sanitization helpers.
-//!
-//! The workspace folder name is user-derived (built from BO number, type,
-//! city, etc.), so we must scrub characters that are illegal on Windows or
-//! that could cause confusion (reserved device names, leading/trailing dots
-//! and spaces, control chars).
+//! Nome de pasta derivado de dados do usuário (BO, tipo, município): limpa o
+//! que é ilegal no Windows (chars, nomes reservados, pontos/espaços nas pontas).
 
-/// Replace anything that is not safe for a file/folder name with `_`.
-///
-/// Rules:
-///   - Strip leading/trailing whitespace and dots.
-///   - Reject empty results (substitute "ocorrencia").
-///   - Replace any of `<>:"/\\|?*` and ASCII control chars with `_`.
-///   - Limit length to 100 chars so the full path stays well under Windows' 260.
+/// Troca o que não é seguro por `_`; apara espaços e pontos; vazio → "ocorrencia";
+/// corta em 100 chars (caminho completo fica longe dos 260 do Windows).
 pub fn sanitize_folder_name(raw: &str) -> String {
     let trimmed = raw.trim().trim_matches('.');
     if trimmed.is_empty() {
@@ -30,13 +21,13 @@ pub fn sanitize_folder_name(raw: &str) -> String {
 
     if out.len() > 100 {
         out.truncate(100);
-        // Ensure we don't end on a half multi-byte sequence: truncate at char boundary.
+        // Não cortar no meio de um char multibyte.
         while !out.is_char_boundary(out.len()) {
             out.pop();
         }
     }
 
-    // Avoid Windows reserved device names.
+    // Nomes reservados do Windows.
     let upper = out.to_uppercase();
     const RESERVED: &[&str] = &[
         "CON", "PRN", "AUX", "NUL", "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7",

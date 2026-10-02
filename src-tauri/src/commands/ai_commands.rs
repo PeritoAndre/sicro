@@ -1,11 +1,6 @@
-//! Gerenciador de IA (Fase 2.1) — baixa o whisper.cpp + modelos de transcrição
-//! SOB DEMANDA, de fontes OFICIAIS, com progresso e hash, e auto-configura os
-//! caminhos em `AppSettings`.
-//!
-//! Princípio §13: nada automático. Catálogo curado (GitHub `ggml-org/whisper.cpp`
-//! e Hugging Face `ggerganov/whisper.cpp`); o perito escolhe e instala; a
-//! verificação de atualização é opt-in e só INFORMA (não instala). A versão do
-//! motor continua registrada (reprodutibilidade).
+//! Gerenciador de IA: baixa whisper.cpp, modelos e o separador de locutores de
+//! fontes oficiais, sob demanda, com progresso e hash, e configura os caminhos em
+//! `AppSettings`. Nada automático: o perito escolhe e instala; atualização só informa.
 
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -320,9 +315,8 @@ fn extract_tar_bz2(path: &Path, dest: &Path) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// Separação de locutores (sherpa-onnx) — programa + 2 modelos, de fontes
-// oficiais (GitHub k2-fsa/sherpa-onnx), com tamanho e SHA-256 FIXOS: se o que
-// chegar não conferir, nada é instalado. Roda local e offline depois.
+// Separação de locutores (sherpa-onnx): programa + 2 modelos de fontes oficiais,
+// com tamanho e SHA-256 FIXOS — se não conferir, nada é instalado.
 
 const SHERPA_VERSION: &str = "v1.13.8";
 
@@ -543,7 +537,6 @@ pub async fn install_ai_asset(app: AppHandle, asset_id: String) -> Result<AiStat
     .await
     .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))??;
 
-    // Finaliza: extrai (build .zip) ou move (modelo .bin).
     let mut bin_path = String::new();
     let mut model_path = String::new();
     if item.is_zip {
@@ -564,7 +557,6 @@ pub async fn install_ai_asset(app: AppHandle, asset_id: String) -> Result<AiStat
         model_path = final_path.to_string_lossy().to_string();
     }
 
-    // Auto-configura + registra o sha256 do que foi baixado (rastreabilidade).
     let mut s = get_app_settings(app.clone()).await?;
     match item.kind {
         "build" => {
@@ -646,10 +638,8 @@ pub async fn check_ai_updates(app: AppHandle) -> Result<AiUpdateInfo> {
     })
 }
 
-/// OPT-IN: atualiza o motor whisper.cpp para a última release upstream,
-/// reinstalando o MESMO build (GPU/CPU) com a versão trocada na URL do asset.
-/// Registra a nova versão e o sha256 (rastreabilidade). §13: ação do perito —
-/// nada é trocado automaticamente; a versão usada fica registrada.
+/// OPT-IN: reinstala o MESMO build (GPU/CPU) com a versão trocada na URL do
+/// release. Ação do perito — nada é trocado automaticamente; a versão fica registrada.
 #[tauri::command]
 pub async fn update_whisper_engine(app: AppHandle) -> Result<AiStatus> {
     let s = get_app_settings(app.clone()).await?;

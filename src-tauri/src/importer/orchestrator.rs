@@ -1,18 +1,6 @@
-//! Import orchestrator — `run_import` is the single public entry point.
-//!
-//! Side effects in order (each step is logged + best-effort audit):
-//!   1. SHA-256 of the source `.sicroapp`.
-//!   2. Open the ZIP, parse the manifest.
-//!   3. Look for an existing import with the same package hash.
-//!   4. Create the destination `.sicro` workspace.
-//!   5. Copy the package to `imports/<id>/original_package.sicroapp`.
-//!   6. Verify `hashes.json` against the staged ZIP.
-//!   7. Read the structured JSONs (case/metadata/location/photos).
-//!   8. Build a Desktop `Occurrence` (preserving raw payloads).
-//!   9. Extract photos to `media/photos/`; insert `media_assets` +
-//!      `evidence_items`.
-//!  10. Persist the `Import` row + the rendered `import_report.json`.
-//!  11. Return `ImportResult { import, occurrence, workspace_path, report }`.
+//! Orquestra a importação de um `.sicroapp`: hash, manifesto, workspace novo,
+//! cópia do pacote, verificação de `hashes.json`, ocorrência, fotos, dossiê e
+//! relatório. `run_import` é o único ponto de entrada.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -41,10 +29,8 @@ use super::package_reader::{
 };
 use super::registry::{GlobalImportRecord, ImportRegistry};
 
-/// Top-level folders that the imported workspace must have on top of the
-/// usual `.sicro` skeleton. Keeping them here (instead of in
-/// `workspace::create::SUBDIRS`) makes it clear they're "owned" by the
-/// importer and stops Spike A workspaces from creating empty folders.
+/// Pastas extras do workspace importado (fora de `workspace::create::SUBDIRS`
+/// para um workspace comum não criar pastas vazias).
 const IMPORT_SUBDIRS: &[&str] = &[
     "dossie",
     "laudos",
@@ -55,8 +41,7 @@ const IMPORT_SUBDIRS: &[&str] = &[
     "logs",
 ];
 
-/// Files the importer ALWAYS attempts to read. Anything else found in the
-/// ZIP is reported under `files_ignored` (not an error — just noise).
+/// JSONs que o importador sempre tenta ler; o resto do ZIP vai para `files_ignored`.
 const KNOWN_JSONS: &[&str] = &[
     "manifest.json",
     "metadados.json",
@@ -87,7 +72,6 @@ pub fn run_import(
         .and_then(|n| n.to_str())
         .map(str::to_string);
 
-    // 1. Validate extension + presence on disk.
     validate_extension(&package_path)?;
     if !package_path.is_file() {
         return Err(SicroError::Filesystem(format!(
@@ -96,14 +80,11 @@ pub fn run_import(
         )));
     }
 
-    // 2. Hash the source file before staging — so callers can compare even
-    //    if the staging copy fails later.
+    // Hash do original antes de copiar: vale mesmo se a cópia falhar depois.
     let pkg_sha256 = package_sha256(&package_path)?;
     let pkg_size = fs::metadata(&package_path).map(|m| m.len()).unwrap_or(0);
 
-    // 2.1 Cross-workspace duplicate check. Importing the same `.sicroapp`
-    //     twice would create two divergent workspaces from the same source,
-    //     which the doc §8 explicitly forbids ("não duplicar silenciosamente").
+    // Duplicata entre workspaces: o mesmo pacote nunca gera dois workspaces.
     if let Some(existing) = registry.find_by_sha256(&pkg_sha256)? {
         return Err(SicroError::Validation(format!(
             "package already imported on {} (workspace {}, import_id {})",
@@ -111,7 +92,6 @@ pub fn run_import(
         )));
     }
 
-    // 3. Open the ZIP and parse the manifest.
     let mut probe_reader = PackageReader::open(&package_path)?;
     let raw_manifest = probe_reader
         .read_to_bytes("manifest.json")?
@@ -119,9 +99,8 @@ pub fn run_import(
             SicroError::Validation("package missing manifest.json".to_string())
         })?;
     let manifest = manifest_parser::parse(&raw_manifest)?;
-    drop(probe_reader); // re-open after staging
+    drop(probe_reader); // reaberto depois da cópia
 
-    // 4. Resolve where the destination workspace will live.
     let parent: PathBuf = match &input.parent_directory {
         Some(p) if !p.trim().is_empty() => PathBuf::from(p),
         _ => default_parent.to_path_buf(),
@@ -137,11 +116,10 @@ pub fn run_import(
     }
 
     let workspace_id = Uuid::new_v4();
-    let occurrence_id = workspace_id; // 1 workspace = 1 occurrence (Spike A convention).
+    let occurrence_id = workspace_id; // 1 workspace = 1 ocorrência
     let base_name = pick_workspace_folder_name(&manifest, &workspace_id);
     let workspace_path = unique_workspace_path(&parent, &base_name)?;
 
-    // 5. Create the directory tree + SQLite.
     fs::create_dir_all(&workspace_path)?;
     for sub in IMPORT_SUBDIRS {
         fs::create_dir_all(workspace_path.join(sub))?;
@@ -150,10 +128,8 @@ pub fn run_import(
     let mut conn = open_connection(&db_path)?;
     run_migrations(&mut conn)?;
 
-    // 6. Defensive within-workspace duplicate check. The cross-workspace
-    //    check at step 2.1 catches the common case; this guards against a
-    //    user manually pointing two imports at the same fresh workspace
-    //    via `parent_directory`.
+    // Duplicata dentro do workspace (dois imports apontados para a mesma pasta
+    // via `parent_directory`).
     if let Some(existing) = import_repo::find_by_package_sha256(&conn, &pkg_sha256)? {
         drop(conn);
         let _ = fs::remove_dir_all(&workspace_path);
@@ -163,7 +139,6 @@ pub fn run_import(
         )));
     }
 
-    // 7. Stage the original package under imports/<id>/.
     let import_id = Uuid::new_v4();
     let import_dir = workspace_path
         .join("imports")
@@ -191,13 +166,10 @@ pub fn run_import(
         imported_at: Some(now),
         ..Default::default()
     };
-    // Carry the manifest's own warnings into our report.
     report.warnings.extend(manifest.manifest_warnings.iter().cloned());
 
-    // 8. Insert the `imports` row FIRST so subsequent `occurrences` and
-    //    `media_assets` foreign-key references are satisfied.  warnings/
-    //    errors/status get patched at the very end via
-    //    `update_status_and_warnings`.
+    // A linha de `imports` entra primeiro (FK de occurrences/media_assets);
+    // status e avisos são fechados no fim.
     let initial_import = Import {
         id: import_id,
         package_relative_path: format!("imports/{}/original_package.sicroapp", import_id),
@@ -208,7 +180,6 @@ pub fn run_import(
         app_name: manifest.app_name.clone(),
         app_version: manifest.app_version.clone(),
         mobile_occurrence_id: manifest.occurrence_id.clone(),
-        // Placeholder — finalised below.
         status: ImportStatus::Imported,
         warnings_json: "[]".to_string(),
         errors_json: "[]".to_string(),
@@ -217,15 +188,11 @@ pub fn run_import(
     };
     import_repo::insert(&conn, &initial_import)?;
 
-    // 9. Re-open against the staged package (so further extraction reads
-    //    from imports/<id>/original_package.sicroapp, not the user path).
+    // Daqui em diante lê da cópia em imports/<id>/, não do caminho do usuário.
     let mut reader = PackageReader::open(&staged_pkg)?;
 
-    // Catalogue every file in the ZIP into either `jsons_read`, `files_ignored`,
-    // and synthesize `jsons_missing` from KNOWN_JSONS.
     classify_zip_entries(&mut report, &reader);
 
-    // 10. Verify hashes (best effort).
     if let Some(hash_bytes) = reader.read_to_bytes("hashes.json")? {
         report.hashes_present = true;
         match parse_hashes_json(&hash_bytes) {
@@ -238,7 +205,6 @@ pub fn run_import(
             .push("hashes.json missing — integrity check skipped".to_string());
     }
 
-    // 11. Read structured JSONs.
     let case_json = reader.read_to_bytes("caso.json")?;
     let metadata_json = reader.read_to_bytes("metadados.json")?;
     let location_json = reader.read_to_bytes("localizacao.json")?;
@@ -254,7 +220,6 @@ pub fn run_import(
         .as_ref()
         .and_then(|b| serde_json::from_slice::<Value>(b).ok());
 
-    // 11. Build the Desktop Occurrence.
     let occurrence = build_occurrence(
         occurrence_id,
         import_id,
@@ -278,7 +243,6 @@ pub fn run_import(
         Some(&pkg_sha256),
     )?;
 
-    // Mirror the occurrence summary into the report.
     report.bo = occurrence.numero_bo.clone();
     report.protocolo = occurrence.protocolo.clone();
     report.municipio = occurrence.municipio.clone();
@@ -291,7 +255,6 @@ pub fn run_import(
     report.natureza = occurrence.natureza.clone().or(report.natureza.take());
     report.resultado = occurrence.resultado.clone().or(report.resultado.take());
 
-    // 12. Import photos.
     let photo_index = photos_json
         .as_ref()
         .and_then(|b| serde_json::from_slice::<Value>(b).ok())
@@ -309,10 +272,8 @@ pub fn run_import(
         &mut report,
     )?;
 
-    // 13.5 MVP 3 — populate the Dossiê tables (checklist, entities, traces,
-    //      measurements, notes, timeline, stats) from the remaining JSONs.
-    //      Best-effort: an error here is reported but doesn't abort the
-    //      import (the pacote already produced a valid Occurrence + media).
+    // Dossiê é best-effort: erro vira aviso, não aborta (ocorrência e mídia já
+    // estão válidas).
     match super::rehydrator::load_from_reader(&conn, occurrence_id, import_id, &mut reader) {
         Ok(counts) => {
             tracing::info!(
@@ -334,18 +295,16 @@ pub fn run_import(
         }
     }
 
-    // 14. Decide final status.
     let status = if report.errors.is_empty() && report.warnings.is_empty() {
         ImportStatus::Imported
     } else if report.errors.is_empty() {
         ImportStatus::ImportedWithWarnings
     } else {
-        // Errors so far are non-fatal (we'd have bubbled them up). Mark with warnings.
+        // Erros aqui são não fatais (os fatais já subiram): vale como "com avisos".
         ImportStatus::ImportedWithWarnings
     };
     report.status = Some(status);
 
-    // 15. Finalise the Import row in place.
     let warnings_json = serde_json::to_string(&report.warnings).unwrap_or_else(|_| "[]".into());
     let errors_json = serde_json::to_string(&report.errors).unwrap_or_else(|_| "[]".into());
     import_repo::update_status_and_warnings(
@@ -362,14 +321,11 @@ pub fn run_import(
         ..initial_import
     };
 
-    // 16. Write the workspace manifest.json so the workspace is openable by
-    //     the Spike A `open_occurrence` command without a special case.
+    // manifest.json do workspace: `open_occurrence` abre o import sem caso especial.
     let mut ws_manifest = Manifest::new(workspace_id, occurrence_id);
     ws_manifest.touch();
     ws_manifest.write(&workspace_path)?;
 
-    // 16. Fill in the workspace_path + import_id on the report and persist
-    //     it to disk.
     let workspace_path_str = workspace_path
         .to_str()
         .map(str::to_string)
@@ -382,8 +338,8 @@ pub fn run_import(
     let report_json = serde_json::to_vec_pretty(&report)?;
     crate::filesystem::atomic_write_bytes(&report_path, &report_json)?;
 
-    // Record in the global cross-workspace registry so the same package
-    // can never be imported twice (even into a different parent_directory).
+    // Registro global: o mesmo pacote nunca entra duas vezes, nem em outro
+    // parent_directory.
     registry.record(GlobalImportRecord {
         package_sha256: import.package_sha256.clone(),
         workspace_id,
@@ -433,7 +389,7 @@ fn pick_workspace_folder_name(manifest: &ParsedManifest, workspace_id: &Uuid) ->
         parts.push("import".to_string());
     }
     if let Some(mob_id) = &manifest.occurrence_id {
-        // mobile IDs look like "occ_<ms>" — keep the last 6 chars as a hint.
+        // IDs do mobile são "occ_<ms>": os 6 últimos chars servem de pista.
         let tail = mob_id
             .chars()
             .rev()
@@ -455,7 +411,7 @@ fn classify_zip_entries(report: &mut ImportReport, reader: &PackageReader) {
     let mut known_seen: HashSet<&'static str> = HashSet::new();
     for entry in reader.list_files() {
         if entry.starts_with("fotos/") {
-            // Counted under photos_*; nothing to do here.
+            // fotos/ entram em photos_*.
             continue;
         }
         match KNOWN_JSONS.iter().find(|k| **k == entry.as_str()) {
@@ -470,8 +426,7 @@ fn classify_zip_entries(report: &mut ImportReport, reader: &PackageReader) {
     }
     for k in KNOWN_JSONS {
         if !known_seen.contains(k) {
-            // hashes.json is the only one whose absence is its own warning
-            // (handled in the orchestrator). Track the rest here.
+            // A ausência de hashes.json já gera aviso próprio em run_import.
             if *k == "hashes.json" {
                 continue;
             }
@@ -649,9 +604,7 @@ fn parse_iso8601(s: &str) -> Option<DateTime<Utc>> {
     DateTime::parse_from_rfc3339(s)
         .ok()
         .or_else(|| {
-            // mobile sometimes omits the timezone offset (Dart toIso8601String).
-            // Treat as UTC for now — Spike D doesn't model timezones beyond
-            // ISO-8601-ish parsing.
+            // O mobile às vezes omite o fuso (Dart toIso8601String): assume UTC.
             DateTime::parse_from_str(&format!("{s}Z"), "%Y-%m-%dT%H:%M:%S%.f%#z").ok()
         })
         .map(|d| d.with_timezone(&Utc))
@@ -721,7 +674,6 @@ fn import_photos(
             continue;
         }
 
-        // sanitize the in-zip path against traversal.
         let sanitised = match super::safe_zip::sanitize_zip_path(pkg_path) {
             Ok(p) => p.to_str().unwrap_or_default().replace('\\', "/"),
             Err(e) => {
@@ -749,7 +701,6 @@ fn import_photos(
             continue;
         }
 
-        // Target filename uses the original_id when available, else a UUID.
         let target_filename = controlled_filename(&id, &sanitised);
         let target_path = media_dir.join(&target_filename);
         let (size, actual_sha) = match reader.extract_to(&sanitised, &target_path) {
@@ -762,9 +713,7 @@ fn import_photos(
             }
         };
 
-        // If mobile published a SHA, compare it against the one we just
-        // computed — divergence here is an actual integrity flag (separate
-        // from hashes.json which is at the ZIP level).
+        // O SHA por foto (fotos.json) é independente do hashes.json do ZIP.
         if let Some(mob_sha) = mobile_sha.as_deref() {
             if !mob_sha.eq_ignore_ascii_case(&actual_sha) {
                 report.warnings.push(format!(
@@ -827,11 +776,8 @@ fn import_photos(
     Ok(())
 }
 
-/// Pick a filename inside `media/photos/` that:
-///   - keeps the mobile `id` as the stem when present (so the relation in
-///     `media_assets.original_id` is grep-able on disk);
-///   - uses the original extension (.jpg / .png / .webp);
-///   - falls back to a UUID when the mobile id is empty.
+/// Nome em `media/photos/`: id do mobile como stem (grep-ável junto de
+/// `media_assets.original_id`), extensão original; UUID se o id vier vazio.
 fn controlled_filename(mobile_id: &str, source_path: &str) -> String {
     let ext = PathBuf::from(source_path)
         .extension()

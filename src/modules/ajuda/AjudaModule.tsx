@@ -1,15 +1,9 @@
-/**
- * AjudaModule — Manual do SICRO dentro do app.
- *
- * Renderiza `docs/MANUAL_SICRO.md` (fonte ÚNICA — editar o .md atualiza a ajuda)
- * com `marked`, monta um índice navegável a partir dos títulos e intercepta os
- * links âncora internos (#secao) pra rolar sem confundir o HashRouter.
- */
+/** Manual do SICRO dentro do app: renderiza `docs/MANUAL_SICRO.md` com `marked` + índice lateral. */
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
 import { HelpCircle, Search } from "lucide-react";
-// Fonte única do manual (bundlada como texto). Editar o .md → atualiza a Ajuda.
+// Fonte única: editar o .md atualiza a Ajuda.
 import manualMd from "../../../docs/MANUAL_SICRO.md?raw";
 import { FeedbackButton } from "./FeedbackButton";
 import styles from "./AjudaModule.module.css";
@@ -20,11 +14,7 @@ interface TocItem {
   level: number;
 }
 
-/**
- * Slug compatível com o GitHub (minúsculas, sem pontuação, espaços→hífen,
- * MANTÉM acentos) — pra os links do "Sumário" do próprio manual baterem com os
- * ids dos títulos. Desambigua duplicados com sufixo numérico.
- */
+/** Slug no padrão do GitHub (mantém acentos) para os links do Sumário do manual baterem. */
 function slugify(text: string, used: Set<string>): string {
   const base =
     text
@@ -45,15 +35,12 @@ export function AjudaModule() {
   const [toc, setToc] = useState<TocItem[]>([]);
   const [query, setQuery] = useState("");
 
-  // Após renderizar o HTML, dá id a cada título e monta o índice (h2/h3).
   useEffect(() => {
     const root = articleRef.current;
     if (!root) return;
     const used = new Set<string>();
     const items: TocItem[] = [];
-    // Dá id a TODOS os títulos (pros links âncora do manual funcionarem), mas o
-    // índice lateral mostra só as SEÇÕES principais (h2) — listar h3 também
-    // deixava a lista densa e ilegível.
+    // Id em todos os títulos (âncoras do manual); o índice lateral só lista h2.
     root.querySelectorAll("h1, h2, h3").forEach((el) => {
       const text = el.textContent ?? "";
       const id = slugify(text, used);
@@ -69,8 +56,7 @@ export function AjudaModule() {
     el?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  // Links âncora internos (#...) do próprio manual: rola na mão (evita que o
-  // HashRouter interprete o # como rota). Links externos seguem normais.
+  // Âncoras internas rolam na mão: o HashRouter interpretaria o # como rota.
   const onContentClick = (e: React.MouseEvent) => {
     const anchor = (e.target as HTMLElement).closest("a");
     const href = anchor?.getAttribute("href") ?? "";
@@ -118,8 +104,6 @@ export function AjudaModule() {
             <p className={styles.tocEmpty}>Nada encontrado no índice.</p>
           )}
         </nav>
-        {/* Relatar problema / sugerir — morava no Início; aqui é o lugar de
-            quem já veio procurar ajuda. */}
         <div className={styles.tocFoot}>
           <FeedbackButton />
         </div>
@@ -129,8 +113,7 @@ export function AjudaModule() {
         ref={articleRef}
         className={styles.content}
         onClick={onContentClick}
-        // Conteúdo é o nosso próprio manual (estático/confiável) — não é entrada
-        // de usuário, então o innerHTML é seguro aqui.
+        // Manual próprio, estático — não é entrada de usuário.
         dangerouslySetInnerHTML={{ __html: html }}
       />
     </div>

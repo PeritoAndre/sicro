@@ -11,11 +11,7 @@ import { Toaster } from "@/components/toast/Toaster";
 import { installAutoBackupWatcher } from "@core/autoBackup";
 import { installContextMenuGuard } from "@components/ContextMenu/ContextMenu";
 
-// F12.9 — Bundle splitting:
-//   - Croqui carrega Konva (~280 KB) + Leaflet (~180 KB) → lazy.
-//   - Imagem carrega Konva → lazy.
-//   - Video / Lab spike → lazy.
-// Home e Integridade ficam no main bundle.
+// Módulos pesados (Konva, Leaflet, marked) ficam fora do bundle principal.
 const CroquiModule = lazy(() =>
   import("@modules/croqui/CroquiModule").then((m) => ({
     default: m.CroquiModule,
@@ -41,13 +37,11 @@ const DegravacaoView = lazy(() =>
     default: m.DegravacaoView,
   })),
 );
-// Ajuda carrega o manual (texto) + marked → lazy pra ficar fora do bundle main.
 const AjudaModule = lazy(() =>
   import("@modules/ajuda/AjudaModule").then((m) => ({
     default: m.AjudaModule,
   })),
 );
-/** Spinner mínimo enquanto chunks carregam. */
 function ModuleLoading() {
   return (
     <div
@@ -70,18 +64,13 @@ function MidiaRedirect() {
 }
 
 export function App() {
-  // Carrega as configurações globais (perfil, instituição, aparência) uma vez
-  // no boot e aplica o tema + cor de destaque ao documento.
   useEffect(() => {
     void useSettingsStore.getState().load();
   }, []);
 
-  // Auto-backup ao fechar/trocar a ocorrência (DR — Fase 2b). O observador
-  // dispara o backup geral incremental para a pasta de backup configurada.
   useEffect(() => installAutoBackupWatcher(), []);
 
-  // Sem o menu de navegador do WebKit no botão direito (Voltar, Recarregar…);
-  // os menus próprios do SICRO continuam.
+  // Bloqueia o menu de navegador do WebKit no botão direito; os menus do SICRO continuam.
   useEffect(() => installContextMenuGuard(), []);
 
   return (
@@ -94,8 +83,7 @@ export function App() {
               <Route path="/" element={<HomeView />} />
               <Route path="/integridade" element={<IntegridadeModule />} />
               <Route path="/croqui" element={<CroquiModule />} />
-              {/* Vídeo e Áudio: um módulo só, com as abas Vídeos / Áudios na
-                  barra do topo. /midia volta à aba usada por último. */}
+              {/* /midia volta à aba (Vídeos/Áudios) usada por último. */}
               <Route path="/midia" element={<MidiaRedirect />} />
               <Route path="/video" element={<VideoModule />} />
               <Route path="/audio" element={<AudioModule />} />
@@ -104,7 +92,7 @@ export function App() {
                 element={<DegravacaoView />}
               />
               <Route path="/imagem" element={<ImagemModule />} />
-              {/* Endereços de módulos que saíram no 4.0 (ou foram renomeados). */}
+              {/* Endereços antigos de módulos renomeados/removidos. */}
               <Route path="/imagens" element={<Navigate to="/imagem" replace />} />
               <Route path="/evidencias" element={<Navigate to="/integridade" replace />} />
               <Route path="/midias" element={<Navigate to="/integridade" replace />} />

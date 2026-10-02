@@ -1,14 +1,6 @@
-//! W12 (GIMP-parity) — Decomposição de CANAIS + falsa-cor.
-//!
-//! Inspiração: GIMP Cores → Componentes → Decompor / Extrair componente.
-//! A ferramenta forense MAIS pedida (segundo a pesquisa do GIMP/GEGL): ver um
-//! único canal de um espaço de cor diferente revela o que o RGB esconde —
-//! re-coloração, splicing, tinta apagada, marcas latentes, anomalias de croma.
-//!
-//! Tudo é PROJEÇÃO EXATA dos dados existentes (não fabrica nada — §13). As
-//! conversões são feitas em f32 a partir do sRGB codificado (mesma convenção
-//! do resto do módulo: `apply_adjustments` opera em sRGB-encoded, não linear).
-//! Saída: imagem em tons de cinza (R=G=B=valor do canal), alpha preservado.
+//! Extração de canal (RGB, HSV, YCbCr, CIELAB) e falsa-cor. Projeção exata dos
+//! dados existentes; conversões em f32 a partir do sRGB codificado (mesma
+//! convenção de `apply_adjustments`). Saída em cinza, alpha preservado.
 
 use image::{Rgba, RgbaImage};
 
@@ -36,10 +28,9 @@ pub fn channel_value(r: u8, g: u8, b: u8, channel: &str) -> u8 {
         "r" | "red" => rf,
         "g" | "green" => gf,
         "b" | "blue" => bf,
-        // Luminância linear-light Rec.709 (sobre sRGB-encoded — aproximação
-        // documentada: usamos os pesos 709 direto sobre o valor codificado).
+        // Pesos Rec.709 aplicados direto sobre o valor codificado (aproximação).
         "luminance" => 0.2126 * rf + 0.7152 * gf + 0.0722 * bf,
-        // Luma perceptual Rec.601 (sobre gamma).
+        // Luma Rec.601.
         "luma" => 0.299 * rf + 0.587 * gf + 0.114 * bf,
         "h" | "s" | "v" => {
             let (h, s, vv) = rgb_to_hsv(rf, gf, bf);
@@ -72,9 +63,8 @@ pub fn channel_value(r: u8, g: u8, b: u8, channel: &str) -> u8 {
     (v.clamp(0.0, 1.0) * 255.0).round() as u8
 }
 
-/// **Falsa-cor**: mapeia a luminância (Rec.601) de cada pixel por um colormap,
-/// tornando perceptíveis diferenças tonais sutis. Reversível e auditável (o
-/// mapa é fixo e registrado). Colormaps: `viridis` `jet` `ironbow` `grayscale`.
+/// Falsa-cor: luminância (Rec.601) mapeada por um colormap fixo.
+/// Colormaps: `viridis` `jet` `ironbow` `grayscale`.
 pub fn false_color(img: &RgbaImage, colormap: &str) -> RgbaImage {
     let lut = colormap_lut(colormap);
     let mut out = img.clone();

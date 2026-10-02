@@ -21,9 +21,7 @@ export function Dialog({ open, title, onClose, children, footer }: DialogProps) 
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
-  // Origem do mousedown — usada para NÃO fechar quando o arrasto começou dentro
-  // do diálogo (ex.: selecionar o texto de um input e arrastar o mouse para fora;
-  // o mouseup cairia no backdrop e fecharia o modal indevidamente).
+  // Não fechar quando o arrasto começou dentro (selecionar texto e soltar fora).
   const downOnBackdrop = useRef(false);
 
   if (!open) return null;
@@ -35,8 +33,6 @@ export function Dialog({ open, title, onClose, children, footer }: DialogProps) 
         downOnBackdrop.current = e.target === e.currentTarget;
       }}
       onClick={(e) => {
-        // Só fecha se o clique COMEÇOU e TERMINOU no backdrop (clique real fora),
-        // nunca num arrasto de seleção que começou dentro.
         if (e.target === e.currentTarget && downOnBackdrop.current) onClose();
         downOnBackdrop.current = false;
       }}

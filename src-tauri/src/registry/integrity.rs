@@ -1,16 +1,6 @@
-//! Integrity verifier (MVP 5).
-//!
-//! Operates in two modes:
-//!   - **lightweight**: for each item with a `relative_path`, probe
-//!     existence via `probe_workspace_relative`. Optionally check the
-//!     sidecar JSON (currently only `storyboard_frame` has one).
-//!   - **deep**: in addition, recompute SHA-256 for items that store a
-//!     hash and compare. Heavy — only runs when the caller asks for it.
-//!
-//! Failure to read or hash never crashes the verifier — we record the
-//! item as `Unknown` or `HashMismatch` with a `integrity_detail`
-//! message and move on. This matches the briefing's "não travar se
-//! houver erro".
+//! Verificador: leve (arquivo e sidecar existem?) ou profundo (recalcula o
+//! SHA-256 dos itens com hash). Falha de leitura/hash nunca derruba a
+//! verificação — vira `integrity_detail` e segue.
 
 use std::path::Path;
 
@@ -29,8 +19,7 @@ use crate::workspace::manifest::APP_VERSION;
 use super::aggregator::{build_registry, build_summary};
 use super::broken_links::detect_broken_laudo_links;
 
-/// Build the registry, run the integrity check, count summaries and
-/// detect broken laudo links — return everything bundled for the UI.
+/// Registro + verificação + resumo + links quebrados, num pacote só para a UI.
 pub fn verify_workspace(
     conn: &Connection,
     workspace_root: &Path,
@@ -59,8 +48,7 @@ pub fn verify_workspace(
     };
 
     let mut summary: RegistrySummary = build_summary(&items);
-    // Roll the broken laudo links into the summary so the "Resumo"
-    // tab shows the actual number instead of only the per-item flag.
+    // Soma os links quebrados no resumo, não só na flag por item.
     let extra_broken_links = broken_links
         .iter()
         .filter(|b| {
@@ -88,17 +76,12 @@ pub fn verify_workspace(
     })
 }
 
-/// Resolve the verification verdict for a single item.
-///
-/// Items without a `relative_path` are left as `Unknown` — they may be
-/// "pure database" items (e.g. dossiê fields are not in scope of
-/// MVP 5).
+/// Veredito de um item. Sem `relative_path` fica `Unknown` (itens "só banco").
 pub fn verify_one(
     workspace_root: &Path,
     item: &EvidenceRegistryItem,
     deep: bool,
 ) -> (IntegrityStatus, Option<String>) {
-    // 1. Probe the primary path.
     let probe = probe_workspace_relative(
         workspace_root,
         item.relative_path.as_deref(),
@@ -116,7 +99,6 @@ pub fn verify_one(
         RelativeResolution::Empty => (IntegrityStatus::Unknown, None),
     };
 
-    // 2. Sidecar check, when expected.
     if matches!(status, IntegrityStatus::Ok) {
         if let Some(sidecar) = item.sidecar_relative_path.as_deref() {
             let sidecar_probe =
@@ -131,7 +113,6 @@ pub fn verify_one(
         }
     }
 
-    // 3. Deep hash check.
     if deep && matches!(status, IntegrityStatus::Ok) {
         if let (Some(expected_hash), Some(rel)) =
             (item.hash_sha256.as_ref(), item.relative_path.as_ref())

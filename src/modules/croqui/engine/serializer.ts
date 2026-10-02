@@ -1,22 +1,8 @@
 /**
- * Serializer — coerce arbitrary JSON into a `SicroCroquiDoc`.
- *
- * The Rust backend treats `.sicrocroqui` as opaque JSON, so we have no
- * type guarantees on the wire. The serializer:
- *   - fills missing fields with safe defaults (so older envelopes keep working);
- *   - drops fields it doesn't recognise (still preserves them in `raw_unknown`
- *     once we need that — out of scope for the spike);
- *   - throws on shape that can't possibly be a croqui (no `croqui_id`, etc.).
- *
- * Inverse direction is trivial: `JSON.stringify(doc)` works because the
- * shape is plain data — no class instances.
- *
- * Fase S clean cut — vias/rotatórias legacy (`kind: "road"`, `kind:
- * "roundabout"`) e os campos legacy `road_engine_version` / `parity_objects`
- * são silenciosamente DESCARTADOS pelo coercer. Croquis antigos perdem
- * essas primitivas (não eram distribuídos pra users) e voltam a abrir;
- * o único motor de via passa a ser Python Parity Engine (kind:
- * "road_parity" / "roundabout_parity").
+ * Coerção de JSON arbitrário em `SicroCroquiDoc`: o backend Rust trata o
+ * `.sicrocroqui` como JSON opaco. Preenche defaults, descarta o que não
+ * reconhece e lança só quando a forma não pode ser um croqui. O inverso é
+ * `JSON.stringify(doc)` — é tudo dado plano.
  */
 
 import {
@@ -33,8 +19,7 @@ import {
   type SicroObject,
 } from "./schema";
 
-// ---------------------------------------------------------------------------
-// MVP 9 — defaults for the new optional sections
+// ---- Defaults ----
 
 const DEFAULT_VIEW_SETTINGS: SicroCroquiViewSettings = {
   show_grid: true,
@@ -76,11 +61,7 @@ const DEFAULT_LAYERS: SicroCroquiLayer[] = [
   },
 ];
 
-/**
- * Conjunto de `kind`s suportados pelo Fase S. Qualquer objeto com `kind`
- * fora desta lista é descartado pelo coercer (caso típico: croquis
- * pré-S com `kind: "road"` / `kind: "roundabout"` do engine v1/v2).
- */
+/** Objeto com `kind` fora desta lista é descartado (ex.: `road`/`roundabout` de croquis antigos). */
 const SUPPORTED_KINDS = new Set<string>([
   "vehicle",
   "line",
@@ -106,13 +87,8 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
     ? (o.layers as SicroCroquiLayer[])
     : DEFAULT_LAYERS;
 
-  // Fase S — descarta silenciosamente objetos legacy (`kind: "road"`,
-  // `kind: "roundabout"`, ou qualquer `kind` fora do conjunto suportado).
-  // Os demais ganham `category` default se ausente.
-  //
-  // Não há migração para parity — quem precisar de via abre o croqui
-  // e recria. Decisão consciente do usuário: croquis antigos não eram
-  // distribuídos pra outros peritos.
+  // Sem migração dos objetos de via antigos: quem precisar recria no croqui
+  // (decisão do dono — esses croquis nunca foram distribuídos a outros peritos).
   const objects: SicroObject[] = [];
   if (Array.isArray(o.objects)) {
     for (const rawObj of o.objects as unknown[]) {
@@ -126,10 +102,7 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
     }
   }
 
-  // Fase S — Se o envelope antigo carrega `parity_objects` (Fase H.1),
-  // são absorvidos pelo array `objects` principal. O coercer só aceita
-  // formas válidas; outras passam sem validação fina (qualquer regressão
-  // seria detectada como `kind` desconhecido).
+  // Envelopes antigos traziam `parity_objects` separado; são absorvidos em `objects`.
   if (Array.isArray(o.parity_objects)) {
     for (const rawObj of o.parity_objects as unknown[]) {
       if (!rawObj || typeof rawObj !== "object") continue;
@@ -155,13 +128,10 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
     background_image: coerceBackgroundImage(o.background_image),
     layers,
     objects,
-    // MVP 9 — opcionais aditivos
     view_settings: coerceViewSettings(o.view_settings),
     export_settings: coerceExportSettings(o.export_settings),
     stamp_metadata: coerceStampMetadata(o.stamp_metadata),
-    // MVP 10 — array opcional. Passa pelo coercer só pra filtrar
-    // entries claramente malformadas; documentos sem o campo carregam
-    // intactos.
+    // Só filtra entradas malformadas; doc sem o campo fica sem o campo.
     ...(Array.isArray(o.osm_imports)
       ? { osm_imports: coerceOsmImports(o.osm_imports) }
       : {}),
@@ -289,9 +259,6 @@ function coerceBackgroundImage(
   const o = raw as Record<string, unknown>;
   const source_path = stringField(o, "source_path");
   if (!source_path) return null;
-  // MVP 9 Round 5 — `rotation`, `sidecar_path`, `original_path` are all
-  // optional and default to safe values, so docs from earlier rounds
-  // keep loading without intervention.
   const sidecar = stringField(o, "sidecar_path");
   const original = stringField(o, "original_path");
   return {
@@ -308,7 +275,7 @@ function coerceBackgroundImage(
   };
 }
 
-/** Project an object onto the layer-panel category buckets. */
+/** Categoria do painel de camadas a partir de `kind`/`subtype`. */
 export function inferCategory(obj: SicroObject): ObjectCategory {
   switch (obj.kind) {
     case "vehicle":
@@ -319,7 +286,6 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
       return "anotacoes";
     case "road_parity":
     case "roundabout_parity":
-      // Vias e rotatórias parity vão para a camada "vias".
       return "vias";
     case "line":
       if (obj.subtype === "r1" || obj.subtype === "r2") return "referenciais";
@@ -340,7 +306,6 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
       }
       return "outros";
     case "marker":
-      // Mobiliário urbano (placas/postes/árvores/semáforos/faixa).
       if (
         obj.subtype === "semaforo" ||
         obj.subtype === "placa_pare" ||
@@ -352,7 +317,6 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
       ) {
         return "mobiliario_urbano";
       }
-      // Vestígios periciais.
       if (
         obj.subtype === "collision_x" ||
         obj.subtype === "brake_mark" ||
@@ -369,7 +333,7 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
       ) {
         return "vestigios";
       }
-      // Pessoas — pericial contexto.
+      // Pessoas também contam como vestígio pericial.
       if (
         obj.subtype === "pedestrian" ||
         obj.subtype === "body" ||
@@ -392,7 +356,7 @@ function numberField(o: Record<string, unknown>, key: string): number | null {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-/** Stamp `updated_at` and serialize. */
+/** Carimba `schema_version` e `updated_at`. */
 export function serializeCroquiDoc(doc: SicroCroquiDoc): SicroCroquiDoc {
   return {
     ...doc,

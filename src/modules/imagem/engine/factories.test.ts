@@ -1,6 +1,4 @@
-/**
- * Tests for annotation factories (MVP 7).
- */
+/** Testes das fábricas de anotações. */
 
 import { describe, expect, it } from "vitest";
 import {

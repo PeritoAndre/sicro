@@ -1,17 +1,6 @@
 /**
- * Python Parity Engine — renderer Konva multipass.
- *
- * Implementa o pipeline em **4 passes** inspirado em
- * `_desenhar_vias_multipass` do SICRO 1.0 Python:
- *
- *   1. Calçadas (vias + rotatórias).
- *   2. Asfalto (vias + anel de rotatória + ilha verde).
- *   3. Marcações (bordas brancas + eixo tracejado, clipadas).
- *   4. Handles (apenas objeto selecionado).
- *
- * **Sem** junction patches, **sem** flares, **sem** roundabout
- * entries, **sem** smoothing modes, **sem** lane dividers, **sem**
- * road_style. Filosofia: poucos campos, poucos passes, visual limpo.
+ * Renderer Konva do motor parity, em 4 passes (como o SICRO 1.0 Python):
+ * calçadas → asfalto → marcações clipadas → handles do objeto selecionado.
  */
 
 import { Fragment, useMemo } from "react";
@@ -37,44 +26,32 @@ import {
 } from "./types";
 import { isParityRoad, isParityRoundabout } from "./guards";
 
-// ---------------------------------------------------------------------------
-// Cores hardcoded (paridade SICRO 1.0 Python — `editor_croqui.py:2810`).
-
+// Cores fixas, copiadas do SICRO 1.0 Python.
 const PARITY_COLORS = {
-  /** Asfalto (linha 2950 do Python). */
   asphalt: "#1C1C1C",
-  /** Calçada cinza-amarelado (linha 2927). */
   sidewalk: "#7C7460",
-  /** Terra (`superficies.py` linha 44). */
   earth: "#9C7A4E",
-  /** Ilha central rotatória — verde canteiro (linha 2964). */
   islandDefault: "#3A6535",
-  /** Bordas brancas (linhas 2982, 3013). */
   edge: "#FFFFFF",
-  /** Eixo tracejado amarelo (linha 2991). */
   yellow: "#F5C518",
-  /** Eixo tracejado branco. */
   white: "#FFFFFF",
-  /** Stroke de seleção. */
   selection: "#4A80FF",
-  /** Linha tracejada de seleção. */
   selectionGuide: "#6080C0",
 } as const;
 
-/** Espessuras em px de tela. `lw_b = 2`, `lw_mc = 2` (Python 2967-2968). */
+/** Espessuras em px de tela. */
 const PARITY_STROKE_WIDTHS = {
   edgeLine: 2,
   centerLine: 2,
 } as const;
 
-/** Padrão do dash do eixo central (px de tela, Python 2969). */
+/** Dash do eixo central (px de tela). */
 const PARITY_CENTER_LINE_DASH: readonly [number, number] = [12, 8];
 
-/** Tensão do Konva.Line(closed) — equivalente a Tkinter `smooth=True`. */
+/** Tensão do Konva.Line fechado — equivale ao `smooth=True` do Tkinter. */
 const PARITY_LINE_TENSION = 0.5;
 
-// ---------------------------------------------------------------------------
-// Helpers internos.
+// ---- Helpers ----
 
 function surfaceFillForRoad(road: SicroRoadObject_parity): string {
   switch (road.superficie) {
@@ -100,17 +77,12 @@ function centerLineColorForRoad(road: SicroRoadObject_parity): string {
   }
 }
 
-/**
- * Estrutura pré-computada por via — calculada uma vez em useMemo,
- * usada nos 4 passes para evitar re-amostragem.
- */
+/** Geometria pré-computada por via (metros), compartilhada pelos 4 passes. */
 interface RoadMesh {
   road: SicroRoadObject_parity;
-  /** Amostras da Bezier em mundo (m). */
   samplesWorld: Vec2World[];
-  /** Polígono do asfalto em mundo (m) — usado para clipping cruzado. */
+  /** Também serve de obstáculo no clipping das outras vias. */
   asphaltPolyWorld: Vec2World[];
-  /** Polígono da calçada em mundo (m). */
   sidewalkPolyWorld: Vec2World[];
 }
 
@@ -125,28 +97,20 @@ function buildRoadMesh(road: SicroRoadObject_parity): RoadMesh {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Componente principal.
+// ---- Componente ----
 
-export interface RoadParityRendererProps {
-  /** Objetos a renderizar. Tipicamente `doc.parity_objects`. */
+interface RoadParityRendererProps {
   objects: ReadonlyArray<SicroParityObject>;
-  /** Escala do documento (px/m). Quando null/undefined, usa default. */
+  /** Escala do documento (px/m); null/undefined usa o default. */
   pxPerM?: number | null;
-  /** Translação do mundo → canvas (px). Tipicamente 0,0 dentro de um Stage. */
+  /** Translação mundo → canvas (px). */
   offsetX?: number;
   offsetY?: number;
-  /** Id do objeto selecionado — desenha handles. */
   selectedId?: string | null;
-  /** Click handler — usado pelo modo "select" do editor. */
   onSelect?: (id: string | null) => void;
   /**
-   * Patch handler — recebe id + campos modificados. Usado quando o
-   * perito arrasta handles. Quando ausente, handles ficam estáticos
-   * (só visualização — útil no lab e em modo "view").
-   *
-   * Para vias: patches incluem ax, ay, bx, by, cx1, cy1, cx2, cy2.
-   * Para rotatórias: patches incluem cx, cy.
+   * Chamado ao arrastar handles (via: ax/ay/bx/by/cx1/cy1/cx2/cy2; rotatória: cx/cy).
+   * Ausente ⇒ handles estáticos (modo visualização).
    */
   onObjectChange?: (
     id: string,
@@ -154,12 +118,7 @@ export interface RoadParityRendererProps {
   ) => void;
 }
 
-/**
- * Renderer Konva multipass — entrada do Python Parity Engine.
- *
- * Componente puro: lê `objects` + `pxPerM` + `offsetX/Y` e produz
- * `<Layer>`s do react-konva. Não tem estado próprio.
- */
+/** Componente puro, sem estado próprio. */
 export function RoadParityRenderer({
   objects,
   pxPerM,
@@ -171,10 +130,7 @@ export function RoadParityRenderer({
 }: RoadParityRendererProps) {
   const effectivePxPerM = resolvePxPerM(pxPerM);
 
-  /**
-   * Converte um ponto canvas (px) de volta para mundo (m).
-   * Inverte o `projectWorldPoints`.
-   */
+  // Inverso de `projectWorldPoints`.
   const canvasToWorldX = (px: number): number =>
     (px - offsetX) / Math.max(effectivePxPerM, 0.0001);
   const canvasToWorldY = (px: number): number =>
@@ -195,24 +151,17 @@ export function RoadParityRenderer({
     [objects],
   );
 
-  // Pré-computa meshes (compartilhados entre todos os passes).
   const meshes = useMemo<RoadMesh[]>(
     () => roads.map(buildRoadMesh),
     [roads],
   );
 
-  // Obstáculos para clipping de marcações: polígonos do asfalto das
-  // outras vias + discos das rotatórias.
   const allRoadAsphaltPolys = useMemo(
     () => meshes.map((m) => m.asphaltPolyWorld),
     [meshes],
   );
-  // Discos das rotatórias usados como obstáculos para clipping das
-  // bordas das vias. Sem padding — as bordas das vias devem parar
-  // EXATAMENTE no raio externo do anel, encontrando a borda circular
-  // branca da rotatória. Quaisquer pontos tangentes que escapem do
-  // clipping são cobertos pelo PASS 3b (overlay de asfalto da
-  // rotatória), portanto não há risco de vazamento visual.
+  // Sem padding: as bordas das vias devem parar exatamente no raio externo do
+  // anel; qualquer sobra é coberta pelo overlay do pass 3b.
   const allRoundaboutDisks = useMemo(
     () =>
       roundabouts.map((rb) => buildRoundaboutDiskPolygon(rb, 96, 0)),
@@ -242,7 +191,6 @@ export function RoadParityRenderer({
               />
             );
           })}
-        {/* Calçadas externas das rotatórias. */}
         {roundabouts
           .filter((rb) => rb.visible !== false)
           .map((rb) => {
@@ -282,7 +230,6 @@ export function RoadParityRenderer({
               />
             );
           })}
-        {/* Rotatórias: asfalto + ilha. */}
         {roundabouts
           .filter((rb) => rb.visible !== false)
           .map((rb) => {
@@ -331,7 +278,6 @@ export function RoadParityRenderer({
 
             const elements: JSX.Element[] = [];
 
-            // Bordas brancas.
             for (let i = 0; i < leftClip.segments.length; i++) {
               const seg = leftClip.segments[i] as Vec2World[];
               const proj = projectWorldPoints(seg, effectivePxPerM, offsetX, offsetY);
@@ -365,7 +311,6 @@ export function RoadParityRenderer({
               );
             }
 
-            // Eixo central — apenas se mão dupla E marcação não é "nenhuma".
             if (m.road.mao_dupla && m.road.marcacao !== "nenhuma") {
               const centerClip = clipPolylineAgainstPolygons(
                 m.samplesWorld,
@@ -397,13 +342,8 @@ export function RoadParityRenderer({
             return <Group key={`pp3_${m.road.id}`}>{elements}</Group>;
           })}
 
-        {/* Pass 3b — Repinta o anel ASFALTO + ilha verde POR CIMA das
-            marcações das vias. Garante que bordas / eixos centrais das
-            vias que cruzaram dentro do disco da rotatória sejam
-            cobertos. Em vez de desenhar um donut (Shape com sceneFunc),
-            usamos dois <Circle> simples: o externo cobre tudo, o
-            interno restaura a ilha por cima. Z-order natural do
-            react-konva resolve. */}
+        {/* Pass 3b — repinta anel + ilha por cima das marcações das vias que
+            cruzam o disco. Dois <Circle> em vez de donut: o z-order resolve. */}
         {roundabouts
           .filter((rb) => rb.visible !== false)
           .map((rb) => {
@@ -431,11 +371,8 @@ export function RoadParityRenderer({
             );
           })}
 
-        {/* Bordas + eixo central das rotatórias — clipping GEOMÉTRICO
-            REAL contra os polígonos de asfalto das vias. Onde o
-            asfalto da via cruza o anel, a borda do anel é cortada
-            EXATAMENTE na borda lateral da via — junções seamless
-            sem heurística angular. */}
+        {/* Bordas + eixo das rotatórias, clipados geometricamente contra o
+            asfalto das vias — junção sem heurística angular. */}
         {roundabouts
           .filter((rb) => rb.visible !== false)
           .map((rb) => {
@@ -448,21 +385,15 @@ export function RoadParityRenderer({
                   ? PARITY_COLORS.white
                   : PARITY_COLORS.edge;
 
-            // Raios em metros (mundo) — clipping é geométrico em
-            // mundo, depois projetamos pra canvas.
             const halfLargM = rb.largura_m / 2;
             const outerRm = rb.r_m + halfLargM;
             const innerRm = Math.max(0, rb.r_m - halfLargM);
             const midRm = (outerRm + innerRm) / 2;
 
-            // Discretiza os 3 anéis em polylines fechadas (96 vértices).
             const outerLoop = discretizeCircle(rb.cx, rb.cy, outerRm);
             const innerLoop = discretizeCircle(rb.cx, rb.cy, innerRm);
             const midLoop = discretizeCircle(rb.cx, rb.cy, midRm);
 
-            // Clipa contra TODOS os polígonos de asfalto das vias —
-            // os pedaços DENTRO do asfalto da via são descartados.
-            // Resultado: arcos visíveis APENAS onde não há via.
             const outerClipped = clipPolylineAgainstPolygons(
               outerLoop,
               allRoadAsphaltPolys,
@@ -477,7 +408,6 @@ export function RoadParityRenderer({
 
             return (
               <Group key={`pp3_rb_${rb.id}`}>
-                {/* Borda externa — arcos sobreviventes do clipping. */}
                 {outerClipped.segments.map((seg, i) => {
                   const proj = projectWorldPoints(
                     seg,
@@ -498,9 +428,6 @@ export function RoadParityRenderer({
                     />
                   );
                 })}
-                {/* Borda interna — arcos sobreviventes. Em rotatórias
-                    pequenas / largas, vias podem cruzar até esse anel;
-                    o clip cuida. */}
                 {innerRm >= 0.5 &&
                   innerClipped.segments.map((seg, i) => {
                     const proj = projectWorldPoints(
@@ -522,7 +449,6 @@ export function RoadParityRenderer({
                       />
                     );
                   })}
-                {/* Eixo central tracejado — também clipado. */}
                 {showCentralLine &&
                   midRm >= 0.5 &&
                   midClipped.segments.map((seg, i) => {
@@ -601,7 +527,7 @@ export function RoadParityRenderer({
                     dash={[3, 3]}
                     listening={false}
                   />
-                  {/* Handle A — arrasta A junto com C1 (preserva curvatura). */}
+                  {/* Âncoras arrastam o controle junto (preserva a curvatura). */}
                   <Circle
                     x={a.x}
                     y={a.y}
@@ -624,7 +550,6 @@ export function RoadParityRenderer({
                       });
                     }}
                   />
-                  {/* Handle B — arrasta B junto com C2. */}
                   <Circle
                     x={b.x}
                     y={b.y}
@@ -647,7 +572,6 @@ export function RoadParityRenderer({
                       });
                     }}
                   />
-                  {/* Handle C1 — move só o controle (curvatura muda). */}
                   <Circle
                     x={c1.x}
                     y={c1.y}
@@ -662,7 +586,6 @@ export function RoadParityRenderer({
                       });
                     }}
                   />
-                  {/* Handle C2. */}
                   <Circle
                     x={c2.x}
                     y={c2.y}
@@ -688,7 +611,6 @@ export function RoadParityRenderer({
               const rbId = rb.id;
               return (
                 <Group key={`pp4_rb_${rbId}`}>
-                  {/* Centro — arrasta a rotatória inteira. */}
                   <Circle
                     x={rings.cx_px + offsetX}
                     y={rings.cy_px + offsetY}

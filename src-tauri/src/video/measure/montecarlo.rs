@@ -1,18 +1,7 @@
-//! Monte Carlo de DISTÂNCIA (fotogrametria) — propagação de incerteza.
-//!
-//! Espelha o Monte Carlo de velocidade (`video::speed::montecarlo`), mas o
-//! "alvo" são apenas DOIS pontos marcados (sem tempo), e a grandeza propagada
-//! é a distância real entre eles ([`world_distance`]). Mesma disciplina de
-//! semente (explícita, persistível como `i64` no comando) e mesmo NÚCLEO
-//! estatístico: reusa `speed::montecarlo::summarize_distribution`.
-//!
-//! Direção da dependência: **measure → speed** (mão única). Este módulo
-//! importa de `speed` (homografia, razão cruzada, núcleo estatístico) e de
-//! `measure::distance`; `speed` nunca importa `measure`. Como na velocidade, a
-//! função roda mesmo com σ = 0 (distribuição degenerada na distância exata) —
-//! o gate de "só roda MC se σ > 0" é decisão da camada de comando, não daqui.
-//! Suporta plano (DLT) e razão cruzada (fit + lift); calibração por linha fica
-//! sem MC, igual à velocidade.
+//! Monte Carlo de distância: espelha o de velocidade (mesmo núcleo
+//! `summarize_distribution`, mesma semente), mas o alvo são dois pontos sem
+//! tempo. Roda mesmo com σ = 0 (o gate é da camada de comando); calibração
+//! por linha fica sem MC, como na velocidade.
 
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -23,34 +12,22 @@ use crate::video::speed::crossratio::{fit_cross_ratio_homography, CrossRatioRefe
 use crate::video::speed::homography::solve_homography_dlt;
 use crate::video::speed::montecarlo::{summarize_distribution, MonteCarloError};
 
-/// Estatística da distribuição da distância estimada (tudo em METROS — sem a
-/// conversão km/h, que não faz sentido para comprimento).
+/// Distribuição da distância (m): p2.5/p97.5 = IC 95%, p5/p95 = IC 90%.
 #[derive(Debug, Clone)]
 pub struct MonteCarloDistanceResult {
-    /// Iterações que produziram uma distância finita.
     pub successful_iterations: usize,
-    /// Iterações descartadas (calibração singular após perturbação, etc.).
     pub failed_iterations: usize,
-    /// Média da distância (m).
     pub mean_m: f64,
-    /// Mediana (m).
     pub median_m: f64,
-    /// Desvio padrão (m).
     pub std_m: f64,
-    /// Percentil 2.5% (limite inferior do IC 95%) em m.
     pub p2_5_m: f64,
-    /// Percentil 5% (limite inferior do IC 90%) em m.
     pub p5_m: f64,
-    /// Percentil 95% (limite superior do IC 90%) em m.
     pub p95_m: f64,
-    /// Percentil 97.5% (limite superior do IC 95%) em m.
     pub p97_5_m: f64,
-    /// Amostras brutas (m) — uma por iteração bem-sucedida, para histograma.
+    /// Uma amostra por iteração bem-sucedida, para o histograma.
     pub samples_m: Vec<f64>,
 }
 
-/// Resume amostras de distância (m) numa `MonteCarloDistanceResult`. Reusa o
-/// mesmo núcleo de `summarize_distribution` da velocidade — apenas sem km/h.
 fn summarize_distance_samples(
     samples: Vec<f64>,
     failed: usize,
@@ -71,36 +48,29 @@ fn summarize_distance_samples(
     })
 }
 
-/// Configuração do Monte Carlo de distância no modo PLANO (calibração DLT de
-/// 4 cantos). Os σ são desvios padrão de Normais de média 0; 0 desliga aquela
-/// fonte; negativos são saneados para 0.
+/// Modo plano (DLT de 4 cantos). Cada σ é o desvio de uma Normal(0, σ);
+/// 0 desliga a fonte; negativo vira 0.
 #[derive(Debug, Clone)]
 pub struct MonteCarloDistanceConfig {
-    /// 4 pontos de calibração em pixel.
     pub calibration_image_pts: [(f64, f64); 4],
-    /// 4 pontos correspondentes no mundo (metros).
+    /// Em metros.
     pub calibration_world_pts: [(f64, f64); 4],
-    /// Primeiro ponto medido, em pixel.
     pub p1_px: (f64, f64),
-    /// Segundo ponto medido, em pixel.
     pub p2_px: (f64, f64),
-    /// σ de marcação dos pontos de calibração (em pixels).
+    /// Pixels.
     pub sigma_calibration_px: f64,
-    /// σ de medição das dimensões reais da calibração (em metros).
+    /// Metros.
     pub sigma_world_m: f64,
-    /// σ de marcação dos DOIS pontos medidos (em pixels).
+    /// Pixels, nos dois pontos medidos.
     pub sigma_measure_px: f64,
-    /// Número de iterações Monte Carlo. Mínimo 10 (validado).
+    /// Mínimo 10.
     pub iterations: usize,
-    /// Seed do RNG para reprodutibilidade. `None` usa entropia do SO.
+    /// `None` usa entropia do SO.
     pub seed: Option<u64>,
 }
 
-/// Executa o Monte Carlo de distância no modo plano. Para cada iteração:
-/// perturba os 4 pontos de calibração (pixel + mundo), re-resolve a homografia
-/// (DLT), perturba os dois pontos medidos (pixel) e recomputa
-/// [`world_distance`]. Iterações que falham (homografia singular, projeção no
-/// infinito) são descartadas e contadas.
+/// Por iteração: perturba calibração (pixel + mundo) → DLT → perturba os dois
+/// pontos → `world_distance`. Iterações que falham são contadas.
 pub fn monte_carlo_distance(
     config: &MonteCarloDistanceConfig,
 ) -> Result<MonteCarloDistanceResult, MonteCarloError> {
@@ -127,7 +97,6 @@ pub fn monte_carlo_distance(
     let mut failed = 0_usize;
 
     for _ in 0..config.iterations {
-        // 1. Calibração perturbada (pixel + mundo).
         let mut cal_img = config.calibration_image_pts;
         let mut cal_world = config.calibration_world_pts;
         for i in 0..4 {
@@ -137,7 +106,6 @@ pub fn monte_carlo_distance(
             cal_world[i].1 += n_world.sample(&mut rng);
         }
 
-        // 2. Homografia perturbada.
         let h = match solve_homography_dlt(&cal_img, &cal_world) {
             Ok(h) => h,
             Err(_) => {
@@ -146,7 +114,6 @@ pub fn monte_carlo_distance(
             }
         };
 
-        // 3. Pontos medidos perturbados.
         let p1 = (
             config.p1_px.0 + n_meas.sample(&mut rng),
             config.p1_px.1 + n_meas.sample(&mut rng),
@@ -156,7 +123,6 @@ pub fn monte_carlo_distance(
             config.p2_px.1 + n_meas.sample(&mut rng),
         );
 
-        // 4. Distância real (m).
         let d = match world_distance(&h, p1, p2) {
             Ok(d) => d,
             Err(_) => {
@@ -174,34 +140,28 @@ pub fn monte_carlo_distance(
     summarize_distance_samples(samples, failed, config.iterations)
 }
 
-/// Configuração do Monte Carlo de distância no modo RAZÃO CRUZADA. Como na
-/// velocidade, a calibração é `>= 3` referências colineares (re-ajustadas e
-/// re-levantadas a cada iteração), não um quadrilátero.
+/// Modo razão cruzada: `>= 3` referências colineares, re-ajustadas a cada iteração.
 #[derive(Debug, Clone)]
 pub struct MonteCarloCrossRatioDistanceConfig {
-    /// Referências colineares (pixel + posição real em metros).
+    /// Pixel + posição real (m) ao longo da linha.
     pub references: Vec<CrossRatioReference>,
-    /// Primeiro ponto medido, em pixel.
     pub p1_px: (f64, f64),
-    /// Segundo ponto medido, em pixel.
     pub p2_px: (f64, f64),
-    /// σ de marcação dos pontos de referência (em pixels).
+    /// Pixels.
     pub sigma_calibration_px: f64,
-    /// σ da posição real das referências (em metros).
+    /// Metros.
     pub sigma_world_m: f64,
-    /// σ de marcação dos DOIS pontos medidos (em pixels).
+    /// Pixels, nos dois pontos medidos.
     pub sigma_measure_px: f64,
-    /// Número de iterações Monte Carlo. Mínimo 10.
+    /// Mínimo 10.
     pub iterations: usize,
-    /// Seed do RNG para reprodutibilidade. `None` usa entropia do SO.
+    /// `None` usa entropia do SO.
     pub seed: Option<u64>,
 }
 
-/// Executa o Monte Carlo de distância no modo razão cruzada, espelhando
-/// `monte_carlo_distance` mas perturbando as referências colineares (pixel +
-/// posição real), re-ajustando linha + projetividade 1D e re-levantando a 3×3
-/// (`fit_cross_ratio_homography`) a cada iteração. A distância sai
-/// naturalmente "ao longo da linha" porque a 3×3 projeta para `(s, 0)`.
+/// Como `monte_carlo_distance`, perturbando as referências colineares e
+/// refazendo `fit_cross_ratio_homography` por iteração; a 3×3 projeta para
+/// `(s, 0)`, então a distância sai ao longo da linha.
 pub fn monte_carlo_distance_cross_ratio(
     config: &MonteCarloCrossRatioDistanceConfig,
 ) -> Result<MonteCarloDistanceResult, MonteCarloError> {
@@ -233,7 +193,6 @@ pub fn monte_carlo_distance_cross_ratio(
     let mut failed = 0_usize;
 
     for _ in 0..config.iterations {
-        // 1. Referências perturbadas (pixel + posição real).
         let perturbed: Vec<CrossRatioReference> = config
             .references
             .iter()
@@ -244,7 +203,6 @@ pub fn monte_carlo_distance_cross_ratio(
             })
             .collect();
 
-        // 2. Re-ajuste (linha + projetividade) + lift → 3×3.
         let h = match fit_cross_ratio_homography(&perturbed) {
             Ok(h) => h,
             Err(_) => {
@@ -253,7 +211,6 @@ pub fn monte_carlo_distance_cross_ratio(
             }
         };
 
-        // 3. Pontos medidos perturbados.
         let p1 = (
             config.p1_px.0 + n_meas.sample(&mut rng),
             config.p1_px.1 + n_meas.sample(&mut rng),
@@ -263,7 +220,6 @@ pub fn monte_carlo_distance_cross_ratio(
             config.p2_px.1 + n_meas.sample(&mut rng),
         );
 
-        // 4. Distância ao longo da linha (a 3×3 projeta para (s, 0)).
         let d = match world_distance(&h, p1, p2) {
             Ok(d) => d,
             Err(_) => {
@@ -285,8 +241,7 @@ pub fn monte_carlo_distance_cross_ratio(
 mod tests {
     use super::*;
 
-    /// Calibração 100 px = 1 m (retângulo 10×10 m). Dois pontos a 5 m de
-    /// distância: (1m, 5m) = (100, 500) px e (6m, 5m) = (600, 500) px.
+    /// Retângulo 10×10 m a 100 px/m; pontos (1 m, 5 m) e (6 m, 5 m) → 5 m.
     fn build_distance_config() -> MonteCarloDistanceConfig {
         const PX_PER_M: f64 = 100.0;
         let cal_img = [
@@ -309,7 +264,6 @@ mod tests {
         }
     }
 
-    /// σ = 0 ⇒ distribuição degenerada na distância exata (5 m).
     #[test]
     fn distance_no_noise_is_exact() {
         let cfg = build_distance_config();
@@ -322,7 +276,6 @@ mod tests {
         assert!((r.p97_5_m - 5.0).abs() < 1e-9);
     }
 
-    /// Reprodutibilidade: a mesma seed reproduz exatamente as amostras.
     #[test]
     fn distance_same_seed_reproduces() {
         let mut cfg = build_distance_config();
@@ -338,12 +291,10 @@ mod tests {
         for (a, b) in r1.samples_m.iter().zip(r2.samples_m.iter()) {
             assert!((a - b).abs() < 1e-12, "amostras diferentes: {a} vs {b}");
         }
-        // Com ruído há dispersão e a média fica perto de 5 m.
         assert!(r1.std_m > 0.0, "esperado dispersão > 0");
         assert!((r1.mean_m - 5.0).abs() < 0.5, "mean = {}", r1.mean_m);
     }
 
-    /// Razão cruzada, σ = 0: distância exata ao longo da linha (10 m).
     #[test]
     fn distance_cross_ratio_no_noise_is_exact() {
         let cfg = MonteCarloCrossRatioDistanceConfig {
@@ -366,7 +317,6 @@ mod tests {
         assert!(r.std_m < 1e-6, "std = {}", r.std_m);
     }
 
-    /// Razão cruzada com ruído: a mesma seed reproduz exatamente as amostras.
     #[test]
     fn distance_cross_ratio_reproducible() {
         let cfg = MonteCarloCrossRatioDistanceConfig {

@@ -1,7 +1,5 @@
-//! Fotos do caso (as que vêm do pacote `.sicroapp` do SICRO Operacional).
-//!
-//! No 3.x este arquivo servia o módulo Dossiê inteiro; no 4.0 o Dossiê saiu e
-//! só a lista de fotos continua — é a origem "Fotos do caso" das Imagens.
+//! Fotos do caso (as que vêm do pacote `.sicroapp` do SICRO Operacional) — a
+//! origem "Fotos do caso" das Imagens.
 
 use std::path::PathBuf;
 

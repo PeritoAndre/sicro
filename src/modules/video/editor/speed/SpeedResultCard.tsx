@@ -1,11 +1,7 @@
 /**
- * SpeedResultCard — apresenta o resultado de um cálculo de velocidade.
- *
- * Mostra a velocidade de destaque e, QUANDO existirem, os DOIS intervalos:
- *   - IC do ajuste por regressão (Student's t, 95%);
- *   - intervalo Monte Carlo (p2,5–p97,5);
- * além do R², semente e a lista de ressalvas. Deixa explícito que o número
- * é um auxílio de medição — o perito confirma.
+ * Card do resultado de velocidade: valor de destaque e, quando existirem, o IC
+ * da regressão (t de Student, 95%) e o intervalo Monte Carlo (p2,5–p97,5),
+ * mais R², semente e ressalvas.
  */
 
 import type { VideoSpeedCalculation } from "@domain/video_speed";

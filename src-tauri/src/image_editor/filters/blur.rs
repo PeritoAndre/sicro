@@ -1,11 +1,8 @@
-//! G12.2 — Suavização / Denoise (Gaussian, Median, Bilateral).
-//!
-//! Família de filtros para limpar ruído antes de detectar bordas,
-//! suavizar transições ou preservar bordas.
+//! Suavização e denoise: gaussiano, mediana, bilateral.
 
 use image::{Rgba, RgbaImage};
 
-/// Calcula kernel gaussiano 1D normalizado de `radius` raio com `sigma`.
+/// Kernel gaussiano 1D normalizado; raio = 3σ.
 fn gaussian_kernel_1d(sigma: f32) -> Vec<f32> {
     let s = sigma.max(0.1);
     let radius = (3.0 * s).ceil() as i32;
@@ -25,7 +22,7 @@ fn gaussian_kernel_1d(sigma: f32) -> Vec<f32> {
     kernel
 }
 
-/// Gaussian blur separável (1D horizontal + 1D vertical). Sigma = spread.
+/// Blur gaussiano separável (passada horizontal + vertical).
 pub fn gaussian(img: &RgbaImage, sigma: f32) -> RgbaImage {
     if sigma < 0.05 {
         return img.clone();
@@ -86,8 +83,7 @@ pub fn gaussian(img: &RgbaImage, sigma: f32) -> RgbaImage {
     out
 }
 
-/// Median filter — remove "salt & pepper" preservando bordas.
-/// `radius` em pixels; janela = 2*radius+1.
+/// Mediana (janela 2·radius+1): remove "salt & pepper" preservando bordas.
 pub fn median(img: &RgbaImage, radius: u32) -> RgbaImage {
     let r = radius.max(1) as i32;
     let w = img.width() as i32;
@@ -128,8 +124,8 @@ pub fn median(img: &RgbaImage, radius: u32) -> RgbaImage {
     out
 }
 
-/// Bilateral filter (versão simplificada O(w*h*kernel²)).
-/// Suaviza preservando bordas — peso = gaussian_space * gaussian_color.
+/// Bilateral O(w·h·kernel²): suaviza preservando bordas,
+/// peso = gauss(distância) · gauss(diferença de cor).
 pub fn bilateral(img: &RgbaImage, sigma_space: f32, sigma_color: f32) -> RgbaImage {
     let ss = sigma_space.max(0.5);
     let sc = sigma_color.max(1.0);

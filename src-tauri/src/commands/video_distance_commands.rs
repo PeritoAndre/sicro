@@ -1,20 +1,6 @@
-//! Tauri commands da Medição de Distância por fotogrametria.
-//!
-//! Superfície:
-//!   - create_distance_measurement → carrega uma calibração já existente,
-//!     projeta os 2 pontos pixel→mundo pela MESMA homografia da velocidade,
-//!     calcula a distância pontual e (se o perito informou σ) roda o Monte
-//!     Carlo. Persiste.
-//!   - list_distance_measurements / get_distance_measurement
-//!
-//! Convenção (idêntica ao `video_speed_commands`): o frontend passa apenas
-//! `workspace_path`; o `occurrence_id` vem SEMPRE do Manifest (backend).
-//!
-//! Reprodutibilidade pericial: quando o Monte Carlo roda, `mc_seed` e
-//! `mc_sigmas` são SEMPRE persistidos.
-//!
-//! Diferença para a velocidade: distância de 2 pontos NÃO tem IC de regressão.
-//! A ÚNICA incerteza é o Monte Carlo — sem σ, sai só a distância pontual.
+//! Comandos da Medição de Distância: 2 pontos projetados pela MESMA homografia da
+//! velocidade. `occurrence_id` vem sempre do Manifest. Distância de 2 pontos não
+//! tem IC de regressão: a única incerteza é o Monte Carlo (semente e σ persistidos).
 
 use std::path::PathBuf;
 
@@ -46,7 +32,7 @@ use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
 const DEFAULT_MC_ITERATIONS: u32 = 10_000;
 
 // ===========================================================================
-// Comandos Tauri (plumbing fino: ws → manifest → conn; lógica nos *_impl)
+// Comandos Tauri (lógica nos *_impl)
 
 #[tauri::command]
 pub async fn create_distance_measurement(
@@ -88,9 +74,8 @@ pub async fn get_distance_measurement(
         .ok_or_else(|| SicroError::Validation(format!("medição {id} não encontrada")))
 }
 
-/// Lista TODAS as medições de distância da ocorrência (qualquer mídia), mais
-/// recentes primeiro. Usado pelo laudo para escolher uma medição a transcrever
-/// na seção de metodologia, sem precisar saber o media_hash.
+/// Todas as medições da ocorrência (qualquer mídia), mais recentes primeiro —
+/// o laudo escolhe uma sem precisar saber o media_hash.
 #[tauri::command]
 pub async fn list_distance_measurements_for_occurrence(
     workspace_path: String,
@@ -110,7 +95,6 @@ fn create_distance_measurement_impl(
     occurrence_id: Uuid,
     input: CreateDistanceMeasurementInput,
 ) -> Result<VideoDistanceMeasurement> {
-    // 1. Carrega a calibração e valida o pertencimento à ocorrência.
     let calibration = video_speed_repo::find_calibration_by_id(conn, &input.calibration_id)?
         .ok_or_else(|| {
             SicroError::Validation(format!("calibração {} não encontrada", input.calibration_id))
@@ -121,7 +105,6 @@ fn create_distance_measurement_impl(
         ));
     }
 
-    // 2. Reconstrói a homografia e calcula a distância pontual (m).
     let homography = homography_from_row_major(&calibration.homography);
     let p1 = (input.p1_px, input.p1_py);
     let p2 = (input.p2_px, input.p2_py);
@@ -131,7 +114,6 @@ fn create_distance_measurement_impl(
         ))
     })?;
 
-    // 3. Ressalvas comuns (o perito transcreve no laudo).
     let mut limitations: Vec<String> = vec![
         "Marcação manual dos dois pontos (sem detecção automática).".into(),
         "Possível erro de paralaxe: os pontos devem estar SOBRE o plano calibrado (ex.: no solo); pontos fora do plano introduzem viés.".into(),
@@ -170,8 +152,8 @@ fn create_distance_measurement_impl(
         created_at: now,
     };
 
-    // 4. Monte Carlo method-aware, com o MESMO gate de σ>0 da velocidade. Sem σ
-    // NÃO inventamos incerteza: sai só a distância pontual + a ressalva.
+    // Mesmo gate de σ>0 da velocidade: sem σ informado não inventamos incerteza;
+    // sai só a distância pontual + ressalva.
     let sigmas_opt = input.mc_sigmas.clone();
     let has_sigmas = sigmas_opt.as_ref().map_or(false, |s| {
         s.calibration_px > 0.0 || s.world_m > 0.0 || s.measure_px > 0.0
@@ -221,7 +203,6 @@ fn create_distance_measurement_impl(
         }
     }
 
-    // 5. Finaliza audit + limitations e persiste.
     measurement.audit = json!({
         "estimator": "homography_point_distance",
         "projection": "homography_row_major_3x3",
@@ -270,9 +251,8 @@ fn homography_from_row_major(a: &[f64; 9]) -> Homography {
     ))
 }
 
-/// Monta a config do Monte Carlo de distância (modo plano) a partir da
-/// calibração de 4 pontos + os 2 pontos medidos. Compartilhado entre o comando
-/// e os testes de reprodutibilidade — determinístico dada a semente.
+/// Config do Monte Carlo de distância (plano, 4 pts). Compartilhada com os
+/// testes de reprodutibilidade: determinística dada a semente.
 fn build_distance_mc_config(
     calibration: &VideoSpeedCalibration,
     p1: (f64, f64),
@@ -312,8 +292,7 @@ fn build_distance_mc_config(
     })
 }
 
-/// Monta a config do Monte Carlo de distância (modo razão cruzada) a partir das
-/// `>= 3` referências colineares + os 2 pontos medidos.
+/// Config do Monte Carlo de distância no modo razão cruzada (≥3 referências colineares).
 fn build_cross_ratio_distance_mc_config(
     calibration: &VideoSpeedCalibration,
     p1: (f64, f64),
@@ -348,8 +327,7 @@ fn build_cross_ratio_distance_mc_config(
     })
 }
 
-/// Ressalva da fonte de calibração (igual à velocidade — a calibração é a
-/// mesma geometria de cena).
+/// Ressalva da fonte de calibração (igual à velocidade: mesma geometria de cena).
 fn reference_source_caveat(source: &str) -> String {
     match source {
         "norma_viaria" => "Calibração por dimensão de norma viária (presumida, não medida em campo) — confirme se a via segue o padrão assumido.".into(),
@@ -468,7 +446,6 @@ mod tests {
         );
         assert!(m.mc_p2_5_m.unwrap() <= m.mc_p97_5_m.unwrap());
 
-        // Persistiu e relê idêntico.
         let back = video_distance_repo::find_measurement_by_id(&conn, &m.id)?.unwrap();
         assert_eq!(back, m);
         Ok(())

@@ -1,7 +1,5 @@
 /**
- * Espelho TS de `AudioMedia` (Rust: `models/audio.rs`). Módulo Áudio, Camada 1.
- *
- * `relative_path` aponta para o WAV de análise (derivado determinístico);
+ * Espelha `models/audio.rs`. `relative_path` é o WAV de análise;
  * `original_relative_path` é o original preservado (quando importado).
  */
 
@@ -96,7 +94,7 @@ export interface TranscriptAi {
   speaker_mixed?: boolean;
 }
 
-/** Status da ferramenta whisper.cpp (Fase 2 — transcrição local). */
+/** Status do whisper.cpp (transcrição local). */
 export interface WhisperStatus {
   available: boolean;
   path: string | null;
@@ -115,7 +113,7 @@ export interface TranscriptCandidate {
   words: TranscriptWord[];
 }
 
-// W12 (paridade Audacity) — Análise forense (espelho de `audio/analysis.rs`).
+// Análise forense (espelho de `audio/analysis.rs`).
 
 /** Medições objetivas de um áudio (pico/RMS/DC/clipping/crista). */
 export interface AudioMeasurements {

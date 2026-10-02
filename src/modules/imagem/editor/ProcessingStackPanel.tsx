@@ -1,31 +1,17 @@
 /**
- * ProcessingStackPanel — pipeline de filtros forenses não-destrutivo.
- *
- * G12.11 — Lista vertical de operações empilhadas. Cada operação tem:
- *   - Toggle on/off (não remove, só desabilita).
- *   - Botões mover para cima/baixo (reordenar).
- *   - Botão remover.
- *   - Editor de parâmetros específico do kind.
- *
- * Embaixo, um botão "+ Adicionar filtro" abre menu suspenso com lista
- * categorizada de filtros (Bordas, Suavização, Realce, Morfologia,
- * Geométrico, Misc).
- *
- * O `onApply` é chamado quando a stack muda — o pai dispara
- * `apply_operation_stack` no backend e atualiza o preview.
+ * Catálogo de filtros forenses (defs, palavras-chave, notas), galeria buscável
+ * e barra de camadas da pipeline não-destrutiva; conversão de `ProcessingOp`
+ * para o formato do backend.
  */
 
 import { useMemo, useState, type CSSProperties } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Eye,
   EyeOff,
-  Layers,
   Plus,
   Search,
   SlidersHorizontal,
@@ -38,11 +24,6 @@ import type {
   SicroImageSelection,
 } from "../engine/schema";
 import styles from "./ProcessingStackPanel.module.css";
-
-interface Props {
-  stack: ProcessingOp[];
-  onChange: (stack: ProcessingOp[]) => void;
-}
 
 interface FilterControl {
   key: string;
@@ -60,7 +41,7 @@ interface FilterDef {
   label: string;
   defaults: Record<string, unknown>;
   controls: FilterControl[];
-  /** Nota forense curta (§13) exibida no item quando presente. */
+  /** Sobrepõe a nota de `FILTER_NOTES` quando presente. */
   note?: string;
 }
 
@@ -243,7 +224,7 @@ const FILTER_CATALOG: Record<string, FilterDef[]> = {
       ],
     },
   ],
-  // ---- W12 (paridade GIMP) ----
+  // ---- Tonais, canais, forense, genérico ----
   Tonal: [
     {
       kind: "levels",
@@ -278,7 +259,7 @@ const FILTER_CATALOG: Record<string, FilterDef[]> = {
     {
       kind: "curves",
       label: "Curvas (S de contraste)",
-      // Preset de contraste em S; editor de curva interativo = fase 2.
+      // Preset de contraste em S; ainda sem editor de curva interativo.
       defaults: {
         channel: "rgb",
         points: [
@@ -394,7 +375,7 @@ const FILTER_CATALOG: Record<string, FilterDef[]> = {
     {
       kind: "convolve",
       label: "Convolução — nitidez (3×3)",
-      // Primitivo de convolução genérico; editor de matriz custom = fase 2.
+      // Kernel fixo de nitidez; ainda sem editor de matriz.
       defaults: {
         kernel: [0, -1, 0, -1, 5, -1, 0, -1, 0],
         size: 3,
@@ -409,10 +390,8 @@ const FILTER_CATALOG: Record<string, FilterDef[]> = {
 };
 
 /**
- * W13.5 — palavras-chave de INTENÇÃO por filtro, para a galeria buscável.
- * O perito pesquisa pelo que quer fazer ("falsificação", "ruído", "tinta
- * apagada"), não pelo nome técnico. Mantido separado do catálogo para não
- * poluir os defaults/controles.
+ * Palavras-chave de intenção por filtro, para a busca da galeria: o perito
+ * pesquisa pelo que quer fazer ("falsificação", "ruído"), não pelo nome técnico.
  */
 const FILTER_KEYWORDS: Partial<Record<ProcessingOpKind, string>> = {
   edge_sobel: "borda contorno gradiente arestas",
@@ -453,11 +432,8 @@ const FILTER_KEYWORDS: Partial<Record<ProcessingOpKind, string>> = {
 };
 
 /**
- * W15.2 / W20.2 — Explicação de CADA filtro voltada à APLICAÇÃO PRÁTICA na
- * perícia, em linguagem que um leigo entende ("na perícia, ajuda a …, por
- * exemplo …"). Exibida no card do catálogo e no popover da pilha. §13:
- * realça/mede, não fabrica — quando cabe, traz a ressalva. Fonte única (o
- * catálogo não duplica mais `note`).
+ * Explicação de cada filtro voltada à aplicação prática na perícia, em
+ * linguagem leiga. Exibida no card do catálogo e no popover da pilha.
  */
 const FILTER_NOTES: Partial<Record<ProcessingOpKind, string>> = {
   // Bordas
@@ -553,11 +529,7 @@ function findDef(kind: ProcessingOpKind): FilterDef | null {
   return null;
 }
 
-/**
- * Catálogo achatado (uma entrada por filtro) — fonte única para a galeria E
- * para a paleta de comandos (W13.5/W13.6). Carrega grupo, rótulo, nota e as
- * palavras-chave de intenção.
- */
+/** Catálogo achatado (uma entrada por filtro): fonte única para a galeria e a paleta de comandos. */
 export const FILTER_INDEX: Array<{
   kind: ProcessingOpKind;
   label: string;
@@ -574,8 +546,7 @@ export const FILTER_INDEX: Array<{
   })),
 );
 
-/** Cria um `ProcessingOp` novo (id + defaults do catálogo). Reusado pela
- * galeria e pela paleta de comandos. */
+/** Cria um `ProcessingOp` novo (id + defaults do catálogo). */
 export function makeProcessingOp(kind: ProcessingOpKind): ProcessingOp {
   const def = findDef(kind);
   return {
@@ -593,11 +564,7 @@ function labelFor(kind: ProcessingOpKind): string {
   return kind;
 }
 
-/**
- * W18 — Galeria buscável do catálogo de filtros forenses. Só DESCOBRE e
- * adiciona filtros (`onAdd`); a pilha ATIVA vive no `PipelineDock`, separada,
- * para não disputar espaço com a galeria conforme a pilha cresce.
- */
+/** Galeria buscável do catálogo: só descobre e adiciona filtros (`onAdd`); a pilha ativa fica na `LayersBar`. */
 export function FilterGallery({
   onAdd,
 }: {
@@ -605,8 +572,7 @@ export function FilterGallery({
 }) {
   const [query, setQuery] = useState("");
 
-  // Grupos do catálogo filtrados pela busca (label + grupo + nota + palavras-
-  // chave de intenção + kind). Acento-insensível.
+  // Busca acento-insensível em label + grupo + nota + palavras-chave + kind.
   const filteredGroups = useMemo(() => {
     const q = normalizeSearch(query.trim());
     return Object.entries(FILTER_CATALOG)
@@ -692,222 +658,7 @@ export function FilterGallery({
   );
 }
 
-/**
- * W18 — Pilha de operações ATIVA: a "camada melhorada" não-destrutiva. Fica
- * SEMPRE visível (dock no rodapé do painel direito), separada da galeria, com
- * toggle/reordenar/remover/parametrizar por operação, na ordem de aplicação
- * (topo→base). Recortes (crop) também aparecem aqui.
- */
-export function PipelineDock({
-  stack,
-  onChange,
-  collapsed = false,
-  onToggleCollapsed,
-}: {
-  stack: ProcessingOp[];
-  onChange: (stack: ProcessingOp[]) => void;
-  collapsed?: boolean;
-  onToggleCollapsed?: () => void;
-}) {
-  const updateOp = (id: string, patch: Partial<ProcessingOp>) => {
-    onChange(stack.map((o) => (o.id === id ? { ...o, ...patch } : o)));
-  };
-  const updateParam = (id: string, key: string, value: unknown) => {
-    onChange(
-      stack.map((o) =>
-        o.id === id ? { ...o, params: { ...o.params, [key]: value } } : o,
-      ),
-    );
-  };
-  const removeOp = (id: string) => {
-    onChange(stack.filter((o) => o.id !== id));
-  };
-  const move = (id: string, delta: number) => {
-    const i = stack.findIndex((o) => o.id === id);
-    if (i < 0) return;
-    const j = i + delta;
-    if (j < 0 || j >= stack.length) return;
-    const next = [...stack];
-    const a = next[i];
-    const b = next[j];
-    if (!a || !b) return;
-    next[i] = b;
-    next[j] = a;
-    onChange(next);
-  };
-
-  return (
-    <div className={styles.dock}>
-      <header className={styles.dockHead}>
-        <button
-          type="button"
-          className={styles.dockToggle}
-          onClick={onToggleCollapsed}
-          aria-expanded={!collapsed}
-          title={collapsed ? "Expandir pilha" : "Recolher pilha"}
-        >
-          {collapsed ? <ChevronRight size={13} /> : <ChevronDown size={13} />}
-          <Layers size={13} />
-          <strong>Pipeline</strong>
-          <span className={styles.dockCount}>{stack.length}</span>
-        </button>
-        {stack.length > 0 && (
-          <button
-            type="button"
-            className={styles.dockClear}
-            onClick={() => onChange([])}
-            title="Remover todos os filtros da pilha"
-          >
-            Limpar
-          </button>
-        )}
-      </header>
-
-      {!collapsed &&
-        (stack.length === 0 ? (
-          <p className={styles.dockEmpty}>
-            Pilha vazia. Adicione filtros pela aba <strong>Filtros</strong> ou
-            recorte com a ferramenta de corte — eles aparecem aqui como camadas
-            (topo → base = ordem de aplicação).
-          </p>
-        ) : (
-          <ul className={`${styles.list} ${styles.dockList}`}>
-            {stack.map((op, i) => {
-              const def = findDef(op.kind);
-              return (
-                <li
-                  key={op.id}
-                  className={`${styles.item} ${op.enabled ? "" : styles.disabled}`}
-                >
-                  <header className={styles.itemHead}>
-                    <span className={styles.itemIndex}>#{i + 1}</span>
-                    <span className={styles.itemLabel}>{labelFor(op.kind)}</span>
-                    <div className={styles.itemActions}>
-                      <button
-                        type="button"
-                        title="Mover para cima"
-                        onClick={() => move(op.id, -1)}
-                        disabled={i === 0}
-                      >
-                        <ArrowUp size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        title="Mover para baixo"
-                        onClick={() => move(op.id, 1)}
-                        disabled={i === stack.length - 1}
-                      >
-                        <ArrowDown size={11} />
-                      </button>
-                      <button
-                        type="button"
-                        title={op.enabled ? "Desativar" : "Ativar"}
-                        onClick={() => updateOp(op.id, { enabled: !op.enabled })}
-                      >
-                        {op.enabled ? <Eye size={11} /> : <EyeOff size={11} />}
-                      </button>
-                      <button
-                        type="button"
-                        title="Remover"
-                        onClick={() => removeOp(op.id)}
-                        className={styles.itemDanger}
-                      >
-                        <Trash2 size={11} />
-                      </button>
-                    </div>
-                  </header>
-                  {def && def.controls.length > 0 && (
-                    <div className={styles.controls}>
-                      {def.controls.map((ctrl) => {
-                        if (ctrl.type === "select") {
-                          const val =
-                            (op.params[ctrl.key] as string | undefined) ??
-                            (def.defaults[ctrl.key] as string | undefined) ??
-                            "";
-                          return (
-                            <label key={ctrl.key} className={styles.control}>
-                              <span>{ctrl.label}</span>
-                              <select
-                                value={val}
-                                onChange={(e) =>
-                                  updateParam(op.id, ctrl.key, e.target.value)
-                                }
-                              >
-                                {ctrl.options?.map((o) => (
-                                  <option key={o.value} value={o.value}>
-                                    {o.label}
-                                  </option>
-                                ))}
-                              </select>
-                            </label>
-                          );
-                        }
-                        if (ctrl.type === "checkbox") {
-                          const val =
-                            (op.params[ctrl.key] as boolean | undefined) ??
-                            (def.defaults[ctrl.key] as boolean | undefined) ??
-                            false;
-                          return (
-                            <label
-                              key={ctrl.key}
-                              className={`${styles.control} ${styles.controlCheck ?? ""}`}
-                            >
-                              <span>{ctrl.label}</span>
-                              <input
-                                type="checkbox"
-                                checked={val}
-                                onChange={(e) =>
-                                  updateParam(op.id, ctrl.key, e.target.checked)
-                                }
-                              />
-                            </label>
-                          );
-                        }
-                        const val =
-                          (op.params[ctrl.key] as number | undefined) ??
-                          (def.defaults[ctrl.key] as number | undefined) ??
-                          0;
-                        return (
-                          <label key={ctrl.key} className={styles.control}>
-                            <span>{ctrl.label}</span>
-                            <input
-                              type={ctrl.type}
-                              min={ctrl.min}
-                              max={ctrl.max}
-                              step={ctrl.step ?? 1}
-                              value={val}
-                              onChange={(e) =>
-                                updateParam(
-                                  op.id,
-                                  ctrl.key,
-                                  parseFloat(e.target.value),
-                                )
-                              }
-                            />
-                            <output>{Number(val).toFixed(2)}</output>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  )}
-                  {(def?.note ?? FILTER_NOTES[op.kind]) && (
-                    <p className={styles.opNote}>
-                      {def?.note ?? FILTER_NOTES[op.kind]}
-                    </p>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        ))}
-    </div>
-  );
-}
-
-/**
- * Editor de parâmetros de UMA operação (select / checkbox / range / number),
- * reutilizado pela pilha vertical e pela barra de camadas horizontal.
- */
+/** Editor de parâmetros de uma operação (select / checkbox / range / number). */
 function OpControls({
   op,
   onParam,
@@ -983,15 +734,7 @@ function OpControls({
   );
 }
 
-/**
- * W19 — Barra de CAMADAS horizontal, ancorada EMBAIXO DO CANVAS. Mostra a
- * mesma `processing_stack` como camadas lado a lado (esquerda = base, direita
- * = topo = ordem de aplicação). Cada nova camada entra à direita e empilha.
- * Clicar uma camada abre seus parâmetros num popover acima da barra; ali dá
- * para reordenar (← base / topo →), alternar visibilidade e remover. Só a
- * APRESENTAÇÃO muda — é a pilha de filtros não-destrutiva de sempre (§13).
- */
-/** W20 (S2) — estilo do par de botões de escopo (imagem × seleção). */
+/** Estilo do par de botões de escopo (imagem × seleção). */
 function scopeBtnStyle(active: boolean): CSSProperties {
   return {
     flex: 1,
@@ -1009,6 +752,11 @@ function scopeBtnStyle(active: boolean): CSSProperties {
   };
 }
 
+/**
+ * Barra horizontal de camadas da pipeline, embaixo do canvas (esquerda = base,
+ * direita = topo = ordem de aplicação). Clicar numa camada abre o popover com
+ * parâmetros, escopo, ordem e remoção.
+ */
 export function LayersBar({
   stack,
   onChange,
@@ -1020,7 +768,7 @@ export function LayersBar({
   onChange: (stack: ProcessingOp[]) => void;
   collapsed?: boolean;
   onToggleCollapsed?: () => void;
-  /** W20 (S2) — seleção ativa no editor (p/ "confinar à seleção" um filtro). */
+  /** Seleção ativa no editor, para confinar um filtro a ela. */
   activeSelection?: SicroImageSelection | null;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -1201,7 +949,7 @@ export function LayersBar({
             op={selected}
             onParam={(k, v) => updateParam(selected.id, k, v)}
           />
-          {/* W20 (S2) — escopo da etapa: imagem inteira × só na seleção. */}
+          {/* Escopo da etapa: imagem inteira × só na seleção. */}
           {isMaskableOpKind(selected.kind) && (
             <div
               style={{
@@ -1274,31 +1022,9 @@ export function LayersBar({
 }
 
 /**
- * Composição (compat): pilha + galeria juntas num só painel. Mantida para
- * reuso eventual; o editor de imagem (W18) usa `PipelineDock` (dock fixo,
- * sempre visível) e `FilterGallery` (aba Filtros) separadamente.
- */
-export function ProcessingStackPanel({ stack, onChange }: Props) {
-  return (
-    <div className={styles.panel}>
-      <PipelineDock stack={stack} onChange={onChange} />
-      <FilterGallery
-        onAdd={(kind) => onChange([...stack, makeProcessingOp(kind)])}
-      />
-    </div>
-  );
-}
-
-/**
- * Helper para converter um `ProcessingOp` em `BackendOperation` (formato
- * aceito pelo Tauri command). Usado pelo editor ao chamar
- * `apply_operation_stack`.
- */
-/**
- * W20 (S2) — converte a seleção (coords em px da imagem) numa `MaskSpec`
- * NORMALIZADA `[0,1]` para o backend. Normalizar é o que faz a MESMA máscara
- * valer no preview reduzido e no export em resolução cheia. Devolve null
- * quando as dimensões são desconhecidas ou a geometria é inválida.
+ * Converte a seleção (px da imagem) numa `MaskSpec` normalizada [0,1]: assim a
+ * mesma máscara vale no preview reduzido e no export em resolução cheia.
+ * Null se faltam dimensões ou a geometria é inválida.
  */
 export function selectionToMaskSpec(
   sel: SicroImageSelection,
@@ -1332,11 +1058,7 @@ export function selectionToMaskSpec(
   };
 }
 
-/**
- * W20 (S2) — kinds GEOMÉTRICOS mudam a dimensão da imagem; mascarar não faz
- * sentido (a máscara não alinharia). Só filtros/tonais/cor são mascaráveis.
- * Fonte única da verdade (usada aqui e no ImageEditor).
- */
+/** Kinds geométricos mudam a dimensão da imagem, então a máscara não alinharia: não são mascaráveis. */
 const NON_MASKABLE_KINDS: ReadonlySet<ProcessingOpKind> =
   new Set<ProcessingOpKind>([
     "crop",
@@ -1350,19 +1072,19 @@ const NON_MASKABLE_KINDS: ReadonlySet<ProcessingOpKind> =
     "rotate_arbitrary",
   ]);
 
-export function isMaskableOpKind(kind: ProcessingOpKind): boolean {
+function isMaskableOpKind(kind: ProcessingOpKind): boolean {
   return !NON_MASKABLE_KINDS.has(kind);
 }
 
+/** Converte um `ProcessingOp` no `BackendOperation` aceito por `apply_operation_stack`. */
 export function processingOpToBackendOperation(
   op: ProcessingOp,
   sourceWidth?: number,
   sourceHeight?: number,
 ): Record<string, unknown> {
   const inner = { kind: op.kind, ...op.params };
-  // W20 (S2) — escopo "seleção": embrulha o op num wrapper `masked`, confinando
-  // o efeito à região. A máscara vai normalizada (o backend rasteriza no
-  // tamanho corrente). Se faltarem dimensões/geometria, cai para imagem inteira.
+  // Escopo "seleção": embrulha o op em `masked` com a máscara normalizada (o backend
+  // rasteriza no tamanho corrente). Sem dimensões/geometria, cai para imagem inteira.
   if (op.scope === "selection" && op.mask) {
     const spec = selectionToMaskSpec(op.mask, sourceWidth, sourceHeight);
     if (spec) return { kind: "masked", op: inner, mask: spec };

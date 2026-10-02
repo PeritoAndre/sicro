@@ -1,12 +1,6 @@
-//! Schema migrations.
-//!
-//! Migrations are bundled at compile time via `include_str!`, so they ship
-//! inside the executable. Versions are tracked in `schema_migrations`.
-//!
-//! Adding a new migration:
-//!   1. Drop a file in `src-tauri/migrations/NNN_label.sql` (must be IF NOT EXISTS-safe).
-//!   2. Register it in the `MIGRATIONS` array below.
-//!   3. Bump `current_version()` if you also want to surface it.
+//! Migrações embutidas no binário (`include_str!`), versionadas em `schema_migrations`.
+//! Nova migração: criar `migrations/NNN_label.sql` (idempotente, IF NOT EXISTS)
+//! e registrar em `MIGRATIONS`.
 
 use chrono::Utc;
 use rusqlite::Connection;
@@ -110,8 +104,7 @@ const MIGRATIONS: &[Migration] = &[
 ];
 
 pub fn run_migrations(conn: &mut Connection) -> Result<()> {
-    // schema_migrations is also created by 001 itself, but we need to read
-    // from it before the first migration runs, so create it idempotently here.
+    // A 001 também cria schema_migrations, mas é preciso lê-la antes da primeira rodar.
     conn.execute_batch(
         "CREATE TABLE IF NOT EXISTS schema_migrations (
             version    TEXT PRIMARY KEY,

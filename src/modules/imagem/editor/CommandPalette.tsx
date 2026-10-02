@@ -1,14 +1,6 @@
 /**
- * W13.6 — Paleta de comandos (⌘K / Ctrl+K) do editor de imagem.
- *
- * Overlay central com busca acento-insensível sobre TODAS as ações do editor:
- * trocar ferramenta, mudar o modo do painel (Realçar/Analisar/Anotar), adicionar
- * filtros do catálogo, alternar réguas, enquadrar/zoom, salvar e exportar.
- *
- * Navegação 100% por teclado (↑/↓ + Enter + Esc) — o perito não precisa caçar
- * o botão; digita a intenção ("falsificação", "borda", "salvar") e executa.
- * É só um atalho para ações que já existem na UI — não cria capacidade nova
- * nem altera a evidência (§13).
+ * Paleta de comandos (Ctrl+K) do editor de imagem: busca acento-insensível
+ * sobre ações que já existem na UI, navegável só pelo teclado.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";

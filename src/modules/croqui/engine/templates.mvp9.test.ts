@@ -1,6 +1,4 @@
-/**
- * Tests for the MVP 9 advanced road templates.
- */
+/** Testes dos templates avançados (avenida, Y, curvas, faixa, acostamento). */
 
 import { describe, expect, it } from "vitest";
 import { findTemplate, TEMPLATES, type TemplateId } from "./templates";

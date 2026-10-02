@@ -1,20 +1,7 @@
 /**
- * vehicleArt — frota SVG do designer para o croqui viário.
- *
- * Os SVGs (CorelDRAW, vendorizados em `../assets/transito/`) foram desenhados
- * em ESCALA REAL (1mm = 1m) e em pé (retrato): largura do veículo no eixo x,
- * comprimento no eixo y, frente para CIMA.
- *
- * Recolor: nos veículos "civis" a lataria usa a COR-CHAVE `#CC0000`, definida
- * uma única vez no bloco CSS de cada arquivo (verificado nos 19 recoloríveis;
- * o Sedan tem também a sombra `#B0080A`). Trocar a cor = substituir o VALOR
- * (o nome da classe varia entre arquivos — .fil0, .fil74...). Viaturas
- * (VTR PM/PC/PCI/BM/PP), ambulância e táxi têm pintura oficial fixa —
- * `recolorable: false` e a cor do Inspector não as repinta.
- *
- * Este módulo é PURO (sem React/Konva) para ser testável: o catálogo, o
- * recolor e as dimensões reais. O carregamento de HTMLImageElement (browser)
- * vive em `loadVehicleArtImage`, com cache por (tipo, cor).
+ * Frota SVG do designer (CorelDRAW, em `../assets/transito/`), desenhada em
+ * escala real (1 mm = 1 m) e em retrato: largura no eixo x, comprimento no y,
+ * frente para cima. Módulo puro (sem React/Konva); só `load*Image` toca o browser.
  */
 
 import type { VehicleBodyType } from "./schema";
@@ -53,27 +40,25 @@ import svgPedFDorsal from "../assets/transito/pedestre_f_dorsal.svg?raw";
 import svgPedFLateral from "../assets/transito/pedestre_f_lateral.svg?raw";
 import svgPedFVentral from "../assets/transito/pedestre_f_ventral.svg?raw";
 
-/** Cor-chave da lataria nos SVGs civis (definida 1× no CSS de cada arquivo). */
+/**
+ * Cor-chave da lataria nos SVGs civis, definida uma vez no CSS de cada arquivo
+ * (o nome da classe varia: .fil0, .fil74…); recolorir = trocar o VALOR.
+ */
 export const ART_KEY_COLOR = "#CC0000";
-/** Sombra da lataria (presente só no Sedan) — vira a cor alvo escurecida. */
-export const ART_KEY_SHADE = "#B0080A";
+/** Sombra da lataria (só no Sedan) — vira a cor alvo escurecida. */
+const ART_KEY_SHADE = "#B0080A";
 
-export interface VehicleArtEntry {
-  /** SVG cru (com a cor-chave, quando recolorável). */
+interface VehicleArtEntry {
   svg: string;
-  /** Largura real do veículo (m) — eixo x do SVG. */
+  /** Largura real (m) — eixo x do SVG. */
   widthM: number;
   /** Comprimento real (m) — eixo y do SVG; frente para cima. */
   lengthM: number;
-  /** false = pintura oficial fixa (VTRs, ambulância, táxi). */
+  /** false = pintura oficial fixa (VTRs, ambulância, táxi); a cor do Inspector não repinta. */
   recolorable: boolean;
 }
 
-/**
- * Catálogo body_type → arte. Tipos sem arte do designer (pickup, other e os
- * legados "car"/"truck" genéricos mapeiam pra arte mais próxima) continuam
- * caindo na silhueta vetorial antiga (fallback do CanvasStage).
- */
+/** Tipos sem arte (pickup, other) caem na silhueta vetorial antiga do CanvasStage. */
 export const VEHICLE_ART: Partial<Record<VehicleBodyType, VehicleArtEntry>> = {
   // -- civis recoloríveis --
   car: { svg: svgSedan, widthM: 2.21, lengthM: 4.6, recolorable: true },
@@ -107,11 +92,7 @@ export const VEHICLE_ART: Partial<Record<VehicleBodyType, VehicleArtEntry>> = {
   vtr_pp: { svg: svgVtrPp, widthM: 1.93, lengthM: 4.7, recolorable: false },
 };
 
-/**
- * Pedestres em decúbito (marcadores do grupo Pessoa) — arte do designer em
- * escala real (altura humana ~1,6–1,75 m). Sem cor-chave: a arte não repinta
- * (tons de pele/roupa são fixos). `lengthM` = comprimento deitado no chão.
- */
+/** Pedestres em decúbito (markers do grupo Pessoa), sem cor-chave. `lengthM` = comprimento deitado. */
 export const PESSOA_ART: Record<
   string,
   { svg: string; widthM: number; lengthM: number }
@@ -124,14 +105,13 @@ export const PESSOA_ART: Record<
   pedestre_f_ventral: { svg: svgPedFVentral, widthM: 0.46, lengthM: 1.6 },
 };
 
-/** Arte de pessoa pro subtype de marker, ou null se não houver. */
 export function getPessoaArt(
   subtype: string,
 ): { svg: string; widthM: number; lengthM: number } | null {
   return PESSOA_ART[subtype] ?? null;
 }
 
-/** Escurece um #rrggbb multiplicando os canais (pra sombra da lataria). */
+/** Escurece um #rrggbb multiplicando os canais (sombra da lataria). */
 export function darkenHex(hex: string, factor = 0.86): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim());
   if (!m) return hex;
@@ -143,11 +123,7 @@ export function darkenHex(hex: string, factor = 0.86): string {
   return `#${ch((n >> 16) & 0xff)}${ch((n >> 8) & 0xff)}${ch(n & 0xff)}`;
 }
 
-/**
- * SVG final pro par (tipo, cor): troca a cor-chave (e a sombra) pela cor do
- * objeto quando o tipo é recolorável; pintura fixa ignora a cor. `null` se o
- * tipo não tem arte (caller usa a silhueta antiga).
- */
+/** SVG recolorido para (tipo, cor); pintura fixa ignora a cor. `null` se o tipo não tem arte. */
 export function getVehicleArtSvg(
   body: VehicleBodyType,
   color: string | null | undefined,
@@ -165,7 +141,6 @@ export function getVehicleArtSvg(
     .join(darkenHex(hex));
 }
 
-/** Dimensões reais (m) do tipo, se houver arte — usadas no insert em escala. */
 export function getVehicleRealDims(
   body: VehicleBodyType,
 ): { widthM: number; lengthM: number } | null {
@@ -184,7 +159,7 @@ function cacheKey(body: VehicleBodyType, color: string | null | undefined) {
   return entry && entry.recolorable ? `${body}|${color ?? ""}` : `${body}|`;
 }
 
-/** Imagem já carregada (sincrono) — pro primeiro paint sem flicker. */
+/** Síncrono — para o primeiro paint sem flicker. */
 export function getCachedVehicleArtImage(
   body: VehicleBodyType,
   color: string | null | undefined,
@@ -192,14 +167,12 @@ export function getCachedVehicleArtImage(
   return imageCache.get(cacheKey(body, color)) ?? null;
 }
 
-/** Imagem cacheada do pedestre (sincrono) — `null` se ainda não carregou. */
 export function getCachedPessoaArtImage(
   subtype: string,
 ): HTMLImageElement | null {
   return imageCache.get(`pessoa:${subtype}`) ?? null;
 }
 
-/** Carrega (uma vez) a arte do pedestre. `null` se o subtype não tem arte. */
 export function loadPessoaArtImage(
   subtype: string,
 ): Promise<HTMLImageElement | null> {
@@ -227,7 +200,6 @@ export function loadPessoaArtImage(
   return promise;
 }
 
-/** Carrega (uma vez) a imagem da arte recolorida. `null` se sem arte. */
 export function loadVehicleArtImage(
   body: VehicleBodyType,
   color: string | null | undefined,

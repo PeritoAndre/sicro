@@ -1,7 +1,4 @@
-//! Repositório do módulo Documentoscopia (SQLite via rusqlite).
-//!
-//! Padrão idêntico aos demais repos: colunas em const, closures `row_to_*`,
-//! `insert_*` / `list_*` / `find_*`. Tudo determinístico e auditável.
+//! Repositório do módulo Documentoscopia.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -189,9 +186,8 @@ pub fn update_document_pageinfo(
     Ok(())
 }
 
-/// Remove o documento e TODOS os seus derivados (páginas, OCR, blocos, campos,
-/// regiões, análises, logs, comparações). O arquivo em disco é removido pelo
-/// comando (camada de filesystem), não aqui.
+/// Remove o documento e todos os derivados (páginas, OCR, campos, regiões,
+/// análises, logs, comparações). O arquivo em disco é do comando.
 pub fn delete_document(conn: &Connection, id: &Uuid) -> Result<()> {
     let sid = id.to_string();
     conn.execute("DELETE FROM doc_text_blocks WHERE document_id = ?1", [&sid])?;
@@ -480,8 +476,7 @@ pub fn list_fields(conn: &Connection, document_id: &Uuid) -> Result<Vec<Detected
     Ok(rows)
 }
 
-/// Remove campos de uma origem específica (ex.: re-rodar heurística sem apagar
-/// os campos inseridos manualmente pelo perito).
+/// Por origem: re-rodar a heurística não apaga os campos manuais do perito.
 pub fn delete_fields_by_source(
     conn: &Connection,
     document_id: &Uuid,

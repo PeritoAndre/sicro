@@ -1,8 +1,5 @@
-//! Atomic file write — write to a sibling temp file, fsync, then rename.
-//!
-//! Why this matters: if the app dies mid-write, the original file stays
-//! intact. `manifest.json` corruption would brick a workspace, so every
-//! write goes through this helper.
+//! Escrita atômica: temp ao lado, fsync, rename. Se o app cair no meio, o
+//! original fica intacto — um `manifest.json` corrompido inutilizaria o workspace.
 
 use std::fs::{self, File};
 use std::io::Write;
@@ -15,10 +12,8 @@ pub fn atomic_write_bytes(target: &Path, bytes: &[u8]) -> Result<()> {
         .parent()
         .ok_or_else(|| SicroError::Filesystem(format!("path has no parent: {}", target.display())))?;
 
-    // Cada passo de I/O é embrulhado com CONTEXTO (qual operação + qual
-    // caminho). Sem isso, uma falha vira um "i/o error: ... (os error 2)" seco,
-    // impossível de diagnosticar — exatamente o que queremos evitar no único
-    // caminho de escrita crítico do app.
+    // Cada passo de I/O leva contexto (operação + caminho); sem isso o erro
+    // vira um "os error 2" seco.
     fs::create_dir_all(parent).map_err(|e| {
         SicroError::Filesystem(format!(
             "não consegui criar a pasta {}: {}",
@@ -27,8 +22,7 @@ pub fn atomic_write_bytes(target: &Path, bytes: &[u8]) -> Result<()> {
         ))
     })?;
 
-    // Use a `.tmp` sibling so we stay on the same volume (rename is atomic on
-    // the same filesystem on every platform we care about).
+    // Temp na mesma pasta = mesmo volume; rename só é atômico no mesmo filesystem.
     let tmp_name = format!(
         "{}.tmp",
         target
@@ -65,14 +59,9 @@ pub fn atomic_write_bytes(target: &Path, bytes: &[u8]) -> Result<()> {
         })?;
     }
 
-    // Rename atômico com resiliência a pastas SINCRONIZADAS (OneDrive/Dropbox):
-    // o serviço de sync pode segurar ou mover o `.tmp` entre o sync e o rename,
-    // fazendo o rename falhar (sharing violation; ou a origem some → "os error 2").
-    // Estratégia: (1) no Windows o rename não sobrescreve, então removemos o
-    // destino e tentamos de novo; (2) repetimos algumas vezes (o sync solta o
-    // handle); (3) se ainda falhar, gravamos DIRETO no destino — perde a
-    // atomicidade nesse caso raro, mas garante que o arquivo exista (melhor que
-    // deixar um laudo "fantasma" sem arquivo, que aparece na lista e não abre).
+    // Pastas sincronizadas (OneDrive/Dropbox) podem segurar o `.tmp` e fazer o
+    // rename falhar. No Windows rename não sobrescreve: remove o destino e tenta
+    // de novo (4x); se ainda falhar, grava direto — perde atomicidade, mas o arquivo existe.
     let mut last_err: Option<std::io::Error> = None;
     for attempt in 0..4u32 {
         match fs::rename(&tmp_path, target) {
@@ -89,7 +78,6 @@ pub fn atomic_write_bytes(target: &Path, bytes: &[u8]) -> Result<()> {
         }
     }
 
-    // Fallback: escrita direta no destino (último recurso).
     fs::write(target, bytes).map_err(|e| {
         SicroError::Filesystem(format!(
             "não consegui gravar {} (rename falhou: {}): {}",

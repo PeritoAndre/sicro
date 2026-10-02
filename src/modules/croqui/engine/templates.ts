@@ -1,27 +1,7 @@
 /**
- * Road templates (MVP 6).
- *
- * A template is a function that, given an anchor point in canvas
- * coordinates, returns a *set of editable objects* the perito can move
- * and customise. Templates are not images and not frozen groups — they
- * just save the perito from drawing common road skeletons by hand.
- *
- * Every template stays inside `category: "vias"` so the layer panel can
- * group them. Lines are emitted as `SicroLineObject` (subtype road /
- * lane / lane_separator / sidewalk) so the rest of the engine keeps
- * working — no special-case rendering required.
- *
- * Fase S clean cut — Os antigos templates `via_pro_*` (que dependiam de
- * `makeRoad` + `SicroRoadObject` v1) foram REMOVIDOS. Esses templates
- * usavam o motor Road v1 que não existe mais. A criação de vias com
- * acabamento de via real agora é feita exclusivamente pela ferramenta
- * **Criar Via** (Python Parity Engine — vias com Bezier 4-point +
- * largura em metros).
- *
- * Os templates remanescentes são todos **line-based** — emitem
- * `SicroLineObject` (e nada mais). São úteis como esboço/esqueleto
- * rápido, complementando o motor parity (que cuida das vias "de
- * verdade").
+ * Templates de esqueleto de via: dado um ponto-âncora, devolvem linhas
+ * (`SicroLineObject`) editáveis, em `category: "vias"`. Vias "de verdade"
+ * (asfalto, eixo, calçada) são a ferramenta Criar Via do motor parity.
  */
 
 import type {
@@ -39,7 +19,6 @@ export type TemplateId =
   | "mao_unica"
   | "rotatoria_simples"
   | "curva_simples"
-  // MVP 9 — modelos avançados (linhas soltas)
   | "avenida_canteiro"
   | "cruzamento_y"
   | "curva_esquerda"
@@ -47,7 +26,7 @@ export type TemplateId =
   | "faixa_pedestre_via"
   | "via_acostamento";
 
-export interface RoadTemplate {
+interface RoadTemplate {
   id: TemplateId;
   label: string;
   description: string;
@@ -56,7 +35,6 @@ export interface RoadTemplate {
 
 const DEFAULT_LANE_WIDTH = 60; // px (~3.5 m com ~17 px/m)
 
-/** Single-lane straight road (one road centerline). */
 export const TEMPLATES: Record<TemplateId, RoadTemplate> = {
   via_reta: {
     id: "via_reta",
@@ -252,9 +230,6 @@ export const TEMPLATES: Record<TemplateId, RoadTemplate> = {
     },
   },
 
-  // -------------------------------------------------------------------------
-  // MVP 9 — modelos avançados
-
   avenida_canteiro: {
     id: "avenida_canteiro",
     label: "Avenida com canteiro central",
@@ -426,15 +401,7 @@ export function findTemplate(id: TemplateId): RoadTemplate | undefined {
   return TEMPLATES[id];
 }
 
-/**
- * Templates surfaced by the Croqui Toolbar.
- *
- * Fase S clean cut — removidos os antigos `via_pro_*` (legados — usavam
- * `SicroRoadObject` v1). Os templates restantes são esboços em linhas
- * úteis como starter para o perito. Vias parity completas (com
- * acabamento de asfalto, eixo central, calçada automática) são criadas
- * via ferramenta **Criar Via** (Python Parity Engine).
- */
+/** Templates exibidos na toolbar do Croqui. */
 export const TOOLBAR_TEMPLATES: ReadonlyArray<TemplateId> = [
   "via_reta",
   "cruzamento_x",
@@ -451,8 +418,7 @@ export const TOOLBAR_TEMPLATES: ReadonlyArray<TemplateId> = [
   "via_acostamento",
 ];
 
-// ---------------------------------------------------------------------------
-// Internal helpers
+// ---- Helpers ----
 
 function roadEdge(a: SicroPoint, b: SicroPoint): SicroLineObject {
   return makeLine(a, b, "road");
@@ -475,10 +441,7 @@ function acostamentoLane(a: SicroPoint, b: SicroPoint): SicroLineObject {
   return makeLine(a, b, "acostamento");
 }
 
-/**
- * Curva 90° genérica — discretiza outer/inner edges em 8 segmentos.
- * `startAngle` / `endAngle` em radianos (sentido horário).
- */
+/** Curva de 90° genérica: bordas externa/interna em 8 segmentos; ângulos em radianos (sentido horário). */
 function curvedRoadFromArc(
   anchor: SicroPoint,
   startAngle: number,

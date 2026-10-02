@@ -1,7 +1,4 @@
-/**
- * Mirror of `src-tauri/src/models/video.rs` (Spike F — Video Engine).
- * Field names stay snake_case so serde defaults line up with the wire.
- */
+/** Espelha `src-tauri/src/models/video.rs` (snake_case = wire do serde). */
 
 export type VideoEventCategory =
   | "colisao"

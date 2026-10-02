@@ -1,15 +1,9 @@
-/**
- * Espelho TS do índice global de casos (`case-index.json`).
- * Backend: `src-tauri/src/commands/case_index_commands.rs`.
- *
- * Subconjunto de cabeçalho de cada ocorrência, alimentado quando o caso vira
- * ativo. Base das "estatísticas gerais de trabalho".
- */
+/** Espelha o índice global de casos (`case-index.json`, Rust: `commands/case_index_commands.rs`). */
 
 import type { Occurrence } from "./occurrence";
 import type { WorkspaceCounters } from "./alpha";
 
-/** Espelho de `CaseCounts` (Rust). Contagens "da última abertura" do caso. */
+/** Contagens da última abertura do caso. */
 export interface CaseCounts {
   laudos: number;
   croquis: number;
@@ -24,7 +18,7 @@ export interface CaseCounts {
 export interface CaseIndexEntry {
   workspace_id: string;
   workspace_path: string;
-  /** Nome do caso. Ausente nos índices gravados antes da migration 022. */
+  /** Ausente em índices antigos. */
   titulo?: string | null;
   numero_bo: string | null;
   tipo_pericia: string | null;
@@ -40,11 +34,10 @@ export interface CaseIndexEntry {
   created_at: string | null;
   /** Definido pelo backend; o front pode enviar "". */
   indexed_at: string;
-  /** Contagens por módulo (best-effort). `null` até o caso ser aberto. */
+  /** `null` até o caso ser aberto. */
   counts: CaseCounts | null;
 }
 
-/** Constrói uma entrada de índice a partir de uma ocorrência carregada. */
 export function caseEntryFromOccurrence(
   occurrence: Occurrence,
   workspacePath: string,
@@ -70,7 +63,6 @@ export function caseEntryFromOccurrence(
   };
 }
 
-/** Converte os contadores do workspace (backend) no subconjunto do índice. */
 export function caseCountsFromCounters(c: WorkspaceCounters): CaseCounts {
   return {
     laudos: c.laudos,

@@ -1,8 +1,5 @@
-//! Croqui domain model (Spike E — Croqui Engine).
-//!
-//! Same shape as Laudo (Spike B): Rust treats the document body as opaque
-//! JSON. The Croqui Engine on the frontend owns the `.sicrocroqui` schema.
-//! Rust persists one row per croqui + the JSON blob on disk.
+//! Croqui: como o laudo, o corpo é JSON opaco (schema do Croqui Engine, no
+//! front); o Rust persiste a linha e o blob. Espelhado em `src/types/croqui.ts`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -49,8 +46,8 @@ pub struct Croqui {
     pub status: CroquiStatus,
     pub schema_version: String,
     pub last_export_relative_path: Option<String>,
-    /// "viario" (.sicrocroqui) | "corporal" (.sicrocorpo). Migration 017 —
-    /// default "viario" pros croquis existentes.
+    /// "viario" (.sicrocroqui) | "corporal" (.sicrocorpo). Migration 017;
+    /// croquis antigos caem em "viario".
     #[serde(default = "default_kind")]
     pub kind: String,
     pub created_at: DateTime<Utc>,
@@ -69,8 +66,7 @@ pub struct NewCroquiInput {
     pub kind: Option<String>,
 }
 
-/// Returned by read/save commands — Croqui row + the full `.sicrocroqui`
-/// JSON envelope. Schema is enforced on the frontend.
+/// Linha + envelope `.sicrocroqui` completo; schema imposto no front.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CroquiDoc {
     pub croqui: Croqui,
@@ -79,6 +75,6 @@ pub struct CroquiDoc {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ExportCroquiPngInput {
-    /// base64-encoded PNG bytes (no `data:` prefix expected).
+    /// PNG em base64, sem prefixo `data:`.
     pub png_base64: String,
 }

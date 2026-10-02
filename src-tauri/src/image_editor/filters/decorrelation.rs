@@ -1,27 +1,12 @@
-//! W12 (forense) — **Decorrelation stretch** (estilo "DStretch").
-//!
-//! Amplifica diferenças de cor SUTIS, invisíveis no RGB: tinta apagada,
-//! marcas latentes, hematomas, texto de fundo, pigmentos próximos. Técnica
-//! consagrada em arqueologia (pinturas rupestres) e documentoscopia.
-//!
-//! Pipeline (determinístico, derivado 100% da imagem — §13):
-//!   1. média µ e covariância Σ (3×3) dos canais R,G,B sobre a imagem;
-//!   2. autodecomposição Σ = R·Λ·Rᵀ (componentes principais);
-//!   3. transforma cada pixel: y = µ_alvo + R·S·Rᵀ·(x − µ),
-//!      com S = diag(σ_alvo / √λ_i) — equaliza a variância de cada PC,
-//!      "esticando" os eixos de menor variância (onde moram as diferenças sutis);
-//!   4. clampa a [0,255].
-//!
-//! A matriz de transformação e a região-fonte ficam registráveis no log
-//! (reprodutível). NÃO inventa conteúdo: é uma transformação afim linear da
-//! cor existente.
+//! Decorrelation stretch (estilo DStretch): PCA da covariância RGB, equaliza a
+//! variância de cada componente (S = diag(σ_alvo/√λ)) e recompõe —
+//! y = µ_alvo + R·S·Rᵀ·(x − µ). Transformação afim da cor existente.
 
 use image::{Rgba, RgbaImage};
 use nalgebra::{Matrix3, SymmetricEigen, Vector3};
 
-/// Aplica decorrelation stretch. `target_sigma` controla a intensidade do
-/// realce (desvio-padrão alvo por componente; ~30..80). `target_mean` é o
-/// nível central de saída (tipicamente 128).
+/// `target_sigma`: desvio-padrão alvo por componente (~30..80).
+/// `target_mean`: nível central de saída (tipicamente 128).
 pub fn decorrelation_stretch(img: &RgbaImage, target_sigma: f32, target_mean: f32) -> RgbaImage {
     let sigma = target_sigma.clamp(5.0, 127.0);
     let mean_out = target_mean.clamp(0.0, 255.0);
@@ -44,7 +29,6 @@ pub fn decorrelation_stretch(img: &RgbaImage, target_sigma: f32, target_mean: f3
     out
 }
 
-/// Média (µ) e covariância (Σ) dos canais RGB sobre todos os pixels.
 fn mean_and_covariance(img: &RgbaImage) -> (Vector3<f32>, Matrix3<f32>) {
     let n = (img.width() as f32 * img.height() as f32).max(1.0);
     let mut sum = Vector3::zeros();
@@ -71,8 +55,7 @@ fn build_transform(
 ) -> (Matrix3<f32>, Vector3<f32>) {
     let eig = SymmetricEigen::new(cov);
     let r = eig.eigenvectors; // colunas = componentes principais
-    // S = diag(σ_alvo / √λ_i). Eigenvalues podem ser ~0 (canal degenerado) →
-    // clampa para evitar explosão; um eixo sem variância não é amplificado.
+    // λ ≈ 0 (canal degenerado) é clampado: eixo sem variância não explode.
     let mut s = Matrix3::zeros();
     for i in 0..3 {
         let lambda = eig.eigenvalues[i].max(1e-3);

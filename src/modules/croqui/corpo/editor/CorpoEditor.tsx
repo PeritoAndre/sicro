@@ -1,8 +1,7 @@
 /**
- * CorpoEditor — orquestra o croqui corporal (carta de lesões): toolbar
- * (pranchas + tipos de lesão), CorpoCanvas, inspector do marcador selecionado e
- * a legenda numerada ao vivo. Gerencia o próprio `.sicrocorpo` via commands
- * (read/save) + coerceCorpoDoc — o croquiStore só guarda a linha/lista.
+ * Editor do croqui corporal (carta de lesões): toolbar, CorpoCanvas, inspector
+ * do marcador e legenda ao vivo. Gerencia o próprio `.sicrocorpo` via commands;
+ * o croquiStore só guarda a lista.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -56,8 +55,7 @@ export function CorpoEditor() {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
 
-  // Calibração manual da numeração POP (modo "arraste e salve"). Overrides
-  // GLOBAIS por prancha (pop_calibration.json no app_config_dir).
+  // Calibração da numeração POP: overrides globais (pop_calibration.json).
   const [regionOverrides, setRegionOverrides] = useState<PopCalibration>({});
   const [calibrating, setCalibrating] = useState(false);
 
@@ -85,7 +83,7 @@ export function CorpoEditor() {
     };
   }, [workspacePath, activeCroqui]);
 
-  // Carrega a calibração GLOBAL da numeração POP (uma vez).
+  // Carrega a calibração global da numeração POP.
   useEffect(() => {
     let alive = true;
     void commands
@@ -118,7 +116,7 @@ export function CorpoEditor() {
     [doc, savedJson],
   );
 
-  // Legenda da PRANCHA ATIVA (marcações são autocontidas por prancha).
+  // Legenda só da prancha ativa.
   const legend = useMemo(
     () => (doc ? buildLegend(doc, doc.template_id) : []),
     [doc],
@@ -133,7 +131,7 @@ export function CorpoEditor() {
     (x: number, y: number) => {
       if (tool === "select") return;
       mutate((d) => {
-        // Carimba a prancha ativa: a marcação pertence a ELA (autocontida).
+        // Carimba a prancha ativa: a marcação pertence só a ela.
         const marker = {
           ...makeLesao(x, y, tool as LesaoTipo, nextMarkerNumber(d)),
           template: d.template_id,
@@ -174,9 +172,8 @@ export function CorpoEditor() {
 
   const setTemplate = useCallback(
     (t: BodyView) => {
-      // Limpa a seleção: o marker selecionado pode pertencer à prancha
-      // anterior (e some da tela ao trocar). O canvas acompanha a prancha
-      // ativa — sem isso, salvar após trocar deixaria canvas/template
+      // Limpa a seleção (o marker pode ser da prancha anterior) e acompanha o
+      // canvas: sem isso, salvar após trocar deixaria canvas/template
       // inconsistentes e o coerce re-escalaria markers legados errado.
       setSelectedId(null);
       const tpl = BODY_TEMPLATES[t];
@@ -190,8 +187,7 @@ export function CorpoEditor() {
   );
 
   // --- Calibração da numeração POP ---------------------------------------
-  // Ao soltar um número arrastado, guarda a posição normalizada (chave única
-  // por prancha+vista+n+ponto). Ainda em memória até "Salvar calibração".
+  // Fica em memória até "Salvar calibração".
   const onRegionDrag = useCallback((key: string, nx: number, ny: number) => {
     const r = (v: number) => Math.round(v * 10000) / 10000;
     setRegionOverrides((prev) => ({ ...prev, [key]: [r(nx), r(ny)] }));
@@ -258,8 +254,7 @@ export function CorpoEditor() {
     }
     setBusy(true);
     try {
-      // Captura SÓ a prancha (folha branca) em resolução nativa da arte —
-      // independe do zoom e do tamanho da janela.
+      // Só a prancha, em resolução nativa (independe do zoom e da janela).
       const bodyPng = canvasRef.current?.toPng(1);
       if (!bodyPng) throw new Error("não foi possível capturar a prancha");
       const tpl = BODY_TEMPLATES[doc.template_id];
@@ -274,8 +269,7 @@ export function CorpoEditor() {
           : null,
         templateLabel: tpl.label,
         timestamp: new Date(),
-        // POP Anexo 1 — listas de regiões numeradas no PNG final (só nas
-        // pranchas numeradas; a numeração sobre o corpo já vem do canvas).
+        // Listas de regiões do POP no PNG (só pranchas numeradas).
         regionLists: tpl.numbered
           ? [
               { title: "FRENTE (vista anterior)", items: popListaLinhas("frente") },
@@ -287,8 +281,7 @@ export function CorpoEditor() {
         png_base64: png.split(",")[1] ?? png,
       });
       await loadList(workspacePath);
-      // Abre a pasta do export selecionando o PNG (mesmo padrão do laudo) —
-      // feedback concreto de que a exportação aconteceu e onde está.
+      // Abre a pasta do export com o PNG selecionado (mesmo padrão do laudo).
       try {
         const abs = `${workspacePath}\\${String(relPath).replace(/\//g, "\\")}`;
         await commands.revealPathInExplorer(abs);
@@ -332,7 +325,7 @@ export function CorpoEditor() {
         <strong style={{ color: "#f8fafc", fontSize: 13 }}>{doc.title}</strong>
         {dirty && <span style={{ color: "#fbbf24", fontSize: 11 }}>● não salvo</span>}
 
-        {/* Pranchas — seletor agrupado (10 artes POP/SENASP) */}
+        {/* Seletor de pranchas */}
         <label
           style={{
             display: "inline-flex",
@@ -429,7 +422,7 @@ export function CorpoEditor() {
         ))}
       </div>
 
-      {/* Calibração da numeração POP — só nas pranchas numeradas (corpo masc/fem) */}
+      {/* Calibração da numeração POP (só pranchas numeradas) */}
       {numbered && (
         <div
           style={{
@@ -576,7 +569,7 @@ export function CorpoEditor() {
             {summarizeLesoes(doc)}
           </p>
 
-          {/* Nômina do POP — só nas pranchas numeradas (corpo inteiro). */}
+          {/* Nômina do POP (só pranchas numeradas) */}
           {BODY_TEMPLATES[doc.template_id].numbered && (
             <>
               <hr style={{ margin: "14px 0", border: 0, borderTop: "1px solid #e2e8f0" }} />
@@ -690,8 +683,7 @@ function MarkerInspector({
           style={inputStyle()}
         >
           <option value="">— não informada —</option>
-          {/* Doc antigo com região da 1ª geração: mantém o valor legível
-              (trocar pra uma região POP é opcional). */}
+          {/* Região do catálogo antigo: mantém o valor legível. */}
           {marker.regiao && !isPopRegiao(marker.regiao) && (
             <option value={marker.regiao}>
               {regiaoLabel(marker.regiao)} (catálogo antigo)
@@ -778,7 +770,7 @@ function MarkerInspector({
   );
 }
 
-// --- estilos inline (primeira versão; refinar com feedback visual) ---
+// --- estilos inline ---
 function btnStyle(active = false, accent?: string): React.CSSProperties {
   return {
     display: "inline-flex",

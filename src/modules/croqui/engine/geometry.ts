@@ -1,9 +1,4 @@
-/**
- * Pure geometry helpers — Spike E.
- *
- * No React, no Konva. Just numbers in / numbers out. Easy to unit-test.
- * If the math is wrong here, every measurement on the canvas is wrong.
- */
+/** Geometria pura do canvas (escala, medições, encaixe de imagem). Sem React/Konva. */
 
 import type { SicroPoint } from "./schema";
 
@@ -13,10 +8,7 @@ export function distancePx(a: SicroPoint, b: SicroPoint): number {
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-/**
- * Calibrate a scale from two clicked points + the real-world distance the
- * user declares. Returns `pxPerMeter`. Throws when the points coincide.
- */
+/** px/m a partir de dois pontos clicados + distância real declarada. Lança se os pontos coincidem. */
 export function computePxPerMeter(
   p1: SicroPoint,
   p2: SicroPoint,
@@ -32,11 +24,7 @@ export function computePxPerMeter(
   return px / realDistanceM;
 }
 
-/**
- * Convert a pixel distance to meters using the active scale.
- * Returns null when the scale isn't defined yet — callers decide whether
- * to render "px N" or "—".
- */
+/** `null` sem escala — o caller decide entre "px N" e "—". */
 export function pxToMeters(
   pxDistance: number,
   pxPerMeter: number | null | undefined,
@@ -45,7 +33,7 @@ export function pxToMeters(
   return pxDistance / pxPerMeter;
 }
 
-/** Human-friendly label for a measurement. Uses meters when scale exists. */
+/** Rótulo da medição: px sem escala; cm abaixo de 1 m; 2 casas até 10 m; 1 casa acima. */
 export function formatMeasurement(
   pxDistance: number,
   pxPerMeter: number | null | undefined,
@@ -63,35 +51,19 @@ export function formatMeasurement(
   return `${meters.toFixed(1)} m`;
 }
 
-/**
- * Midpoint — used to position the measurement label between the two anchors.
- */
 export function midpoint(a: SicroPoint, b: SicroPoint): SicroPoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
-/**
- * Angle (in degrees) of the segment a → b relative to the +x axis.
- * Used to rotate the measurement label so it lays along the segment.
- */
+/** Ângulo em graus de a→b em relação ao eixo +x (rotação do rótulo da medição). */
 export function angleDeg(a: SicroPoint, b: SicroPoint): number {
   return (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI;
 }
 
 /**
- * Fit a rectangle of dimensions `imgW × imgH` into a canvas of
- * `canvasW × canvasH`, preserving aspect ratio and leaving a `margin`
- * fraction of the canvas free on each side.
- *
- * Returns the destination rectangle (top-left + size), centred inside
- * the canvas. Used by MVP 9 Round 5 so a 4K drone photo doesn't blow
- * past the canvas the moment it's inserted as a background. A
- * 5472×3648 photo on a 1600×1000 canvas with the default
- * `margin = 0.1` resolves to roughly 1440×960 centred at (80, 20) —
- * fits comfortably.
- *
- * `margin` is clamped to [0, 0.45] (more than that and there's no
- * room for the image at all).
+ * Encaixa `imgW × imgH` no canvas preservando proporção, centralizado, com
+ * `margin` (fração, clampada a [0, 0.45]) livre em cada lado. Serve para foto
+ * 4K de drone não estourar o canvas ao virar fundo.
  */
 export function fitImageToCanvas(
   imgW: number,

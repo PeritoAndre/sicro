@@ -1,27 +1,17 @@
-//! W12 (GIMP-parity / forense) — Análise por comparação.
-//!
-//! **ELA (Error Level Analysis)** e **diferença local** (imagem vs. sua própria
-//! versão borrada) — técnicas de detecção de adulteração que derivam TUDO da
-//! imagem de entrada (não fabricam nada; §13). Determinísticas dados os
-//! parâmetros (qualidade JPEG / escala) — registrados na pilha de processamento.
-//!
-//! ELA: recomprime a imagem como JPEG numa qualidade conhecida, decodifica de
-//! volta e mede a diferença absoluta por pixel, amplificada. Regiões com
-//! histórico de compressão diferente (colagens, retoques, "paste-in") aparecem
-//! com erro distinto. Limitação documentada: re-saves múltiplos / recompressão
-//! de redes sociais "achatam" o ELA — é um INDÍCIO, não prova.
+//! ELA (Error Level Analysis): recomprime como JPEG numa qualidade conhecida e
+//! mede a diferença por pixel; regiões com histórico de compressão diferente
+//! destoam. É indício, não prova: re-saves e redes sociais achatam o ELA.
 
 use image::{codecs::jpeg::JpegEncoder, ExtendedColorType, Rgba, RgbaImage};
 
-/// Error Level Analysis. `quality` (1..=100) é a qualidade de recompressão
-/// JPEG; `scale` amplifica a diferença (ex.: 10..30). Saída em tons amplificados
-/// (RGB do erro; alpha = 255).
+/// `quality` (1..=100) é a qualidade de recompressão; `scale` amplifica a
+/// diferença (ex.: 10..30). Saída: RGB do erro, alpha 255.
 pub fn ela(img: &RgbaImage, quality: u8, scale: f32) -> RgbaImage {
     let q = quality.clamp(1, 100);
     let s = scale.max(1.0);
     let (w, h) = img.dimensions();
 
-    // 1. RGBA → RGB intercalado (JPEG não tem alpha).
+    // JPEG não tem alpha.
     let mut rgb = Vec::with_capacity((w * h * 3) as usize);
     for px in img.pixels() {
         rgb.push(px.0[0]);
@@ -29,7 +19,6 @@ pub fn ela(img: &RgbaImage, quality: u8, scale: f32) -> RgbaImage {
         rgb.push(px.0[2]);
     }
 
-    // 2. Recomprime em memória na qualidade Q.
     let mut buf: Vec<u8> = Vec::new();
     {
         let mut enc = JpegEncoder::new_with_quality(&mut buf, q);
@@ -37,12 +26,11 @@ pub fn ela(img: &RgbaImage, quality: u8, scale: f32) -> RgbaImage {
             .encode(&rgb, w, h, ExtendedColorType::Rgb8)
             .is_err()
         {
-            // Falha de codificação → devolve preto (sem inventar nada).
+            // Falha de codificação → preto.
             return RgbaImage::from_pixel(w, h, Rgba([0, 0, 0, 255]));
         }
     }
 
-    // 3. Decodifica o JPEG recomprimido.
     let recompressed = match image::load_from_memory(&buf) {
         Ok(d) => d.to_rgb8(),
         Err(_) => return RgbaImage::from_pixel(w, h, Rgba([0, 0, 0, 255])),
@@ -51,7 +39,7 @@ pub fn ela(img: &RgbaImage, quality: u8, scale: f32) -> RgbaImage {
         return RgbaImage::from_pixel(w, h, Rgba([0, 0, 0, 255]));
     }
 
-    // 4. |orig - recomprimido| * escala, por canal.
+    // |orig − recomprimido| · escala, por canal.
     let mut out = RgbaImage::new(w, h);
     for (x, y, px) in out.enumerate_pixels_mut() {
         let o = img.get_pixel(x, y).0;

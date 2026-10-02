@@ -1,7 +1,5 @@
-//! Serializable domain models that cross the Tauri boundary.
-//!
-//! These structs mirror `src/types/*.ts` on the front-end. Keep field names
-//! in snake_case — serde defaults match the TypeScript wire format.
+//! Modelos que cruzam a fronteira Tauri. Espelham `src/types/*.ts` — mudar
+//! nos dois; snake_case casa com o wire serde.
 
 pub mod audio;
 pub mod croqui;

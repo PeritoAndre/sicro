@@ -1,4 +1,4 @@
-//! Read/write helpers for `media_assets` (Spike D).
+//! Tabela `media_assets`.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};

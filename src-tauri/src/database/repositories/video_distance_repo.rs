@@ -1,9 +1,6 @@
-//! Repositório da Medição de Distância por fotogrametria.
-//!
-//! Tabela única: `video_distance_measurements` (migration 011). Como no
-//! `video_speed_repo`, este repositório **(de)serializa** as colunas `*_json`
-//! (sigmas do Monte Carlo, ressalvas, auditoria) para tipos estruturados — o
-//! laudo precisa reabrir a medição e reproduzir o número exato.
+//! Tabela `video_distance_measurements` (migration 011). As colunas `*_json`
+//! são (de)serializadas para tipos estruturados: o laudo precisa reabrir a
+//! medição e reproduzir o número exato.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -167,8 +164,7 @@ mod tests {
     use crate::database::repositories::video_speed_repo;
     use crate::models::{ControlPoint, VideoSpeedCalibration};
 
-    /// In-memory DB com migrações + FK ON, e uma ocorrência pai para exercitar
-    /// a cadeia occurrence → calibration → measurement.
+    /// Banco em memória com migrações, FK ON e uma ocorrência pai.
     fn setup() -> (Connection, Uuid) {
         let mut conn = Connection::open_in_memory().expect("open in-memory");
         conn.pragma_update(None, "foreign_keys", "ON")

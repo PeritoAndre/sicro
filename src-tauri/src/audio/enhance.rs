@@ -1,14 +1,9 @@
-//! Realce para escuta — gera um DERIVADO; o WAV de análise não muda.
-//!
-//! Ordem fixa (a mesma sempre, para ser reprodutível):
-//!   1. FFmpeg, antes: tirar saturação (`adeclip`), cliques (`adeclick`),
-//!      zumbido da rede 50/60 Hz e harmônicos (`bandreject`), graves < 80 Hz.
-//!   2. Rust: redução de ruído POR AMOSTRA (perfil espectral tirado de um
-//!      trecho A–B só de ruído, "spectral gating") e redutor de ruído de fala
-//!      por rede neural (RNNoise, via `nnnoiseless` — modelo embutido, local).
-//!   3. FFmpeg, depois: `afftdn`, agudos > 8 kHz, banda de voz 300–3400 Hz,
-//!      normalização dinâmica.
-//! A receita exata (filtros e parâmetros) volta para ser gravada no caso.
+//! Realce para escuta (gera derivado; o WAV de análise não muda). Ordem fixa,
+//! para ser reprodutível:
+//!   1. FFmpeg: adeclip, adeclick, notch 50/60 Hz + harmônicos, graves < 80 Hz;
+//!   2. Rust: spectral gating com perfil A–B de ruído e RNNoise (nnnoiseless, local);
+//!   3. FFmpeg: afftdn, agudos > 8 kHz, banda de voz 300–3400 Hz, dynaudnorm.
+//! A receita volta para ser gravada no caso.
 
 use std::path::{Path, PathBuf};
 
@@ -246,11 +241,9 @@ impl Default for GateParams {
     }
 }
 
-/// Redução de ruído com perfil: mede o espectro do ruído no trecho
-/// `profile` e atenua, quadro a quadro e faixa a faixa, o que fica abaixo do
-/// limiar desse ruído. Mesma família do "Noise Reduction" do Audacity
-/// (reescrito do zero). Ganho suavizado em frequência e no tempo para não
-/// gerar "ruído musical". Mantém o comprimento e o alinhamento do sinal.
+/// Spectral gating: mede o espectro do ruído em `profile` e atenua, por quadro
+/// e por faixa, o que fica abaixo do limiar. Ganho suavizado em frequência e
+/// no tempo (evita "ruído musical"); mantém comprimento e alinhamento.
 fn spectral_gate(samples: &mut Vec<f32>, sr: u32, profile: NoiseProfile, p: GateParams) -> Result<()> {
     let n = GATE_N;
     let hop = GATE_HOP;

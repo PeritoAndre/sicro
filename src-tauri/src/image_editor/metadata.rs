@@ -1,13 +1,5 @@
-//! Image metadata helpers.
-//!
-//! MVP 7: lê dimensões, formato e tamanho do arquivo sem decodificar a
-//! imagem inteira quando possível (`image::ImageReader::with_guessed_format`).
-//! Hash SHA-256 é calculado por demanda — não no momento da leitura
-//! de metadados.
-//!
-//! G12 (Image Engine Pro): quando `compute_hash=true`, também computa
-//! MD5/SHA-1/SHA-256/SHA-3-256 num único pass (chain of custody pericial)
-//! e tenta extrair EXIF via `kamadak-exif`.
+//! Metadados da imagem: dimensões e formato sem decodificar tudo; hashes
+//! (sob demanda) e EXIF.
 
 use std::fs::File;
 use std::io::BufReader;
@@ -57,7 +49,6 @@ pub fn read_metadata(abs_path: &Path, compute_hash: bool) -> Result<ImageMetadat
     });
     let format_label = format.map(|f| format!("{:?}", f));
 
-    // G12.8 — hash set completo (4 algoritmos num único pass do arquivo).
     let hash_set = if compute_hash {
         compute_all_hashes(abs_path).ok()
     } else {
@@ -65,7 +56,7 @@ pub fn read_metadata(abs_path: &Path, compute_hash: bool) -> Result<ImageMetadat
     };
     let hash_sha256 = hash_set.as_ref().map(|h| h.sha256.clone());
 
-    // G12.7 — EXIF reading (best-effort; falha = sem EXIF, não erro).
+    // EXIF é best-effort: falha = sem EXIF, não erro.
     let exif_json = read_exif_json(abs_path);
 
     Ok(ImageMetadata {
@@ -80,8 +71,7 @@ pub fn read_metadata(abs_path: &Path, compute_hash: bool) -> Result<ImageMetadat
     })
 }
 
-/// Map common extensions to mime types — used when criar análise a
-/// partir de arquivo local antes de decidir gravar.
+/// Mime por extensão, para análises criadas a partir de arquivo local.
 pub fn guess_mime_for_path(path: &Path) -> Option<&'static str> {
     let ext = path
         .extension()

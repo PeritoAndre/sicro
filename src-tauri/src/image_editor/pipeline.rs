@@ -1,16 +1,6 @@
-//! Export pipeline (MVP 7).
-//!
-//! Orquestra:
-//!   1. Carregar imagem original (ou usar o PNG composto enviado pelo
-//!      frontend, quando presente);
-//!   2. Aplicar ajustes (`apply_adjustments`);
-//!   3. Aplicar operações geométricas (`apply_operation` em loop);
-//!   4. Persistir PNG/JPG em `imagens/exports/`;
-//!   5. Persistir sidecar JSON contendo origem, operações, hashes,
-//!      timestamp e versão do SICRO.
-//!
-//! O caller (commands) é responsável por gravar a linha em
-//! `image_exports` e atualizar `last_export_relative_path`.
+//! Pipeline de export: carrega a imagem (original ou PNG composto do front),
+//! aplica ajustes e operações, grava em `imagens/exports/` com sidecar JSON
+//! (origem, operações, hashes, versão). O caller grava a linha em `image_exports`.
 
 use std::path::{Path, PathBuf};
 
@@ -28,8 +18,7 @@ use crate::workspace::manifest::APP_VERSION;
 
 use super::processor::{apply_adjustments, apply_operation};
 
-/// Result of `run_export`: bytes already on disk + descriptor used by
-/// the caller to insert the row in `image_exports`.
+/// Saída de `run_export`: arquivo já em disco + dados para a linha em `image_exports`.
 #[derive(Debug, Clone)]
 pub struct ExportArtifact {
     pub output_relative_path: String,
@@ -61,9 +50,7 @@ pub fn run_export(
         }
     };
 
-    // 1. Load pixels — either from a composed PNG that the frontend
-    //    already produced (with Konva annotations baked in) OR from
-    //    the original on disk.
+    // PNG composto pelo front (anotações já gravadas) ou original em disco.
     let mut img: RgbaImage = if let Some(b64) = input.composed_png_base64.as_deref() {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(b64)
@@ -87,24 +74,20 @@ pub fn run_export(
             .to_rgba8()
     };
 
-    // 2. Optional adjustments (only when the caller asked the backend
-    //    to apply them — the default is "trust the composed PNG").
+    // Ajustes só quando pedido; o padrão é confiar no PNG composto.
     if input.apply_backend_adjustments {
         if let Some(adj) = input.adjustments.as_ref() {
             apply_adjustments(&mut img, adj);
         }
     }
 
-    // 3. Geometric operations (always applied, even when composed_png
-    //    is provided — they may have been requested after the canvas
-    //    was composed).
+    // Operações sempre: podem ter sido pedidas depois de compor o canvas.
     for op in &input.operations {
         img = apply_operation(img, op);
     }
 
     let (width, height) = (img.width(), img.height());
 
-    // 4. Encode to bytes.
     let mut buf: Vec<u8> = Vec::new();
     {
         use std::io::Cursor;
@@ -116,7 +99,6 @@ pub fn run_export(
     let hash = sha256_bytes(&buf);
     let size_bytes = buf.len() as u64;
 
-    // 5. Write to disk under imagens/exports/.
     let ext = match format {
         ImageFormat::Png => "png",
         ImageFormat::Jpeg => "jpg",
@@ -140,7 +122,6 @@ pub fn run_export(
     }
     atomic_write_bytes(&abs_out, &buf)?;
 
-    // 6. Sidecar JSON.
     let rel_sidecar = rel_out.replace(
         &format!(".{ext}"),
         "_sidecar.json",
@@ -205,12 +186,9 @@ fn build_sidecar(
 }
 
 fn operation_to_value(op: &BackendOperation) -> Value {
-    // Usa serde_json::to_value para preservar tag+params automaticamente.
-    // Fallback para "unknown" se a serialização falhar (não deveria).
     serde_json::to_value(op).unwrap_or_else(|_| json!({"kind": "unknown"}))
 }
 
-// Build a filesystem-safe slug from the analysis title.
 fn sanitize_slug(title: &str) -> String {
     let mut out = String::with_capacity(title.len());
     for c in title.chars() {

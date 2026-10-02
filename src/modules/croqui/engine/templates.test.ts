@@ -1,10 +1,4 @@
-/**
- * Unit tests for road templates — MVP 6.
- *
- * Fase S clean cut — Os templates `via_pro_*` (que dependiam de
- * `makeRoad` + `SicroRoadObject` v1) foram removidos. Os templates
- * remanescentes são todos line-based (emitem `SicroLineObject`).
- */
+/** Testes dos templates de esqueleto (todos emitem só `SicroLineObject`). */
 
 import { describe, expect, it } from "vitest";
 import {
@@ -17,7 +11,7 @@ import {
 describe("TEMPLATES registry", () => {
   it("exposes the canonical MVP 6 templates + MVP 9 extensions", () => {
     const ids = Object.keys(TEMPLATES).sort();
-    // MVP 6 baseline — devem continuar existindo.
+    // Templates base — devem continuar existindo.
     const mvp6 = [
       "cruzamento_t",
       "cruzamento_x",
@@ -30,7 +24,6 @@ describe("TEMPLATES registry", () => {
     for (const id of mvp6) {
       expect(ids).toContain(id);
     }
-    // Sanity: MVP 9 introduziu pelo menos um template novo.
     expect(ids.length).toBeGreaterThan(mvp6.length);
   });
 
@@ -43,9 +36,7 @@ describe("TEMPLATES registry", () => {
       const ids = new Set(objs.map((o) => o.id));
       expect(ids.size).toBe(objs.length);
       for (const o of objs) {
-        // Fase S — templates emitem apenas `line` (line-based).
-        // Vias parity são criadas pela ferramenta Criar Via, não por
-        // templates.
+        // Vias parity vêm da ferramenta Criar Via, nunca de template.
         expect(o.kind).toBe("line");
         expect(o.category).toBeDefined();
       }

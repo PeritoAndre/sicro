@@ -1,11 +1,6 @@
-//! Workspace = a single `.sicro` directory on disk.
-//!
-//! Layout (doc 02 §9):
-//!     <name>.sicro/
-//!         manifest.json
-//!         sicro.sqlite
-//!         dossie/  laudos/  croquis/  videos/
-//!         imagens/  midias/  exports/  logs/  cache/
+//! Workspace = uma pasta `.sicro` com `manifest.json`, `sicro.sqlite` e as
+//! subpastas por módulo (dossie, laudos, croquis, videos, imagens, midias,
+//! exports, logs, cache).
 
 pub mod backup;
 pub mod create;

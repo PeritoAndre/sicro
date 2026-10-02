@@ -1,9 +1,6 @@
 /**
- * Annotation factories — MVP 7.
- *
- * Cada função produz um `SicroAnnotation` com defaults sãos. As cores
- * técnicas escolhidas (vermelho/amarelo/preto) são as típicas de
- * marcação pericial top-down.
+ * Fábricas de anotações: cada função produz um `SicroAnnotation` com defaults.
+ * Cores (vermelho/amarelo/preto) são as típicas de marcação pericial.
  */
 
 import type {
@@ -111,12 +108,9 @@ export function makeRedaction(
 }
 
 // ---------------------------------------------------------------------------
-// G12.14 — Novos kinds: polygon, angle, freehand
+// polygon, angle, freehand
 
-/**
- * Polígono fechado (área + perímetro). Precisa ≥3 pontos.
- * O ponto de ancoragem `(x, y)` é o primeiro vértice.
- */
+/** Polígono fechado (3+ pontos); a âncora `(x, y)` é o primeiro vértice. */
 export function makePolygon(points: SicroImagePoint[]): SicroAnnotation {
   const first = points[0] ?? { x: 0, y: 0 };
   return {
@@ -128,10 +122,7 @@ export function makePolygon(points: SicroImagePoint[]): SicroAnnotation {
   };
 }
 
-/**
- * Medida de ângulo formada por 3 pontos. O vértice é o do meio
- * (`points[1]`); os outros dois definem os raios.
- */
+/** Ângulo por 3 pontos; o vértice é o do meio (`points[1]`). */
 export function makeAngle(
   p1: SicroImagePoint,
   vertex: SicroImagePoint,
@@ -145,9 +136,7 @@ export function makeAngle(
   };
 }
 
-/**
- * Desenho à mão livre — amostra de pontos do mouse drag.
- */
+/** Desenho à mão livre a partir dos pontos amostrados do arrasto. */
 export function makeFreehand(points: SicroImagePoint[]): SicroAnnotation {
   const first = points[0] ?? { x: 0, y: 0 };
   return {

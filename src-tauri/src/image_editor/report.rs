@@ -1,18 +1,5 @@
-//! G12.21 — Gerador de relatório de análise pericial.
-//!
-//! Produz um HTML auto-contido com:
-//!   - Cabeçalho institucional + identificador do laudo.
-//!   - Thumbnail da imagem analisada (embutida como data URI).
-//!   - Painel EXIF.
-//!   - Tabela de hashes (MD5/SHA-1/SHA-256/SHA-3-256).
-//!   - Lista de operações aplicadas (pipeline).
-//!   - Lista de anotações com coordenadas + medidas.
-//!   - Escala (se calibrada) + densidade de pixels.
-//!   - Chain of custody (logs de operações com timestamp).
-//!   - Footer com timestamp de geração + versão SICRO.
-//!
-//! O HTML pode ser convertido em PDF posteriormente pelo pipeline
-//! Edge headless (igual ao laudo).
+//! Relatório HTML auto-contido da análise (origem, hashes, EXIF, pipeline,
+//! anotações, escala, histórico). Vira PDF pelo mesmo caminho do laudo.
 
 use base64::Engine as _;
 use chrono::Utc;

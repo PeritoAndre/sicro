@@ -1,14 +1,6 @@
-//! Models for the .sicroapp importer (Spike D).
-//!
-//! Three persisted entities + one transient report:
-//!   - `Import`         — row in `imports` (one per .sicroapp brought in).
-//!   - `MediaAsset`     — row in `media_assets` (one per binary extracted).
-//!   - `EvidenceItem`   — row in `evidence_items` (one per domain evidence).
-//!   - `ImportReport`   — JSON written to `imports/<id>/import_report.json`
-//!                        AND returned to the frontend.
-//!
-//! Wire format is serde-default snake_case so the TypeScript mirrors are
-//! drop-in. Never rename a field once it's been written to disk.
+//! Modelos do importador de `.sicroapp` (`imports`, `media_assets`,
+//! `evidence_items` e o `ImportReport`, gravado em `imports/<id>/import_report.json`).
+//! Espelhados em `src/types/import.ts` — mudar nos dois. Nunca renomear campo já gravado.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -20,13 +12,11 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum ImportStatus {
-    /// All required files present, hashes verified, no missing media.
+    /// Tudo presente, hashes conferidos.
     Imported,
-    /// Imported but with one or more non-fatal warnings (missing media,
-    /// missing optional JSON, unknown extra files, etc.).
+    /// Avisos não fatais (mídia ausente, JSON opcional faltando…).
     ImportedWithWarnings,
-    /// Aborted before persisting the occurrence. Row may still exist for
-    /// audit purposes if the failure happened late.
+    /// Abortou antes de persistir a ocorrência; a linha pode existir para auditoria.
     Failed,
 }
 
@@ -61,10 +51,10 @@ pub struct Import {
     pub app_version: Option<String>,
     pub mobile_occurrence_id: Option<String>,
     pub status: ImportStatus,
-    /// JSON array of strings, surfaced as-is to the frontend.
+    /// JSON array de strings, repassado ao front.
     pub warnings_json: String,
     pub errors_json: String,
-    /// Raw `manifest.json` payload, preserved verbatim for future audits.
+    /// `manifest.json` íntegro, para auditoria.
     pub raw_manifest_json: String,
     pub imported_at: DateTime<Utc>,
 }
@@ -76,8 +66,7 @@ pub struct Import {
 #[serde(rename_all = "snake_case")]
 pub enum MediaAssetType {
     Photo,
-    // Reserved — Spike D only emits Photo. Future spikes:
-    // Video, Audio, Attachment,
+    // Por enquanto só fotos vêm do .sicroapp.
 }
 
 impl MediaAssetType {
@@ -105,8 +94,7 @@ pub struct MediaAsset {
     pub imported_at: DateTime<Utc>,
     pub category: Option<String>,
     pub caption: Option<String>,
-    /// Verbatim payload from `fotos.json[].*`, so the UI can show categoria
-    /// or any future field even before it's modelled here.
+    /// Item de `fotos.json` íntegro — a UI mostra campos ainda não modelados.
     pub raw_json: String,
 }
 
@@ -128,10 +116,10 @@ pub struct EvidenceItem {
 }
 
 // ---------------------------------------------------------------------------
-// Import report (transient — written to disk + returned to UI)
+// Relatório do import (gravado em disco + devolvido à UI)
 
-/// Summary of one `.sicroapp` import. Always-defined fields use safe defaults
-/// so the frontend can render the panel even if the importer aborted half-way.
+/// Resumo de um import. Defaults seguros: o painel renderiza mesmo se o
+/// importador abortou no meio.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ImportReport {
     pub import_id: Option<Uuid>,
@@ -150,7 +138,7 @@ pub struct ImportReport {
     pub generated_at: Option<String>,
     pub exported_at: Option<String>,
 
-    // Occurrence summary (mirrors what the user typed in mobile, helps QA).
+    // Resumo da ocorrência (o que foi digitado no mobile).
     pub tipo_pericia: Option<String>,
     pub natureza: Option<String>,
     pub resultado: Option<String>,
@@ -160,18 +148,18 @@ pub struct ImportReport {
     pub bairro: Option<String>,
     pub logradouro: Option<String>,
 
-    // Counts (declared vs. imported lets the UI flag partial imports).
+    // Declarado vs. importado: a UI sinaliza import parcial.
     pub photos_declared: u32,
     pub photos_imported: u32,
     pub photos_missing: u32,
 
-    // Hash verification.
+    // Verificação de hashes.
     pub hashes_present: bool,
     pub hashes_verified_ok: u32,
     pub hashes_mismatched: Vec<HashMismatch>,
     pub files_missing_from_hashes: Vec<String>,
 
-    // Files discovered in the ZIP (relative to root).
+    // Arquivos do ZIP (relativos à raiz).
     pub jsons_read: Vec<String>,
     pub jsons_missing: Vec<String>,
     pub files_ignored: Vec<String>,
@@ -180,7 +168,7 @@ pub struct ImportReport {
     pub errors: Vec<String>,
     pub status: Option<ImportStatus>,
 
-    /// Echo of important counts straight from `manifest.json -> contagens`.
+    /// Eco de `manifest.json -> contagens`.
     pub manifest_counts: Option<serde_json::Value>,
 
     pub imported_at: Option<DateTime<Utc>>,
@@ -194,22 +182,19 @@ pub struct HashMismatch {
 }
 
 // ---------------------------------------------------------------------------
-// Input from the frontend
+// Input do front
 
-/// Payload sent by the front-end when the user picks a .sicroapp.
+/// Payload do front ao escolher um .sicroapp.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ImportSicroappInput {
-    /// Absolute path to the chosen .sicroapp file.
+    /// Caminho absoluto do .sicroapp.
     pub package_path: String,
-    /// Parent directory for the workspace. `None` means use the OS Documents
-    /// folder (same default as Spike A).
+    /// Pasta-mãe do workspace; `None` = Documentos do SO.
     #[serde(default)]
     pub parent_directory: Option<String>,
 }
 
-/// Final result returned to the front-end when import succeeds.
-/// Combines the Import row, the imported Occurrence row, the workspace
-/// path, and the full ImportReport (which the UI panel renders).
+/// Devolvido ao front quando o import dá certo.
 #[derive(Debug, Clone, Serialize)]
 pub struct ImportResult {
     pub import: Import,

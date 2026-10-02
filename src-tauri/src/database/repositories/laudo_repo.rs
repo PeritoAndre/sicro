@@ -1,7 +1,4 @@
-//! Read/write helpers for the `laudos` table.
-//!
-//! The `.sicrodoc` file itself is NOT handled here — see
-//! `commands/laudo_commands.rs`. This repository only owns the index row.
+//! Tabela `laudos`: só a linha-índice; o `.sicrodoc` em disco é do comando.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -67,9 +64,7 @@ pub fn touch_updated_at(conn: &Connection, id: &Uuid, when: DateTime<Utc>) -> Re
     Ok(())
 }
 
-/// Remove a linha do laudo da tabela. NÃO mexe no `.sicrodoc` em disco —
-/// quem orquestra a exclusão (apagar arquivo + auditoria) é o command em
-/// `commands/laudo_commands.rs`.
+/// Só a linha; apagar o `.sicrodoc` e auditar é do comando.
 pub fn delete(conn: &Connection, id: &Uuid) -> Result<()> {
     conn.execute(
         "DELETE FROM laudos WHERE id = ?1",
@@ -102,8 +97,7 @@ fn row_to_laudo(row: &Row<'_>) -> rusqlite::Result<Laudo> {
             .ok_or(rusqlite::Error::InvalidQuery)?,
         last_export_pdf: parse_optional_dt(row.get::<_, Option<String>>("last_export_pdf")?),
         last_export_docx: parse_optional_dt(row.get::<_, Option<String>>("last_export_docx")?),
-        // H — populated by `list_laudos` command after DB read (lê
-        // `.sicrodoc` para extrair `finalization.signature.type`).
+        // Preenchido pelo `list_laudos` lendo o `.sicrodoc`.
         signature_type: None,
     })
 }

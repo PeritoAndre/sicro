@@ -1,8 +1,4 @@
-//! Tauri commands for the `.sicroapp` importer (Spike D).
-//!
-//! The frontend calls `import_sicroapp` with the path the user picked from
-//! the OS dialog. The orchestrator does the heavy lifting; this module is
-//! just the Tauri boundary.
+//! Comandos Tauri do importador `.sicroapp`; o trabalho pesado fica em `importer`.
 
 use std::path::PathBuf;
 
@@ -26,8 +22,6 @@ pub async fn import_sicroapp(
     let registry = ImportRegistry::open(state.config_dir());
     let result = run_import(input, state.default_workspace_parent(), &registry)?;
 
-    // Surface the new workspace on the recents list so the user can reopen
-    // it without browsing.
     state.upsert_recent(
         &result.occurrence,
         &result.workspace_path,
@@ -37,13 +31,11 @@ pub async fn import_sicroapp(
     Ok(result)
 }
 
-/// List every `imports` row stored in the workspace's SQLite. Used by the
-/// dossier panel to show "this ocorrência originated from the following
-/// import(s)".
+/// Linhas de `imports` do workspace (de quais importações a ocorrência veio).
 #[tauri::command]
 pub async fn list_workspace_imports(workspace_path: String) -> Result<Vec<Import>> {
     let ws = PathBuf::from(&workspace_path);
-    // Reuse the full open path so the workspace structure is validated.
+    // `open_workspace` só para validar a estrutura.
     let _ = open_workspace(&ws)?;
     let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
     import_repo::list_all(&conn)

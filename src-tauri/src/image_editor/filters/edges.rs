@@ -1,25 +1,16 @@
-//! G12.1 — Detecção de bordas (Sobel, Laplacian, Canny).
-//!
-//! Filtros forenses fundamentais: realçam transições de intensidade,
-//! úteis para destacar contornos de placas, marcações, objetos sob
-//! análise. Trabalham na luminância (0.299R + 0.587G + 0.114B) e
-//! retornam imagem grayscale colorizada (R=G=B).
+//! Detecção de bordas na luminância (BT.601): Sobel, Laplaciano, Canny, DoG,
+//! gradiente colorido. Saída em cinza (R=G=B), alpha preservado.
 
 use image::{Rgba, RgbaImage};
 
-/// Converte um pixel RGBA para luminância (BT.601).
+/// Luminância BT.601.
 #[inline]
 fn lum(p: Rgba<u8>) -> f32 {
     0.299 * p.0[0] as f32 + 0.587 * p.0[1] as f32 + 0.114 * p.0[2] as f32
 }
 
-/// Sobel — magnitude do gradiente. `strength` multiplica o resultado
-/// antes de clipar em 0..255.
-///
-/// Kernel Gx:           Kernel Gy:
-/// [-1  0  1]           [-1 -2 -1]
-/// [-2  0  2]           [ 0  0  0]
-/// [-1  0  1]           [ 1  2  1]
+/// Sobel: magnitude do gradiente (Gx = [-1 0 1; -2 0 2; -1 0 1], Gy = Gxᵀ),
+/// multiplicada por `strength` antes de clipar em 0..255.
 pub fn sobel(img: &RgbaImage, strength: f32) -> RgbaImage {
     let w = img.width() as i32;
     let h = img.height() as i32;
@@ -66,14 +57,7 @@ pub fn sobel(img: &RgbaImage, strength: f32) -> RgbaImage {
     out
 }
 
-/// Laplaciano 5x5 — detector de bordas isotrópico (segunda derivada).
-///
-/// Kernel (5x5, soma zero):
-/// [ 0  0 -1  0  0]
-/// [ 0 -1 -2 -1  0]
-/// [-1 -2 16 -2 -1]
-/// [ 0 -1 -2 -1  0]
-/// [ 0  0 -1  0  0]
+/// Laplaciano 5×5 isotrópico (segunda derivada; kernel de soma zero, centro 16).
 pub fn laplacian(img: &RgbaImage, strength: f32) -> RgbaImage {
     let w = img.width() as i32;
     let h = img.height() as i32;
@@ -106,20 +90,16 @@ pub fn laplacian(img: &RgbaImage, strength: f32) -> RgbaImage {
     out
 }
 
-/// Canny simplificado — Sobel + non-max suppression + double threshold + hysteresis.
-///
-/// Versão didática (não otimizada). O output é binário: 0 ou 255.
-/// `low_threshold` e `high_threshold` em escala 0..255.
+/// Canny simplificado: blur σ=1 → Sobel → supressão não máxima → limiar duplo
+/// com histerese de 1 passada. Saída binária 0/255; limiares em 0..255.
 pub fn canny(img: &RgbaImage, low_threshold: f32, high_threshold: f32) -> RgbaImage {
     let w = img.width() as usize;
     let h = img.height() as usize;
     let lo = low_threshold.clamp(0.0, 255.0);
     let hi = high_threshold.clamp(lo + 1.0, 255.0);
 
-    // 1. Gaussian blur leve para reduzir ruído (sigma=1, kernel 3x3 aprox).
     let smooth = super::blur::gaussian(img, 1.0);
 
-    // 2. Sobel gradient magnitude + direction.
     let mut mag = vec![0.0_f32; w * h];
     let mut dir = vec![0.0_f32; w * h];
     for y in 0..h {
@@ -154,7 +134,7 @@ pub fn canny(img: &RgbaImage, low_threshold: f32, high_threshold: f32) -> RgbaIm
         }
     }
 
-    // 3. Non-max suppression — bin direção em 4 ângulos.
+    // Supressão não máxima: direção em 4 bins.
     let mut suppressed = vec![0.0_f32; w * h];
     for y in 1..h - 1 {
         for x in 1..w - 1 {
@@ -174,8 +154,7 @@ pub fn canny(img: &RgbaImage, low_threshold: f32, high_threshold: f32) -> RgbaIm
         }
     }
 
-    // 4. Double threshold + hysteresis (simplificado: pixel >= hi sempre forte,
-    //    pixel entre lo..hi conectado a forte fica como forte).
+    // Limiar duplo: >= hi é forte; entre lo..hi vira forte se tocar um forte.
     let mut out = RgbaImage::new(w as u32, h as u32);
     let mut strong = vec![false; w * h];
     for i in 0..w * h {
@@ -183,7 +162,6 @@ pub fn canny(img: &RgbaImage, low_threshold: f32, high_threshold: f32) -> RgbaIm
             strong[i] = true;
         }
     }
-    // Propagação simples (1 passada): pixel "fraco" (>= lo) com vizinho forte vira forte.
     for y in 1..h - 1 {
         for x in 1..w - 1 {
             let i = y * w + x;
@@ -215,10 +193,8 @@ pub fn canny(img: &RgbaImage, low_threshold: f32, high_threshold: f32) -> RgbaIm
     out
 }
 
-/// W12 — **Difference of Gaussians** (DoG): banda de frequências = borrado
-/// fino (σ1) − borrado grosso (σ2>σ1), na luminância. Realça bordas/texturas
-/// numa faixa de escala escolhida; centrado em 128 (mostra as duas
-/// polaridades). `gain` amplifica antes de clampar. Determinístico.
+/// Difference of Gaussians na luminância: blur(σ1) − blur(σ2 > σ1), centrado em
+/// 128 (mostra as duas polaridades); `gain` amplifica antes de clampar.
 pub fn difference_of_gaussians(img: &RgbaImage, sigma1: f32, sigma2: f32, gain: f32) -> RgbaImage {
     let s1 = sigma1.clamp(0.1, 50.0);
     // garante σ2 > σ1 (senão a banda é vazia).
@@ -240,11 +216,8 @@ pub fn difference_of_gaussians(img: &RgbaImage, sigma1: f32, sigma2: f32, gain: 
     out
 }
 
-/// W12 (forense) — **Gradiente de luminância** colorido: magnitude do Sobel
-/// vira brilho e a DIREÇÃO do gradiente vira matiz (hue). Expõe direção de
-/// iluminação/sombreamento inconsistente entre regiões (indício de colagem)
-/// e áreas "pintadas"/clonadas (gradiente artificialmente liso). `strength`
-/// amplifica a magnitude.
+/// Gradiente de luminância colorido: magnitude do Sobel vira brilho e a direção
+/// vira matiz. Expõe iluminação inconsistente entre regiões (indício de colagem).
 pub fn luminance_gradient(img: &RgbaImage, strength: f32) -> RgbaImage {
     let w = img.width() as i32;
     let h = img.height() as i32;
@@ -320,7 +293,6 @@ mod tests {
 
     #[test]
     fn dog_flat_image_is_neutral_128() {
-        // Imagem chapada → DoG ≈ 0 → saída centrada em 128.
         let img = RgbaImage::from_pixel(16, 16, Rgba([100, 100, 100, 255]));
         let out = difference_of_gaussians(&img, 1.0, 3.0, 5.0);
         let c = out.get_pixel(8, 8).0[0] as i32;
@@ -380,7 +352,6 @@ mod tests {
         let img = black_with_white_center();
         let out = laplacian(&img, 1.0);
         // Pixel central: o laplaciano vale 16 * 255 -> clipa em 255.
-        // Vizinhos diagonais 1+: têm resposta moderada.
         assert_eq!(out.get_pixel(2, 2).0[0], 255);
     }
 

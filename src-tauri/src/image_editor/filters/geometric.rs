@@ -1,21 +1,12 @@
-//! G12.6 — Correção de perspectiva (homografia 4-point).
-//!
-//! Resolve um sistema 8x8 para encontrar a matriz 3x3 que mapeia
-//! `src` (4 pontos no plano observado, ex.: 4 cantos de um documento
-//! fotografado de viés) em `dst` (4 cantos do retângulo de saída).
-//! Depois aplica warp inverso bilinear: para cada pixel do output,
-//! encontra a posição correspondente no input e interpola.
+//! Homografia 4 pontos (perspectiva) e rotação arbitrária, com warp inverso
+//! e amostragem bilinear.
 
 use image::{Rgba, RgbaImage};
 
-/// Resolve sistema linear via eliminação gaussiana com pivoteamento parcial.
-///
-/// `a` é matriz NxN, `b` vetor N. Modifica in-place; retorna `Some(x)` se
-/// resolvido ou `None` se singular.
+/// Eliminação gaussiana 8×8 com pivoteamento parcial; `None` se singular.
 fn solve_linear_system(a: &mut [[f32; 8]; 8], b: &mut [f32; 8]) -> Option<[f32; 8]> {
     const N: usize = 8;
     for i in 0..N {
-        // Pivot.
         let mut max_row = i;
         for r in (i + 1)..N {
             if a[r][i].abs() > a[max_row][i].abs() {
@@ -28,7 +19,6 @@ fn solve_linear_system(a: &mut [[f32; 8]; 8], b: &mut [f32; 8]) -> Option<[f32; 
         a.swap(i, max_row);
         b.swap(i, max_row);
 
-        // Eliminate.
         for r in (i + 1)..N {
             let factor = a[r][i] / a[i][i];
             for c in i..N {
@@ -38,7 +28,6 @@ fn solve_linear_system(a: &mut [[f32; 8]; 8], b: &mut [f32; 8]) -> Option<[f32; 
         }
     }
 
-    // Back-substitute.
     let mut x = [0.0_f32; 8];
     for i in (0..N).rev() {
         let mut sum = b[i];
@@ -50,17 +39,9 @@ fn solve_linear_system(a: &mut [[f32; 8]; 8], b: &mut [f32; 8]) -> Option<[f32; 
     Some(x)
 }
 
-/// Computa a homografia 3x3 (com h33=1) que mapeia src → dst.
-///
-/// Cada par (x_s, y_s) → (x_d, y_d) gera 2 equações:
-///   x_d = (h11*x_s + h12*y_s + h13) / (h31*x_s + h32*y_s + 1)
-///   y_d = (h21*x_s + h22*y_s + h23) / (h31*x_s + h32*y_s + 1)
-///
-/// Reescrevendo:
-///   h11*x_s + h12*y_s + h13 - h31*x_s*x_d - h32*y_s*x_d = x_d
-///   h21*x_s + h22*y_s + h23 - h31*x_s*y_d - h32*y_s*y_d = y_d
-///
-/// 4 pontos → 8 equações → resolve linha [h11..h32].
+/// Homografia 3×3 (h33 = 1) que leva `src` em `dst`. Cada par de pontos gera duas
+/// equações lineares em h11..h32 (x_d = (h11·x_s + h12·y_s + h13)/(h31·x_s + h32·y_s + 1),
+/// idem para y_d); 4 pontos → sistema 8×8.
 fn compute_homography(src: &[[f32; 2]; 4], dst: &[[f32; 2]; 4]) -> Option<[f32; 9]> {
     let mut a = [[0.0_f32; 8]; 8];
     let mut b = [0.0_f32; 8];
@@ -108,7 +89,7 @@ fn apply_homography(m: &[f32; 9], x: f32, y: f32) -> (f32, f32) {
     (xp, yp)
 }
 
-/// Sample bilinear at (fx, fy) in source image. Out-of-bounds → transparente.
+/// Amostragem bilinear; fora da imagem → transparente.
 fn sample_bilinear(img: &RgbaImage, fx: f32, fy: f32) -> Rgba<u8> {
     let w = img.width() as f32;
     let h = img.height() as f32;
@@ -136,11 +117,8 @@ fn sample_bilinear(img: &RgbaImage, fx: f32, fy: f32) -> Rgba<u8> {
     Rgba(out)
 }
 
-/// Aplica correção de perspectiva: pixels de `src` (input) mapeados para
-/// rectângulo `[0, output_width] x [0, output_height]` via `src`→`dst`.
-///
-/// `dst` é tipicamente o retângulo `[(0,0),(W,0),(W,H),(0,H)]` em ordem
-/// horária. `src` são os 4 cantos correspondentes no input.
+/// Warp inverso: cada pixel de saída busca sua posição em `img` via `src`→`dst`.
+/// `dst` é tipicamente `[(0,0),(W,0),(W,H),(0,H)]`, em ordem horária.
 pub fn perspective_correct(
     img: &RgbaImage,
     src: &[[f32; 2]; 4],
@@ -154,7 +132,7 @@ pub fn perspective_correct(
 
     let h_fwd = match compute_homography(src, dst) {
         Some(m) => m,
-        None => return out, // degenerate input — output transparente.
+        None => return out, // entrada degenerada → saída transparente
     };
     let h_inv = match invert_3x3(&h_fwd) {
         Some(m) => m,
@@ -170,11 +148,8 @@ pub fn perspective_correct(
     out
 }
 
-/// W12 — **Rotação por ângulo arbitrário** (não só 90°), com amostragem
-/// bilinear. `degrees` horário. Se `expand`, a tela cresce para caber a
-/// imagem inteira (cantos novos = transparentes); senão mantém o tamanho e
-/// recorta. Determinístico; preserva os pixels (sem inventar — bordas vazias
-/// ficam transparentes).
+/// Rotação por ângulo arbitrário (`degrees` horário), bilinear. `expand` cresce
+/// a tela para caber tudo (cantos transparentes); senão recorta.
 pub fn rotate_arbitrary(img: &RgbaImage, degrees: f32, expand: bool) -> RgbaImage {
     let w = img.width() as f32;
     let h = img.height() as f32;
@@ -182,8 +157,7 @@ pub fn rotate_arbitrary(img: &RgbaImage, degrees: f32, expand: bool) -> RgbaImag
     let (sin, cos) = rad.sin_cos();
 
     let (out_w, out_h) = if expand {
-        // `round` (não `ceil`): cos(90°) em f32 ≈ 6e-8, então `w*cos` daria
-        // 4.0000006 e `ceil` cresceria a tela 1px à toa. round descarta o épsilon.
+        // `round`, não `ceil`: cos(90°) em f32 ≈ 6e-8 e `ceil` cresceria a tela 1 px à toa.
         let nw = (w * cos.abs() + h * sin.abs()).round().max(1.0);
         let nh = (w * sin.abs() + h * cos.abs()).round().max(1.0);
         (nw, nh)

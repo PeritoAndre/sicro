@@ -1,10 +1,5 @@
-//! G12.3 / G12.5 — Realce de imagem: CLAHE, Histogram EQ, Auto-Levels,
-//! White Balance.
-//!
-//! CLAHE (Contrast-Limited Adaptive Histogram Equalization) é o realce
-//! local mais usado em forense — divide a imagem em tiles, equaliza
-//! cada tile, faz blend bilinear nas bordas, e limita contraste pra
-//! evitar amplificar ruído.
+//! Realce: CLAHE, equalização de histograma, subtract background, auto-levels
+//! e white balance.
 
 use image::{Rgba, RgbaImage};
 
@@ -15,14 +10,12 @@ pub fn histogram_equalize(img: &RgbaImage) -> RgbaImage {
     let h = img.height();
     let total = (w * h) as f32;
 
-    // Histograma da luminância 0..255.
     let mut hist = [0u32; 256];
     for p in img.pixels() {
         let l = (0.299 * p.0[0] as f32 + 0.587 * p.0[1] as f32 + 0.114 * p.0[2] as f32) as usize;
         hist[l.min(255)] += 1;
     }
 
-    // CDF acumulada → tabela de remap.
     let mut cdf = [0u32; 256];
     let mut acc = 0u32;
     for i in 0..256 {
@@ -53,23 +46,9 @@ pub fn histogram_equalize(img: &RgbaImage) -> RgbaImage {
     out
 }
 
-/// CLAHE — divide em `tile_size` x `tile_size` tiles, equaliza cada um
-/// com clip-limit, interpola bilinear nas bordas.
-///
-/// Paridade de parâmetros com o "Enhance Local Contrast (CLAHE)" do
-/// Fiji/ImageJ:
-///   - `tile_size`  ≙ *block size* (tamanho da região local; deve ser
-///     maior que as feições a preservar);
-///   - `clip_limit` ≙ *maximum slope* (limita a inclinação da função de
-///     transferência → controla o contraste; 1.0 = imagem original);
-///   - `bins`       ≙ *histogram bins* (níveis do histograma por tile;
-///     ≤256 é o que faz sentido em 8 bits — 256 reproduz exatamente o
-///     comportamento anterior, sem `bins`).
-///
-/// NB: o algoritmo aqui é o CLAHE clássico em TILES não-sobrepostos com
-/// interpolação bilinear (Zuiderveld); o Fiji usa janela DESLIZANTE por
-/// pixel (Saalfeld). Mesmos parâmetros, resultado equivalente — não
-/// idêntico pixel a pixel.
+/// CLAHE clássico (Zuiderveld): tiles não sobrepostos, clip-limit, interpolação
+/// bilinear. Parâmetros espelham o "Enhance Local Contrast" do Fiji (block size,
+/// max slope, bins); resultado equivalente, não idêntico (o Fiji usa janela deslizante).
 pub fn clahe(img: &RgbaImage, tile_size: u32, clip_limit: f32, bins: u32) -> RgbaImage {
     let ts = tile_size.max(2);
     let cl = clip_limit.max(1.0);
@@ -79,11 +58,8 @@ pub fn clahe(img: &RgbaImage, tile_size: u32, clip_limit: f32, bins: u32) -> Rgb
     let tx_count = (w + ts - 1) / ts;
     let ty_count = (h + ts - 1) / ts;
 
-    // Luminância (0..255) → índice de bin (0..nb-1).
     let bin_of = |l: f32| -> usize { ((l.clamp(0.0, 255.0) as usize) * nb / 256).min(nb - 1) };
 
-    // Para cada tile, computa LUT (de `nb` níveis) da luminância equalizada
-    // com clip.
     let mut luts = vec![vec![0u8; nb]; (tx_count * ty_count) as usize];
     for ty in 0..ty_count {
         for tx in 0..tx_count {
@@ -96,7 +72,6 @@ pub fn clahe(img: &RgbaImage, tile_size: u32, clip_limit: f32, bins: u32) -> Rgb
                 continue;
             }
 
-            // Histograma do tile.
             let mut hist = vec![0u32; nb];
             for y in y0..y1 {
                 for x in x0..x1 {
@@ -126,7 +101,6 @@ pub fn clahe(img: &RgbaImage, tile_size: u32, clip_limit: f32, bins: u32) -> Rgb
                 *bin += 1;
             }
 
-            // CDF → LUT (bin → luminância de saída 0..255).
             let mut acc = 0u32;
             let lut = &mut luts[(ty * tx_count + tx) as usize];
             for i in 0..nb {
@@ -136,8 +110,7 @@ pub fn clahe(img: &RgbaImage, tile_size: u32, clip_limit: f32, bins: u32) -> Rgb
         }
     }
 
-    // Remap bilinear: para cada pixel, encontra os 4 tiles vizinhos e
-    // pondera 4 LUTs pela posição.
+    // Remap bilinear entre as LUTs dos 4 tiles vizinhos.
     let mut out = RgbaImage::new(w, h);
     for y in 0..h {
         for x in 0..w {
@@ -183,24 +156,11 @@ pub fn clahe(img: &RgbaImage, tile_size: u32, clip_limit: f32, bins: u32) -> Rgb
 }
 
 // ---------------------------------------------------------------------------
-// Subtract Background (rolling ball) — paridade com o "Subtract Background"
-// do ImageJ/Fiji (núcleo de domínio público; algoritmo de Stanley Sternberg,
-// "Biomedical Image Processing", IEEE Computer, 1983). Reimplementado em Rust
-// (nada copiado do código GPL do Fiji).
-//
-// Ideia: trata a luminância como uma superfície de altura e "rola uma bola"
-// de raio `radius` POR BAIXO dela; a superfície que a bola alcança é o fundo
-// (iluminação não-uniforme, papel, etc.). Subtrai-se o fundo → sobram só as
-// feições menores que a bola. Para `light_background` (placa de fundo claro,
-// objeto escuro), inverte-se antes e depois → caracteres escuros sobre fundo
-// branco uniforme.
-//
-// "Rolar a bola por baixo" = ABERTURA morfológica em tons de cinza com um
-// elemento estruturante esférico (calota). Para raios grandes, encolhe-se a
-// imagem (como o ImageJ) para manter o custo baixo.
+// Subtract Background (rolling ball, Sternberg 1983) — paridade com o ImageJ/Fiji,
+// reimplementado do zero (nada copiado do código GPL). "Rolar a bola por baixo"
+// da luminância = abertura morfológica em cinza com elemento esférico.
 
-/// Média 3×3 (borda replicada) — pré-suavização opcional, evita que ruído
-/// "espete" a bola para cima.
+/// Média 3×3 (borda replicada): pré-suavização para o ruído não "espetar" a bola.
 fn mean3x3(buf: &[f32], w: usize, h: usize) -> Vec<f32> {
     let mut out = vec![0f32; w * h];
     for y in 0..h {
@@ -221,8 +181,7 @@ fn mean3x3(buf: &[f32], w: usize, h: usize) -> Vec<f32> {
     out
 }
 
-/// Redução por MÍNimo em blocos `factor`×`factor` (preserva o "piso" — o
-/// fundo é a envoltória inferior). Devolve (buffer, sw, sh).
+/// Redução por mínimo em blocos `factor`×`factor` (o fundo é a envoltória inferior).
 fn downsample_min(buf: &[f32], w: usize, h: usize, factor: usize) -> (Vec<f32>, usize, usize) {
     let sw = w.div_ceil(factor);
     let sh = h.div_ceil(factor);
@@ -246,7 +205,6 @@ fn downsample_min(buf: &[f32], w: usize, h: usize, factor: usize) -> (Vec<f32>, 
     (out, sw, sh)
 }
 
-/// Upscale bilinear de volta para `w`×`h`.
 fn upsample_bilinear(buf: &[f32], sw: usize, sh: usize, w: usize, h: usize) -> Vec<f32> {
     let mut out = vec![0f32; w * h];
     for y in 0..h {
@@ -272,8 +230,7 @@ fn upsample_bilinear(buf: &[f32], sw: usize, sh: usize, w: usize, h: usize) -> V
     out
 }
 
-/// Calota esférica usada como elemento estruturante. Devolve (alturas, r)
-/// num grid (2r+1)²; valor < 0 marca posição FORA do disco.
+/// Calota esférica (elemento estruturante) num grid (2r+1)²; valor < 0 = fora do disco.
 fn build_ball(radius: f32) -> (Vec<f32>, usize) {
     let r = (radius.round().max(1.0)) as usize;
     let diam = 2 * r + 1;
@@ -292,8 +249,7 @@ fn build_ball(radius: f32) -> (Vec<f32>, usize) {
     (ball, r)
 }
 
-/// Abertura em tons de cinza com elemento esférico = "rolar a bola por
-/// baixo". Erosão (min de `v - z`) seguida de dilatação (max de `e + z`).
+/// Abertura em cinza: erosão (min de `v - z`) seguida de dilatação (max de `e + z`).
 fn ball_open(buf: &[f32], w: usize, h: usize, radius: f32) -> Vec<f32> {
     let (ball, r) = build_ball(radius);
     let diam = 2 * r + 1;
@@ -347,9 +303,7 @@ fn ball_open(buf: &[f32], w: usize, h: usize, radius: f32) -> Vec<f32> {
     dil
 }
 
-/// Fundo (envoltória inferior) via bola rolante, com encolhimento para
-/// raios grandes (igual ao ImageJ) e clamp em `work` (o fundo nunca passa
-/// acima da superfície original).
+/// Fundo via bola rolante; encolhe a imagem para raios grandes (como o ImageJ).
 fn rolling_ball_background(
     work: &[f32],
     w: usize,
@@ -379,8 +333,7 @@ fn rolling_ball_background(
         ball_open(&base, w, h, radius.max(1.0))
     };
 
-    // O fundo não pode exceder a superfície original (evita subtração
-    // negativa por overshoot de interpolação).
+    // Overshoot da interpolação não pode pôr o fundo acima da superfície.
     let mut out = bg_full;
     for i in 0..w * h {
         if out[i] > work[i] {
@@ -390,13 +343,8 @@ fn rolling_ball_background(
     out
 }
 
-/// Subtract Background (rolling ball). `radius` em px (raio da bola);
-/// `light_background = true` para objeto escuro sobre fundo claro (placa,
-/// documento) → resultado fica em fundo branco uniforme; `disable_smoothing`
-/// pula a pré-suavização 3×3 (mais fiel, mais sensível a ruído).
-///
-/// Trabalha na luminância e reaplica a correção a R/G/B por razão (preserva
-/// a cor; numa imagem já em tons de cinza o resultado é exato).
+/// `light_background`: objeto escuro sobre fundo claro (inverte antes e depois).
+/// Trabalha na luminância e reaplica a R/G/B por razão (preserva a cor).
 pub fn subtract_background(
     img: &RgbaImage,
     radius: f32,
@@ -411,7 +359,6 @@ pub fn subtract_background(
     let radius = radius.max(1.0);
     let n = w * h;
 
-    // Plano de trabalho na luminância (invertido quando fundo claro).
     let mut work = vec![0f32; n];
     for (i, p) in img.pixels().enumerate() {
         let l = 0.299 * p.0[0] as f32 + 0.587 * p.0[1] as f32 + 0.114 * p.0[2] as f32;
@@ -440,8 +387,7 @@ pub fn subtract_background(
                 ]),
             );
         } else {
-            // Pixel quase preto: aplica a nova luminância como cinza (sem
-            // razão, que seria instável perto de zero).
+            // Quase preto: a razão seria instável; grava a luminância como cinza.
             let v = new_l.clamp(0.0, 255.0) as u8;
             out.put_pixel(x, y, Rgba([v, v, v, p.0[3]]));
         }
@@ -449,8 +395,7 @@ pub fn subtract_background(
     out
 }
 
-/// Auto-levels — estica histograma por canal entre `pct_low` e `pct_high`
-/// (percentiles em 0..100). 1 / 99 é o default.
+/// Estica o histograma por canal entre os percentis `pct_low` e `pct_high` (0..100).
 pub fn auto_levels(img: &RgbaImage, pct_low: f32, pct_high: f32) -> RgbaImage {
     let pct_lo = pct_low.clamp(0.0, 49.0);
     let pct_hi = pct_high.clamp(pct_lo + 1.0, 100.0);
@@ -458,7 +403,6 @@ pub fn auto_levels(img: &RgbaImage, pct_low: f32, pct_high: f32) -> RgbaImage {
     let target_lo = (total as f32 * pct_lo / 100.0) as u32;
     let target_hi = (total as f32 * pct_hi / 100.0) as u32;
 
-    // Compute per-channel low/high.
     let mut bounds = [(0u8, 255u8); 3];
     for ch in 0..3_usize {
         let mut hist = [0u32; 256];
@@ -483,9 +427,7 @@ pub fn auto_levels(img: &RgbaImage, pct_low: f32, pct_high: f32) -> RgbaImage {
                 break;
             }
         }
-        // `saturating_add` evita overflow quando `lo == 255` (imagem
-        // toda branca / superexposta — comum em margens em branco e
-        // fotos estouradas de documento).
+        // `saturating_add`: `lo` pode ser 255 (imagem toda branca ou estourada).
         bounds[ch] = (lo, hi.max(lo.saturating_add(1)));
     }
 
@@ -505,8 +447,7 @@ pub fn auto_levels(img: &RgbaImage, pct_low: f32, pct_high: f32) -> RgbaImage {
     out
 }
 
-/// Gray-world white balance — assume que a média da cena é cinza.
-/// Multiplica cada canal pelo fator que iguala a média.
+/// Gray-world: assume média da cena cinza e iguala a média dos canais.
 pub fn white_balance_gray_world(img: &RgbaImage) -> RgbaImage {
     let mut sum_r = 0u64;
     let mut sum_g = 0u64;
@@ -614,11 +555,8 @@ mod tests {
         assert_eq!(coarse.dimensions(), (32, 32));
     }
 
-    /// Imagem com gradiente suave de iluminação (sem feições) — depois do
-    /// Subtract Background (fundo escuro) o gradiente é em grande parte
-    /// removido. Duas propriedades robustas:
-    ///   (1) fundo escuro NUNCA clareia um pixel (saída ≤ original);
-    ///   (2) a luminância MÉDIA cai bastante (o "volume" do fundo some).
+    /// Rampa suave sem feições: fundo escuro nunca clareia um pixel e a
+    /// luminância média cai bastante.
     #[test]
     fn subtract_background_flattens_smooth_gradient() {
         let (w, h) = (60u32, 40u32);
@@ -635,15 +573,14 @@ mod tests {
             img.pixels().map(lum).sum::<f32>() / (w * h) as f32;
         let out = subtract_background(&img, 25.0, false, false);
 
-        // (1) Nenhum pixel ficou mais claro que o original (fundo escuro só
-        // subtrai).
+        // (1) Nenhum pixel clareou.
         let no_brightening = img
             .pixels()
             .zip(out.pixels())
             .all(|(a, b)| lum(b) <= lum(a) + 1.0);
         assert!(no_brightening, "fundo escuro não deveria clarear nenhum pixel");
 
-        // (2) A média despencou (o fundo em rampa foi majoritariamente removido).
+        // (2) A média despencou.
         let mean_out: f32 = out.pixels().map(lum).sum::<f32>() / (w * h) as f32;
         assert!(
             mean_out < mean_in * 0.5,
@@ -651,9 +588,7 @@ mod tests {
         );
     }
 
-    /// Objeto escuro sobre fundo claro com `light_background=true` →
-    /// resultado fica em fundo branco quase uniforme, com o objeto ainda
-    /// mais escuro que o fundo.
+    /// Fundo claro: resultado em fundo branco quase uniforme, objeto ainda escuro.
     #[test]
     fn subtract_background_light_yields_white_field_dark_object() {
         let (w, h) = (40u32, 40u32);

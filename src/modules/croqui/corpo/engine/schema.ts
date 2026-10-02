@@ -1,9 +1,7 @@
 /**
- * Schema do `.sicrocorpo` — croqui corporal (carta de lesões).
- *
- * Como o croqui viário, o backend trata o arquivo como JSON OPACO; este módulo
- * é a fonte de verdade do formato. `coerceCorpoDoc` carrega qualquer JSON,
- * preenche defaults e nunca quebra ao abrir (preserva o documento do perito).
+ * Schema do `.sicrocorpo` (croqui corporal). O backend trata o arquivo como
+ * JSON opaco; `coerceCorpoDoc` carrega qualquer JSON com defaults e nunca
+ * quebra ao abrir.
  */
 
 import {
@@ -19,17 +17,16 @@ export const CORPO_SCHEMA_VERSION = "0.1";
 /** Marcador de lesão/achado posicionado sobre a prancha. */
 export interface SicroLesaoMarker {
   id: string;
-  /** Número sequencial exibido no marcador e na legenda (determinístico). */
+  /** Número sequencial exibido no marcador e na legenda. */
   number: number;
   /** Posição em coordenadas lógicas da prancha (viewBox do template). */
   x: number;
   y: number;
-  /** Prancha em que a lesão foi marcada — marcações são AUTOCONTIDAS por
-   *  prancha (trocar de prancha não as carrega junto). Aditivo: markers
-   *  antigos sem o campo recebem a prancha do doc no coerce. */
+  /** Prancha em que foi marcada (marcações não migram entre pranchas);
+   *  markers antigos sem o campo recebem a prancha do doc no coerce. */
   template?: BodyView;
   tipo: LesaoTipo;
-  /** id de RegiaoAnatomica (regions.ts) — opcional. */
+  /** id de região (regions.ts / regionsPop.ts). */
   regiao?: string | null;
   lateralidade?: Lateralidade | null;
   /** Meio/instrumento/ação que produziu (texto livre — POP 6.01). */
@@ -43,7 +40,7 @@ export interface SicroLesaoMarker {
   size?: number;
 }
 
-export interface SicroCorpoCanvas {
+interface SicroCorpoCanvas {
   width_px: number;
   height_px: number;
 }
@@ -94,8 +91,7 @@ function coerceMarker(raw: unknown, index: number): SicroLesaoMarker | null {
     number: num(o["number"], index + 1),
     x: num(o["x"], 0),
     y: num(o["y"], 0),
-    // Validado/mapeado no pós-passe do coerceCorpoDoc (precisa do template
-    // do documento como fallback).
+    // Validado no pós-passe do coerceCorpoDoc (precisa do template do doc).
     template: str(o, "template") as SicroLesaoMarker["template"],
     tipo,
     regiao: strOrNull(o["regiao"]),
@@ -119,9 +115,8 @@ export function coerceCorpoDoc(raw: unknown): SicroCorpoDoc {
     throw new Error("invalid .sicrocorpo: missing corpo_id or occurrence_id");
   }
 
-  // Resolução do template: aceita os ids NOVOS, mapeia os LEGADOS (pranchas
-  // SVG da 1ª geração: corpo_completo/anterior/posterior/cabeca_frontal) pro
-  // equivalente novo, e cai em "corpo_masc" se irreconhecível.
+  // Ids legados (pranchas SVG antigas) mapeiam pro equivalente novo;
+  // irreconhecível cai em "corpo_masc".
   const templateRaw = str(o, "template_id") ?? "";
   const template_id: BodyView = VALID_VIEWS.includes(templateRaw as BodyView)
     ? (templateRaw as BodyView)
@@ -135,10 +130,9 @@ export function coerceCorpoDoc(raw: unknown): SicroCorpoDoc {
     height_px: num(canvasRaw["height_px"], tpl.height),
   };
 
-  // Escala de migração (doc LEGADO): canvas salvo ≠ dims da prancha atual
-  // (a troca SVG→PNG mudou as dimensões). Aplica SÓ a markers legados (sem
-  // prancha própria) — markers com `template` válido estão nas coordenadas
-  // da PRÓPRIA prancha e não podem ser tocados pelo canvas global do doc.
+  // Doc legado: canvas salvo ≠ dims da prancha (a troca SVG→PNG mudou as
+  // dimensões). Re-escala só markers sem prancha própria; os com `template`
+  // válido já estão nas coordenadas da própria prancha.
   const needsRescale =
     savedCanvas.width_px > 0 &&
     savedCanvas.height_px > 0 &&
@@ -153,11 +147,9 @@ export function coerceCorpoDoc(raw: unknown): SicroCorpoDoc {
     .map((m) => {
       const raw = (m.template as string | undefined) ?? "";
       if (VALID_VIEWS.includes(raw as BodyView)) {
-        // Prancha própria (formato novo): coordenadas já no espaço dela.
         return { ...m, template: raw as BodyView };
       }
-      // Legado (sem prancha, ou id antigo): re-escala do canvas salvo pro
-      // da prancha do doc e herda a prancha resolvida do documento.
+      // Legado: re-escala e herda a prancha resolvida do doc.
       return { ...m, x: m.x * sx, y: m.y * sy, template: template_id };
     });
 

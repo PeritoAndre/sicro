@@ -1,8 +1,4 @@
-/**
- * Mirror of Rust structs in src-tauri/src/models/import.rs (Spike D —
- * .sicroapp importer). Keep field names in snake_case so serde defaults
- * line up — the wire format flows straight to/from Tauri.
- */
+/** Espelha `src-tauri/src/models/import.rs` (importador .sicroapp). */
 
 import type { Occurrence } from "./occurrence";
 
@@ -22,7 +18,7 @@ export interface Import {
   app_version: string | null;
   mobile_occurrence_id: string | null;
   status: ImportStatus;
-  /** Serialised JSON array of strings. Use JSON.parse if needed. */
+  /** JSON de string[]. */
   warnings_json: string;
   errors_json: string;
   raw_manifest_json: string;
@@ -118,13 +114,11 @@ export interface ImportReport {
 }
 
 export interface ImportSicroappInput {
-  /** Absolute path to the .sicroapp the user picked. */
   package_path: string;
-  /** Optional parent directory for the new workspace. */
+  /** Pasta-mãe do novo workspace. */
   parent_directory?: string | null;
 }
 
-/** Combined result of a successful import. */
 export interface ImportResult {
   import: Import;
   occurrence: Occurrence;

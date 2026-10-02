@@ -1,16 +1,12 @@
 /**
- * Prancha técnica do croqui de PLANTA — composição (Canvas 2D) + export.
- *
- * Recebe a imagem da planta (capturada do Pixi via app.view.toDataURL) e compõe
- * uma PRANCHA TÉCNICA: cabeçalho do caso + planta + barra de escala + rosa dos
- * ventos + legenda automática dos vestígios + rodapé §13. Espelha o padrão de
- * `corpo/editor/exportCorpo.ts`. O PNG resultante é salvo via `exportCroquiPng`
- * (vira inserível no laudo) e pode ir pra um PDF A4 (view de impressão).
+ * Prancha técnica do croqui de planta (Canvas 2D): cabeçalho do caso + planta
+ * capturada do Pixi + barra de escala + rosa dos ventos + legenda dos vestígios
+ * + rodapé. Mesmo padrão de corpo/editor/exportCorpo.ts.
  */
 import { evidenceMeta, evidenceLabelFor, type EvidenceLabelKind } from "../evidence";
 import type { PlantaEvidenceMarker } from "../schema";
 
-export interface PlantaStampMeta {
+interface PlantaStampMeta {
   title: string;
   occurrence: {
     numero_bo?: string | null;
@@ -43,7 +39,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
   });
 }
 
-/** Constrói as linhas da legenda (rótulo derivado da ORDEM). */
+/** Linhas da legenda; o rótulo deriva da ordem. */
 export function buildLegendRows(
   evidences: PlantaEvidenceMarker[],
   labelKind: EvidenceLabelKind,
@@ -70,10 +66,8 @@ function niceScaleLength(pxPerM: number): number {
   return Math.max(0.25, Math.round((100 / pxPerM) * 4) / 4);
 }
 
-/**
- * Compõe a prancha técnica. `imgPxPerM` = px/metro NA IMAGEM capturada (a escala
- * de tela vira exata aqui, independente de dpr). Retorna data URL PNG.
- */
+/** Compõe a prancha. `imgPxPerM` = px/metro na imagem capturada (escala exata,
+ *  independente de dpr). Retorna data URL PNG. */
 export async function stampPlantaPng(
   planDataUrl: string,
   imgPxPerM: number,
@@ -247,7 +241,7 @@ export async function stampPlantaPng(
     }
   }
 
-  // ---- Rodapé §13 ----
+  // ---- Rodapé ----
   const fy = canvas.height - FOOTER_H;
   ctx.fillStyle = "#1f2937";
   ctx.fillRect(0, fy, canvas.width, FOOTER_H);
@@ -264,11 +258,8 @@ export async function stampPlantaPng(
   return canvas.toDataURL("image/png");
 }
 
-/**
- * Abre uma view de impressão A4 (retrato/paisagem auto) com a prancha, e dispara
- * o diálogo de impressão — o perito escolhe "Salvar como PDF". Padrão já usado no
- * editor de imagem (print via iframe no WebView2).
- */
+/** Abre uma view de impressão A4 com a prancha e dispara o diálogo (o perito
+ *  escolhe "Salvar como PDF"); print via iframe, como no editor de imagem. */
 export function openPlantaPrintView(plateDataUrl: string, title: string): void {
   const landscape = true; // pranchas tendem a ser largas
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(

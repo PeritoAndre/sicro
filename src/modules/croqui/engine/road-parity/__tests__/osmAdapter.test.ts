@@ -1,18 +1,4 @@
-/**
- * Python Parity Engine — testes do OSM Adapter (Fase H.5).
- *
- * Cobre:
- *   - largura_m por classe OSM (primary 10.5, secondary 8.5, tertiary 7.5,
- *     residential 6.0, service 4.5);
- *   - marcação por classe (amarela em arteriais, branca em residential/service);
- *   - oneway → mao_dupla=false + marcacao=nenhuma;
- *   - non-vehicle highways ignoradas;
- *   - polyline → Bezier 4-point preserva endpoints;
- *   - detecção de rotatória via `junction=roundabout`;
- *   - fit uniforme + recentre ao centro do canvas;
- *   - metadata preservada (source=osm, osm_id, raw_tags, etc.);
- *   - resultados em coords de mundo (metros) — não pixels.
- */
+/** Testes do adapter OSM → parity (tabelas por classe, Bezier, rotatória, fit, metadata). */
 
 import { describe, expect, it } from "vitest";
 import {

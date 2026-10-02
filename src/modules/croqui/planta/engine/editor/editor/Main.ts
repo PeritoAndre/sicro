@@ -43,10 +43,8 @@ export class Main extends Viewport {
             .wheel().clampZoom({ minScale: 0.12, maxScale: 8.0 })
         this.center = new Point(this.worldWidth / 2, this.worldHeight / 2)
 
-        // Grid VETORIAL com level-of-detail (LOD), em vez de TilingSprite — linhas
-        // desenhadas conforme o zoom, com largura constante em px de tela. Elimina o
-        // moiré que a textura repetida gerava em zooms intermediários. Inclui a folha
-        // (#f5f6f8) e a borda da área útil (#525252).
+        // Grid vetorial com LOD em vez de TilingSprite: largura constante em px de
+        // tela, sem o moiré que a textura repetida gerava em zooms intermediários.
         this.gridGraphics = new Graphics();
         this.addChild(this.gridGraphics);
         this.redrawGrid();
@@ -65,8 +63,7 @@ export class Main extends Viewport {
         this.on("pointerdown", this.checkTools)
         this.on("pointermove", this.updatePreview)
         this.on("pointerup", this.updateEnd)
-        // Ao mudar zoom/posição: atualiza --viewport-zoom (escala da caixa de cota,
-        // port arcada PR #14) e redesenha o grid vetorial (LOD).
+        // Zoom/pan: expõe --viewport-zoom no :root e redesenha o grid.
         this.on("zoomed", this.onViewportChanged)
         this.on("moved", this.scheduleGridRedraw)
         this.onViewportChanged();
@@ -86,11 +83,8 @@ export class Main extends Viewport {
         });
     };
 
-    /**
-     * Grid vetorial com level-of-detail: desenha só a região visível, com larguras
-     * de linha constantes em px de tela (÷ escala) e níveis (0,1 / 0,5 / 1 m) que
-     * só aparecem quando têm espaço suficiente — sem moiré em nenhum zoom.
-     */
+    /** Grid com LOD: só a região visível, larguras constantes em px de tela,
+     *  níveis (0,1 / 0,5 / 1 m) só quando têm espaço. */
     private redrawGrid() {
         const g = this.gridGraphics;
         if (!g) return;
@@ -164,8 +158,7 @@ export class Main extends Viewport {
     private checkTools(ev: InteractionEvent) {
         ev.stopPropagation()
         if (ev.data.button == 2) {
-            // Botão direito: cancela o desenho em andamento (parede/medição) — o
-            // pan (right-drag) continua funcionando normalmente.
+            // Botão direito cancela o desenho em andamento; o pan (right-drag) segue normal.
             const tool = useStore.getState().activeTool;
             if (tool === Tool.WallAdd) {
                 this.addWallManager.cancelChain();
@@ -193,7 +186,7 @@ export class Main extends Viewport {
                 this.preview.set(point);
                 break;
             case Tool.FurnitureAdd: {
-                // Mobília LIVRE (SICRO): coloca a peça selecionada no ponto clicado.
+                // Mobília livre (SICRO): coloca a peça selecionada no ponto clicado.
                 const def = useStore.getState().pendingFurniture;
                 if (def) {
                     point.x = Math.max(0, Math.min(this.worldWidth, viewportX(ev.data.global.x)))

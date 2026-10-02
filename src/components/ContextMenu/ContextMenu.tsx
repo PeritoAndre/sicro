@@ -1,14 +1,6 @@
 /**
- * Menu do botão direito do SICRO (substitui o menu de navegador do WebKit).
- *
- * Uso:
- *   const menu = useContextMenu();
- *   <div onContextMenu={(e) => menu.open(e, [{ label: "Tela cheia", shortcut: "F", onSelect: … }])}>
- *   {menu.element}
- *
- * O menu é desenhado NO LUGAR (não em portal): assim continua visível quando o
- * painel está em tela cheia (a Fullscreen API só mostra a subárvore do
- * elemento em tela cheia). `position: fixed` + limite na viewport.
+ * Menu do botão direito do SICRO. Desenhado no lugar, não em portal: a
+ * Fullscreen API só mostra a subárvore do elemento em tela cheia.
  */
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import styles from "./ContextMenu.module.css";
@@ -124,10 +116,8 @@ function MenuView({ state, onClose }: { state: OpenState; onClose: () => void })
 }
 
 /**
- * Bloqueia o menu de navegador (Voltar, Recarregar, "Baixar vídeo"…) no app
- * todo. Campos de texto mantêm o menu nativo (Copiar/Colar); na versão de
- * desenvolvimento ele fica liberado para o inspetor. Menus do SICRO chamam
- * `preventDefault` por conta própria e não são afetados.
+ * Bloqueia o menu de navegador no app todo; campos de texto mantêm o nativo
+ * (Copiar/Colar) e em DEV fica liberado para o inspetor.
  */
 export function installContextMenuGuard(): () => void {
   if (import.meta.env.DEV) return () => {};

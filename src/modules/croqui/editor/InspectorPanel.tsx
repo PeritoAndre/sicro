@@ -1,21 +1,6 @@
 /**
- * InspectorPanel — right column with **Camadas** (grouped by category)
- * and **Propriedades** of the selected object. MVP 6.
- *
- * Layer panel features (MVP 6):
- *   - group objects by `category` (vias / veículos / vestígios / medidas /
- *     anotações / referenciais);
- *   - per-object: visibility toggle, lock toggle, click-to-select,
- *     rename inline, delete, move forward / backward;
- *   - global layer visibility from the existing `SicroCroquiLayer` rows.
- *
- * Properties panel features (MVP 6):
- *   - common: label, x/y, rotation (when applicable), width/height,
- *     color, notes, locked, visible;
- *   - vehicle: body_type select;
- *   - marker: subtype select;
- *   - measurement: pixel distance + real distance (from current scale);
- *   - line: subtype select + stroke width + dashed.
+ * Coluna direita: camadas, objetos agrupados por categoria e propriedades
+ * do objeto selecionado.
  */
 
 import { useMemo, useState } from "react";
@@ -436,14 +421,9 @@ function ObjectProperties({
   scale: SicroCroquiScale | null;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  // Fase S — vias/rotatórias parity têm seu próprio shape (largura em
-  // metros, marcação, anchors Bezier) e ainda não têm editor dedicado
-  // no Inspector. Por enquanto, mostramos só os campos comuns + um
-  // aviso de que a edição é via canvas.
   const isParity =
     object.kind === "road_parity" || object.kind === "roundabout_parity";
-  // `color` / `notes` só existem nos kinds legados (vehicle/line/marker/
-  // text/measurement). Tipamos via cast para acesso uniforme.
+  // `color`/`notes` não existem nos kinds parity.
   const colorish = object as { color?: string | null; notes?: string | null };
 
   return (
@@ -667,7 +647,7 @@ function MeasurementProps({
 }
 
 // ---------------------------------------------------------------------------
-// Fase S — Editores parity (largura em metros, marcação, superfície).
+// Editores parity
 
 function ParityRoadProps({
   object,
@@ -676,11 +656,8 @@ function ParityRoadProps({
   object: SicroRoadObject_parity;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  // Estilo do eixo central — combina `marcacao` + `mao_dupla` num único
-  // select. Antes eram dois controles separados: o user podia escolher
-  // "branca" mas o eixo não renderizava porque a via estava marcada
-  // como mão única (`mao_dupla=false`). UX confusa, especialmente em
-  // vias importadas do OSM com `oneway=yes`.
+  // `marcacao` + `mao_dupla` num select só: separados, o usuário escolhia
+  // "branca" e nada aparecia porque a via era mão única (comum em OSM oneway).
   const eixoStyle = !object.mao_dupla
     ? "mao_unica"
     : object.marcacao === "amarela"
@@ -787,8 +764,7 @@ function ParityRoundaboutProps({
         value={object.largura_m}
         step={0.5}
         onChange={(n) => {
-          // Anel não pode engolir a ilha — deixa pelo menos 1m de
-          // ilha visível, e respeita o teto global.
+          // O anel não pode engolir a ilha: deixa pelo menos 1 m dela.
           const ceil = Math.min(
             PARITY_ROUNDABOUT_LARGURA_MAX_M_FALLBACK,
             Math.max(PARITY_ROUNDABOUT_LARGURA_MIN_M, object.r_m - 1),

@@ -1,23 +1,8 @@
 /**
- * Nômina anatômica OFICIAL do POP LOCAL DE CRIME (SENASP/MJSP, 2024) —
- * Anexo 1, "Esquema para localização de lesões e achados de interesse
- * pericial" (fonte: SCPe/IC/PCDF, 2024; páginas 110–111 do PDF).
- *
- * Duas numerações INDEPENDENTES, transcritas VERBATIM do manual:
- *   - FRENTE (vista anterior): 1–28
- *   - COSTAS (vista posterior): 1–21
- * (Grafias do manual preservadas: "Espondiléia", "Deltodiana",
- * "Sacro-coccígea", "Face dorsal mão". O item "20. Vulvar" consta IGUAL nas
- * pranchas masculina e feminina do POP — mantido verbatim.)
- *
- * As posições (nx, ny ∈ [0,1]) são normalizadas pelo BOUNDING BOX de cada
- * vista (vide bodyTemplates.views[].box). Estes DEFAULTS foram calibrados
- * MANUALMENTE pelo perito sobre a prancha masculina (modo "Calibrar
- * numeração" do editor → arrastar + salvar), conforme o boneco numerado do
- * manual. O perito pode reajustar a qualquer momento pelo editor; a
- * calibração dele é gravada em `pop_calibration.json` (app_config_dir) e
- * sobrepõe estes defaults por prancha. Regiões bilaterais têm DOIS pontos
- * (lados D e E) com o MESMO número, como no manual.
+ * Nômina anatômica do POP Local de Crime (SENASP/MJSP 2024, Anexo 1): frente
+ * 1–28 e costas 1–21, nomes verbatim do manual (grafias como "Deltodiana" e o
+ * "Vulvar" em ambas as pranchas são propositais). Posições normalizadas no box
+ * da vista; a calibração do perito (pop_calibration.json) sobrepõe os defaults.
  */
 
 export type PopSide = "frente" | "costas";
@@ -87,7 +72,7 @@ export const POP_COSTAS: ReadonlyArray<PopRegiao> = [
   { n: 21, label: "Face dorsal mão", side: "costas", pts: [[0.0561, 0.4932], [0.9439, 0.4986]] },
 ];
 
-export const POP_REGIOES: ReadonlyArray<PopRegiao> = [
+const POP_REGIOES: ReadonlyArray<PopRegiao> = [
   ...POP_FRENTE,
   ...POP_COSTAS,
 ];
@@ -120,17 +105,14 @@ export function popListaLinhas(side: PopSide): string[] {
 }
 
 // ---------------------------------------------------------------------------
-// Calibração manual das posições (modo "Calibrar numeração" do editor).
-// O perito arrasta cada número e salva; o app passa a usar a posição dele em
-// cima do default. Persistido GLOBAL em pop_calibration.json (app_config_dir).
+// Calibração manual (modo "Calibrar numeração"): global, em pop_calibration.json.
 
 /** Override de posição: chave → [nx, ny] (normalizado no box da vista). */
 export type PopCalibration = Record<string, readonly [number, number]>;
 
 /**
- * Chave estável de um PONTO de região (regiões bilaterais têm 2 pontos).
- * Inclui a PRANCHA porque masc/fem são artes distintas (proporções diferentes),
- * então calibram independente. Ex.: "corpo_masc_frente_18_0".
+ * Chave de um ponto de região, ex.: "corpo_masc_frente_18_0". Inclui a prancha
+ * porque masc/fem têm proporções distintas e calibram independente.
  */
 export function popPointKey(
   templateId: string,

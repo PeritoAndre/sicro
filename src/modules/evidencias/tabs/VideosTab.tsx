@@ -1,7 +1,4 @@
-/**
- * VideosTab — lista vídeos registrados com codec, resolução, hash,
- * status e contadores de eventos/frames.
- */
+/** Aba Vídeos: codec, resolução, hash, status e contadores de eventos/frames. */
 
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -41,10 +38,7 @@ export function VideosTab({ items, workspacePath }: Props) {
   );
   const [bundles, setBundles] = useState<Record<string, VideoMedia>>({});
 
-  // Pull the full VideoMedia rows once (the registry item already has
-  // most of the info but we want event counts which require a separate
-  // call to openVideoMedia per id — kept lazy via listVideoMedia which
-  // is cheap).
+  // listVideoMedia é barato e traz as contagens de eventos que o registro não tem.
   useEffect(() => {
     let cancelled = false;
     if (videos.length === 0) return;

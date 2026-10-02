@@ -1,14 +1,6 @@
-//! Índice GLOBAL de casos — base das "estatísticas gerais de trabalho".
-//!
-//! O app é centrado numa ocorrência por vez (cada `.sicro` é separado), então
-//! não há de onde tirar visão entre-casos sem abrir cada um. Este índice
-//! leve resolve isso: um `case-index.json` no `app_config_dir` (o mesmo
-//! "cofrinho" das Configurações) com os metadados de cada caso (tipo, município,
-//! status, datas, peritos). É alimentado automaticamente toda vez que um caso
-//! vira ativo (criar/abrir/importar) — sem varrer disco.
-//!
-//! NÃO guarda evidência nem conteúdo pericial; só os campos de cabeçalho da
-//! ocorrência, para agregação estatística descritiva.
+//! Índice GLOBAL de casos (`case-index.json` em `app_config_dir`): metadados de
+//! cabeçalho de cada caso para estatísticas entre-casos sem abrir cada `.sicro`.
+//! Alimentado quando um caso vira ativo; não guarda evidência nem conteúdo pericial.
 
 use std::path::PathBuf;
 
@@ -50,7 +42,7 @@ pub struct CaseIndexEntry {
     pub workspace_id: String,
     #[serde(default)]
     pub workspace_path: String,
-    /// Nome do caso (migration 022). `None` nos índices gravados antes.
+    /// `None` nos índices gravados antes de o campo existir.
     #[serde(default)]
     pub titulo: Option<String>,
     #[serde(default)]
@@ -137,9 +129,7 @@ fn write_index(path: &PathBuf, file: &CaseIndexFile) -> Result<()> {
     Ok(())
 }
 
-/// Núcleo testável do upsert: substitui a entrada de mesmo `workspace_id`
-/// (ou insere), carimba `indexed_at`, ordena por `workspace_id` para
-/// estabilidade e devolve o arquivo resultante.
+/// Substitui a entrada de mesmo `workspace_id` (ou insere) e carimba `indexed_at`.
 fn upsert_into(mut file: CaseIndexFile, mut entry: CaseIndexEntry, now: String) -> CaseIndexFile {
     if entry.workspace_id.trim().is_empty() {
         return file; // sem chave, ignora silenciosamente
@@ -161,7 +151,7 @@ fn upsert_into(mut file: CaseIndexFile, mut entry: CaseIndexEntry, now: String) 
     file
 }
 
-/// Núcleo testável da remoção: tira a entrada de `workspace_id` do índice.
+/// Tira a entrada de `workspace_id` do índice.
 fn remove_from(mut file: CaseIndexFile, workspace_id: &str) -> CaseIndexFile {
     file.entries.retain(|e| e.workspace_id != workspace_id);
     file

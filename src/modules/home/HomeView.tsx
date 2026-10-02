@@ -1,14 +1,6 @@
 /**
- * HomeView — tela inicial do SICRO 4.
- *
- * Uma pergunta só: o que você vai fazer agora? Um nome para o caso e os três
- * módulos. Clicar num módulo cria o caso (quando não há um aberto) e já entra
- * nele; abrir um caso recente volta ao módulo em que ele foi trabalhado por
- * último. Dados do caso, backup, integridade, concluir e excluir ficam no
- * menu ⋯ — o SICRO não é cadastro, é bancada.
- *
- * §13 (KNOWN_LIMITATIONS): nada inventado na tela — contagens vêm do banco do
- * caso, datas do que foi gravado.
+ * Tela inicial: nome do caso + três módulos. Clicar num módulo cria o caso (se
+ * não há um aberto) e entra; abrir um recente volta ao módulo usado por último.
  */
 
 import {
@@ -68,7 +60,7 @@ interface ModuleEntry {
   summary: (c: WorkspaceCounters) => string | null;
 }
 
-// Os três módulos do 4.0, na ordem do trilho. Enter no nome abre no primeiro.
+// Na ordem do trilho; Enter no nome abre no primeiro.
 const MODULES: ModuleEntry[] = [
   {
     label: "Croqui",
@@ -134,8 +126,7 @@ export function HomeView() {
     if (creating) nameRef.current?.focus();
   }, [creating]);
 
-  // Quantos croquis, vídeos… o caso aberto tem (best-effort: sem isso a tela
-  // só fica sem os números).
+  // Contagens do caso aberto (best-effort: sem elas a tela só fica sem números).
   useEffect(() => {
     if (!workspacePath) {
       setCounts(null);
@@ -254,8 +245,7 @@ export function HomeView() {
     }
   };
 
-  // Apaga a pasta .sicro do disco e tira o caso das listas. Se era o caso
-  // aberto, fecha. Em erro, o popup fica aberto com a mensagem.
+  // Em erro, o popup fica aberto com a mensagem.
   const confirmDelete = async () => {
     if (!pendingDelete) return;
     const target = pendingDelete;
@@ -591,8 +581,7 @@ function PopMenu({ items, label }: { items: MenuItem[]; label: string }) {
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const btnRef = useRef<HTMLButtonElement | null>(null);
 
-  // Menu em portal no document.body, posicionado pela viewport — não é cortado
-  // por nenhum overflow. Reposiciona em scroll/resize e fecha em Esc.
+  // Portal no body, posicionado pela viewport: nenhum overflow corta o menu.
   useEffect(() => {
     if (!open) {
       setPos(null);

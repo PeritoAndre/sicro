@@ -1,16 +1,7 @@
 /**
- * W13.2 — Barra de contexto ("barra de opções da ferramenta").
- *
- * Faixa horizontal no topo do editor que **muda conforme a ferramenta ativa**
- * e centraliza as propriedades que hoje ficavam espalhadas: cor de traço,
- * espessura, preenchimento. Inspiração: barra de opções do Photoshop / opções
- * de ferramenta do GIMP — o maior ganho de "facilidade" da repaginação.
- *
- * Comportamento (igual aos editores da indústria):
- *  - Se há um **objeto selecionado**, a barra edita o estilo DELE ao vivo.
- *  - Senão, edita o **estilo padrão** que será aplicado à PRÓXIMA anotação.
- *  - Ferramentas sem estilo (navegar/medir/escala/cortar) mostram a dica/estado
- *    relevante (ex.: status da calibração de escala).
+ * Barra de opções da ferramenta ativa. Com um objeto selecionado edita o
+ * estilo dele ao vivo; senão edita o estilo padrão da próxima anotação.
+ * Ferramentas sem estilo mostram uma dica de contexto.
  */
 
 import type { SicroAnnotation, SicroImageScale } from "../engine/schema";
@@ -79,7 +70,7 @@ export function ToolOptionsBar({
   onSelectedPatch,
   scale,
 }: Props) {
-  // Alvo do estilo: objeto selecionado tem prioridade (edição ao vivo).
+  // Objeto selecionado tem prioridade sobre o estilo padrão.
   const target = selected;
   const editingSelected = !!target;
 
@@ -99,8 +90,6 @@ export function ToolOptionsBar({
   const setFill = (v: string) =>
     editingSelected ? onSelectedPatch({ fill: v }) : onToolStyle({ fill: v });
 
-  // Mostra controles de estilo quando: edita um objeto selecionado OU a
-  // ferramenta ativa é "desenhável".
   const showStyle =
     editingSelected || STYLEABLE_TOOLS.has(tool);
   const showFill =

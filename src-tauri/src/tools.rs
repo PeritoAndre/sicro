@@ -1,11 +1,6 @@
-//! Programas externos (ffmpeg, ffprobe, whisper, navegador…): onde achar e
-//! como rodar.
-//!
-//! - O instalador do Windows traz o FFmpeg em `<pasta do SICRO>\ffmpeg\`
-//!   (quase nenhum Windows tem ffmpeg no PATH). Ele tem prioridade; sem ele,
-//!   vale o do PATH (Linux: o do sistema).
-//! - O SICRO é um app de janela: no Windows, cada programa de console aberto
-//!   sem `CREATE_NO_WINDOW` pisca uma janela preta na tela.
+//! Programas externos (ffmpeg, ffprobe, whisper…). O instalador do Windows traz o
+//! FFmpeg em `<pasta do SICRO>\ffmpeg\` (quase nenhum Windows o tem no PATH) e ele
+//! tem prioridade; e todo processo precisa de `CREATE_NO_WINDOW` para não piscar console.
 
 use std::ffi::OsStr;
 use std::path::PathBuf;

@@ -1,33 +1,23 @@
-//! Pure-pixel operations applied during the export pipeline (MVP 7).
-//!
-//! Cada função aceita uma `RgbaImage` mutável (ou retorna nova) e
-//! representa exatamente uma operação registrada no sidecar.
-//!
-//! Filosofia:
-//!   - **Não destrutivo na sessão**: o `.sicroimage` lista os ajustes;
-//!     o original em disco nunca é tocado.
-//!   - **Destrutivo no derivado**: ao exportar, o pipeline aplica as
-//!     operações em ordem e grava um arquivo novo em `imagens/exports/`.
-//!   - **Pure-rust**: só `image` crate. Nada de OpenCV.
+//! Operações de pixel do pipeline de exportação: cada função é uma operação
+//! registrada no sidecar. O original em disco nunca é alterado; o export grava
+//! um derivado novo em `imagens/exports/`. Só `image` crate, sem OpenCV.
 
 use image::{imageops, Rgba, RgbaImage};
 
 use crate::models::{BackendAdjustments, BackendOperation};
 
 // ---------------------------------------------------------------------------
-// Visual adjustments
+// Ajustes visuais
 
-/// Apply all visual adjustments (brightness, contrast, gamma, saturation,
-/// grayscale, invert) to an RGBA image in place. Order is deterministic:
-/// gamma → brightness → contrast → saturation → grayscale → invert.
+/// Aplica os ajustes visuais in place, em ordem fixa:
+/// gamma → brilho → contraste → saturação → matiz → canais → cinza → inverter.
 pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
     let gamma = if adj.gamma > 0.0 { adj.gamma } else { 1.0 };
     let brightness = adj.brightness.clamp(-100.0, 100.0) * 2.55; // ±255
     let contrast = (adj.contrast.clamp(-100.0, 100.0) + 100.0) / 100.0; // 0..2
     let saturation = (adj.saturation.clamp(-100.0, 100.0) + 100.0) / 100.0; // 0..2
 
-    // W14.2 — Matiz: matriz hueRotate do SVG/CSS (preserva luminância),
-    // pré-computada fora do loop. Idêntica ao `hue-rotate()` do preview.
+    // Matiz: matriz hueRotate do SVG/CSS, idêntica ao `hue-rotate()` do preview.
     let hue_active = (adj.hue % 360.0).abs() > 1e-4;
     let hue_m: [[f32; 3]; 3] = if hue_active {
         let a = adj.hue.to_radians();
@@ -53,7 +43,6 @@ pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
     } else {
         [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
     };
-    // W14.2 — visibilidade de canal: canal desligado → 0 na saída.
     let kr = if adj.channel_r { 1.0 } else { 0.0 };
     let kg = if adj.channel_g { 1.0 } else { 0.0 };
     let kb = if adj.channel_b { 1.0 } else { 0.0 };
@@ -61,31 +50,26 @@ pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
     for pixel in img.pixels_mut() {
         let Rgba([r0, g0, b0, a]) = *pixel;
 
-        // Convert to linear [0,1]
         let mut r = r0 as f32 / 255.0;
         let mut g = g0 as f32 / 255.0;
         let mut b = b0 as f32 / 255.0;
 
-        // Gamma
         if (gamma - 1.0).abs() > 1e-4 {
             r = r.powf(1.0 / gamma);
             g = g.powf(1.0 / gamma);
             b = b.powf(1.0 / gamma);
         }
 
-        // Brightness (additive in 0..255 space)
         let mut rr = (r * 255.0) + brightness;
         let mut gg = (g * 255.0) + brightness;
         let mut bb = (b * 255.0) + brightness;
 
-        // Contrast around mid-gray 128.
         if (contrast - 1.0).abs() > 1e-4 {
             rr = ((rr - 128.0) * contrast) + 128.0;
             gg = ((gg - 128.0) * contrast) + 128.0;
             bb = ((bb - 128.0) * contrast) + 128.0;
         }
 
-        // Saturation — mix with luminance.
         if (saturation - 1.0).abs() > 1e-4 {
             let lum = 0.299 * rr + 0.587 * gg + 0.114 * bb;
             rr = lum + (rr - lum) * saturation;
@@ -93,7 +77,6 @@ pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
             bb = lum + (bb - lum) * saturation;
         }
 
-        // W14.2 — Hue (rotação preservando luminância; igual ao CSS).
         if hue_active {
             let nr = hue_m[0][0] * rr + hue_m[0][1] * gg + hue_m[0][2] * bb;
             let ng = hue_m[1][0] * rr + hue_m[1][1] * gg + hue_m[1][2] * bb;
@@ -103,12 +86,10 @@ pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
             bb = nb;
         }
 
-        // W14.2 — visibilidade de canal (no-op quando todos ligados → k=1).
         rr *= kr;
         gg *= kg;
         bb *= kb;
 
-        // Grayscale (replaces RGB with luminance).
         if adj.grayscale {
             let lum = 0.299 * rr + 0.587 * gg + 0.114 * bb;
             rr = lum;
@@ -116,7 +97,6 @@ pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
             bb = lum;
         }
 
-        // Invert (after grayscale so both compose).
         if adj.invert {
             rr = 255.0 - rr;
             gg = 255.0 - gg;
@@ -133,19 +113,15 @@ pub fn apply_adjustments(img: &mut RgbaImage, adj: &BackendAdjustments) {
 }
 
 // ---------------------------------------------------------------------------
-// Geometric operations
+// Operações
 
-/// Apply one geometric operation, returning a new image (some operations
-/// can't be done in place because they change dimensions).
-///
-/// G12 — agora também despacha para os filtros forenses adicionados ao
-/// enum `BackendOperation`. Filtros pesados (CLAHE, Bilateral, Median
-/// com raio grande) podem demorar em imagens grandes; o caller deve
-/// rodar fora do thread principal Tauri.
+/// Aplica uma operação e devolve imagem nova (algumas mudam as dimensões).
+/// Filtros pesados (CLAHE, bilateral, mediana grande) demoram: rodar fora da
+/// thread principal do Tauri.
 pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
     use super::filters;
     match op {
-        // -- Geometric (MVP 7)
+        // -- Geométricas
         BackendOperation::Rotate90Cw => imageops::rotate90(&img),
         BackendOperation::Rotate90Ccw => imageops::rotate270(&img),
         BackendOperation::Rotate180 => imageops::rotate180(&img),
@@ -164,7 +140,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             imageops::FilterType::Lanczos3,
         ),
 
-        // -- G12.1 Edge detection
+        // -- Bordas
         BackendOperation::EdgeSobel { strength } => {
             filters::edges::sobel(&img, *strength)
         }
@@ -176,7 +152,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             high_threshold,
         } => filters::edges::canny(&img, *low_threshold, *high_threshold),
 
-        // -- G12.2 Blur/denoise
+        // -- Suavização
         BackendOperation::BlurGaussian { sigma } => {
             filters::blur::gaussian(&img, *sigma)
         }
@@ -188,7 +164,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             sigma_color,
         } => filters::blur::bilateral(&img, *sigma_space, *sigma_color),
 
-        // -- G12.3 Enhancement
+        // -- Realce
         BackendOperation::Clahe {
             tile_size,
             clip_limit,
@@ -215,7 +191,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             filters::enhancement::white_balance_gray_world(&img)
         }
 
-        // -- G12.4 Morphology
+        // -- Morfologia
         BackendOperation::Dilate { radius } => {
             filters::morphology::dilate(&img, *radius)
         }
@@ -225,7 +201,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
         BackendOperation::Open { radius } => filters::morphology::open(&img, *radius),
         BackendOperation::Close { radius } => filters::morphology::close(&img, *radius),
 
-        // -- G12.6 Perspective
+        // -- Perspectiva
         BackendOperation::Perspective {
             src,
             dst,
@@ -239,7 +215,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             *output_height,
         ),
 
-        // -- G12 Extras
+        // -- Extras
         BackendOperation::UnsharpMask { sigma, amount } => {
             filters::misc::unsharp_mask(&img, *sigma, *amount)
         }
@@ -252,7 +228,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             block_size,
         } => filters::misc::pixelize_region(&img, *x, *y, *width, *height, *block_size),
 
-        // -- W12 (GIMP-parity) — Tonais
+        // -- Tonais
         BackendOperation::Levels {
             channel,
             in_black,
@@ -275,7 +251,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
         }
         BackendOperation::Posterize { levels } => filters::tone::posterize(&img, *levels),
 
-        // -- W12 — Canais / falsa-cor
+        // -- Canais / falsa-cor
         BackendOperation::ExtractChannel { channel } => {
             filters::channels::extract_channel(&img, channel)
         }
@@ -283,7 +259,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             filters::channels::false_color(&img, colormap)
         }
 
-        // -- W12 — Forense por comparação / cor
+        // -- Comparação / cor
         BackendOperation::Ela { quality, scale } => filters::compare::ela(&img, *quality, *scale),
         BackendOperation::DifferenceOfGaussians {
             sigma1,
@@ -298,7 +274,7 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             target_mean,
         } => filters::decorrelation::decorrelation_stretch(&img, *target_sigma, *target_mean),
 
-        // -- W12 — Geométrica / genérica
+        // -- Rotação livre / convolução genérica
         BackendOperation::RotateArbitrary { degrees, expand } => {
             filters::geometric::rotate_arbitrary(&img, *degrees, *expand)
         }
@@ -309,10 +285,8 @@ pub fn apply_operation(img: RgbaImage, op: &BackendOperation) -> RgbaImage {
             offset,
         } => filters::convolution::convolve(&img, kernel, *size, *divisor, *offset),
 
-        // -- W20 (S2) — Operação confinada à seleção (estilo Photoshop).
-        // Aplica o `op` interno numa cópia e compõe SÓ dentro da `mask`;
-        // fora dela preserva o pixel original. Recursivo (o op interno passa
-        // pelo mesmo dispatch).
+        // -- Confinada à seleção: aplica o op interno numa cópia e compõe só
+        // dentro da máscara.
         BackendOperation::Masked { op, mask } => {
             let base = img.clone();
             let filtered = apply_operation(img, op);
@@ -384,7 +358,7 @@ mod tests {
 
     #[test]
     fn channel_isolate_zeros_disabled_channels() {
-        // W14.2 — só o canal azul visível (GIMP-style): R e G zeram.
+        // Só o canal azul visível: R e G zeram.
         let mut img = RgbaImage::from_pixel(1, 1, Rgba([200, 150, 100, 255]));
         apply_adjustments(
             &mut img,
@@ -524,11 +498,8 @@ mod tests {
         img
     }
 
-    /// Espelha a sequência que o preview ao vivo monta: um `resize` (downscale)
-    /// seguido dos filtros, aplicados EM ORDEM pelo mesmo `apply_operation`.
-    /// Garante que (1) o downscale dita as dimensões finais e (2) os filtros
-    /// realmente alteram os pixels (preview ≠ simples redução). Regressão do
-    /// bug "filtros não dão resultado".
+    /// Espelha a pilha do preview (resize + filtros em ordem): o downscale dita
+    /// as dimensões e os filtros alteram os pixels. Regressão de "filtros não dão resultado".
     #[test]
     fn preview_like_stack_resizes_then_applies_filters() {
         let original = gradient_image(64, 64);
@@ -567,10 +538,8 @@ mod tests {
         );
     }
 
-    /// W20 (S2) — o op `masked` (wrapper) precisa (1) desserializar do JSON do
-    /// front com o op interno aninhado + a máscara normalizada e (2) ao aplicar,
-    /// alterar SÓ a região da máscara (fora dela o pixel original é preservado).
-    /// Trava tanto o enum aninhado (serde internally-tagged) quanto o composite.
+    /// O op `masked` desserializa do JSON do front (op interno aninhado + máscara
+    /// normalizada) e altera só a região da máscara.
     #[test]
     fn masked_op_deserializes_and_composites_only_inside() {
         let json = r#"{
@@ -599,11 +568,8 @@ mod tests {
         );
     }
 
-    /// Regressão: as operações de rotação fixa têm dígitos no nome
-    /// (`Rotate90Cw`), e o front manda `rotate_90_cw`. Os testes que
-    /// constroem a variante direto NÃO exercitam a tag serde — então a
-    /// rotação fixa "não funcionava" (op não desserializava) enquanto o
-    /// resto funcionava. Trava a tag exata que o front envia.
+    /// Regressão: o front manda `rotate_90_cw`; construir a variante direto não
+    /// exercita a tag serde. Trava a tag exata.
     #[test]
     fn rotate_ops_deserialize_from_frontend_kind_strings() {
         let cw: BackendOperation =

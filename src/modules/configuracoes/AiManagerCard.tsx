@@ -1,10 +1,4 @@
-/**
- * AiManagerCard — gerenciador de IA (Fase 2.1) nas Configurações.
- *
- * Baixa o motor whisper.cpp + modelos SOB DEMANDA (catálogo curado), com barra
- * de progresso e verificação de hash no backend, e auto-configura os caminhos
- * em AppSettings. Opt-in, offline-first. "Verificar atualizações" só informa.
- */
+/** Gerenciador de IA: baixa whisper.cpp + modelos sob demanda (opt-in) e auto-configura os caminhos. */
 
 import { useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
@@ -107,8 +101,7 @@ export function AiManagerCard() {
     }
   };
 
-  // OPT-IN: baixa a última release do motor e troca pela instalada (§13: o
-  // perito escolhe; a versão usada fica registrada no log da degravação).
+  // Opt-in; a versão usada fica registrada no log da degravação.
   const updateEngine = async () => {
     const installedBuild = catalog?.items.find(
       (i) => i.kind === "build" && !!status?.whisper_bin_path.includes(i.id),

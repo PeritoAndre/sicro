@@ -1,13 +1,6 @@
-//! Dossiê Operacional models (MVP 3).
-//!
-//! Each struct mirrors one of the structured tables introduced in
-//! `migrations/005_dossie.sql`. Field names stay snake_case so serde's
-//! default rendering matches the TypeScript wire format.
-//!
-//! Convention for "raw payload" preservation: every row stores a
-//! `raw_json` string containing the original mobile JSON object verbatim.
-//! The structured columns above are what the Desktop UI *uses*; the raw
-//! payload is what the Desktop *never loses*.
+//! Modelos do Dossiê (tabelas da migration 005). Toda linha guarda em `raw_json`
+//! o objeto original do mobile íntegro: as colunas são o que a UI usa; o raw é
+//! o que nunca se perde.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -47,7 +40,7 @@ pub struct ChecklistSummary {
 }
 
 // ---------------------------------------------------------------------------
-// entities (vehicle / victim — polymorphic)
+// entities (vehicle | victim)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Entity {
@@ -177,7 +170,7 @@ pub struct OccurrenceStats {
 }
 
 // ---------------------------------------------------------------------------
-// Aggregated dossier summary returned by `get_dossie_summary`.
+// Resumo devolvido por `get_dossie_summary`
 
 #[derive(Debug, Clone, Serialize)]
 pub struct DossieSummary {

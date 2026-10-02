@@ -1,13 +1,4 @@
-/**
- * ActivityRail — barra lateral de navegação, fixa em toda a aplicação.
- *
- * Sidebar institucional (não mais só ícones): marca SICRO no topo, navegação
- * rotulada por módulo, card do perito (puxado das Configurações) e rodapé
- * honesto com o modo de trabalho (local/offline) e a versão real.
- *
- * Honestidade (KNOWN_LIMITATIONS §13): só lista rotas que existem de verdade e
- * o perfil mostra exatamente o que está salvo em Configurações — nada inventado.
- */
+/** Barra lateral de navegação: módulos, card do perito e rodapé com a versão. */
 
 import { NavLink, useLocation, useNavigate, type NavigateFunction } from "react-router-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -26,20 +17,18 @@ import { useSettingsStore } from "@stores/settingsStore";
 import styles from "./ActivityRail.module.css";
 import { useNavGuard } from "./navGuard";
 import { isMidiaPath, lastMidiaAba } from "@modules/midia/midiaNav";
-// Versão real do build: vem do package.json (não escrever à mão).
 import { version as APP_VERSION } from "../../package.json";
 
 interface RailItem {
   to: string;
   label: string;
   icon: LucideIcon;
-  /** Ativo também nestes caminhos (o módulo Vídeo e Áudio tem duas telas). */
+  /** Ativo também nestes caminhos (Vídeo e Áudio tem duas telas). */
   activeWhen?: (pathname: string) => boolean;
 }
 
 const primary: RailItem = { to: "/", label: "Início", icon: HomeIcon };
 
-// SICRO 4.0: três módulos, um por tipo de trabalho técnico.
 const modules: RailItem[] = [
   { to: "/croqui", label: "Croquis", icon: MapIcon },
   { to: "/midia", label: "Vídeo e Áudio", icon: Clapperboard, activeWhen: isMidiaPath },
@@ -52,15 +41,9 @@ const settingsItem: RailItem = {
   icon: Settings,
 };
 
-// Ajuda é global (não depende de ocorrência ativa), por isso fica na zona de
-// utilitários junto de Configurações — mas é um link de navegação igual aos
-// módulos. Abre o manual completo do SICRO.
 const helpItem: RailItem = { to: "/ajuda", label: "Ajuda", icon: HelpCircle };
 
-/**
- * Navegação que respeita o guard global de alterações não salvas (editores
- * com trabalho pendente podem interceptar e perguntar antes de sair).
- */
+/** Navegação que respeita o guard de alterações não salvas. */
 function guardedGo(navigate: NavigateFunction, to: string): void {
   const guard = useNavGuard.getState().guard;
   if (!guard) {
@@ -83,8 +66,7 @@ export function ActivityRail() {
         .map((w) => w.charAt(0).toUpperCase())
         .join("")
     : "";
-  // Foto do perito (Configurações → Perfil): vira o avatar quando informada;
-  // sem foto, cai nas iniciais e, sem nome, no ícone genérico.
+  // Avatar: foto → iniciais → ícone genérico.
   const photoPath = profile.photo_path?.trim() ?? "";
   const photoSrc = photoPath ? convertFileSrc(photoPath) : null;
 
@@ -139,7 +121,7 @@ export function ActivityRail() {
 function RailLink({ to, label, icon: Icon, activeWhen }: RailItem) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  // Vídeo e Áudio: o link aponta direto para a aba usada por último.
+  // /midia aponta direto para a aba usada por último.
   const target = to === "/midia" ? lastMidiaAba() : to;
   return (
     <NavLink

@@ -1,19 +1,8 @@
 /**
- * SpeedPanel — aba "Velocidade" do editor de vídeo (modo manual).
- *
- * Opera sobre FRAMES COLETADOS (PNG do storyboard) — nunca sobre o vídeo ao
- * vivo — porque só o frame extraído pelo ffmpeg é frame-accurate e carrega
- * `actual_timestamp_s`. Fluxo em 2 passos:
- *
- *   1. Calibração (uma vez): escolha um frame, marque a referência métrica
- *      ('line' = 2 pontos + distância; 'plane' = 4 cantos + dimensões reais;
- *      'cross_ratio' = ≥3 pontos colineares + posição de cada um ao longo da
- *      via) → cria a homografia. Mostra o RMS de reprojeção como qualidade.
- *   2. Trajetória: percorra N frames coletados e marque a posição do veículo
- *      em cada (CONTATO PNEU-SOLO, para reduzir paralaxe). ≥3 habilita IC + MC.
- *
- * Tudo é decisão do perito (KNOWN_LIMITATIONS §13): sem tracking, sem
- * detecção. O Monte Carlo só roda se o perito informar as incertezas (σ).
+ * Aba "Velocidade": calibração (line/plane/cross_ratio → homografia) e
+ * trajetória marcada à mão em frames COLETADOS — nunca no vídeo ao vivo, porque
+ * só o quadro extraído pelo ffmpeg é frame-accurate e tem `actual_timestamp_s`.
+ * Sem tracking: tudo é decisão do perito; Monte Carlo só com σ informado.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -35,9 +24,9 @@ import { frameAssetSrc, frameTimestamp, hasActualTimestamp } from "./speedShared
 import styles from "./SpeedPanel.module.css";
 
 type Step = "calibrate" | "mark";
-/** Modo de calibração — exportado para reuso na aba "Medições". */
+/** Modo de calibração (também usado em Medições). */
 export type Method = "plane" | "line" | "cross_ratio";
-/** Fonte da referência métrica — exportado para reuso na aba "Medições". */
+/** Fonte da referência métrica (também usada em Medições). */
 export type RefSource = "campo" | "norma_viaria" | "entre_eixos";
 
 /** Máximo de pontos de referência no modo razão cruzada (mínimo é 3). */
@@ -89,12 +78,11 @@ export function SpeedPanel({ workspacePath, media, frames, author }: Props) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Carrega calibrações + cálculos da mídia ao montar / trocar mídia.
   useEffect(() => {
     void loadSpeedData(workspacePath, media.sha256);
   }, [workspacePath, media.sha256, loadSpeedData]);
 
-  // Seleciona a calibração mais recente e pula para a marcação.
+  // Calibração mais recente já selecionada: pula para a marcação.
   useEffect(() => {
     if (activeCalibrationId === null && speedCalibrations.length > 0) {
       setActiveCalibrationId(speedCalibrations[0]!.id);
@@ -102,7 +90,6 @@ export function SpeedPanel({ workspacePath, media, frames, author }: Props) {
     }
   }, [speedCalibrations, activeCalibrationId]);
 
-  // Default dos seletores de frame.
   useEffect(() => {
     if (frames.length === 0) return;
     const firstId = frames[0]!.id;
@@ -125,7 +112,7 @@ export function SpeedPanel({ workspacePath, media, frames, author }: Props) {
 
   const onAddCalPoint = (x: number, y: number) => {
     if (calMethod === "cross_ratio") {
-      // Sem contagem fixa: ≥3 pontos colineares (limite alto p/ não travar).
+      // sem contagem fixa: ≥3 pontos colineares
       setCalPoints((pts) => (pts.length >= MAX_CR_POINTS ? pts : [...pts, { x, y }]));
       setCrPositions((ds) => (ds.length >= MAX_CR_POINTS ? ds : [...ds, ""]));
       return;
@@ -186,8 +173,7 @@ export function SpeedPanel({ workspacePath, media, frames, author }: Props) {
         { px: p1.x, py: p1.y, world_x_m: d, world_y_m: 0, label: "B" },
       ];
     } else {
-      // cross_ratio: ≥3 pontos colineares; cada um com posição (m) ao longo
-      // da via em world_x_m (world_y_m = 0).
+      // cross_ratio: a posição (m) ao longo da via vai em world_x_m (world_y_m = 0)
       if (calPoints.length < 3) {
         setError("Marque pelo menos 3 pontos colineares ao longo da via.");
         return;
@@ -271,7 +257,7 @@ export function SpeedPanel({ workspacePath, media, frames, author }: Props) {
       };
     });
 
-    // σ: o MC só roda se o perito informar ≥1 incerteza > 0 (item 4).
+    // O Monte Carlo só roda se o perito informar ≥1 incerteza > 0.
     const sCal = parseNum(sigmaCalPx);
     const sMark = parseNum(sigmaMarkPx);
     const sTime = parseNum(sigmaTimeS);
@@ -475,7 +461,6 @@ export function SpeedPanel({ workspacePath, media, frames, author }: Props) {
   );
 }
 
-// ===========================================================================
 // Calibração — controles
 
 export function CalibrationControls(props: {
@@ -699,7 +684,6 @@ export function CalibrationControls(props: {
   );
 }
 
-// ===========================================================================
 // Trajetória — controles
 
 function TrajectoryControls(props: {
@@ -875,7 +859,6 @@ function TrajectoryControls(props: {
   );
 }
 
-// ===========================================================================
 // helpers
 
 function parseNum(s: string): number {

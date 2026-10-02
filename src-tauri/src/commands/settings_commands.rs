@@ -1,15 +1,6 @@
-//! App-level (GLOBAL) settings — o "cofrinho" que vive FORA de qualquer
-//! workspace `.sicro`, no diretório de config do app (per-user, gerenciado
-//! pelo Tauri). Guarda o que é do PERITO/da MÁQUINA e deve valer em todas as
-//! ocorrências: perfil, marca institucional padrão, aparência e caminhos.
-//!
-//! Armazenamento: um único `app-settings.json` em `app_config_dir`.
-//! Compatibilidade: TODO campo é `#[serde(default)]`, então arquivos antigos
-//! carregam sem erro e campos desconhecidos são ignorados. Um arquivo corrompido
-//! degrada para os defaults em vez de quebrar a tela de Configurações.
-//!
-//! NÃO guardamos segredos aqui. A senha do SIGDOC continua no Windows
-//! Credential Manager (ver `sigdocs_commands`); estas configs são texto claro.
+//! Configurações GLOBAIS do app (fora de qualquer `.sicro`, em `app_config_dir`):
+//! perfil, instituição, aparência, caminhos, IA. Todo campo é `#[serde(default)]`
+//! para arquivos antigos carregarem; corrompido degrada para defaults. Sem segredos aqui.
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
@@ -19,10 +10,8 @@ use crate::error::{Result, SicroError};
 const SETTINGS_FILENAME: &str = "app-settings.json";
 const SCHEMA_VERSION: &str = "1";
 
-/// Calibração das posições da numeração POP do croqui corporal — arquivo
-/// PRÓPRIO (isolado das app-settings pra não correr risco de ser apagado ao
-/// salvar outras configurações). Mapa opaco { "tpl_vista_n_idx": [nx, ny] };
-/// o front é dono da estrutura. Global, vale para todas as ocorrências.
+/// Calibração da numeração POP do croqui corporal em arquivo PRÓPRIO, para não
+/// ser apagada ao salvar as outras configurações. Mapa opaco; o front é dono.
 const POP_CALIBRATION_FILENAME: &str = "pop_calibration.json";
 
 /// Perfil do perito — pré-preenche autoria de laudos/medições.
@@ -93,8 +82,7 @@ fn default_ui_zoom() -> f64 {
     1.0
 }
 
-/// Caminhos padrão. Guardados globalmente; o uso efetivo em cada fluxo
-/// (criar ocorrência / exportar) entra incrementalmente.
+/// Caminhos padrão (globais).
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct PathsSettings {
     #[serde(default)]
@@ -103,8 +91,7 @@ pub struct PathsSettings {
     pub default_export_dir: String,
 }
 
-/// Fase 2.1 — IA de transcrição (whisper.cpp + modelo) instalada pelo
-/// gerenciador. Caminhos globais (valem em todos os casos). Texto claro.
+/// IA de transcrição (whisper.cpp + modelo) instalada pelo gerenciador; caminhos globais.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct AiSettings {
     #[serde(default)]
@@ -126,9 +113,8 @@ pub struct AiSettings {
     pub diar_version: String,
 }
 
-/// Documentoscopia — motor de OCR (Tesseract) + dados de idioma instalados pelo
-/// gerenciador. `engine_bin_path` aponta para o executável (ex.: tesseract.exe);
-/// `tessdata_dir` é a pasta dos `.traineddata` baixados. Caminhos globais.
+/// OCR (Tesseract) instalado pelo gerenciador: `engine_bin_path` é o executável;
+/// `tessdata_dir` a pasta dos `.traineddata`.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct OcrSettings {
     #[serde(default)]
@@ -157,10 +143,8 @@ pub struct AppSettings {
     pub ai: AiSettings,
     #[serde(default)]
     pub ocr: OcrSettings,
-    /// Biblioteca de cabeçalhos oficiais salvos pelo perito (criador de
-    /// cabeçalho do Laudo). Conteúdo opaco aqui (cada item é um doc
-    /// ProseMirror + metadados) — o front é dono da estrutura. Global e
-    /// reutilizável entre todos os laudos/casos.
+    /// Cabeçalhos oficiais salvos pelo perito. Conteúdo opaco (doc ProseMirror
+    /// + metadados): o front é dono da estrutura.
     #[serde(default)]
     pub header_templates: Vec<serde_json::Value>,
 }

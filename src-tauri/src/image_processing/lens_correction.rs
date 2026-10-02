@@ -1,33 +1,12 @@
-//! Radial lens distortion correction — Brown-Conrady model, k1/k2/k3 only.
-//!
-//! Used by the drone import flow (MVP 9 Round 4): the perito takes an
-//! aerial photo from a consumer drone, and the lens introduces barrel
-//! distortion that bends straight road segments into curves. This
-//! module undoes the distortion at full resolution before the image
-//! is used as a croqui background.
-//!
-//! Formulation (normalised coordinates `(u, v)` ∈ \[-1, 1\] from the
-//! image centre, `r² = u² + v²`):
-//!
-//! ```text
-//! u_src = u · (1 + k1·r² + k2·r⁴ + k3·r⁶)
-//! v_src = v · (1 + k1·r² + k2·r⁴ + k3·r⁶)
-//! ```
-//!
-//! `k1`, `k2`, `k3` are *negative* for barrel distortion (drone lenses)
-//! and positive for pincushion. The UI exposes a single 0..1
-//! "intensity" slider; `coefficients_for_intensity` maps that to
-//! sensible defaults: `k1 = -0.30 · intensity`, `k2 = 0.08 · intensity`,
-//! `k3 = 0`.
-//!
-//! Resampling: backward warp (for each output pixel, find the source
-//! pixel) with bilinear interpolation. Out-of-bounds samples render
-//! transparent black so the corner artefacts are obvious — the perito
-//! crops them away in the next step of the import wizard.
+//! Correção de distorção radial (Brown-Conrady, só k1/k2/k3) da foto de drone
+//! usada como fundo de croqui. Com `(u, v)` normalizados pelo centro e `r² = u² + v²`:
+//!   `src = p · (1 + k1·r² + k2·r⁴ + k3·r⁶)`
+//! k negativo = barril (drone), positivo = almofada. Backward warp bilinear;
+//! fora da imagem = preto transparente (o perito recorta os cantos depois).
 
 use image::{DynamicImage, GenericImageView, Rgba, RgbaImage};
 
-/// Three radial-distortion coefficients, no tangential terms.
+/// Só termos radiais, sem tangenciais.
 #[derive(Debug, Clone, Copy)]
 pub struct LensCoefficients {
     pub k1: f32,
@@ -42,16 +21,12 @@ impl LensCoefficients {
         k3: 0.0,
     };
 
-    /// True when all coefficients are effectively zero — the caller can
-    /// skip remapping and return the input untouched.
     pub fn is_identity(&self) -> bool {
         self.k1.abs() < 1e-6 && self.k2.abs() < 1e-6 && self.k3.abs() < 1e-6
     }
 }
 
-/// Map a 0..=1 "intensity" slider into a set of radial coefficients
-/// suitable for typical consumer drone barrel distortion. Clamps the
-/// input to [0, 1] so an out-of-range UI value can't blow up the math.
+/// Slider 0..1 → `k1 = −0.30·t`, `k2 = 0.08·t`, `k3 = 0` (barril típico de drone).
 pub fn coefficients_for_intensity(intensity: f32) -> LensCoefficients {
     let t = intensity.clamp(0.0, 1.0);
     LensCoefficients {
@@ -61,9 +36,7 @@ pub fn coefficients_for_intensity(intensity: f32) -> LensCoefficients {
     }
 }
 
-/// Rectangular crop in pixel coordinates of the corrected image. The
-/// drone import wizard places this rectangle on the *output* of the
-/// lens correction, not the original.
+/// Recorte em pixels sobre a imagem já corrigida.
 #[derive(Debug, Clone, Copy)]
 pub struct CropRect {
     pub x: u32,
@@ -73,9 +46,7 @@ pub struct CropRect {
 }
 
 impl CropRect {
-    /// Clamp the rectangle into the bounds of an image of size
-    /// `(img_w, img_h)`. Returns `None` if the rectangle no longer has
-    /// positive area after clamping (e.g. the user dragged it offscreen).
+    /// Limita ao tamanho da imagem; `None` se não sobra área.
     pub fn clamped(self, img_w: u32, img_h: u32) -> Option<Self> {
         if img_w == 0 || img_h == 0 {
             return None;
@@ -98,20 +69,8 @@ impl CropRect {
     }
 }
 
-/// Apply radial correction to an image. Returns a new RGBA image —
-/// the caller decides whether to re-encode as PNG/JPEG.
-///
-/// Algorithm:
-///   1. Convert input to RGBA8 once (cheap if already RGBA8).
-///   2. Allocate an output buffer of the *same* dimensions.
-///   3. For each output pixel `(xd, yd)`:
-///      - normalise to `(u, v) ∈ [-1, 1]`;
-///      - compute the distortion factor `f`;
-///      - find the source pixel `(xs, ys)` via the Brown-Conrady map;
-///      - sample bilinearly; out-of-bounds → transparent black.
-///
-/// Output size matches input size — the corner artefacts are kept so
-/// the perito can see and crop them away.
+/// Backward warp com amostragem bilinear; saída RGBA do mesmo tamanho (os
+/// cantos ficam para o perito recortar).
 pub fn apply_radial_correction(
     img: &DynamicImage,
     coeffs: LensCoefficients,
@@ -123,8 +82,7 @@ pub fn apply_radial_correction(
     let src = img.to_rgba8();
     let mut out = RgbaImage::new(w, h);
 
-    // Use the longer side as the normalisation radius so the corner
-    // factor stays consistent across portrait/landscape inputs.
+    // Raio de normalização = lado maior (mesmo fator nos cantos em retrato e paisagem).
     let half_w = w as f32 / 2.0;
     let half_h = h as f32 / 2.0;
     let norm = half_w.max(half_h);
@@ -147,7 +105,7 @@ pub fn apply_radial_correction(
     out
 }
 
-/// Bilinear sampler — returns transparent black for out-of-bounds.
+/// Fora da imagem = preto transparente.
 fn sample_bilinear(src: &RgbaImage, x: f32, y: f32) -> Rgba<u8> {
     let (w, h) = src.dimensions();
     if x < 0.0 || y < 0.0 || x > (w - 1) as f32 || y > (h - 1) as f32 {
@@ -177,8 +135,7 @@ fn sample_bilinear(src: &RgbaImage, x: f32, y: f32) -> Rgba<u8> {
     Rgba(out)
 }
 
-/// Crop an RGBA image. `rect` is clamped to the image bounds; returns
-/// `None` when the clamped rectangle is empty (no work to do).
+/// Recorta (rect limitado à imagem); `None` se o recorte fica vazio.
 pub fn crop(img: RgbaImage, rect: CropRect) -> Option<RgbaImage> {
     let (w, h) = img.dimensions();
     let bound = rect.clamped(w, h)?;
@@ -292,8 +249,7 @@ mod tests {
                 height: 5,
             },
         );
-        // Clamping shrinks x to 9, leaving width = 1, height = 1 — still
-        // a 1×1 image. Test the truly-offscreen case:
+        // x vira 9 e sobra 1×1; o caso realmente vazio é largura/altura 0.
         let img2 = RgbaImage::new(10, 10);
         let cropped2 = crop(
             img2,
@@ -305,7 +261,7 @@ mod tests {
             },
         );
         assert!(cropped2.is_none());
-        assert!(cropped.is_some()); // 1×1 survives
+        assert!(cropped.is_some());
     }
 
     #[test]

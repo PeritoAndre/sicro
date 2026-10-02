@@ -1,6 +1,4 @@
-/**
- * Unit tests for the object factories — MVP 6.
- */
+/** Testes das factories de objeto. */
 
 import { describe, expect, it } from "vitest";
 import {

@@ -1,7 +1,4 @@
-/**
- * VideoEventPanel — lista de eventos + formulário rápido para criar
- * um evento no timestamp atual.
- */
+/** Lista de eventos + formulário rápido para criar um evento no instante atual. */
 
 import { useState } from "react";
 import { Check, Pencil, Plus, Target, Trash2, ImagePlus } from "lucide-react";

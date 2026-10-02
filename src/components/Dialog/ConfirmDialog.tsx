@@ -1,13 +1,6 @@
 /**
- * ConfirmDialog — small wrapper around <Dialog> for "are you sure?"
- * confirmation popups. Defaults are safe for destructive actions:
- *   - cancel button is auto-focused
- *   - confirm uses the `danger` variant when `destructive` is true
- *
- * The dialog is fully controlled: parent owns the open state and
- * passes `onCancel` / `onConfirm`. The component does not call
- * `onCancel` automatically after `onConfirm` — the parent decides
- * when to close (typically after the async work completes).
+ * Popup de confirmação, totalmente controlado: não chama `onCancel` depois de
+ * `onConfirm` — o pai fecha quando o trabalho assíncrono terminar.
  */
 
 import { useEffect, useRef, type ReactNode } from "react";
@@ -19,15 +12,14 @@ import styles from "./ConfirmDialog.module.css";
 interface ConfirmDialogProps {
   open: boolean;
   title: string;
-  /** Main confirmation message. Can be a string or rich JSX. */
   message: ReactNode;
-  /** Optional secondary line, shown muted under the main message. */
+  /** Linha secundária, apagada, sob a mensagem. */
   detail?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
-  /** When true, confirm button is red and we lead with a warning icon. */
+  /** Botão vermelho + ícone de alerta. */
   destructive?: boolean;
-  /** When true, both buttons are disabled (in-flight operation). */
+  /** Desabilita os dois botões. */
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -47,9 +39,7 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
   const bodyRef = useRef<HTMLDivElement>(null);
 
-  // Foca o botão Cancelar quando o popup abre — segurança para
-  // ações destrutivas: se o usuário apertar Enter sem ler, ele
-  // cancela em vez de confirmar.
+  // Foco no Cancelar: Enter sem ler cancela em vez de confirmar.
   useEffect(() => {
     if (!open) return;
     const id = window.setTimeout(() => {

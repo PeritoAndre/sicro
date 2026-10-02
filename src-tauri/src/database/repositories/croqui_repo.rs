@@ -1,6 +1,4 @@
-//! Read/write helpers for the `croquis` table (Spike E).
-//!
-//! Pattern mirrors `laudo_repo`: row in SQLite, `.sicrocroqui` file on disk.
+//! Tabela `croquis`: só a linha-índice; o `.sicrocroqui` em disco é do comando.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -56,8 +54,7 @@ pub fn find_by_id(conn: &Connection, id: &Uuid) -> Result<Option<Croqui>> {
     Ok(row)
 }
 
-/// Update the `updated_at` (used after save / after export). Optionally bumps
-/// `last_export_relative_path` and `status` in the same call.
+/// Atualiza `updated_at` e, se informados, `last_export_relative_path` e `status`.
 pub fn touch(
     conn: &Connection,
     id: &Uuid,
@@ -93,8 +90,7 @@ pub fn touch(
     Ok(())
 }
 
-/// Remove a linha do croqui da tabela. NÃO mexe no `.sicrocroqui` em
-/// disco — o command em `commands/croqui_commands.rs` cuida disso.
+/// Só a linha; o `.sicrocroqui` em disco é apagado pelo comando.
 pub fn delete(conn: &Connection, id: &Uuid) -> Result<()> {
     conn.execute(
         "DELETE FROM croquis WHERE id = ?1",
@@ -163,10 +159,9 @@ mod tests {
 
     #[test]
     fn migration_017_kind_round_trips() {
-        // FK off por padrão num Connection in-memory → não precisa de occurrence.
         let mut conn = Connection::open_in_memory().unwrap();
         run_migrations(&mut conn).unwrap();
-        // Testamos só o round-trip de `kind`, não a integridade FK → desliga.
+        // Só o round-trip de `kind`; FK desligada para não precisar de occurrence.
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
 
         let corporal = mk("corporal");
@@ -185,9 +180,8 @@ mod tests {
     fn old_row_without_kind_defaults_to_viario() {
         let mut conn = Connection::open_in_memory().unwrap();
         run_migrations(&mut conn).unwrap();
-        // Testamos só o round-trip de `kind`, não a integridade FK → desliga.
         conn.execute_batch("PRAGMA foreign_keys=OFF;").unwrap();
-        // Insert sem a coluna kind (simula croqui pré-017) → DEFAULT 'viario'.
+        // Insert sem a coluna kind (croqui pré-017) → DEFAULT 'viario'.
         let id = Uuid::new_v4();
         let occ = Uuid::new_v4();
         conn.execute(

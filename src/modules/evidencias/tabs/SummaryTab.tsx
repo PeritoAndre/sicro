@@ -1,6 +1,4 @@
-/**
- * SummaryTab — Resumo da ocorrência (contadores + status geral + ações).
- */
+/** Resumo da ocorrência: contadores + status geral + ações. */
 
 import { useState } from "react";
 import { FileText, RefreshCw, ShieldCheck } from "lucide-react";

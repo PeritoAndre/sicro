@@ -1,19 +1,8 @@
-//! ENF (Electric Network Frequency): a frequência da rede elétrica que fica
-//! gravada como zumbido. Extração robusta + comparação com uma referência.
-//!
-//!   1. Reduz a taxa para ~1 kHz em estágios (filtro anti-aliasing a cada um).
-//!   2. Rede 50/60 Hz automática: relação sinal/ruído dos harmônicos.
-//!   3. Por quadro (8 s, passo 1 s): espectros dos harmônicos 1–4 trazidos à
-//!      escala da fundamental e somados com pesos pela qualidade de cada um;
-//!      pico com interpolação → frequência; SNR do quadro → confiança.
-//!   4. Variações bruscas (comparando uma janela antes com uma depois — numa
-//!      emenda a curva vira rampa por causa da sobreposição) e trechos sem ENF.
-//!   5. Comparação: a curva desliza sobre a de uma gravação de referência da
-//!      rede; melhor encaixe = maior correlação, com diferença média e o 2º
-//!      melhor encaixe (unicidade).
-//!
-//! Algoritmo escrito aqui, a partir da literatura (combinação de espectros de
-//! harmônicos, Hajj-Ahmad et al.); nenhum código copiado. Tudo determinístico.
+//! ENF (zumbido da rede elétrica gravado no áudio): extração por combinação
+//! ponderada dos espectros dos harmônicos 1–4 (Hajj-Ahmad et al.) em quadros
+//! de 8 s / passo 1 s, detecção de variações bruscas e trechos sem ENF, e
+//! comparação com uma gravação de referência da rede. Algoritmo próprio,
+//! determinístico.
 
 use rustfft::{num_complex::Complex32, FftPlanner};
 use serde::Serialize;

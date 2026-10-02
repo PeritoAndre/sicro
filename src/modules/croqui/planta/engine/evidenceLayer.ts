@@ -1,9 +1,8 @@
-// @ts-nocheck -- ponte com o motor Pixi vendido (arcada). Camada PERICIAL do SICRO.
+// @ts-nocheck -- ponte com o motor Pixi vendido (arcada).
 /**
- * Camada de marcadores de vestígio sobre a planta (Pixi). É SICRO (não faz parte
- * do serializer do arcada): os vestígios vivem em `SicroPlantaDoc.evidences` e
- * são desenhados aqui por cima do floorplan. Marcador = círculo colorido (cor do
- * tipo) + rótulo sequencial (A,B,C… ou 1,2,3…). §13: só rotula/organiza.
+ * Camadas periciais do SICRO sobre a planta Pixi (fora do serializer do
+ * arcada): vestígios, trajetórias, estruturas lineares e textos livres,
+ * desenhados por cima do floorplan.
  */
 import { Container, Graphics, Text, TextStyle } from "pixi.js";
 import { main } from "./editor/EditorRoot";
@@ -24,7 +23,7 @@ function parseColor(hex) {
 }
 
 /** Garante o container da camada de vestígios adicionado ao viewport. */
-export function ensureEvidenceLayer() {
+function ensureEvidenceLayer() {
   if (!main) return null;
   if (!layer || layer.destroyed) {
     layer = new Container();
@@ -92,7 +91,7 @@ export function renderEvidenceMarkers(markers, labelKind) {
 }
 
 /** Garante o container de trajetórias (acima dos vestígios). */
-export function ensureTrajLayer() {
+function ensureTrajLayer() {
   if (!main) return null;
   if (!trajLayer || trajLayer.destroyed) {
     trajLayer = new Container();
@@ -176,7 +175,7 @@ const STRUCT_DEFAULT_W = {
 };
 
 /** Garante o container de estruturas (abaixo dos vestígios/trajetórias). */
-export function ensureStructureLayer() {
+function ensureStructureLayer() {
   if (!main) return null;
   if (!structureLayer || structureLayer.destroyed) {
     structureLayer = new Container();
@@ -306,7 +305,7 @@ export function renderStructures(list, selectedId: string | null = null) {
 // Texto livre (rótulos). Interativos: arrastar pra mover, duplo-clique pra editar.
 
 /** Garante o container de textos (acima de tudo). */
-export function ensureTextLayer() {
+function ensureTextLayer() {
   if (!main) return null;
   if (!textLayer || textLayer.destroyed) {
     textLayer = new Container();

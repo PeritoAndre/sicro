@@ -1,45 +1,21 @@
-//! Workspace-relative path resolution (MVP 5).
-//!
-//! Every module that reads/writes inside a `.sicro` workspace eventually
-//! receives a "relative path" from the frontend or from a row in
-//! SQLite. Those paths must never escape the workspace folder; failure
-//! to enforce that is a directory traversal vulnerability.
-//!
-//! `sanitize_relative_path` is the *normalization* step (sync, in-memory):
-//!   - rejects absolute paths (`/foo`, `\\foo`);
-//!   - rejects drive-anchored paths (`C:\foo`);
-//!   - rejects `..` segments;
-//!   - rejects empty input;
-//!   - strips `.` / empty segments and normalizes separators.
-//!
-//! `resolve_workspace_relative` builds on the above and:
-//!   - joins the sanitized relative path under the workspace root;
-//!   - returns a `PathBuf` ready for `std::fs::*` calls.
-//!
-//! Both functions are pure — they do NOT touch the filesystem. The
-//! filesystem-aware variant lives in
-//! [`resolve_existing_workspace_path`], which additionally requires the
-//! resolved path to exist as a file.
-//!
-//! `RelativeResolution` is returned by the registry / verifier — it tells
-//! whether the original input was safe AND whether the file is on disk.
-//! This is intentionally cheap (one `metadata` syscall) so the lightweight
-//! integrity check can iterate over thousands of rows quickly.
+//! Caminhos relativos ao workspace. Tudo que vem do front ou do SQLite passa
+//! por `sanitize_relative_path` (rejeita absoluto, letra de drive e `..`) antes
+//! de tocar o disco — senão é directory traversal.
 
 use std::path::{Path, PathBuf};
 
 use crate::error::{Result, SicroError};
 
-/// Outcome of trying to resolve a workspace-relative reference.
+/// Resultado de resolver uma referência relativa ao workspace.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RelativeResolution {
-    /// Path is safe and the file exists on disk.
+    /// Seguro e existe.
     Ok { absolute: PathBuf, size_bytes: u64 },
-    /// Path is safe but the file is not on disk.
+    /// Seguro, mas não está no disco.
     Missing { absolute: PathBuf },
-    /// Path violates safety rules (traversal, absolute, drive letter).
+    /// Viola a regra (traversal, absoluto, letra de drive).
     Unsafe { reason: String },
-    /// The input was empty / null.
+    /// Entrada vazia/null.
     Empty,
 }
 
@@ -54,11 +30,8 @@ impl RelativeResolution {
     }
 }
 
-/// Sanitize a workspace-relative path. Returns the normalized PathBuf
-/// (with platform separators) when the input is safe; otherwise an
-/// error describing the violation.
-///
-/// This does NOT touch the filesystem.
+/// Normaliza (separadores, `.`/segmentos vazios) ou erra descrevendo a violação.
+/// Não toca o disco.
 pub fn sanitize_relative_path(raw: &str) -> Result<PathBuf> {
     if raw.is_empty() {
         return Err(SicroError::Validation(
@@ -70,7 +43,7 @@ pub fn sanitize_relative_path(raw: &str) -> Result<PathBuf> {
             "absolute path rejected: {raw:?}"
         )));
     }
-    // Drive-letter check: e.g. "C:\..." or "c:/...".
+    // Letra de drive: "C:\…" ou "c:/…".
     if let Some(c) = raw.chars().next() {
         if c.is_ascii_alphabetic() && raw[1..].starts_with(':') {
             return Err(SicroError::Validation(format!(
@@ -98,8 +71,7 @@ pub fn sanitize_relative_path(raw: &str) -> Result<PathBuf> {
     Ok(out)
 }
 
-/// Join `relative` under `workspace_root` after sanitizing. Does not
-/// touch the filesystem.
+/// Junta sob a raiz após sanitizar. Não toca o disco.
 pub fn resolve_workspace_relative(
     workspace_root: &Path,
     relative: &str,
@@ -108,9 +80,8 @@ pub fn resolve_workspace_relative(
     Ok(workspace_root.join(rel))
 }
 
-/// Probe a workspace-relative reference for existence in a single,
-/// allocation-light pass. Used by the lightweight integrity check —
-/// it intentionally does not hash the bytes (see `verify_file_hash`).
+/// Existe? Um `metadata` só — a verificação leve itera milhares de linhas.
+/// Não faz hash.
 pub fn probe_workspace_relative(
     workspace_root: &Path,
     relative: Option<&str>,
@@ -135,9 +106,7 @@ pub fn probe_workspace_relative(
             absolute: abs,
             size_bytes: meta.len(),
         },
-        // Anything else (missing, directory, symlink not pointing to a
-        // file, etc.) is treated as "missing" — for the audit purposes of
-        // MVP 5 the perito needs to see this as "arquivo ausente".
+        // Pasta, symlink quebrado etc. contam como "ausente" para o perito.
         Ok(_) | Err(_) => RelativeResolution::Missing { absolute: abs },
     }
 }
@@ -180,7 +149,6 @@ mod tests {
     #[test]
     fn simple_path_accepted() {
         let p = sanitize_relative_path("imports/photos/IMG_001.jpg").unwrap();
-        // Path components present in correct order.
         let comps: Vec<_> = p
             .components()
             .map(|c| c.as_os_str().to_string_lossy().into_owned())

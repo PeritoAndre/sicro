@@ -1,7 +1,5 @@
-//! Repository for `evidence_links` (MVP 4 — Evidência → Laudo).
-//!
-//! One row per "evidence X foi inserida em laudo Y". Allows the UI to list
-//! `links(laudo)` without parsing the `.sicrodoc`.
+//! Tabela `evidence_links`: uma linha por "evidência X inserida no laudo Y",
+//! para listar vínculos sem abrir o `.sicrodoc`.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};
@@ -61,8 +59,7 @@ pub fn list_for_target(
     Ok(rows)
 }
 
-/// List every evidence link of a given occurrence — used by the
-/// Central de Evidências to count how many laudos cite each item.
+/// Usado pela Central de Evidências para contar quantos laudos citam cada item.
 pub fn list_for_occurrence(
     conn: &Connection,
     occurrence_id: &Uuid,

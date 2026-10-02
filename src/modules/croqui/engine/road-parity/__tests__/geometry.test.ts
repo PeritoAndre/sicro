@@ -1,6 +1,4 @@
-/**
- * Python Parity Engine — testes de geometria.
- */
+/** Testes da geometria parity. */
 
 import { describe, expect, it } from "vitest";
 import {

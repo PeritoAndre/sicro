@@ -1,7 +1,4 @@
-/**
- * Utilitário do índice global de casos (base das estatísticas gerais e do
- * navegador de ocorrências da Home).
- */
+/** Índice global de casos (estatísticas gerais e navegador da Home). */
 
 import { commands } from "@core/commands";
 import {
@@ -10,12 +7,7 @@ import {
   type CaseIndexEntry,
 } from "@domain/case_index";
 
-/**
- * Backfill: lê os casos recentes, re-lê cada ocorrência e atualiza o índice.
- * Devolve o índice já atualizado. Best-effort — recentes inacessíveis são
- * ignorados. (O índice cresce naturalmente conforme casos são abertos; isto
- * só acelera o preenchimento inicial a partir da lista de recentes.)
- */
+/** Backfill a partir dos recentes (best-effort); o índice cresce sozinho conforme casos abrem. */
 export async function reindexCaseIndexFromRecents(): Promise<CaseIndexEntry[]> {
   const recents = await commands.listRecentOccurrences();
   for (const r of recents) {
@@ -27,11 +19,11 @@ export async function reindexCaseIndexFromRecents(): Promise<CaseIndexEntry[]> {
           await commands.getOccurrenceCounts(r.workspace_path),
         );
       } catch {
-        /* contagens best-effort — backend preserva as anteriores */
+        /* backend preserva as contagens anteriores */
       }
       await commands.upsertCaseIndex(entry);
     } catch {
-      /* recente inacessível (workspace movido/excluído) — ignora */
+      /* workspace movido/excluído */
     }
   }
   return commands.getCaseIndex();

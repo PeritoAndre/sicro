@@ -20,8 +20,7 @@ pub fn open_workspace(workspace_dir: &Path) -> Result<OpenedWorkspace> {
 
     let db_path = workspace_dir.join(SQLITE_FILENAME);
     let mut conn = open_connection(&db_path)?;
-    // Re-run migrations defensively: idempotent statements + a migrations table
-    // make this safe even if the workspace was created by an older build.
+    // Migrações são idempotentes: garante o schema mesmo em workspace de build antigo.
     run_migrations(&mut conn)?;
 
     let occurrence = occurrence_repo::find_by_id(&conn, &manifest.occurrence_id)?

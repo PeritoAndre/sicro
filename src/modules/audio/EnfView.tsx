@@ -1,8 +1,7 @@
 /**
  * ENF (frequência da rede gravada como zumbido): resumo, curva no tempo com
- * os trechos sem ENF e as variações bruscas (clique leva o player), e a
- * comparação com uma gravação de referência da rede (outro áudio do caso).
- * "Copiar como texto" dá o resumo para o laudo. Indício, não conclusão.
+ * trechos sem ENF e variações bruscas, e comparação com uma referência da rede
+ * (outro áudio do caso). Indício, não conclusão.
  */
 import { useEffect, useRef, useState } from "react";
 import { ClipboardCopy, GitCompareArrows, Loader2 } from "lucide-react";
@@ -36,7 +35,7 @@ function useWidth<T extends HTMLElement>(): [React.RefObject<T>, number] {
   return [ref, w];
 }
 
-export function enfToText(e: EnfResult, cmp?: EnfComparison | null, refName?: string): string {
+function enfToText(e: EnfResult, cmp?: EnfComparison | null, refName?: string): string {
   const L: string[] = [];
   L.push(
     `ENF: rede de ${e.nominal_hz} Hz${e.auto ? ` (detectada automaticamente: zumbido ${dec(e.score_60_db, 0)} dB em 60 Hz, ${dec(e.score_50_db, 0)} dB em 50 Hz)` : " (informada)"}.`,

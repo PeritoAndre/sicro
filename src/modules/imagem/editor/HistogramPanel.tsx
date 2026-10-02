@@ -1,10 +1,6 @@
 /**
- * HistogramPanel — visualização de histograma RGB + luminância.
- *
- * G12.12 — Painel que mostra os 256 bins de cada canal sobrepostos
- * num gráfico SVG, mais estatísticas (média / desvio / dinâmica
- * mínima/máxima). Útil para diagnóstico de exposição, sub/super-
- * exposição, e ajuste de levels.
+ * Painel de histograma RGB + luminância (SVG com 256 bins por canal) e
+ * estatísticas por canal.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -116,7 +112,7 @@ function HistogramChart({ data }: { data: ImageHistogram }) {
       <path d={polyPath(red)} fill="rgba(239,68,68,0.55)" />
       <path d={polyPath(green)} fill="rgba(34,197,94,0.55)" />
       <path d={polyPath(blue)} fill="rgba(59,130,246,0.55)" />
-      {/* mid line */}
+      {/* linha central */}
       <line
         x1={128}
         y1={0}

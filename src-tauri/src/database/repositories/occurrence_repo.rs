@@ -1,6 +1,4 @@
-//! Read/write helpers for the `occurrences` table and the `audit_logs` table.
-//!
-//! Keep SQL strings here — modules above this layer never touch raw SQL.
+//! Tabelas `occurrences` e `audit_logs`.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -9,8 +7,7 @@ use uuid::Uuid;
 use crate::error::{Result, SicroError};
 use crate::models::{Occurrence, OccurrenceStatus};
 
-/// Column order MUST match the `params![...]` order in `insert` / `update_full`
-/// and the field order accessed in `row_to_occurrence`.
+/// A ordem precisa casar com o `params![...]` de `insert` / `update_full`.
 const COLUMNS: &str = "
     id, numero_bo, protocolo, requisicao, oficio, delegacia,
     tipo_pericia, natureza, municipio, bairro, logradouro, referencia,
@@ -65,10 +62,9 @@ pub fn insert(conn: &Connection, occ: &Occurrence) -> Result<()> {
     Ok(())
 }
 
-/// Sobrescreve as colunas EDITÁVEIS de uma ocorrência (palavra final do perito).
-/// Preserva `id`, `created_at` e a proveniência (`import_id`,
-/// `original_mobile_id`, `primary_accuracy_m`, `raw_*`). O chamador define o novo
-/// `updated_at` em `occ`.
+/// Sobrescreve as colunas editáveis (o perito é a palavra final). Preserva `id`,
+/// `created_at` e a proveniência (`import_id`, `original_mobile_id`,
+/// `primary_accuracy_m`, `raw_*`). `updated_at` vem em `occ`.
 pub fn update_full(conn: &Connection, occ: &Occurrence) -> Result<()> {
     let n = conn.execute(
         "UPDATE occurrences SET
@@ -185,8 +181,7 @@ fn parse_optional_dt(s: Option<String>) -> Option<DateTime<Utc>> {
     s.and_then(parse_dt)
 }
 
-/// Append an entry to `audit_logs`. Best-effort: errors are logged but never
-/// bubble up — audit must not block the user.
+/// Grava em `audit_logs`; falha é logada e devolvida ao chamador.
 pub fn record_audit(
     conn: &Connection,
     occurrence_id: Option<&Uuid>,

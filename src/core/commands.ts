@@ -1,9 +1,6 @@
 /**
- * Thin wrappers around Tauri's `invoke`. The UI must NOT call `invoke`
- * directly — go through this module so:
- *   1. Command names are typed and centralized;
- *   2. Errors are normalized into `SicroError`;
- *   3. Future cross-cutting concerns (logging, retries) have one place to land.
+ * Wrappers tipados do `invoke` do Tauri. A UI não chama `invoke` direto:
+ * os nomes dos comandos ficam centralizados aqui e os erros normalizados.
  */
 
 import { invoke } from "@tauri-apps/api/core";
@@ -107,7 +104,7 @@ import type {
   TranscriptAi,
 } from "@domain/audio";
 import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
-import { toSicroError, type SicroError } from "./errors";
+import { toSicroError } from "./errors";
 
 async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   try {
@@ -117,28 +114,23 @@ async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promi
   }
 }
 
-
 export const commands = {
-  /** Returns the currently loaded occurrence for a given workspace path. */
   getOccurrence(workspacePath: string): Promise<Occurrence> {
     return safeInvoke<Occurrence>("get_occurrence", {
       workspacePath,
     });
   },
 
-  /** Creates a fresh .sicro workspace with an initial occurrence row. */
   createOccurrence(input: NewOccurrenceInput): Promise<LoadedOccurrence> {
     return safeInvoke<LoadedOccurrence>("create_occurrence", { input });
   },
 
-  /** Opens an existing .sicro workspace. */
   openOccurrence(workspacePath: string): Promise<LoadedOccurrence> {
     return safeInvoke<LoadedOccurrence>("open_occurrence", {
       workspacePath,
     });
   },
 
-  /** Atualiza a identificação do caso (cabeçalho editável do Dossiê). */
   updateOccurrence(
     workspacePath: string,
     edit: OccurrenceEdit,
@@ -146,11 +138,7 @@ export const commands = {
     return safeInvoke<Occurrence>("update_occurrence", { workspacePath, edit });
   },
 
-  /**
-   * Muda SÓ o status da ocorrência (concluir / reabrir) — sem tocar no cabeçalho.
-   * Comando dedicado: não corre o risco de zerar campos não enviados como o
-   * update_occurrence faria com um patch parcial.
-   */
+  /** Só o status: um patch parcial em update_occurrence zeraria os campos não enviados. */
   setOccurrenceStatus(
     workspacePath: string,
     status: OccurrenceStatus,
@@ -161,80 +149,41 @@ export const commands = {
     });
   },
 
-  /** Returns the list of recently opened workspaces (newest first). */
   listRecentOccurrences(): Promise<RecentOccurrence[]> {
     return safeInvoke<RecentOccurrence[]>("list_recent_occurrences");
   },
 
-  /** Removes an entry from the recents list (does NOT delete the workspace on disk). */
+  /** Só tira da lista de recentes; não apaga o workspace do disco. */
   forgetRecentOccurrence(workspaceId: string): Promise<void> {
     return safeInvoke<void>("forget_recent_occurrence", { workspaceId });
   },
 
-  /**
-   * EXCLUI PERMANENTEMENTE a pasta `.sicro` do disco. Destrutivo e
-   * irreversível — só chamar após confirmação explícita do usuário. O backend
-   * recusa se a pasta não for um workspace .sicro válido (trava de segurança).
-   */
+  /** Apaga a pasta .sicro do disco (irreversível); o backend recusa se não for um workspace válido. */
   deleteOccurrence(workspacePath: string): Promise<void> {
     return safeInvoke<void>("delete_occurrence", { workspacePath });
   },
 
-  // ----- Laudo (Spike B) -----
-
-
-
-
-
-
-
-
-  // ----- I — Integração SIGDOCS -----
-
-
-
-
-
-
-  /**
-   * Abre o Explorer do SO (Windows/macOS/Linux) na pasta de um
-   * arquivo, selecionando-o. Usado quando o perito vai arrastar o
-   * PDF exportado pra dentro do SIGDOC (que bloqueia Ctrl+V).
-   */
+  /** Abre o explorador do SO na pasta do arquivo, selecionando-o (o SIGDOC bloqueia Ctrl+V). */
   revealPathInExplorer(absolutePath: string): Promise<void> {
     return safeInvoke("reveal_path_in_explorer", { absolutePath });
   },
 
-  // K — Credenciais SIGDOC (Windows Credential Manager)
+  // ----- Configurações globais do app -----
 
-
-
-
-  // ----- Configurações globais do app (o "cofrinho" fora do .sicro) -----
-
-  /** Lê as configurações globais. Ausente/corrompido → defaults. */
+  /** Ausente/corrompido → defaults. */
   getAppSettings(): Promise<AppSettings> {
     return safeInvoke<AppSettings>("get_app_settings", {});
   },
 
-  /** Grava as configurações globais (escrita atômica no app_config_dir). */
   saveAppSettings(settings: AppSettings): Promise<void> {
     return safeInvoke("save_app_settings", { settings });
   },
 
-
-
-
-  /** Caminho absoluto do arquivo app-settings.json (diagnóstico). */
   getSettingsFilePath(): Promise<string> {
     return safeInvoke<string>("get_settings_file_path", {});
   },
 
-  /**
-   * Calibração das posições da numeração POP do croqui corporal (mapa
-   * `{ "tpl_vista_n_idx": [nx, ny] }`). Arquivo próprio em app_config_dir;
-   * ausente → `{}`. Global, vale para todas as ocorrências.
-   */
+  /** Posições da numeração POP do croqui corporal (`{ "tpl_vista_n_idx": [nx, ny] }`); global, ausente → `{}`. */
   loadPopCalibration(): Promise<Record<string, readonly [number, number]>> {
     return safeInvoke<Record<string, readonly [number, number]>>(
       "load_pop_calibration",
@@ -242,62 +191,38 @@ export const commands = {
     );
   },
 
-  /** Grava a calibração da numeração POP (escrita atômica). */
   savePopCalibration(
     calibration: Record<string, readonly [number, number]>,
   ): Promise<void> {
     return safeInvoke("save_pop_calibration", { calibration });
   },
 
-  // ----- Estatísticas (exportação do dashboard) -----
+  // ----- Índice global de casos -----
 
-
-  // ----- Índice global de casos (estatísticas gerais) -----
-
-  /** Lê o índice global de casos (todos os casos já vistos pelo app). */
   getCaseIndex(): Promise<CaseIndexEntry[]> {
     return safeInvoke<CaseIndexEntry[]>("get_case_index", {});
   },
 
-
-  /** Insere/atualiza um caso no índice global (idempotente por id). */
   upsertCaseIndex(entry: CaseIndexEntry): Promise<void> {
     return safeInvoke("upsert_case_index", { entry });
   },
 
-  /**
-   * Remove um caso do índice global (NÃO apaga nada do disco — só tira das
-   * listas/estatísticas). O caso reaparece se for reaberto.
-   */
+  /** Só tira do índice (nada é apagado do disco); o caso reaparece se for reaberto. */
   removeCaseIndex(workspaceId: string): Promise<void> {
     return safeInvoke<void>("remove_case_index", { workspaceId });
   },
 
-  // ----- Export (Spike C) -----
+  // ----- Importação (.sicroapp) -----
 
-
-
-
-
-
-  // ----- Importer (Spike D — .sicroapp) -----
-
-  /**
-   * Open a .sicroapp picked by the user, validate it, and materialise it
-   * into a fresh .sicro workspace. The full ImportReport is included in
-   * the response so the UI can display the summary immediately without a
-   * second round-trip.
-   */
+  /** Valida o .sicroapp e materializa num .sicro novo; já devolve o ImportReport completo. */
   importSicroapp(input: ImportSicroappInput): Promise<ImportResult> {
     return safeInvoke<ImportResult>("import_sicroapp", { input });
   },
 
-  /** Lists every import row stored in a workspace's SQLite. */
   listWorkspaceImports(workspacePath: string): Promise<Import[]> {
     return safeInvoke<Import[]>("list_workspace_imports", { workspacePath });
   },
 
-  /** Reads the persisted import_report.json from disk. */
   readImportReport(
     workspacePath: string,
     importId: string,
@@ -308,25 +233,12 @@ export const commands = {
     });
   },
 
-  /** Lists the photos imported into a workspace (newest captured first). */
-  // ----- Dossiê Operacional (MVP 3) -----
-
-
-  /** Same as listWorkspacePhotos — kept for symmetry with the rest of the dossier API. */
   listDossiePhotos(workspacePath: string): Promise<MediaAsset[]> {
     return safeInvoke<MediaAsset[]>("list_dossie_photos", { workspacePath });
   },
 
+  // ----- Croqui -----
 
-
-
-
-
-
-
-  // ----- Croqui (Spike E) -----
-
-  /** Creates an empty .sicrocroqui + row in the `croquis` table. */
   createCroqui(
     workspacePath: string,
     input: NewCroquiInput,
@@ -337,12 +249,10 @@ export const commands = {
     });
   },
 
-  /** Lists every croqui of the active occurrence (most recent first). */
   listCroquis(workspacePath: string): Promise<Croqui[]> {
     return safeInvoke<Croqui[]>("list_croquis", { workspacePath });
   },
 
-  /** Reads a croqui (row + full .sicrocroqui envelope). */
   readCroqui(workspacePath: string, croquiId: string): Promise<CroquiDocPayload> {
     return safeInvoke<CroquiDocPayload>("read_croqui", {
       workspacePath,
@@ -350,7 +260,6 @@ export const commands = {
     });
   },
 
-  /** Overwrites the .sicrocroqui on disk + bumps updated_at. */
   saveCroqui(
     workspacePath: string,
     croquiId: string,
@@ -363,12 +272,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Remove o croqui do workspace: apaga a linha em `croquis` e o
-   * arquivo `.sicrocroqui` em disco. PNGs já exportados em
-   * `croquis/exports/` NÃO são removidos (preservam o histórico
-   * pericial). Grava `croqui.deleted` no audit log.
-   */
+  /** Apaga a linha e o .sicrocroqui; PNGs já exportados ficam (histórico pericial). */
   deleteCroqui(workspacePath: string, croquiId: string): Promise<void> {
     return safeInvoke<void>("delete_croqui", {
       workspacePath,
@@ -376,10 +280,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Persist a PNG export produced by Konva.toDataURL(). Returns the
-   * workspace-relative path of the saved PNG.
-   */
+  /** Devolve o caminho do PNG relativo ao workspace. */
   exportCroquiPng(
     workspacePath: string,
     croquiId: string,
@@ -392,15 +293,7 @@ export const commands = {
     });
   },
 
-  /**
-   * MVP 9 Round 4 — Drone import.
-   *
-   * Reads an aerial photo, applies radial lens correction at the chosen
-   * intensity, crops to the rectangle the user drew in the wizard,
-   * persists the derivative + sidecar inside the workspace, and returns
-   * the workspace-relative paths so the caller can drop the result as
-   * a croqui background image.
-   */
+  /** Corrige a lente, recorta o retângulo escolhido e grava derivado + sidecar no workspace. */
   importDroneImage(
     workspacePath: string,
     input: DroneImportInput,
@@ -411,13 +304,9 @@ export const commands = {
     });
   },
 
-  // ----- Video (Spike F) -----
+  // ----- Vídeo -----
 
-  /**
-   * Copies the user-picked video into `videos/originais/`, hashes it
-   * (SHA-256), runs ffprobe and persists the metadata. Returns the
-   * `VideoMedia` row.
-   */
+  /** Copia para videos/originais/, calcula SHA-256 e roda ffprobe. */
   registerVideoMedia(
     workspacePath: string,
     input: RegisterVideoInput,
@@ -428,7 +317,6 @@ export const commands = {
     });
   },
 
-  /** Relógio da câmera de todos os vídeos da ocorrência. */
   listVideoClocks(workspacePath: string): Promise<VideoClockCalibration[]> {
     return safeInvoke<VideoClockCalibration[]>("list_video_clocks", { workspacePath });
   },
@@ -444,7 +332,7 @@ export const commands = {
     return safeInvoke<void>("delete_video_clock", { workspacePath, mediaHash });
   },
 
-  /** Exporta um trecho como CÓPIA registrada no caso (o original não muda). */
+  /** Exporta o trecho como cópia registrada no caso; o original não muda. */
   exportVideoClip(workspacePath: string, input: ExportClipInput): Promise<ExportClipResult> {
     return safeInvoke<ExportClipResult>("export_video_clip", { workspacePath, input });
   },
@@ -454,12 +342,11 @@ export const commands = {
     return safeInvoke<string>("video_thumbnail", { workspacePath, mediaId });
   },
 
-  /** Lists every video registered in the active occurrence. */
   listVideoMedia(workspacePath: string): Promise<VideoMedia[]> {
     return safeInvoke<VideoMedia[]>("list_video_media", { workspacePath });
   },
 
-  /** Aggregated bundle (media + events + exports + storyboard). */
+  /** Mídia + eventos + exportações + storyboard. */
   openVideoMedia(workspacePath: string, mediaId: string): Promise<VideoBundle> {
     return safeInvoke<VideoBundle>("open_video_media", {
       workspacePath,
@@ -493,12 +380,7 @@ export const commands = {
     return safeInvoke<void>("delete_video_event", { workspacePath, eventId });
   },
 
-  /**
-   * Extracts a single PNG frame via FFmpeg (NOT a screenshot of the
-   * player). Writes the PNG + sidecar JSON to
-   * `videos/storyboards/frames/` and persists `video_exports` +
-   * `video_storyboard_frames`.
-   */
+  /** Extrai o quadro via FFmpeg (não é captura do player) e persiste PNG + sidecar. */
   collectVideoFrame(
     workspacePath: string,
     input: CollectFrameInput,
@@ -545,13 +427,9 @@ export const commands = {
     });
   },
 
-  // ----- Calculador de Velocidade (vídeo / speed) -----
+  // ----- Velocidade (vídeo) -----
 
-  /**
-   * Resolve a homografia (DLT 4-pts para `method: "plane"` OU calibração
-   * afim para `method: "line"` com 2 pts), calcula o RMS de reprojeção e
-   * persiste a calibração. O `occurrence_id` vem do Manifest do workspace.
-   */
+  /** Resolve a homografia (DLT 4 pts para "plane", afim 2 pts para "line"), calcula o RMS e persiste. */
   createSpeedCalibration(
     workspacePath: string,
     input: CreateSpeedCalibrationInput,
@@ -562,12 +440,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Projeta a trajetória pixel→mundo pela homografia e estima a velocidade:
-   * regressão por eixo + Monte Carlo (≥3 pontos, calibração de plano) ou
-   * média sem incerteza (2 pontos). Persiste mc_seed + mc_sigmas para
-   * reprodutibilidade. Campos de IC/MC vêm `null` quando não se aplicam.
-   */
+  /** Projeta a trajetória pela homografia; regressão + Monte Carlo com ≥3 pts, média sem IC com 2. */
   computeSpeed(
     workspacePath: string,
     input: ComputeSpeedInput,
@@ -578,7 +451,6 @@ export const commands = {
     });
   },
 
-  /** Lista as calibrações de velocidade de uma mídia (mais recentes primeiro). */
   listSpeedCalibrations(
     workspacePath: string,
     mediaHash: string,
@@ -589,7 +461,6 @@ export const commands = {
     });
   },
 
-  /** Lista os cálculos de velocidade de uma mídia (mais recentes primeiro). */
   listSpeedCalculations(
     workspacePath: string,
     mediaHash: string,
@@ -600,11 +471,6 @@ export const commands = {
     });
   },
 
-  /**
-   * Lista TODOS os cálculos de velocidade da ocorrência (qualquer mídia),
-   * mais recentes primeiro. Usado pelo laudo para escolher um cálculo a
-   * transcrever na seção de metodologia.
-   */
   listSpeedCalculationsForOccurrence(
     workspacePath: string,
   ): Promise<VideoSpeedCalculation[]> {
@@ -614,7 +480,6 @@ export const commands = {
     );
   },
 
-  /** Lê uma calibração de velocidade pelo id. */
   getSpeedCalibration(
     workspacePath: string,
     id: string,
@@ -625,16 +490,9 @@ export const commands = {
     });
   },
 
-  // ----- Medição de distância (vídeo / measure) -----
+  // ----- Medição de distância (vídeo) -----
 
-  /**
-   * Consome uma calibração existente: projeta os 2 pontos pixel→mundo pela
-   * MESMA homografia da velocidade e calcula a distância pontual. Com σ
-   * informado (e calibração de plano ou razão cruzada), roda o Monte Carlo e
-   * persiste mc_seed + mc_sigmas. Sem σ, sai só a distância pontual (mc_* null)
-   * — distância de 2 pontos NÃO tem IC de regressão. O occurrence_id e o
-   * media_hash vêm do backend (Manifest / calibração).
-   */
+  /** Usa a MESMA homografia da velocidade; Monte Carlo só com σ (2 pontos não têm IC de regressão). */
   createDistanceMeasurement(
     workspacePath: string,
     input: CreateDistanceMeasurementInput,
@@ -645,7 +503,6 @@ export const commands = {
     });
   },
 
-  /** Lista as medições de distância de uma mídia (mais recentes primeiro). */
   listDistanceMeasurements(
     workspacePath: string,
     mediaHash: string,
@@ -656,11 +513,6 @@ export const commands = {
     });
   },
 
-  /**
-   * Lista TODAS as medições de distância da ocorrência (qualquer mídia), mais
-   * recentes primeiro. Usado pelo laudo para escolher uma medição a transcrever
-   * na seção de metodologia.
-   */
   listDistanceMeasurementsForOccurrence(
     workspacePath: string,
   ): Promise<VideoDistanceMeasurement[]> {
@@ -670,16 +522,9 @@ export const commands = {
     );
   },
 
-  // ----- Evidência → Laudo (MVP 4) -----
+  // ----- Central de Evidências + Integridade -----
 
-
-
-  // ----- Central de Evidências + Integridade (MVP 5) -----
-
-  /**
-   * Full integrity check. Pass `{ deep: true }` to recompute SHA-256
-   * for items that store a hash (slow on large videos).
-   */
+  /** `{ deep: true }` recalcula o SHA-256 dos itens com hash (lento em vídeos grandes). */
   verifyWorkspaceIntegrity(
     workspacePath: string,
     options?: VerifyOptions,
@@ -690,14 +535,12 @@ export const commands = {
     );
   },
 
-  /** Lists every `evidence_links` row of the active occurrence. */
   listEvidenceLinks(workspacePath: string): Promise<EvidenceLink[]> {
     return safeInvoke<EvidenceLink[]>("list_evidence_links", {
       workspacePath,
     });
   },
 
-  /** Open the file with the OS default handler. */
   openEvidenceFile(
     workspacePath: string,
     relativePath: string,
@@ -708,7 +551,6 @@ export const commands = {
     });
   },
 
-  /** Reveal the file in the platform file explorer. */
   revealEvidenceInFolder(
     workspacePath: string,
     relativePath: string,
@@ -719,10 +561,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Run verification and persist an HTML report under `reports/`.
-   * Returns the descriptor (relative path + status snapshot).
-   */
+  /** Verifica e grava o relatório HTML em reports/. */
   generateWorkspaceIntegrityReport(
     workspacePath: string,
     options?: VerifyOptions,
@@ -733,7 +572,7 @@ export const commands = {
     );
   },
 
-  // ----- Editor de Imagem Pericial (MVP 7) -----
+  // ----- Imagem -----
 
   createImageAnalysisFromEvidence(
     workspacePath: string,
@@ -754,8 +593,6 @@ export const commands = {
       input,
     });
   },
-
-
 
   listImageAnalyses(workspacePath: string): Promise<ImageAnalysis[]> {
     return safeInvoke<ImageAnalysis[]>("list_image_analyses", {
@@ -831,12 +668,7 @@ export const commands = {
     });
   },
 
-  // ----- G12 — Image Engine Pro -----
-
-  /**
-   * G12.9 — Calcula histograma (256 bins R/G/B/Lum) + estatísticas
-   * de uma imagem do workspace.
-   */
+  /** 256 bins R/G/B/Lum + estatísticas. */
   computeImageHistogram(
     workspacePath: string,
     relativePath: string,
@@ -847,10 +679,6 @@ export const commands = {
     });
   },
 
-  /**
-   * G12 — Aplica uma pilha de operações sobre a imagem original.
-   * Útil para o ProcessingStackPanel mostrar resultado consolidado.
-   */
   applyOperationStack(
     workspacePath: string,
     input: ApplyOperationStackInput,
@@ -861,12 +689,7 @@ export const commands = {
     });
   },
 
-  /**
-   * W17 — Preview da pilha de filtros sobre um bitmap JÁ reduzido no cliente
-   * (base64). NÃO abre o arquivo original: como entrada e saída são pequenas,
-   * o preview ao vivo é rápido mesmo para originais de dezenas de MP. O export
-   * continua em resolução cheia.
-   */
+  /** Preview sobre um bitmap já reduzido no cliente (base64): não abre o original, por isso é rápido. */
   applyOperationStackPreview(input: {
     image_base64: string;
     operations: ApplyOperationStackInput["operations"];
@@ -878,12 +701,7 @@ export const commands = {
     );
   },
 
-  /**
-   * W20 (S3) — Recorta a região da seleção e grava como camada de pixels
-   * (PNG em `imagens/camadas/`). `apply_processing=true` recorta do RESULTADO
-   * (reaplica `adjustments`+`operations`); `false` recorta do ORIGINAL fiel.
-   * Devolve offset/dims (px da imagem), hash e o PNG base64 p/ exibir já.
-   */
+  /** Grava a região da seleção como camada PNG; `apply_processing` recorta do resultado em vez do original. */
   copyRegionToLayer(
     workspacePath: string,
     input: {
@@ -907,11 +725,7 @@ export const commands = {
     return safeInvoke("copy_region_to_layer", { workspacePath, input });
   },
 
-  /**
-   * G12.21 — Gera relatório HTML de análise pericial. Backend coleta
-   * tudo (EXIF, hashes, ops, logs, thumbnail) e produz HTML auto-contido
-   * gravado em `imagens/relatorios/`.
-   */
+  /** HTML autocontido em imagens/relatorios/. */
   generateImageAnalysisReport(
     workspacePath: string,
     analysisId: string,
@@ -922,13 +736,9 @@ export const commands = {
     );
   },
 
-  // ----- Consolidação Alpha (MVP 8) -----
+  // ----- Backup, saúde do sistema e contadores -----
 
-  /**
-   * Gera um `.sicrobackup` (ZIP) do workspace ativo. `destination`
-   * opcional escolhe outra pasta; padrão é `<workspace>/backups/`.
-   * `boLabel` ajuda o nome do arquivo.
-   */
+  /** ZIP .sicrobackup; `destination` padrão é <workspace>/backups/. */
   generateWorkspaceBackup(
     workspacePath: string,
     destination?: string,
@@ -941,11 +751,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Backup geral (todos os casos) — incremental, 1 `.sicrobackup` por caso,
-   * numa pasta-espelho em `destination`. Pula casos cujo conteúdo não mudou.
-   * Emite eventos `global-backup-progress` por caso (escute com `listen`).
-   */
+  /** Incremental, 1 .sicrobackup por caso; emite `global-backup-progress` por caso. */
   generateGlobalBackup(
     cases: GlobalCaseInput[],
     destination: string,
@@ -956,12 +762,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Restaura um conjunto de backup (HD externo, pendrive, nuvem, rede):
-   * descompacta os casos na pasta local e, opcionalmente, restaura a config
-   * (perfil/instituição/cabeçalhos). Não sobrescreve casos existentes (a menos
-   * de `overwrite`). Emite `restore-backup-progress` por caso.
-   */
+  /** Não sobrescreve casos existentes sem `overwrite`; emite `restore-backup-progress` por caso. */
   restoreBackup(
     sourceDir: string,
     options?: {
@@ -978,10 +779,6 @@ export const commands = {
     });
   },
 
-  /**
-   * Snapshot rápido (JSON) do estado de saúde do app — versão do app,
-   * dependências externas, contadores do workspace ativo, integridade.
-   */
   getSystemHealthSnapshot(
     workspacePath?: string | null,
   ): Promise<SystemHealthSnapshot> {
@@ -990,21 +787,13 @@ export const commands = {
     });
   },
 
-  /**
-   * Contagens por módulo de UM caso (leve: só consulta o banco). Alimenta o
-   * índice global para os KPIs de produção da Home.
-   */
   getOccurrenceCounts(workspacePath: string): Promise<WorkspaceCounters> {
     return safeInvoke<WorkspaceCounters>("get_occurrence_counts", {
       workspacePath,
     });
   },
 
-  /**
-   * Grava o relatório de saúde como HTML auto-suficiente em
-   * `<workspace>/reports/system_health_<TS>.html` e retorna o
-   * descritor.
-   */
+  /** HTML em <workspace>/reports/system_health_<TS>.html. */
   generateSystemHealthReport(
     workspacePath?: string | null,
   ): Promise<HealthReportArtifact> {
@@ -1014,9 +803,9 @@ export const commands = {
     );
   },
 
-  // ----- Áudio (módulo Áudio — Camada 1) -----
+  // ----- Áudio -----
 
-  /** Extrai a trilha de áudio de um vídeo para WAV de análise (+ hash/custódia). */
+  /** Extrai a trilha para WAV de análise, com hash e custódia. */
   extractAudioFromVideo(
     workspacePath: string,
     videoPath: string,
@@ -1029,7 +818,7 @@ export const commands = {
     });
   },
 
-  /** Importa um áudio externo (WhatsApp/gravador): preserva original + gera WAV. */
+  /** Preserva o original e gera o WAV de análise. */
   importAudioFile(workspacePath: string, sourcePath: string): Promise<AudioMedia> {
     return safeInvoke<AudioMedia>("import_audio_file", {
       workspacePath,
@@ -1037,22 +826,20 @@ export const commands = {
     });
   },
 
-  /** Lista os áudios registrados na ocorrência. */
   listAudioMedia(workspacePath: string): Promise<AudioMedia[]> {
     return safeInvoke<AudioMedia[]>("list_audio_media", { workspacePath });
   },
 
-  /** Lê uma mídia de áudio pelo id. */
   openAudioMedia(workspacePath: string, audioId: string): Promise<AudioMedia> {
     return safeInvoke<AudioMedia>("open_audio_media", { workspacePath, audioId });
   },
 
-  /** Gera (FFmpeg) o espectrograma PNG do áudio; devolve o caminho relativo. */
+  /** PNG via FFmpeg; devolve o caminho relativo. */
   audioSpectrogram(workspacePath: string, audioId: string): Promise<string> {
     return safeInvoke<string>("audio_spectrogram", { workspacePath, audioId });
   },
 
-  /** W12 — Medições objetivas (pico/RMS/DC/clipping) do WAV de análise. */
+  /** Pico/RMS/DC/clipping do WAV de análise. */
   audioMeasure(
     workspacePath: string,
     audioId: string,
@@ -1063,8 +850,7 @@ export const commands = {
     });
   },
 
-  /** W12 — Espectro (Welch FFT). `fftSize` potência de 2 (default 4096). */
-  /** Espectrograma interativo da janela [t0, t1] no tamanho da tela. */
+  /** Espectrograma da janela [t0, t1] no tamanho da tela. */
   audioSpectrogramData(
     workspacePath: string,
     audioId: string,
@@ -1083,6 +869,7 @@ export const commands = {
     });
   },
 
+  /** Welch FFT; `fftSize` potência de 2 (padrão 4096). */
   audioSpectrum(
     workspacePath: string,
     audioId: string,
@@ -1095,13 +882,11 @@ export const commands = {
     });
   },
 
-  /** W12 — Curva ENF + continuidade. `nominalHz` 50 ou 60 (default 60). */
-  /** Relatório de autenticidade do áudio (original/vídeo de origem + sinal). */
   audioAuthenticity(workspacePath: string, audioId: string): Promise<AuthenticityReport> {
     return safeInvoke<AuthenticityReport>("audio_authenticity", { workspacePath, audioId });
   },
 
-  /** Compara o ENF do áudio com o de uma gravação de referência da rede. */
+  /** Compara o ENF com uma gravação de referência da rede. */
   audioEnfCompare(
     workspacePath: string,
     audioId: string,
@@ -1116,7 +901,7 @@ export const commands = {
     });
   },
 
-  /** ENF; `nominalHz` null/ausente = automático (50/60). */
+  /** `nominalHz` null/ausente = automático (50/60). */
   audioEnf(
     workspacePath: string,
     audioId: string,
@@ -1129,10 +914,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Recorta o trecho [startS, endS] (segundos) de um áudio num novo clipe
-   * derivado (kind "recorte"), com hash + custódia. Não altera o original.
-   */
+  /** Novo clipe derivado (kind "recorte") com hash + custódia; o original não muda. */
   extractAudioClip(
     workspacePath: string,
     audioId: string,
@@ -1147,11 +929,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Compila vários trechos (de um ou mais áudios) num novo derivado rotulado
-   * (kind "compilacao"), com hash + custódia + manifesto .compilacao.json.
-   * Não-destrutivo. `segments` usa snake_case (campos de struct serde aninhada).
-   */
+  /** Novo derivado (kind "compilacao") com manifesto .compilacao.json; `segments` em snake_case (struct serde). */
   compileAudioClips(
     workspacePath: string,
     segments: {
@@ -1169,11 +947,6 @@ export const commands = {
     });
   },
 
-  // ----- Documentoscopia (OCR, layout, campos, regiões, comparação) -----
-
-
-
-  /** Adiciona um marcador temporal (timestamp + rótulo) a um áudio. */
   addAudioMarker(
     workspacePath: string,
     audioSha256: string,
@@ -1188,7 +961,6 @@ export const commands = {
     });
   },
 
-  /** Lista os marcadores de um áudio (ordenados por tempo). */
   listAudioMarkers(
     workspacePath: string,
     audioSha256: string,
@@ -1199,17 +971,11 @@ export const commands = {
     });
   },
 
-  /** Remove um marcador pelo id. */
   deleteAudioMarker(workspacePath: string, markerId: string): Promise<void> {
     return safeInvoke<void>("delete_audio_marker", { workspacePath, markerId });
   },
 
-  /**
-   * Gera um DERIVADO realçado (auxílio de escuta) de um áudio, aplicando uma
-   * cadeia de filtros FFmpeg reproduzível. NÃO-destrutivo: cria uma nova mídia
-   * (kind="realce"); o WAV de análise original permanece intacto. `filters`:
-   * chaves dentre "denoise" | "highpass" | "lowpass" | "normalize".
-   */
+  /** Derivado realçado (kind "realce") por filtros FFmpeg: "denoise" | "highpass" | "lowpass" | "normalize". */
   enhanceAudio(
     workspacePath: string,
     sourceAudioId: string,
@@ -1225,7 +991,6 @@ export const commands = {
     });
   },
 
-  /** Lista os segmentos de degravação manual de um áudio (ordem por idx). */
   listAudioTranscript(
     workspacePath: string,
     audioSha256: string,
@@ -1236,11 +1001,7 @@ export const commands = {
     });
   },
 
-  /**
-   * Substitui toda a degravação de um áudio (replace-all). Devolve os segmentos
-   * persistidos (com ids gerados pelo backend). A transcrição é trabalho do
-   * perito — o tool não transcreve.
-   */
+  /** Replace-all; devolve os segmentos com os ids gerados pelo backend. */
   saveAudioTranscript(
     workspacePath: string,
     audioSha256: string,
@@ -1260,18 +1021,13 @@ export const commands = {
     });
   },
 
-  /** Diz se o whisper.cpp está disponível (PATH ou caminho informado). */
   whisperStatus(whisperBin?: string): Promise<WhisperStatus> {
     return safeInvoke<WhisperStatus>("whisper_status", {
       whisperBin: whisperBin ?? null,
     });
   },
 
-  /**
-   * Gera um RASCUNHO de transcrição (whisper.cpp local, offline) para o áudio.
-   * A saída é rascunho de máquina — o perito DEVE revisar. Não persiste:
-   * devolve candidatos para a tela de degravação.
-   */
+  /** Rascunho local (whisper.cpp, offline); não persiste — o perito revisa. */
   transcribeAudio(
     workspacePath: string,
     audioId: string,
@@ -1294,30 +1050,27 @@ export const commands = {
     });
   },
 
-  // ---- Gerenciador de IA (Fase 2.1) -------------------------------------
+  // ----- Gerenciador de IA -----
 
-  /** Catálogo curado (builds whisper.cpp + modelos) + se há GPU NVIDIA. */
+  /** Builds do whisper.cpp + modelos + se há GPU NVIDIA. */
   getAiCatalog(): Promise<AiCatalog> {
     return safeInvoke<AiCatalog>("get_ai_catalog", {});
   },
 
-  /** O que está instalado/configurado (caminhos + modelos presentes). */
   getAiStatus(): Promise<AiStatus> {
     return safeInvoke<AiStatus>("get_ai_status", {});
   },
 
-  /** Baixa e instala um item do catálogo (progresso via evento
-   * "ai-download-progress"); auto-configura os caminhos. Devolve o status. */
+  /** Progresso via evento "ai-download-progress"; auto-configura os caminhos. */
   installAiAsset(assetId: string): Promise<AiStatus> {
     return safeInvoke<AiStatus>("install_ai_asset", { assetId });
   },
 
-  /** Remove um item instalado e limpa a configuração. */
   removeAiAsset(assetId: string): Promise<AiStatus> {
     return safeInvoke<AiStatus>("remove_ai_asset", { assetId });
   },
 
-  /** Baixa e instala o separador de locutores (sherpa-onnx + 2 modelos, hash fixo). */
+  /** sherpa-onnx + 2 modelos, hash fixo. */
   installDiarization(): Promise<AiStatus> {
     return safeInvoke<AiStatus>("install_diarization", {});
   },
@@ -1326,7 +1079,7 @@ export const commands = {
     return safeInvoke<AiStatus>("remove_diarization", {});
   },
 
-  /** "Quem fala quando" no áudio (local). `numSpeakers` null = automático. */
+  /** `numSpeakers` null = automático. */
   diarizeAudio(
     workspacePath: string,
     audioId: string,
@@ -1343,21 +1096,12 @@ export const commands = {
     return safeInvoke<void>("save_diarization_names", { workspacePath, audioSha256, names });
   },
 
-  /** OPT-IN: consulta a última release do whisper.cpp (só informa). */
+  /** Opt-in: só informa a última release do whisper.cpp. */
   checkAiUpdates(): Promise<AiUpdateInfo> {
     return safeInvoke<AiUpdateInfo>("check_ai_updates", {});
   },
-  /** OPT-IN: atualiza o motor whisper.cpp para a última release upstream. */
+  /** Opt-in: atualiza o motor para a última release upstream. */
   updateWhisperEngine(): Promise<AiStatus> {
     return safeInvoke<AiStatus>("update_whisper_engine", {});
   },
-
-
-  // ----- SICRO 3.0 — Laudo como `.docx` (registro + ponte com o Word) -----
-
-
-
-
 } as const;
-
-export type { SicroError };

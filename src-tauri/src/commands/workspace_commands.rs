@@ -1,7 +1,5 @@
-//! Tauri commands that operate on workspaces.
-//!
-//! Naming convention: command names use snake_case in Rust. The front-end
-//! `commands.ts` mirrors them exactly.
+//! Comandos Tauri de workspace/ocorrência. Nomes em snake_case; o `commands.ts`
+//! do front espelha exatamente.
 
 use std::path::PathBuf;
 
@@ -21,7 +19,7 @@ use crate::state::AppState;
 use crate::workspace::manifest::{MANIFEST_FILENAME, SQLITE_FILENAME};
 use crate::workspace::{create_workspace, open_workspace};
 
-/// Create a fresh `.sicro` workspace with one initial occurrence row.
+/// Cria um workspace `.sicro` novo com a linha inicial da ocorrência.
 #[tauri::command]
 pub async fn create_occurrence(
     state: State<'_, AppState>,
@@ -38,7 +36,7 @@ pub async fn create_occurrence(
     })
 }
 
-/// Open an existing `.sicro` workspace by path.
+/// Abre um workspace `.sicro` existente pelo caminho.
 #[tauri::command]
 pub async fn open_occurrence(
     state: State<'_, AppState>,
@@ -54,8 +52,7 @@ pub async fn open_occurrence(
     })
 }
 
-/// Re-read the occurrence row for a workspace already known to be valid.
-/// Used by the front-end when navigating back to a workspace it had loaded.
+/// Relê a linha da ocorrência de um workspace já conhecido (volta de navegação).
 #[tauri::command]
 pub async fn get_occurrence(workspace_path: String) -> Result<Occurrence> {
     let path = PathBuf::from(workspace_path);
@@ -63,11 +60,8 @@ pub async fn get_occurrence(workspace_path: String) -> Result<Occurrence> {
     Ok(opened.occurrence)
 }
 
-/// Atualiza a identificação da ocorrência (cabeçalho do caso). O perito é a
-/// PALAVRA FINAL — casos de expediente nascem no Desktop e a coleta de campo é
-/// corrigida depois. Sobrescreve os campos editáveis e regrava o `recent.json`
-/// (o rótulo/tipo/município mudam). NÃO toca na proveniência nem no pacote
-/// `.sicroapp` original (§13: a prova em si permanece imutável; isto é metadado).
+/// Atualiza o cabeçalho do caso — o perito é a PALAVRA FINAL sobre a coleta de
+/// campo. Não toca na proveniência nem no pacote `.sicroapp` original.
 #[tauri::command]
 pub async fn update_occurrence(
     state: State<'_, AppState>,
@@ -99,8 +93,6 @@ pub async fn update_occurrence(
             occ.status = st;
         }
     }
-    // Mantém a data de encerramento coerente com o status (estampa ao concluir,
-    // limpa ao reabrir). Verdade temporal — não inventa data.
     apply_status_side_effects(&mut occ);
     if let Some(peritos) = edit.peritos {
         occ.peritos = peritos
@@ -139,9 +131,8 @@ fn none_if_blank(v: Option<String>) -> Option<String> {
     })
 }
 
-/// Mantém `data_encerramento` coerente com o status: estampa ao concluir (se
-/// ainda vazio) e limpa ao reabrir (aberta / em andamento). "Arquivada" preserva
-/// o que houver. Não inventa data — usa o relógio do sistema no momento da ação.
+/// `data_encerramento` coerente com o status: estampa ao concluir (se vazio),
+/// limpa ao reabrir; "Arquivada" preserva. Não inventa data.
 fn apply_status_side_effects(occ: &mut Occurrence) {
     match occ.status {
         OccurrenceStatus::Concluida => {
@@ -156,10 +147,8 @@ fn apply_status_side_effects(occ: &mut Occurrence) {
     }
 }
 
-/// Muda APENAS o status da ocorrência (concluir / reabrir) — diferente de
-/// `update_occurrence`, que reescreve o cabeçalho inteiro (e zeraria campos não
-/// enviados). Estampa/limpa a data de encerramento conforme o status. O perito é
-/// a palavra final; a proveniência (import_id, raw_*) nunca é tocada.
+/// Muda SÓ o status (concluir/reabrir) — `update_occurrence` reescreve o cabeçalho
+/// inteiro e zeraria campos não enviados. A proveniência nunca é tocada.
 #[tauri::command]
 pub async fn set_occurrence_status(
     state: State<'_, AppState>,
@@ -209,9 +198,8 @@ pub async fn forget_recent_occurrence(
     state.forget_recent(id)
 }
 
-/// Núcleo testável da exclusão do workspace do disco. Só apaga se a pasta for
-/// REALMENTE um workspace `.sicro` (manifesto + banco presentes) — trava de
-/// segurança contra remover uma pasta arbitrária por engano.
+/// Só apaga se a pasta for REALMENTE um workspace `.sicro` (manifesto + banco):
+/// trava contra remover uma pasta arbitrária por engano.
 fn delete_occurrence_impl(workspace_path: &str) -> Result<()> {
     let ws = PathBuf::from(workspace_path);
     if !ws.is_dir() {
@@ -234,10 +222,8 @@ fn delete_occurrence_impl(workspace_path: &str) -> Result<()> {
     Ok(())
 }
 
-/// Exclui PERMANENTEMENTE a pasta `.sicro` do disco (fotos, laudos, croquis —
-/// tudo). Operação destrutiva e irreversível; o front exige confirmação
-/// explícita (digitar o BO) antes de chamar. A limpeza de recentes/índice é
-/// feita pelo front via `forget_recent_occurrence` + `remove_case_index`.
+/// Exclui PERMANENTEMENTE a pasta `.sicro` (irreversível; o front exige confirmação).
+/// Recentes/índice são limpos pelo front.
 #[tauri::command]
 pub async fn delete_occurrence(workspace_path: String) -> Result<()> {
     delete_occurrence_impl(&workspace_path)
@@ -252,7 +238,7 @@ fn path_to_string(path: &std::path::Path) -> Result<String> {
         .ok_or_else(|| SicroError::Filesystem(format!("non-UTF8 path: {}", path.display())))
 }
 
-// Unused yet, kept here so a future "rename / move workspace" command has a clear home.
+// Ainda sem uso; reservado para um futuro comando de renomear/mover workspace.
 #[allow(dead_code)]
 fn workspace_db_path(workspace_dir: &std::path::Path) -> PathBuf {
     workspace_dir.join(SQLITE_FILENAME)

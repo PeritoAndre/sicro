@@ -1,6 +1,4 @@
-/**
- * Coordinate parsing — unit tests (MVP 10).
- */
+/** Testes do parsing de coordenadas. */
 
 import { describe, expect, it } from "vitest";
 import {

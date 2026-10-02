@@ -1,7 +1,4 @@
-/**
- * VideoListView — landing of the Video module: lista de vídeos registrados
- * + botão "Adicionar vídeo" (abre file dialog → registerMedia).
- */
+/** Landing do módulo Vídeo: lista de vídeos registrados + "Adicionar vídeo". */
 
 import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
@@ -26,7 +23,6 @@ const VIDEO_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <ShieldCheck size={18} />,
     title: "Integridade e metadados",
-    // Implementação: metadados extraídos via ffprobe (FFmpeg). UI neutra.
     desc: "SHA-256 + metadados técnicos: codec, resolução, fps e duração. Original preservado.",
   },
   {
@@ -37,7 +33,6 @@ const VIDEO_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <Camera size={18} />,
     title: "Coleta técnica de frames",
-    // Implementação: frames extraídos via ffmpeg (FFmpeg). UI neutra.
     desc: "Extraia quadros para anexar ao laudo ou tratar no Imagem.",
   },
   {
@@ -133,9 +128,7 @@ export function VideoListView() {
         <header className={styles.header}>
           <div>
             <h1 className={styles.title}>Vídeo</h1>
-            {/* Implementação: cada vídeo é registrado como `video_media` com
-                SHA-256, metadados via ffprobe e frames via ffmpeg (FFmpeg).
-                O texto da UI é neutro de propósito. */}
+            {/* Texto neutro de propósito: não cita ffprobe/ffmpeg. */}
             <p className={styles.subtitle}>
               Registre vídeos com integridade (SHA-256), extraia metadados
               técnicos, marque eventos na linha do tempo, colete frames e monte
@@ -226,6 +219,3 @@ export function VideoListView() {
     </div>
   );
 }
-
-// ---- miniatura --------------------------------------------------------------
-

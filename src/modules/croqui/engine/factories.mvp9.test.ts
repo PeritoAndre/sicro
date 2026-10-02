@@ -1,15 +1,4 @@
-/**
- * Tests for the MVP 9 additions to the Croqui factories.
- *
- * Covers:
- *   - new vehicle body subtypes (pickup/van/onibus/moto_esportiva/
- *     moto_carga/caminhao_pesado/carreta);
- *   - new marker subtypes (skid_curve/sulcagem/ranhura/impact_area/
- *     rest_position/semaforo/placa_pare/placa_preferencia/poste/
- *     arvore/guia/faixa_pedestre);
- *   - new line subtypes (canteiro/acostamento/trajetoria/callout);
- *   - category routing (mobiliário urbano).
- */
+/** Testes das factories: frota expandida, vestígios, mobiliário urbano e linhas extras. */
 
 import { describe, expect, it } from "vitest";
 import { makeLine, makeMarker, makeVehicle } from "./factories";

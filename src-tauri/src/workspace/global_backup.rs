@@ -1,29 +1,6 @@
-//! Backup geral (todos os casos) — incremental, 1 arquivo por caso.
-//!
-//! Em vez de um único ZIP gigante de tudo (que pode passar de dezenas de
-//! GB, recomprime tudo toda vez e, se corromper, leva tudo junto), o backup
-//! geral mantém uma PASTA-ESPELHO num destino escolhido (ex.: HD externo):
-//!
-//! ```text
-//! <destino>/
-//!     sicro-backup-index.json     ← índice do conjunto (+ fingerprints)
-//!     backup_<label>_<id8>.sicrobackup   (1 por caso)
-//!     ...
-//! ```
-//!
-//! Cada caso vira um `.sicrobackup` independente (reaproveita `create_backup`),
-//! portanto continua verificável e restaurável isoladamente.
-//!
-//! INCREMENTAL: para cada caso calculamos um *fingerprint* barato (hash de
-//! caminho+tamanho+mtime de todos os arquivos que entrariam no backup, com a
-//! MESMA regra de skip do zip). Se o fingerprint bate com o do último backup
-//! e o arquivo ainda existe no destino, o caso é PULADO — só recopiamos o que
-//! mudou. A primeira rodada copia tudo (não tem mágica com vídeo/drone); as
-//! seguintes só tocam no que mexeu.
-//!
-//! §13: o workspace original nunca é tocado; casos não encontrados
-//! (movidos / HD desconectado) são reportados e o backup anterior deles é
-//! PRESERVADO (nunca apagamos um backup só porque a origem sumiu).
+//! Backup geral: pasta-espelho no destino com um `.sicrobackup` por caso e um
+//! índice JSON com fingerprints. Incremental: caso com fingerprint igual e arquivo
+//! presente é pulado. A origem nunca é tocada; caso ausente mantém o backup anterior.
 
 use std::collections::HashMap;
 use std::fs;
@@ -40,23 +17,21 @@ use crate::workspace::backup::{create_backup, SKIP_DIRS};
 use crate::workspace::manifest::{Manifest, APP_VERSION};
 
 const INDEX_FILENAME: &str = "sicro-backup-index.json";
-/// Subpasta onde ficam os `.sicrobackup` por caso (estrutura v2 do conjunto).
-/// O índice fica na raiz; `config/` (snapshot do app-settings) é gravado pelo
-/// comando. Conjunto auto-explicativo e fácil de restaurar.
+/// Os `.sicrobackup` ficam em `casos/`; o índice fica na raiz do conjunto.
 const CASES_SUBDIR: &str = "casos";
 const INDEX_FORMAT: &str = "sicro-global-backup";
 const INDEX_FORMAT_VERSION: &str = "1.0";
 
-/// Um caso a entrar no backup geral (vindo do índice de casos no front).
+/// Caso a entrar no backup geral.
 #[derive(Debug, Clone, Deserialize)]
 pub struct GlobalCaseInput {
     pub workspace_path: String,
-    /// Rótulo humano (BO/tipo/município) usado no nome do arquivo.
+    /// Rótulo humano usado no nome do arquivo.
     #[serde(default)]
     pub label: String,
 }
 
-/// Evento de progresso emitido por caso (para a UI não congelar).
+/// Progresso por caso (para a UI não congelar).
 #[derive(Debug, Clone, Serialize)]
 pub struct GlobalBackupProgress {
     pub index: u32,
@@ -95,7 +70,7 @@ pub struct GlobalBackupReport {
     pub cases: Vec<CaseBackupResult>,
 }
 
-/// Entrada persistida no `sicro-backup-index.json` (por caso).
+/// Entrada do índice (por caso).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct IndexCaseEntry {
     workspace_id: String,
@@ -124,9 +99,8 @@ struct IndexFile {
     cases: Vec<IndexCaseEntry>,
 }
 
-/// Fingerprint barato do workspace: hash de (caminho|tamanho|mtime) de todos
-/// os arquivos que entrariam no backup, ordenados. Não lê o conteúdo dos
-/// arquivos, só metadados — rápido mesmo com muita mídia.
+/// Hash de (caminho|tamanho|mtime) dos arquivos que entrariam no backup,
+/// ordenados. Não lê conteúdo — rápido mesmo com muita mídia.
 pub fn workspace_fingerprint(root: &Path) -> Result<String> {
     let mut entries: Vec<String> = Vec::new();
     collect_fingerprint(root, root, &mut entries)?;
@@ -150,8 +124,7 @@ fn collect_fingerprint(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result
             .file_type()
             .map_err(|e| SicroError::Filesystem(format!("file_type error: {e}")))?;
 
-        // Skip ephemeral/heavy + a própria pasta de backups — só no nível raiz,
-        // exatamente como o zip do backup faz.
+        // Mesma regra de skip do zip, só no nível raiz.
         if ft.is_dir() && dir == root {
             if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
                 if SKIP_DIRS.iter().any(|d| *d == name) || name == "backups" {
@@ -232,7 +205,6 @@ pub fn run_global_backup<F: FnMut(GlobalBackupProgress)>(
             e
         ))
     })?;
-    // Os .sicrobackup por caso ficam em <destino>/casos/.
     let casos_dir = destination.join(CASES_SUBDIR);
     fs::create_dir_all(&casos_dir).map_err(|e| {
         SicroError::Filesystem(format!(
@@ -345,7 +317,6 @@ pub fn run_global_backup<F: FnMut(GlobalBackupProgress)>(
             }
         }
 
-        // Mudou (ou é novo): gera o .sicrobackup no destino.
         on_progress(GlobalBackupProgress {
             index: idx,
             total,
@@ -434,11 +405,8 @@ pub fn run_global_backup<F: FnMut(GlobalBackupProgress)>(
 }
 
 // ---------------------------------------------------------------------------
-// Restauração — lê um conjunto de backup (estrutura v2) e devolve os casos.
-// GENÉRICO quanto à origem (HD externo, pendrive, nuvem, rede): é só uma pasta.
-// §13: a origem NUNCA é modificada; não sobrescreve casos existentes (a menos
-// que `overwrite`), preservando o que já está no disco do perito.
-// ---------------------------------------------------------------------------
+// Restauração: lê um conjunto de backup (qualquer pasta: HD, pendrive, rede).
+// A origem nunca é modificada; caso já existente só é sobrescrito com `overwrite`.
 
 #[derive(Debug, Clone, Serialize)]
 pub struct RestoreProgress {
@@ -470,8 +438,7 @@ pub struct RestoreReport {
     pub cases: Vec<RestoredCase>,
 }
 
-/// Nome de pasta seguro a partir do caminho original do workspace (último
-/// componente). Fallback: `restaurado_<id8>.sicro`.
+/// Último componente do caminho original; fallback `restaurado_<id8>.sicro`.
 fn restore_folder_name(source_path: &str, id8: &str) -> String {
     let trimmed = source_path.trim_end_matches(['/', '\\']);
     let base = trimmed.rsplit(['/', '\\']).next().unwrap_or("");
@@ -580,7 +547,6 @@ pub fn run_restore<F: FnMut(RestoreProgress)>(
         .map(|e| (e.workspace_id.clone(), e.label.clone()))
         .collect();
 
-    // Lista os `.sicrobackup` em casos/.
     let mut backups: Vec<PathBuf> = Vec::new();
     if let Ok(rd) = fs::read_dir(&casos_dir) {
         for ent in rd.flatten() {

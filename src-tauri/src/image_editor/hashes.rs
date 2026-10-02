@@ -1,10 +1,5 @@
-//! G12.8 — Múltiplos hashes para chain of custody pericial.
-//!
-//! MD5 e SHA-1 estão criptograficamente quebrados (collision attacks)
-//! mas continuam sendo exigidos por convenção em muitos laudos. SHA-256
-//! é o padrão atual; SHA-3-256 (Keccak) é a próxima geração.
-//!
-//! Este módulo computa os 4 num único pass do arquivo, evitando 4x I/O.
+//! MD5, SHA-1, SHA-256 e SHA-3-256 do arquivo numa única leitura. MD5/SHA-1
+//! estão quebrados, mas laudos ainda os exigem por convenção.
 
 use std::fs::File;
 use std::io::{BufReader, Read};
@@ -18,10 +13,7 @@ use sha3::Sha3_256;
 use crate::error::{Result, SicroError};
 use crate::models::ImageHashSet;
 
-/// Computa os 4 hashes do arquivo num único pass.
-///
-/// Para arquivos grandes, lê em chunks de 64 KB e atualiza todos os
-/// digests em paralelo (na verdade sequencialmente mas no mesmo loop).
+/// Lê em blocos de 64 KB e alimenta os quatro digests no mesmo loop.
 pub fn compute_all_hashes(path: &Path) -> Result<ImageHashSet> {
     let file = File::open(path).map_err(|e| {
         SicroError::Filesystem(format!("não consegui abrir {}: {}", path.display(), e))

@@ -1,10 +1,8 @@
 // @ts-nocheck -- mexe nos singletons estáticos do motor vendido (arcada).
 /**
- * O motor do arcada usa singletons estáticos (FloorPlan, TransformLayer,
- * AddWallManager) que sobrevivem entre mount/unmount do React. No arcada (SPA)
- * isso era ok; no SICRO o PlantaEditor monta/desmonta. Sem reset, reabrir um
- * croqui de planta reaproveitaria instâncias com display objects já destruídos.
- * `disposePlantaEngine()` zera os singletons pra um próximo mount começar limpo.
+ * Os singletons estáticos do arcada (FloorPlan, TransformLayer, AddWallManager)
+ * sobrevivem ao unmount do React; sem este reset, reabrir um croqui
+ * reaproveitaria instâncias com display objects já destruídos.
  */
 import { FloorPlan } from "./editor/editor/objects/FloorPlan";
 import { TransformLayer } from "./editor/editor/objects/TransformControls/TransformLayer";

@@ -1,5 +1,4 @@
-/* Marca SICRO (logo + nome) — usada na barra de título.
-   Tamanhos ~10% acima do original (30 px / 14 px / 10 px), pedido de 01/10. */
+/* Marca SICRO (logo + nome) na barra de título. */
 .brand {
   display: inline-flex;
   align-items: center;

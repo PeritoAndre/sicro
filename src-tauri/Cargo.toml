@@ -1,6 +1,6 @@
 [package]
 name = "sicro-desktop"
-version = "4.1.1"
+version = "4.1.2"
 description = "SICRO 3.0 — Sistema Integrado de Criminalística e Operações"
 authors = ["André Ricardo Barroso"]
 edition = "2021"
@@ -123,3 +123,8 @@ tempfile = "3"
 # This feature is enabled when building for the Tauri release.
 # Production builds bake the WebView assets in.
 custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+strip = true
+lto = true
+codegen-units = 1

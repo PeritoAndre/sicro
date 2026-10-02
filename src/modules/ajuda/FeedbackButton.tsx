@@ -1,13 +1,4 @@
-/**
- * FeedbackButton — botão "Feedback" no rodapé do índice da Ajuda.
- *
- * Abre um diálogo com dois caminhos de contato:
- *   1. Issues do projeto no GitHub (reportar bug / sugerir);
- *   2. E-mail do software (copiar ou abrir no app de e-mail).
- *
- * Usa o `plugin-shell` para abrir URL/`mailto:` no navegador/app padrão (não
- * dentro do app) e o `plugin-clipboard-manager` para copiar o e-mail.
- */
+/** Botão "Feedback" da Ajuda: issues no GitHub ou e-mail, abertos fora do app pelo plugin-shell. */
 
 import { useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
@@ -146,7 +137,7 @@ export function FeedbackButton() {
   );
 }
 
-// --- estilos inline (componente auto-contido) -----------------------------
+// --- estilos inline ---
 
 const overlay: CSSProperties = {
   position: "fixed",

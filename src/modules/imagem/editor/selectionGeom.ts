@@ -1,7 +1,4 @@
-/**
- * W20 — Geometria pura da seleção (sem React/Konva). Coordenadas em px da
- * imagem original. Reutilizável na máscara (S2) e na cópia de região (S3).
- */
+/** Geometria pura da seleção (sem React/Konva). Coordenadas em px da imagem original. */
 import type {
   SicroImagePoint,
   SicroImageSelection,
@@ -71,36 +68,4 @@ export function selectionArea(sel: SicroImageSelection): number {
   const h = sel.height ?? 0;
   if (sel.kind === "ellipse") return Math.PI * (w / 2) * (h / 2);
   return w * h;
-}
-
-/** Polígono fechado (em px de imagem) que aproxima a seleção, p/ desenho/medida.
- * Elipse vira polígono de `segments` lados. */
-export function selectionToPolygon(
-  sel: SicroImageSelection,
-  segments = 48,
-): SicroImagePoint[] {
-  if (sel.kind === "polygon") return (sel.points ?? []).slice();
-  const x = sel.x ?? 0;
-  const y = sel.y ?? 0;
-  const w = sel.width ?? 0;
-  const h = sel.height ?? 0;
-  if (sel.kind === "rect") {
-    return [
-      { x, y },
-      { x: x + w, y },
-      { x: x + w, y: y + h },
-      { x, y: y + h },
-    ];
-  }
-  // ellipse
-  const cx = x + w / 2;
-  const cy = y + h / 2;
-  const rx = w / 2;
-  const ry = h / 2;
-  const out: SicroImagePoint[] = [];
-  for (let i = 0; i < segments; i++) {
-    const a = (i / segments) * Math.PI * 2;
-    out.push({ x: cx + Math.cos(a) * rx, y: cy + Math.sin(a) * ry });
-  }
-  return out;
 }

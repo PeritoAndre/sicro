@@ -1,10 +1,4 @@
-/**
- * Espelho TS das configurações GLOBAIS do app (o "cofrinho" que vive fora de
- * qualquer `.sicro`). Chaves em snake_case porque o backend Rust serializa os
- * nomes dos campos como estão (sem rename_all) — igual aos demais domínios.
- *
- * Backend: `src-tauri/src/commands/settings_commands.rs`.
- */
+/** Espelha as configurações globais do app (Rust: `commands/settings_commands.rs`). */
 
 export interface PeritoProfile {
   full_name: string;
@@ -12,9 +6,9 @@ export interface PeritoProfile {
   role: string; // cargo
   formation: string; // formação
   signature_image_path: string;
-  /** Foto do perito (caminho do arquivo) — exibida no avatar do app. */
+  /** Vira o avatar do app. */
   photo_path: string;
-  /** Município de atuação/lotação — pré-preenche o município de novas ocorrências. */
+  /** Pré-preenche o município de novas ocorrências. */
   municipio_atuacao: string;
 }
 
@@ -32,7 +26,7 @@ export type ThemeMode = "dark" | "light" | "auto";
 export interface AppearanceSettings {
   theme: ThemeMode;
   accent: string; // hex (#rrggbb)
-  /** Zoom da interface inteira (1 = 100%). Ver `@core/uiZoom`. */
+  /** 1 = 100%. */
   ui_zoom: number;
 }
 
@@ -41,7 +35,7 @@ export interface PathsSettings {
   default_export_dir: string;
 }
 
-/** Fase 2.1 — caminhos da IA de transcrição instalada pelo gerenciador. */
+/** Caminhos da IA de transcrição instalada pelo gerenciador. */
 export interface AiSettings {
   whisper_bin_path: string;
   model_path: string;
@@ -54,7 +48,7 @@ export interface AiSettings {
   diar_version: string;
 }
 
-/** Documentoscopia — motor de OCR (Tesseract) + idiomas instalados. */
+/** Motor de OCR (Tesseract) + idiomas instalados. */
 export interface OcrSettings {
   engine_bin_path: string;
   engine_version: string;
@@ -62,29 +56,20 @@ export interface OcrSettings {
   ocr_version: string;
 }
 
-/**
- * Doc ProseMirror do cabeçalho (estrutura mínima — o módulo Laudo trata como
- * JSONContent). Genérico aqui pra não acoplar as configs globais ao TipTap.
- */
+/** Doc ProseMirror genérico, para não acoplar as configs globais a um editor. */
 export type HeaderTemplateContent = {
   type: string;
   content?: unknown[];
   attrs?: Record<string, unknown>;
 };
 
-/**
- * Cabeçalho oficial salvo (criador de cabeçalho do Laudo), reutilizável entre
- * todos os laudos. O padrão institucional ("nosso") é definido em código e NÃO
- * fica aqui — esta lista guarda os que o perito salvar (outras unidades/órgãos).
- */
+/** Cabeçalhos salvos pelo perito; o padrão institucional é definido em código, não aqui. */
 export interface HeaderTemplate {
   id: string;
   name: string;
-  /** Conteúdo do cabeçalho (doc ProseMirror). */
   content: HeaderTemplateContent;
-  /** Altura do cabeçalho em cm (default 2.5 quando ausente). */
+  /** cm; ausente = 2.5. */
   header_height_cm?: number;
-  /** ISO-8601. */
   created_at: string;
 }
 
@@ -96,11 +81,10 @@ export interface AppSettings {
   paths: PathsSettings;
   ai: AiSettings;
   ocr: OcrSettings;
-  /** Biblioteca de cabeçalhos oficiais salvos (global). */
   header_templates: HeaderTemplate[];
 }
 
-/** Default usado no front antes do backend responder (espelha o Rust). */
+/** Usado antes do backend responder; espelha o default do Rust. */
 export function defaultAppSettings(): AppSettings {
   return {
     schema_version: "1",

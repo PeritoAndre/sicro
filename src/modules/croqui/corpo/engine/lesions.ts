@@ -1,10 +1,7 @@
 /**
- * Taxonomia de lesões/achados — baseada no POP SENASP "Local de Crime" vol. 6
- * (6.01 crime contra a vida / 6.03 feminicídio), exame perinecroscópico.
- *
- * §13: é uma lista de CATEGORIAS para o perito CLASSIFICAR o que observou —
- * o sistema não diagnostica nada. `icon` é só uma chave (a UI mapeia pra um
- * ícone lucide); o engine fica puro (sem React/lucide), pra ser testável.
+ * Taxonomia de lesões/achados (POP SENASP "Local de Crime" vol. 6): categorias
+ * pro perito classificar o que observou; o sistema não diagnostica.
+ * `icon` é só uma chave — a UI mapeia pra lucide, o engine fica sem React.
  */
 
 export type LesaoTipo =
@@ -19,15 +16,14 @@ export type LesaoTipo =
   | "balistico"
   | "outro";
 
-export interface LesaoTipoMeta {
+interface LesaoTipoMeta {
   tipo: LesaoTipo;
-  /** Rótulo completo (UI + legenda). */
   label: string;
-  /** Abreviatura curta exibida DENTRO do marcador, quando cabe. */
+  /** Abreviatura exibida dentro do marcador, quando cabe. */
   short: string;
   /** Cor do marcador (hex). */
   color: string;
-  /** Chave de ícone (lucide) — resolvida na UI. */
+  /** Chave de ícone lucide, resolvida na UI. */
   icon: string;
 }
 

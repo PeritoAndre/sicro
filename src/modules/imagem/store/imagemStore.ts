@@ -1,7 +1,6 @@
 /**
- * imagemStore — lista de análises da ocorrência ativa + análise atualmente
- * em edição. Heavy editor state (seleção, drag) vive em estado local;
- * o que persiste vive aqui (mirror do croquiStore).
+ * Lista de análises da ocorrência ativa + análise em edição. Estado pesado do
+ * editor (seleção, drag) fica local no componente; só o que persiste vive aqui.
  */
 
 import { create } from "zustand";

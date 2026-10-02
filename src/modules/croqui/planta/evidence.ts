@@ -1,10 +1,6 @@
 /**
- * Marcadores de evidência/vestígio do croqui de planta — taxonomia + legenda.
- *
- * Camada PERICIAL sobre o motor de planta (arcada): o perito marca vestígios
- * sobre a planta (sangue, projétil, arma, ponto de entrada/arrombamento, corpo…)
- * com rótulo sequencial (letra A,B,C… ou número 1,2,3…) e uma legenda é montada
- * deterministicamente. §13: o sistema só rotula/organiza; não infere nada.
+ * Taxonomia e rótulos dos marcadores de vestígio da planta: rótulo sequencial
+ * (letra ou número) e legenda determinística; o sistema só rotula, não infere.
  */
 
 export type EvidenceTipo =
@@ -21,7 +17,7 @@ export type EvidenceTipo =
 
 export type EvidenceLabelKind = "letra" | "numero";
 
-export interface EvidenceMeta {
+interface EvidenceMeta {
   tipo: EvidenceTipo;
   label: string; // nome por extenso (legenda)
   short: string; // abreviação
@@ -57,9 +53,7 @@ export function isEvidenceTipo(v: unknown): v is EvidenceTipo {
   return typeof v === "string" && v in EVIDENCE_INDEX;
 }
 
-/**
- * Rótulo a partir da ordem (1-based): "letra" → A,B,…,Z,AA,AB…; "numero" → 1,2…
- */
+/** Rótulo pela ordem (1-based): "letra" → A…Z, AA, AB…; "numero" → 1, 2… */
 export function evidenceLabelFor(seq: number, kind: EvidenceLabelKind): string {
   if (kind === "numero") return String(seq);
   // base-26 (A=1)

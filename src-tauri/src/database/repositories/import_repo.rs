@@ -1,8 +1,4 @@
-//! Read/write helpers for the `imports` table (Spike D — .sicroapp importer).
-//!
-//! Schema lives in `migrations/004_imports.sql`. This module is the only place
-//! that touches raw SQL for that table — `commands/import_commands.rs` calls
-//! these functions instead of constructing statements itself.
+//! Tabela `imports` (migration 004).
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -44,8 +40,7 @@ pub fn insert(conn: &Connection, import: &Import) -> Result<()> {
     Ok(())
 }
 
-/// Return the existing import for a given package hash, if any. Used to
-/// implement the "block reimport" rule from doc §8.
+/// Import já existente para o hash do pacote — base da regra "não reimportar".
 pub fn find_by_package_sha256(conn: &Connection, sha256: &str) -> Result<Option<Import>> {
     let mut stmt = conn.prepare(&format!(
         "SELECT {COLUMNS} FROM imports WHERE package_sha256 = ?1"
@@ -54,9 +49,8 @@ pub fn find_by_package_sha256(conn: &Connection, sha256: &str) -> Result<Option<
     Ok(row)
 }
 
-/// Patch the row in place — used by the orchestrator after the occurrence and
-/// media rows are written, so the import is born with empty warnings/errors
-/// and finalised once the side-effects are complete.
+/// O import nasce sem avisos/erros e é finalizado aqui depois que ocorrência
+/// e mídias foram gravadas.
 pub fn update_status_and_warnings(
     conn: &Connection,
     id: &Uuid,

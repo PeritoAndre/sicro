@@ -1,26 +1,11 @@
-/**
- * UnsavedChangesModal — the "Salvar antes de sair?" dialog raised by
- * CroquiEditor when the user tries to leave the editor while there
- * are unsaved changes (MVP 9 Round 3).
- *
- * Three outcomes:
- *   - **Salvar e sair**   → save the croqui, then proceed with the
- *                          pending navigation.
- *   - **Sair sem salvar** → discard local edits and proceed.
- *   - **Cancelar**        → close the modal and stay in the editor.
- *
- * Visual styling reuses the existing croqui dialog classes so the
- * modal feels native to the module.
- */
+/** Diálogo "Salvar antes de sair?" do CroquiEditor. */
 
 import styles from "./CroquiEditor.module.css";
 
-export interface UnsavedChangesModalProps {
-  /** Whether the parent is currently in the middle of a save. */
+interface UnsavedChangesModalProps {
   saving: boolean;
-  /** Whether the parent is currently in the middle of an export. */
   exporting?: boolean;
-  /** Optional contextual text — e.g. where the user was trying to go. */
+  /** Para onde o usuário estava indo (entra no texto). */
   destinationLabel?: string;
   onSaveAndLeave: () => void;
   onDiscardAndLeave: () => void;

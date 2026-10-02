@@ -1,8 +1,4 @@
-//! Repositories for the Video module (Spike F).
-//!
-//! Five tables sharing the same shape (occurrence_id + media_hash + JSON
-//! blobs). Kept in a single module — splitting into five files would be
-//! cargo-cult: the SQL parts are short and almost identical.
+//! Repositório do módulo Vídeo (tabelas com a mesma forma, num módulo só).
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -468,7 +464,7 @@ const CLOCK_COLS: &str = "
     clock_label, note, created_at, updated_at
 ";
 
-/// Grava (ou substitui) o vínculo de relógio do vídeo `media_hash`.
+/// Grava ou substitui o vínculo de relógio do vídeo (um por vídeo).
 pub fn upsert_clock(conn: &Connection, c: &VideoClockCalibration) -> Result<()> {
     conn.execute(
         &format!(
@@ -645,13 +641,13 @@ mod tests {
     fn migration_018_clock_upsert_list_delete() {
         let mut conn = Connection::open_in_memory().unwrap();
         run_migrations(&mut conn).unwrap();
-        // Sem linha em `occurrences`: desliga a FK só neste teste.
+        // Sem linha em `occurrences`: FK desligada só neste teste.
         conn.execute_batch("PRAGMA foreign_keys = OFF;").unwrap();
         let occ = Uuid::new_v4();
 
         upsert_clock(&conn, &clock(occ, "aaa", 5.0, 12_965.0)).unwrap();
         upsert_clock(&conn, &clock(occ, "bbb", 1.0, 12_960.0)).unwrap();
-        // Segundo vínculo do mesmo vídeo SUBSTITUI (um por vídeo).
+        // Segundo vínculo do mesmo vídeo substitui.
         upsert_clock(&conn, &clock(occ, "aaa", 7.5, 12_967.5)).unwrap();
 
         let all = list_clocks_for_occurrence(&conn, &occ).unwrap();

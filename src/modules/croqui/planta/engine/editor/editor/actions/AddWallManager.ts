@@ -76,11 +76,8 @@ export class AddWallManager {
 
     }
 
-    /**
-     * Cancela a sequência em andamento. Se só houve o 1º clique (nó solto, sem
-     * parede), remove o nó órfão do floorplan — senão deixaria um ponto perdido.
-     * Usado pelo botão direito e ao trocar de ferramenta.
-     */
+    /** Cancela a sequência em andamento; se só houve o 1º clique, remove o nó
+     *  órfão do floorplan (senão ficaria um ponto perdido). */
     public cancelChain() {
         if (this.previousNode !== undefined && this.wallsInChain === 0) {
             try {
@@ -105,11 +102,8 @@ export class AddWallManager {
         this.preview.set(undefined);
     }
 
-    /**
-     * true quando a sequência tem só o 1º clique (nó solto, sem parede ainda).
-     * Esse estado é TRANSITÓRIO: não deve virar passo de histórico (senão o
-     * Ctrl+Z volta pro "nó solto" e deixa um ponto órfão).
-     */
+    /** true quando só houve o 1º clique (nó solto): estado transitório que não
+     *  deve virar passo de histórico, senão o Ctrl+Z deixa um ponto órfão. */
     public isPendingLoneNode() {
         return this.previousNode !== undefined && this.wallsInChain === 0;
     }
@@ -119,7 +113,6 @@ export class AddWallManager {
 
     public resetTools() {
         TransformLayer.Instance.deselect();
-        // Trocar de ferramenta cancela a sequência (e limpa o nó solto do 1º clique).
         this.cancelChain();
     }
 }

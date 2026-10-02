@@ -1,7 +1,4 @@
-/**
- * Mirror of `src-tauri/src/models/image_analysis.rs` (MVP 7).
- * Field names em snake_case por compatibilidade com serde.
- */
+/** Espelha `src-tauri/src/models/image_analysis.rs` (snake_case = wire do serde). */
 
 export type ImageSourceKind =
   | "photo"
@@ -68,18 +65,16 @@ export interface BackendAdjustments {
   saturation: number;
   grayscale: boolean;
   invert: boolean;
-  /** W14.2 — Matiz (rotação de cor, graus). 0 = neutro. Matriz hueRotate
-   * do SVG/CSS (preservando luminância) — replicada no backend. */
+  /** Rotação de matiz em graus (matriz hueRotate do SVG/CSS, replicada no backend). */
   hue?: number;
-  /** W14.2 — visibilidade de canal (GIMP-style). false zera o canal de
-   * saída. Default true. */
+  /** false zera o canal de saída; default true. */
   channel_r?: boolean;
   channel_g?: boolean;
   channel_b?: boolean;
 }
 
 export type BackendOperation =
-  // Geometric (MVP 7)
+  // Geometria
   | { kind: "rotate_90_cw" }
   | { kind: "rotate_90_ccw" }
   | { kind: "rotate_180" }
@@ -87,25 +82,25 @@ export type BackendOperation =
   | { kind: "flip_vertical" }
   | { kind: "crop"; x: number; y: number; width: number; height: number }
   | { kind: "resize"; width: number; height: number }
-  // G12.1 — Edge detection
+  // Detecção de bordas
   | { kind: "edge_sobel"; strength?: number }
   | { kind: "edge_laplacian"; strength?: number }
   | { kind: "edge_canny"; low_threshold?: number; high_threshold?: number }
-  // G12.2 — Blur / denoise
+  // Desfoque / redução de ruído
   | { kind: "blur_gaussian"; sigma: number }
   | { kind: "blur_median"; radius: number }
   | { kind: "blur_bilateral"; sigma_space: number; sigma_color: number }
-  // G12.3 — Enhancement
+  // Realce
   | { kind: "clahe"; tile_size?: number; clip_limit?: number }
   | { kind: "histogram_equalize" }
   | { kind: "auto_levels"; percentile_low?: number; percentile_high?: number }
   | { kind: "white_balance_gray_world" }
-  // G12.4 — Morphology
+  // Morfologia
   | { kind: "dilate"; radius?: number }
   | { kind: "erode"; radius?: number }
   | { kind: "open"; radius?: number }
   | { kind: "close"; radius?: number }
-  // G12.6 — Perspective
+  // Perspectiva
   | {
       kind: "perspective";
       src: [[number, number], [number, number], [number, number], [number, number]];
@@ -113,7 +108,7 @@ export type BackendOperation =
       output_width: number;
       output_height: number;
     }
-  // G12 — Misc
+  // Diversos
   | { kind: "unsharp_mask"; sigma: number; amount?: number }
   | { kind: "threshold"; value: number }
   | {
@@ -153,11 +148,11 @@ export interface ImageMetadata {
   size_bytes: number;
   hash_sha256: string | null;
   exif_json: string | null;
-  /** G12.8 — Conjunto completo de hashes para chain of custody. */
+  /** Cadeia de custódia. */
   hash_set?: ImageHashSet | null;
 }
 
-/** G12.8 — Múltiplos hashes (chain of custody pericial). */
+/** Múltiplos hashes (cadeia de custódia). */
 export interface ImageHashSet {
   md5: string;
   sha1: string;
@@ -165,7 +160,7 @@ export interface ImageHashSet {
   sha3_256: string;
 }
 
-/** G12.9 — Histograma com 256 bins por canal + estatísticas. */
+/** 256 bins por canal + estatísticas. */
 export interface ImageHistogram {
   red: number[];
   green: number[];
@@ -188,7 +183,7 @@ export interface HistogramStats {
   total_pixels: number;
 }
 
-/** G12 — Preview de uma operação (sem persistir). */
+/** Preview de uma operação, sem persistir. */
 export interface ApplyOperationPreviewInput {
   image_base64: string;
   operation: BackendOperation;
@@ -200,7 +195,6 @@ export interface ApplyOperationPreviewResult {
   height: number;
 }
 
-/** G12 — Aplica pilha de ops na imagem original. */
 export interface ApplyOperationStackInput {
   relative_path: string;
   adjustments?: BackendAdjustments | null;
@@ -215,7 +209,6 @@ export interface ApplyOperationStackResult {
   height: number;
 }
 
-/** G12.21 — Artifact do relatório HTML gerado. */
 export interface ImageAnalysisReportArtifact {
   html: string;
   output_relative_path: string;

@@ -1,72 +1,60 @@
 /**
- * Mirror of `src-tauri/src/models/video_distance.rs`
- * (Medição de Distância por fotogrametria — camada de dados).
- *
- * Field names stay snake_case so serde defaults line up with the wire. The
- * measurement CONSUMES an existing `VideoSpeedCalibration` (via
- * `calibration_id`) — it never recalibrates the scene.
- *
- * Unlike speed, a 2-point distance has NO regression confidence interval: the
- * ONLY source of uncertainty is the Monte Carlo. Without σ, only the pointwise
- * `distance_m` is produced and every `mc_*` field is null.
+ * Espelha `src-tauri/src/models/video_distance.rs` (snake_case = wire do serde).
+ * A medição CONSOME uma `VideoSpeedCalibration` existente; nunca recalibra.
+ * Distância de 2 pontos não tem IC de regressão: sem σ, só `distance_m` e `mc_*` null.
  */
 
-/** Monte Carlo per-source sigmas for distance — NO time sigma (no time here). */
+/** Sem σ de tempo: distância não envolve tempo. */
 export interface McSigmasDistance {
-  /** σ of calibration-point marking (px). */
+  /** σ da marcação dos pontos de calibração (px). */
   calibration_px: number;
-  /** σ of the calibration's real-dimension measurement (m). */
+  /** σ da medida real da calibração (m). */
   world_m: number;
-  /** σ of marking the TWO measured points (px). */
+  /** σ da marcação dos DOIS pontos medidos (px). */
   measure_px: number;
 }
 
 export interface VideoDistanceMeasurement {
   id: string;
   occurrence_id: string;
-  /** sha256 of the source video (inherited from the calibration). */
+  /** Herdado da calibração. */
   media_hash: string;
-  /** FK → VideoSpeedCalibration.id (the scene geometry consumed). */
   calibration_id: string;
   p1_px: number;
   p1_py: number;
   p2_px: number;
   p2_py: number;
-  /** Pointwise distance in meters (always present). */
+  /** Distância pontual em metros (sempre presente). */
   distance_m: number;
-  /** Exact RNG seed used by the Monte Carlo run (null if MC did not run). */
+  /** Seed exata do Monte Carlo (null se não rodou). */
   mc_seed: number | null;
-  /** Exact per-source sigmas used (null if MC did not run). */
   mc_sigmas: McSigmasDistance | null;
-  /** Monte Carlo iterations requested (null if MC did not run). */
   mc_n: number | null;
-  /** Iterations that failed and were discarded (null if MC did not run). */
+  /** Iterações descartadas. */
   mc_failed: number | null;
   mc_mean_m: number | null;
   mc_median_m: number | null;
   mc_p2_5_m: number | null;
   mc_p97_5_m: number | null;
-  /** Technical caveats to transcribe into the laudo. */
+  /** Ressalvas técnicas a transcrever no laudo. */
   limitations: string[];
-  /** Free-form audit trail. */
   audit: Record<string, unknown> | null;
   author: string;
   created_at: string;
 }
 
 // ---------------------------------------------------------------------------
-// Command input
+// Entrada do comando
 
 export interface CreateDistanceMeasurementInput {
-  /** Stored calibration used to project pixel→world (defines the media). */
+  /** Define a mídia e a projeção pixel→mundo. */
   calibration_id: string;
   p1_px: number;
   p1_py: number;
   p2_px: number;
   p2_py: number;
-  /** Monte Carlo iterations (>= 10). Ignored if `mc_sigmas` absent/zero. */
+  /** >= 10; ignorado sem `mc_sigmas`. */
   mc_n?: number | null;
-  /** Per-source sigmas for Monte Carlo. Without them, only the pointwise distance. */
   mc_sigmas?: McSigmasDistance | null;
   author?: string | null;
 }

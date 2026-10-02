@@ -1,4 +1,4 @@
-//! Read/write helpers for `evidence_items` (Spike D).
+//! Tabela `evidence_items`.
 
 use rusqlite::{params, Connection};
 

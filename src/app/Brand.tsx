@@ -1,12 +1,4 @@
-/**
- * Brand — marca SICRO (logo + nome "SICRO 4.1 / Suíte Pericial").
- *
- * O número vem do package.json (maior.menor) — subir a versão já atualiza.
- *
- * Vive na barra de título (app bar), canto superior esquerdo. Logo de
- * `public/branding/sicro-logo.png` com fallback gracioso pro escudo se o
- * arquivo faltar — nada quebra.
- */
+/** Marca SICRO na barra de título; a série vem do package.json. */
 
 import { useState } from "react";
 import { Shield } from "lucide-react";

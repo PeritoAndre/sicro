@@ -1,6 +1,4 @@
-/**
- * Tests for the `.sicroimage` serializer (MVP 7).
- */
+/** Testes do serializer do `.sicroimage`. */
 
 import { describe, expect, it } from "vitest";
 import { coerceSicroImage, serializeSicroImage, CURRENT_SCHEMA_VERSION } from "./index";
@@ -92,7 +90,7 @@ describe("coerceSicroImage", () => {
     expect(d.scale).toBeNull();
   });
 
-  // W20 — seleção (estilo Photoshop)
+  // Seleção
   it("round-trips a rect selection (inverted)", () => {
     const d = coerceSicroImage({
       ...VALID_MIN,
@@ -157,7 +155,7 @@ describe("coerceSicroImage", () => {
     expect(d.selection ?? null).toBeNull();
   });
 
-  // W20 (S2) — escopo + máscara congelada por operação.
+  // Escopo + máscara congelada por operação.
   it("round-trips a selection-scoped processing op with frozen mask", () => {
     const d = coerceSicroImage({
       ...VALID_MIN,
@@ -191,7 +189,7 @@ describe("coerceSicroImage", () => {
     expect(op?.mask?.width).toBe(40);
   });
 
-  // W20 (S3) — camada de pixels (recorte de seleção).
+  // Camada de pixels (recorte de seleção).
   it("round-trips a pixels layer (offset/dims/bitmap/source)", () => {
     const d = coerceSicroImage({
       ...VALID_MIN,

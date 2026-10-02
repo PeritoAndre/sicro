@@ -1,7 +1,4 @@
-/**
- * Mirror of `src-tauri/src/models/registry.rs` (MVP 5 — Central de
- * Evidências). Field names stay snake_case so serde defaults line up.
- */
+/** Espelha `src-tauri/src/models/registry.rs` (Central de Evidências). */
 
 export type EvidenceKind =
   | "photo"
@@ -29,7 +26,7 @@ export type IntegrityStatus =
   | "unknown";
 
 export interface EvidenceRegistryItem {
-  /** Synthetic id "<kind>:<repo-uuid>". Stable per workspace. */
+  /** Sintético: "<kind>:<uuid>", estável por workspace. */
   id: string;
   occurrence_id: string;
   kind: EvidenceKind;
@@ -103,6 +100,6 @@ export interface IntegrityReportArtifact {
 }
 
 export interface VerifyOptions {
-  /** When true, recomputes SHA-256 for items that store a hash. */
+  /** Recalcula o SHA-256 dos itens que guardam hash. */
   deep?: boolean;
 }

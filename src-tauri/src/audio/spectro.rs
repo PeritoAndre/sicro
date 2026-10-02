@@ -1,10 +1,6 @@
-//! Espectrograma interativo: a imagem (tempo × frequência, em dB) só da janela
-//! pedida pela tela — o zoom e o arraste pedem de novo, com o áudio em cache.
-//!
-//! Cada coluna é o MÁXIMO de alguns quadros de FFT dentro do seu intervalo de
-//! tempo (afastado, um clique curto continua aparecendo). Valores em u8:
-//! 0 = −120 dB … 255 = 0 dB (seno a fundo de escala ≈ 0 dB); a tela escolhe a
-//! faixa de contraste sem pedir de novo.
+//! Espectrograma interativo: só a janela pedida pela tela (áudio em cache).
+//! Cada coluna é o MÁXIMO de alguns quadros de FFT no seu intervalo (clique
+//! curto não some afastado). u8: 0 = −120 dB … 255 = 0 dB (seno a fundo de escala).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

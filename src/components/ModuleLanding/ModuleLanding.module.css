@@ -1,5 +1,4 @@
-/* ModuleLanding — padrão "ouro" de tela inicial (extraído da Documentoscopia).
-   Mantém os mesmos tokens do design system para ficar idêntico. */
+/* ModuleLanding — tela inicial padrão dos módulos. */
 
 .wrap {
   flex: 1;

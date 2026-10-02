@@ -1,9 +1,4 @@
-/**
- * Python Parity Engine — testes de clipping.
- *
- * Foco: comportamento correto E garantia de fallback (nunca quebrar
- * o croqui, mesmo com geometria degenerada).
- */
+/** Testes de clipping: corte correto e fallback que nunca lança. */
 
 import { describe, expect, it } from "vitest";
 import { clipPolylineAgainstPolygons } from "../clipping";

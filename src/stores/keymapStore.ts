@@ -1,10 +1,4 @@
-/**
- * Store dos atalhos customizáveis. Guarda apenas os OVERRIDES do usuário
- * (id → combinação); o que não tem override usa o padrão do catálogo.
- *
- * Persistido em localStorage por ora (preferência de UI por máquina). Quando
- * reformularmos as configurações como um todo, migra para o AppSettings.
- */
+/** Overrides de atalho do usuário (id → combinação), em localStorage por máquina. */
 import { create } from "zustand";
 
 import { normalizeBinding } from "@core/keymap";
@@ -31,7 +25,7 @@ function saveOverrides(o: Record<string, string>): void {
   }
 }
 
-/** Combinação efetiva de uma ação = override do usuário ?? padrão do catálogo. */
+/** Override do usuário ?? padrão do catálogo. */
 export function resolveBinding(
   overrides: Record<string, string>,
   id: string,
@@ -46,7 +40,7 @@ interface KeymapState {
   setBinding: (id: string, binding: string) => void;
   resetBinding: (id: string) => void;
   resetAll: () => void;
-  /** Leitura não-reativa (para handlers); a UI deve usar o seletor `overrides`. */
+  /** Leitura não reativa (handlers); a UI usa o seletor `overrides`. */
   binding: (id: string) => string;
 }
 

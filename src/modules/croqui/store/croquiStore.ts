@@ -1,8 +1,6 @@
 /**
- * croquiStore — owns the list of croquis of the active workspace plus the
- * croqui currently being edited. Heavy editor state (selection, transient
- * drag positions) lives in component-local state — only persisted doc
- * lives here.
+ * Lista de croquis do workspace ativo + croqui aberto no editor.
+ * Só o doc persistido vive aqui; seleção/drag ficam no componente.
  */
 
 import { create } from "zustand";
@@ -26,11 +24,8 @@ interface CroquiState {
   activeDoc: SicroCroquiDoc | null;
 
   /**
-   * ISO timestamp of the last successful PNG export per croqui id.
-   * Used by `isExportStale(id)` to decide whether the PNG needs to be
-   * regenerated before being inserted into a Laudo. In-memory only —
-   * a page reload resets this map (the user is then conservative and
-   * re-exports on first insert, which is the safe default).
+   * ISO do último export PNG por croqui id. Só em memória: após reload
+   * `isExportStale` volta a dizer "stale" e o PNG é regenerado (seguro).
    */
   lastExportedAt: Record<string, string>;
 
@@ -43,24 +38,15 @@ interface CroquiState {
     kind?: CroquiKind,
   ) => Promise<Croqui>;
   openCroqui: (workspacePath: string, croquiId: string) => Promise<SicroCroquiDoc>;
-  /**
-   * Abre um croqui CORPORAL: só marca o id/row ativos (sem coagir o doc — o
-   * CorpoEditor carrega e gerencia o `.sicrocorpo` por conta própria). A `row`
-   * vem da lista já carregada.
-   */
+  /** Só marca o croqui ativo; o CorpoEditor carrega o `.sicrocorpo` sozinho. */
   openCorpo: (croquiId: string) => void;
-  /** Abre um croqui de PLANTA (o PlantaEditor/Pixi carrega o .sicroplanta). */
+  /** Só marca o croqui ativo; o PlantaEditor carrega o `.sicroplanta` sozinho. */
   openPlanta: (croquiId: string) => void;
   saveCurrent: (
     workspacePath: string,
     doc: SicroCroquiDoc,
   ) => Promise<Croqui>;
-  /**
-   * Remove o croqui do workspace (linha + `.sicrocroqui`). Tira o
-   * item da `list` em memória; se for o croqui aberto no editor,
-   * limpa o `activeCroqui`/`activeDoc` para o caller voltar pra
-   * lista. PNGs já exportados não são apagados.
-   */
+  /** Remove linha + `.sicrocroqui`; PNGs já exportados ficam. */
   deleteCroqui: (workspacePath: string, croquiId: string) => Promise<void>;
   exportPng: (
     workspacePath: string,
@@ -69,12 +55,7 @@ interface CroquiState {
   clearCurrent: () => void;
   clearError: () => void;
 
-  /**
-   * Returns `true` when the most recent .sicrocroqui save is newer
-   * than the most recent PNG export — i.e. the rendered PNG is out of
-   * sync with what the user sees in the editor. Conservative: returns
-   * `true` when no export has happened in this session yet.
-   */
+  /** `true` se o save é mais novo que o último export PNG (ou se não houve export). */
   isExportStale: (croquiId: string) => boolean;
 }
 
@@ -105,9 +86,8 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
         title,
         kind,
       });
-      // Corporal (.sicrocorpo) e planta (.sicroplanta) usam engines próprios;
-      // NÃO coage como croqui viário. Os editores dedicados abrem o doc por
-      // conta própria. Aqui só atualizamos a lista compartilhada da umbrella.
+      // Corporal e planta têm engines próprios: não coagir como viário,
+      // só atualizar a lista.
       if (kind === "corporal" || kind === "planta") {
         set((s) => ({
           list: [
@@ -159,8 +139,6 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
   },
 
   openPlanta(croquiId) {
-    // Planta usa o motor Pixi (PlantaEditor), que carrega o .sicroplanta por
-    // conta própria; aqui só apontamos o croqui ativo (activeDoc fica null).
     const row = get().list.find((c) => c.id === croquiId) ?? null;
     set({ activeCroquiId: croquiId, activeCroqui: row, activeDoc: null });
   },
@@ -192,7 +170,6 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
       await commands.deleteCroqui(workspacePath, croquiId);
       set((s) => {
         const wasActive = s.activeCroquiId === croquiId;
-        // Remove o timestamp de export deste id (mantém o map limpo).
         const remainingExports = { ...s.lastExportedAt };
         delete remainingExports[croquiId];
         return {
@@ -219,11 +196,9 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
       const path = await commands.exportCroquiPng(workspacePath, current.id, {
         png_base64: pngBase64,
       });
-      // Refresh the row so last_export_relative_path / status update in the UI.
+      // Recarrega a lista para o last_export_relative_path/status aparecerem.
       const list = await commands.listCroquis(workspacePath);
       const refreshed = list.find((c) => c.id === current.id) ?? current;
-      // Record the export timestamp so `isExportStale` can later
-      // decide whether the PNG is in sync with the underlying doc.
       set((s) => ({
         list,
         activeCroqui: refreshed,
@@ -255,7 +230,6 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
     if (!exportedAt) return true;
     const croqui = s.list.find((c) => c.id === croquiId);
     if (!croqui) return true;
-    // The .sicrocroqui has been touched more recently than the PNG.
     return Date.parse(croqui.updated_at) > Date.parse(exportedAt);
   },
 }));

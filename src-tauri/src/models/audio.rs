@@ -1,12 +1,11 @@
-//! Modelos do módulo Áudio (Camada 1).
+//! Modelos do módulo Áudio. Espelhados em `src/types/audio.ts` — mudar nos dois.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Uma mídia de áudio registrada numa ocorrência. O `relative_path` aponta
-/// para o WAV de análise (derivado determinístico); o original importado fica
-/// preservado em `original_relative_path` (quando `kind == "importado"`).
+/// `relative_path` é o WAV de análise (derivado determinístico); o original
+/// importado fica preservado em `original_relative_path` (`kind == "importado"`).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioMedia {
     pub id: Uuid,
@@ -45,8 +44,8 @@ pub struct AudioMarker {
     pub created_at: DateTime<Utc>,
 }
 
-/// Registro de um realce (auxílio de escuta) aplicado a um áudio. Não-destrutivo:
-/// a saída é uma nova mídia; aqui fica o vínculo origem→saída + cadeia FFmpeg.
+/// Realce aplicado a um áudio. Não-destrutivo: a saída é nova mídia; aqui
+/// fica o vínculo origem→saída + cadeia FFmpeg.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioEnhancement {
     pub id: Uuid,
@@ -57,8 +56,7 @@ pub struct AudioEnhancement {
     pub created_at: DateTime<Utc>,
 }
 
-/// Um segmento de degravação MANUAL (trabalho do perito): trecho temporal com
-/// rótulo de locutor e texto. O tool não transcreve nem interpreta — só guarda.
+/// Segmento de degravação manual: o perito escreve, a ferramenta só guarda.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioTranscriptSegment {
     pub id: Uuid,
@@ -74,7 +72,7 @@ pub struct AudioTranscriptSegment {
     pub created_at: DateTime<Utc>,
 }
 
-/// Um turno de fala da separação de locutores (locutor 1..N).
+/// Turno de fala (locutor 1..N).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DiarTurn {
     pub t_start: f64,
@@ -82,7 +80,7 @@ pub struct DiarTurn {
     pub speaker: u32,
 }
 
-/// Separação de locutores de um áudio (uma por áudio; rodar de novo substitui).
+/// Uma por áudio; rodar de novo substitui.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AudioDiarization {
     pub id: Uuid,
@@ -95,7 +93,7 @@ pub struct AudioDiarization {
     pub created_at: DateTime<Utc>,
 }
 
-/// Entrada de segmento vinda do front (sem id/custódia — gerados ao salvar).
+/// Segmento vindo do front (id/custódia gerados ao salvar).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranscriptSegmentInput {
     pub idx: i64,

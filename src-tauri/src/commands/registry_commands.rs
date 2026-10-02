@@ -1,8 +1,5 @@
-//! Tauri commands for the Central de Evidências (MVP 5).
-//!
-//! All commands resolve `workspace_path` → `Manifest` → `occurrence_id`
-//! the same way the other modules do. They never trust the frontend
-//! with an `occurrence_id` because the manifest IS the source of truth.
+//! Comandos Tauri da Central de Evidências. O `occurrence_id` vem sempre do
+//! Manifest, nunca do frontend.
 
 use std::path::PathBuf;
 
@@ -19,8 +16,7 @@ use crate::models::{
 use crate::registry;
 use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
 
-/// Build the consolidated registry. Lightweight — no filesystem
-/// verification, so it's safe to call on every render.
+/// Registro consolidado, sem verificação de disco: barato para chamar a cada render.
 #[tauri::command]
 pub async fn list_evidence_registry_items(
     workspace_path: String,
@@ -32,9 +28,7 @@ pub async fn list_evidence_registry_items(
     registry::build_registry(&conn, &manifest.occurrence_id)
 }
 
-/// Return the counters used by the "Resumo" tab. Runs the lightweight
-/// integrity probe so the UI can show "12 fotos, 0 ausentes, status
-/// íntegro" without paying for a deep hash check.
+/// Contadores da aba Resumo: sonda leve de integridade, sem recomputar hashes.
 #[tauri::command]
 pub async fn get_evidence_registry_summary(
     workspace_path: String,
@@ -43,7 +37,6 @@ pub async fn get_evidence_registry_summary(
     let manifest = Manifest::read(&ws)?;
     let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
     run_migrations(&mut conn)?;
-    // Probe lightly: build items, run verify with deep=false, summarise.
     let report = registry::verify_workspace(
         &conn,
         &ws,
@@ -53,7 +46,7 @@ pub async fn get_evidence_registry_summary(
     Ok(report.summary)
 }
 
-/// Full integrity verification. Pass `deep: true` to recompute SHA-256s.
+/// Verificação completa; `deep: true` recomputa os SHA-256.
 #[tauri::command]
 pub async fn verify_workspace_integrity(
     workspace_path: String,
@@ -71,11 +64,8 @@ pub async fn verify_workspace_integrity(
     )
 }
 
-/// List every `evidence_links` row of the active occurrence.
-///
-/// Complements `list_evidence_links_for_laudo` (MVP 4) — that one is
-/// laudo-scoped, this one is occurrence-scoped (used by the "Laudos e
-/// vínculos" tab of the Central).
+/// Todos os `evidence_links` da ocorrência (a versão por laudo é
+/// `list_evidence_links_for_laudo`).
 #[tauri::command]
 pub async fn list_evidence_links(
     workspace_path: String,
@@ -87,8 +77,7 @@ pub async fn list_evidence_links(
     evidence_link_repo::list_for_occurrence(&conn, &manifest.occurrence_id)
 }
 
-/// Open an evidence file with the OS default handler. Path safety is
-/// enforced — the resolved absolute path must be under `workspace_path`.
+/// Abre com o app padrão do SO; o caminho resolvido tem de ficar dentro do workspace.
 #[tauri::command]
 pub async fn open_evidence_file(
     workspace_path: String,
@@ -106,8 +95,7 @@ pub async fn open_evidence_file(
     crate::commands::os_open::open_with_os(&abs)
 }
 
-/// Reveal an evidence file in the platform's file explorer.
-/// Falls back to "open the containing folder" when "reveal" isn't supported.
+/// Revela no explorador de arquivos (ou abre a pasta, onde "revelar" não existe).
 #[tauri::command]
 pub async fn reveal_evidence_in_folder(
     workspace_path: String,
@@ -125,8 +113,7 @@ pub async fn reveal_evidence_in_folder(
     reveal_with_os(&abs)
 }
 
-/// Run a full verification and persist the HTML report under
-/// `reports/`. Returns a descriptor so the UI can open the report.
+/// Verificação completa + relatório HTML gravado em `reports/`.
 #[tauri::command]
 pub async fn generate_workspace_integrity_report(
     workspace_path: String,
@@ -165,12 +152,7 @@ pub async fn generate_workspace_integrity_report(
 }
 
 // ---------------------------------------------------------------------------
-// OS integration helpers
-//
-// NOTE: o "abrir com o app padrão" (`open_with_os`) foi extraído para
-// `crate::commands::os_open` e é reutilizado aqui e no módulo de laudos
-// (`open_laudo_external`). Só o "revelar na pasta" (`reveal_with_os`)
-// permanece local — é específico da Central de Evidências.
+// Integração com o SO (`open_with_os` vive em `commands::os_open`, compartilhado)
 
 #[cfg(target_os = "windows")]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
@@ -192,7 +174,7 @@ fn reveal_with_os(path: &std::path::Path) -> Result<()> {
 
 #[cfg(all(unix, not(target_os = "macos")))]
 fn reveal_with_os(path: &std::path::Path) -> Result<()> {
-    // Best-effort: open the containing folder.
+    // xdg-open não "revela": abre a pasta que contém o arquivo.
     let dir = path.parent().unwrap_or(path);
     crate::tools::command("xdg-open")
         .arg(dir)

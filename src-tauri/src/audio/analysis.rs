@@ -1,12 +1,5 @@
-//! W12 (paridade Audacity) — **Análise forense de áudio** em Rust puro.
-//!
-//! Inspiração: Audacity → Analyze (Plot Spectrum, Find Clipping, Sample Data
-//! Export) + técnica forense de **ENF** (Electric Network Frequency). Tudo
-//! aqui é ANÁLISE/MEDIÇÃO — lê o WAV de análise (PCM, já produzido pelo
-//! pipeline FFmpeg) e devolve NÚMEROS determinísticos e reproduzíveis. NÃO
-//! altera o áudio (realce continua via cadeia FFmpeg). Sem fabricar nada (§13).
-//!
-//! Núcleo DSP: `hound` (lê WAV) + `rustfft` (FFT). Determinístico e testável.
+//! Análise de áudio em Rust puro (`hound` + `rustfft`): medições objetivas e
+//! espectro (Welch). Só lê o WAV de análise; nunca altera o áudio.
 
 use std::path::Path;
 
@@ -20,8 +13,8 @@ const DB_FLOOR: f32 = -120.0;
 // ---------------------------------------------------------------------------
 // Leitura do WAV → mono f32 [-1,1]
 
-/// Lê um WAV PCM (int 8/16/24/32 ou float) e devolve (amostras mono f32, taxa,
-/// nº de canais). Canais são somados → mono (média) para a análise.
+/// Lê um WAV PCM (int 8/16/24/32 ou float) → (mono f32 em [-1, 1] pela média
+/// dos canais, taxa, nº de canais).
 pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32, u16)> {
     let mut reader = hound::WavReader::open(path)
         .map_err(|e| SicroError::Validation(format!("não foi possível ler o WAV: {e}")))?;
@@ -29,7 +22,6 @@ pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32, u16)> {
     let channels = spec.channels.max(1);
     let sr = spec.sample_rate;
 
-    // Normaliza cada amostra para [-1,1] conforme o formato.
     let interleaved: Vec<f32> = match spec.sample_format {
         hound::SampleFormat::Float => reader
             .samples::<f32>()
@@ -45,7 +37,6 @@ pub fn read_wav_mono(path: &Path) -> Result<(Vec<f32>, u32, u16)> {
         }
     };
 
-    // Intercalado → mono (média dos canais).
     let ch = channels as usize;
     let frames = interleaved.len() / ch;
     let mut mono = Vec::with_capacity(frames);
@@ -69,7 +60,7 @@ fn to_dbfs(linear: f32) -> f32 {
 }
 
 // ---------------------------------------------------------------------------
-// R4 — Medições objetivas
+// Medições objetivas
 
 #[derive(Debug, Clone, Serialize)]
 pub struct AudioMeasurements {
@@ -116,6 +107,7 @@ pub struct ExtendedMeasurements {
 
 /// Lê a saída (stderr) do ffmpeg com `astats`, `ebur128` e `silencedetect`.
 pub fn parse_extended(stderr: &str, threshold_db: f32, min_s: f32, duration_s: f64) -> ExtendedMeasurements {
+    // "-inf" (sinal digital zerado) vira None.
     let num = |s: &str| -> Option<f32> {
         s.split_whitespace().next().and_then(|v| v.parse::<f32>().ok()).filter(|v| v.is_finite())
     };
@@ -162,12 +154,10 @@ pub fn parse_extended(stderr: &str, threshold_db: f32, min_s: f32, duration_s: f
     if let Some(a) = open {
         m.silences.push((a.max(0.0), duration_s));
     }
-    // −inf (sinal digital zerado) vira None; o ffmpeg imprime "-inf".
     m
 }
 
-/// Calcula as medições objetivas (§ Sample Data Export + Find Clipping do
-/// Audacity). `clip_threshold` em [0,1]; 0.997 ≈ fundo de escala.
+/// `clip_threshold` em [0, 1]; 0.997 ≈ fundo de escala.
 pub fn measure(samples: &[f32], sr: u32, channels: u16, clip_threshold: f32) -> AudioMeasurements {
     let n = samples.len();
     let thr = clip_threshold.clamp(0.5, 1.0);
@@ -227,7 +217,6 @@ pub fn measure(samples: &[f32], sr: u32, channels: u16, clip_threshold: f32) -> 
 // ---------------------------------------------------------------------------
 // Janelas
 
-/// Janela de Hann de N pontos.
 fn hann(n: usize) -> Vec<f32> {
     if n <= 1 {
         return vec![1.0; n.max(1)];
@@ -238,7 +227,7 @@ fn hann(n: usize) -> Vec<f32> {
 }
 
 // ---------------------------------------------------------------------------
-// R3 — Espectro (Welch: FFT janelada + média de blocos)
+// Espectro (Welch)
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SpectrumResult {
@@ -253,9 +242,9 @@ pub struct SpectrumResult {
     pub peak_db: f32,
 }
 
-/// Plot Spectrum (Welch). `fft_size` potência de 2 (256..65536). Blocos com
-/// 50% de sobreposição, janela de Hann, média de potência. Normaliza pelo
-/// ganho coerente da janela para que uma senoide de fundo de escala leia ~0 dB.
+/// Welch: blocos de `fft_size` (potência de 2, 256..65536) com 50% de
+/// sobreposição, Hann, média de potência. Normalizado pelo ganho coerente da
+/// janela: senoide de fundo de escala ≈ 0 dB.
 pub fn spectrum(samples: &[f32], sr: u32, fft_size: usize) -> SpectrumResult {
     let n = fft_size.clamp(256, 65536).next_power_of_two();
     let bins = n / 2 + 1;
@@ -323,7 +312,6 @@ mod tests {
     use super::*;
     use std::f32::consts::PI;
 
-    /// Gera senoide de `freq` Hz, `amp` (0..1), `dur_s` segundos a `sr`.
     fn sine(freq: f32, amp: f32, dur_s: f32, sr: u32) -> Vec<f32> {
         let n = (sr as f32 * dur_s) as usize;
         (0..n)
@@ -344,7 +332,7 @@ mod tests {
     fn measure_detects_dc_offset() {
         let mut s = sine(440.0, 0.3, 0.2, 48000);
         for v in s.iter_mut() {
-            *v += 0.25; // injeta DC
+            *v += 0.25;
         }
         let m = measure(&s, 48000, 1, 0.997);
         assert!((m.dc_offset - 0.25).abs() < 0.01, "dc={}", m.dc_offset);
@@ -352,7 +340,6 @@ mod tests {
 
     #[test]
     fn measure_detects_clipping_runs() {
-        // Sinal com 3 trechos saturados.
         let mut s = vec![0.0f32; 100];
         for v in &mut s[10..15] {
             *v = 1.0;
@@ -372,7 +359,6 @@ mod tests {
     fn spectrum_peak_at_input_frequency() {
         let s = sine(1000.0, 0.9, 1.0, 48000);
         let sp = spectrum(&s, 48000, 4096);
-        // Pico do espectro deve cair perto de 1000 Hz (± resolução do bin).
         assert!(
             (sp.peak_freq_hz - 1000.0).abs() < 30.0,
             "pico em {} Hz",

@@ -1,13 +1,6 @@
 /**
- * GlobalBackupCard — "Backup geral" (todos os casos), em Configurações.
- *
- * Mantém uma PASTA-ESPELHO num destino escolhido (ex.: HD externo), com 1
- * `.sicrobackup` por caso + um índice. INCREMENTAL: só recopia os casos que
- * mudaram desde o último backup (o backend compara um fingerprint barato).
- *
- * §13: o original nunca é tocado; o backup é COMPLETO (inclui vídeos/drone) e
- * casos não encontrados (HD desconectado / movido) são reportados sem apagar
- * o backup anterior. Backup é deliberado/manual — sem nuvem.
+ * Backup geral (todos os casos): pasta-espelho no destino, 1 .sicrobackup por caso,
+ * incremental. Caso não encontrado é reportado sem apagar o backup anterior.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -53,7 +46,6 @@ export function GlobalBackupCard() {
   const [error, setError] = useState<string | null>(null);
   const runningRef = useRef(false);
 
-  // Restauração (genérica: HD externo, pendrive, nuvem, rede).
   const [restoring, setRestoring] = useState(false);
   const [restoreProgress, setRestoreProgress] = useState<RestoreProgress | null>(
     null,
@@ -62,7 +54,6 @@ export function GlobalBackupCard() {
   const [restoreError, setRestoreError] = useState<string | null>(null);
   const restoringRef = useRef(false);
 
-  // Auto-backup ao fechar a ocorrência (DR — Fase 2b).
   const [autoOnClose, setAutoOnClose] = useState(isAutoBackupOnCloseEnabled());
   const lastAuto = getLastAutoBackupAt();
 
@@ -165,8 +156,7 @@ export function GlobalBackupCard() {
           restoreConfig: true,
           overwrite: false,
         });
-        // Os casos restaurados voltaram pros recentes; reindexar agora os
-        // coloca no Histórico da Home sem precisar abrir cada um.
+        // Reindexar põe os restaurados no Histórico sem precisar abrir cada um.
         await reindexCaseIndexFromRecents().catch(() => {});
         setRestoreReport(rep);
       } finally {
@@ -352,7 +342,7 @@ export function GlobalBackupCard() {
           </div>
         )}
 
-        {/* ---- Restaurar de um backup (HD/pendrive/nuvem) ---- */}
+        {/* ---- Restaurar de um backup ---- */}
         <div className={styles.restoreBlock}>
           <div className={styles.destRow}>
             <div className={styles.destInfo}>

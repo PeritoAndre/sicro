@@ -1,8 +1,5 @@
-//! Comandos Tauri do módulo Áudio (Camada 1).
-//!
-//! Determinístico e com cadeia de custódia (igual ao Vídeo): hash do material,
-//! cópia para subpasta do workspace, metadados via ffprobe, persistência +
-//! log de operação + auditoria. Nada de interpretação.
+//! Comandos Tauri do módulo Áudio. Determinístico e com cadeia de custódia (hash,
+//! cópia para o workspace, ffprobe, log + auditoria); nada de interpretação.
 
 use std::path::{Path, PathBuf};
 
@@ -29,9 +26,8 @@ const AUDIO_ORIG_SUBDIR: &str = "audio/originais";
 const AUDIO_WAV_SUBDIR: &str = "audio/wav";
 const AUDIO_SPECTRO_SUBDIR: &str = "audio/espectrogramas";
 
-/// Extrai a trilha de áudio de um vídeo (do caso ou externo) para WAV de
-/// análise. `source_video_sha256` registra a proveniência quando o vídeo já
-/// está no caso.
+/// Extrai a trilha de áudio de um vídeo para WAV de análise. `source_video_sha256`
+/// registra a proveniência quando o vídeo já está no caso.
 #[tauri::command]
 pub async fn extract_audio_from_video(
     workspace_path: String,
@@ -51,8 +47,8 @@ pub async fn extract_audio_from_video(
             source.display()
         )));
     }
-    // Antes de tudo: vídeo só com imagem não tem o que extrair (o ffmpeg daria
-    // "Output file does not contain any stream", incompreensível para o perito).
+    // Vídeo só com imagem: o ffmpeg daria "Output file does not contain any
+    // stream", incompreensível para o perito.
     if !crate::audio::has_audio_stream(&source)? {
         return Err(SicroError::Validation(format!(
             "o vídeo \"{}\" não tem trilha de áudio — só imagem. Não há áudio para extrair.",
@@ -119,7 +115,7 @@ pub async fn import_audio_file(
         )));
     }
 
-    // 1. Hash do ORIGINAL (a evidência) + dedupe por ele.
+    // Hash do ORIGINAL (a evidência); dedupe por ele.
     let original_sha256 = sha256_file(&source)?;
     if let Some(existing) =
         audio_repo::find_media_by_original_sha256(&conn, &occurrence_id, &original_sha256)?
@@ -130,7 +126,6 @@ pub async fn import_audio_file(
         )));
     }
 
-    // 2. Preserva o original.
     let orig_dir = ws.join(AUDIO_ORIG_SUBDIR);
     create_dir(&orig_dir)?;
     let orig_name = unique_name(
@@ -142,7 +137,6 @@ pub async fn import_audio_file(
         SicroError::Filesystem(format!("não foi possível copiar o original: {e}"))
     })?;
 
-    // 3. WAV de análise a partir do original preservado.
     let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
     create_dir(&wav_dir)?;
     let stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("audio");
@@ -200,7 +194,7 @@ pub async fn open_audio_media(
 }
 
 // ---------------------------------------------------------------------------
-// Espectrograma (Camada 4 — visualização objetiva do sinal)
+// Espectrograma
 
 /// Gera o espectrograma PNG do WAV de análise (FFmpeg `showspectrumpic`) e
 /// devolve o caminho relativo. Determinístico; não interpreta o conteúdo.
@@ -248,11 +242,8 @@ pub async fn audio_spectrogram(
 }
 
 // ---------------------------------------------------------------------------
-// W12 (paridade Audacity) — Análise forense em Rust puro (medição/espectro/ENF)
-//
-// Tudo aqui é ANÁLISE: lê o WAV de análise e devolve números determinísticos.
-// Não altera o áudio (o realce continua sendo um derivado FFmpeg). Cada
-// chamada é registrada no log de auditoria do áudio (reprodutível).
+// Análise (medição/espectro/ENF): só lê o WAV de análise e devolve números
+// determinísticos; cada chamada vai para o log do áudio.
 
 /// Resolve um `audio_id` → (mídia, caminho absoluto do WAV de análise).
 fn resolve_wav(
@@ -274,8 +265,7 @@ fn resolve_wav(
     Ok((media, wav_abs))
 }
 
-/// Medições objetivas: pico/RMS (dBFS), offset DC, clipping, fator de crista,
-/// duração. Equivalente ao Sample Data Export + Find Clipping do Audacity.
+/// Medições objetivas: pico/RMS (dBFS), offset DC, clipping, fator de crista, duração.
 #[tauri::command]
 pub async fn audio_measure(
     workspace_path: String,
@@ -306,9 +296,8 @@ pub async fn audio_measure(
     Ok(m)
 }
 
-/// Espectrograma interativo: a imagem (u8 em base64) da janela [t0, t1] do
-/// WAV de análise, no tamanho pedido pela tela. Só lê; não registra log (é
-/// chamado a cada zoom e arraste).
+/// Espectrograma interativo da janela [t0, t1], no tamanho pedido pela tela.
+/// Só lê; não registra log (é chamado a cada zoom e arraste).
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn audio_spectrogram_data(
@@ -449,9 +438,8 @@ pub async fn audio_enf_compare(
     Ok(cmp)
 }
 
-/// Relatório de autenticidade: estrutura do arquivo ORIGINAL (importado) ou do
-/// vídeo de origem (extraído) e detectores sobre o sinal. Só indícios — o
-/// relatório não conclui sobre edição. Registrado no log do áudio.
+/// Relatório de autenticidade: estrutura do arquivo ORIGINAL (ou do vídeo de
+/// origem) e detectores sobre o sinal. Só indícios — não conclui sobre edição.
 #[tauri::command]
 pub async fn audio_authenticity(
     workspace_path: String,
@@ -547,7 +535,7 @@ pub async fn audio_authenticity(
 }
 
 // ---------------------------------------------------------------------------
-// Extração de trecho (Camada 4 — recorte com custódia)
+// Recorte de trecho
 
 /// Recorta o trecho [start_s, end_s] do áudio num NOVO clipe (`kind="recorte"`),
 /// com hash + custódia + proveniência. NÃO-destrutivo: o original permanece.
@@ -639,11 +627,8 @@ struct ResolvedClip {
     sha: String,
 }
 
-/// Compila vários trechos (de um ou mais áudios) num novo derivado rotulado
-/// (`kind="compilacao"`), com hash + custódia + um manifesto `.compilacao.json`
-/// documentando a origem (arquivo + sha256) e os tempos de cada trecho, na
-/// ordem. NÃO-destrutivo: os áudios de origem permanecem intactos. Não junta
-/// "disfarçando" — há uma pausa audível entre trechos e o manifesto é explícito.
+/// Compila trechos num derivado `kind="compilacao"` com hash, custódia e manifesto
+/// `.compilacao.json`. Não disfarça a montagem: pausa audível entre trechos.
 #[tauri::command]
 pub async fn compile_audio_clips(
     workspace_path: String,
@@ -739,8 +724,8 @@ pub async fn compile_audio_clips(
     Ok(media)
 }
 
-/// Escreve, ao lado do WAV compilado, o manifesto JSON com a origem e os tempos
-/// de cada trecho — o "rótulo" forense que torna a montagem reproduzível.
+/// Manifesto JSON ao lado do WAV compilado: origem e tempos de cada trecho,
+/// o "rótulo" que torna a montagem reproduzível.
 fn write_compilation_manifest(
     out_wav: &Path,
     resolved: &[ResolvedClip],
@@ -840,13 +825,8 @@ pub struct NoiseProfileInput {
     pub end_s: f64,
 }
 
-/// Gera um DERIVADO realçado (auxílio de escuta) a partir do WAV de análise.
-///
-/// NÃO-destrutivo: o original e o WAV de análise permanecem intactos. O realce
-/// é uma nova mídia (`kind="realce"`) e a cadeia EXATA de filtros fica
-/// registrada em `audio_enhancements` (reproduzível). Isto é um auxílio de
-/// escuta — NÃO "limpa" nem "recupera" conteúdo, apenas filtra de forma
-/// determinística para facilitar a audição pelo perito.
+/// Derivado realçado (`kind="realce"`): original intacto, cadeia exata de filtros
+/// gravada em `audio_enhancements`. Auxílio de escuta — não "limpa" nem "recupera".
 #[tauri::command]
 pub async fn enhance_audio(
     workspace_path: String,
@@ -939,9 +919,8 @@ pub async fn list_audio_transcript(
     audio_repo::list_segments(&conn, &manifest.occurrence_id, &audio_sha256)
 }
 
-/// Salva (substitui) toda a degravação MANUAL de um áudio. A transcrição é
-/// trabalho do perito — o tool não transcreve nem interpreta nada. Devolve os
-/// segmentos persistidos (com ids gerados) para o front reidratar.
+/// Salva (substitui) toda a degravação MANUAL — a transcrição é trabalho do
+/// perito. Devolve os segmentos persistidos (com ids) para o front reidratar.
 #[tauri::command]
 pub async fn save_audio_transcript(
     workspace_path: String,
@@ -983,7 +962,7 @@ pub async fn save_audio_transcript(
 pub struct TranscribeOptions {
     /// Caminho do modelo GGUF do whisper (obrigatório).
     pub model_path: String,
-    /// Caminho/nome do executável whisper.cpp (opcional; senão procura no PATH).
+    /// Executável whisper.cpp; ausente = procura no PATH.
     #[serde(default)]
     pub whisper_bin: Option<String>,
     /// Idioma (default "pt").
@@ -1028,11 +1007,8 @@ pub async fn whisper_status(whisper_bin: Option<String>) -> Result<WhisperStatus
     })
 }
 
-/// Gera um RASCUNHO de transcrição (whisper.cpp local, offline) para o áudio.
-///
-/// A saída é rascunho de máquina — o perito DEVE revisar. Não persiste nada:
-/// devolve segmentos candidatos para a tela de degravação. Determinístico
-/// (decodificação gulosa). Não identifica locutor nem interpreta conteúdo.
+/// RASCUNHO de transcrição (whisper.cpp local, offline). Não persiste: devolve
+/// candidatos para a tela de degravação; o perito DEVE revisar.
 #[tauri::command]
 pub async fn transcribe_audio(
     workspace_path: String,
@@ -1117,9 +1093,8 @@ pub async fn transcribe_audio(
 // ---------------------------------------------------------------------------
 // Separação de locutores (sherpa-onnx local) — apoio à degravação
 
-/// "Quem fala quando" no áudio, com o separador local instalado em
-/// Configurações → IA. `num_speakers` informado pelo perito é mais confiável
-/// que o automático. Grava no caso (substitui a anterior, mantém os nomes).
+/// "Quem fala quando" (separador local de Configurações → IA). `num_speakers`
+/// informado pelo perito é mais confiável que o automático; substitui a anterior.
 #[tauri::command]
 pub async fn diarize_audio(
     app: tauri::AppHandle,
@@ -1292,8 +1267,7 @@ fn create_dir(dir: &Path) -> Result<()> {
         .map_err(|e| SicroError::Filesystem(format!("cannot create {}: {e}", dir.display())))
 }
 
-/// Devolve um nome de arquivo único dentro de `dir` a partir de `desired`,
-/// acrescentando `_1`, `_2`… ao radical se já existir.
+/// Nome único dentro de `dir`: acrescenta `_1`, `_2`… ao radical se já existir.
 fn unique_name(dir: &Path, desired: &str) -> String {
     if !dir.join(desired).exists() {
         return desired.to_string();

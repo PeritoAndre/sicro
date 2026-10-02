@@ -1,14 +1,6 @@
 /**
- * Factory helpers — create a new `SicroObject` with sensible defaults so
- * the UI doesn't sprinkle UUIDs and constants everywhere.
- *
- * `crypto.randomUUID()` is available in modern browsers and in the Tauri
- * WebView (Chromium-based), so no extra dep needed.
- *
- * Fase S clean cut — Road v1 e Road v2 foram removidos. Vias e
- * rotatórias são criadas via `road-parity/factories` (`makeParityRoad`,
- * `makeParityRoundabout`). Este arquivo cobre apenas as primitivas não-via
- * (veículo, linha, marcador, texto, medição).
+ * Factories dos objetos não-via (veículo, linha, marcador, texto, medição) com
+ * defaults. Vias e rotatórias ficam em `road-parity/factories`.
  */
 
 import type {
@@ -27,14 +19,8 @@ import { getPessoaArt, getVehicleRealDims } from "./vehicleArt";
 
 const OBJECT_LAYER = "layer_objects";
 
-/**
- * Vehicle silhouette presets — width × height in canvas pixels at zoom 1.
- * Numbers chosen from doc 03 §6.4 references (sedan ~4.5×1.8 m, SUV ~4.7×1.9
- * m, caminhão leve ~6.5×2.2 m, moto ~2.0×0.7 m, bike ~1.6×0.5 m). The pixel
- * mapping uses ~18 px/m as a sensible starting size — the user can
- * re-scale anything anyway. Keeping aspect ratios honest matters more
- * than absolute size for the spike.
- */
+// Presets em px (~18 px/m), usados só quando o doc não tem escala; com escala,
+// makeVehicle usa as dimensões reais da arte. Proporção importa mais que tamanho.
 const VEHICLE_DIMENSIONS: Record<
   VehicleBodyType,
   { width: number; height: number; color: string }
@@ -48,7 +34,6 @@ const VEHICLE_DIMENSIONS: Record<
   moto: { width: 36, height: 16, color: "#facc15" },
   bike: { width: 28, height: 12, color: "#22c55e" },
   other: { width: 80, height: 40, color: "#6b7280" },
-  // MVP 9 — frota expandida
   pickup: { width: 96, height: 42, color: "#0f766e" }, // caminhonete
   van: { width: 96, height: 46, color: "#854d0e" },
   onibus: { width: 220, height: 60, color: "#b45309" },
@@ -56,8 +41,6 @@ const VEHICLE_DIMENSIONS: Record<
   moto_carga: { width: 50, height: 28, color: "#a16207" }, // moto com bagageiro
   caminhao_pesado: { width: 160, height: 60, color: "#7c2d12" },
   carreta: { width: 280, height: 60, color: "#451a03" }, // cavalo + semi-reboque
-  // Frota SVG do designer — presets em px usados só quando o doc NÃO tem
-  // escala definida (com escala, makeVehicle usa as dimensões REAIS em m).
   van_furgao: { width: 96, height: 46, color: "#854d0e" },
   micro_onibus: { width: 140, height: 44, color: "#b45309" },
   onibus_leito: { width: 240, height: 78, color: "#b45309" },
@@ -76,13 +59,10 @@ const VEHICLE_DIMENSIONS: Record<
 };
 
 function uid(prefix: string): string {
-  // crypto.randomUUID is the canonical path in modern Chromium.
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return `${prefix}_${crypto.randomUUID()}`;
   }
-  // Defensive fallback for non-browser test environments (vitest under jsdom
-  // sometimes lacks the API). Not cryptographically strong — only used to
-  // disambiguate within a session.
+  // vitest/jsdom às vezes não tem randomUUID; fallback só precisa ser único na sessão.
   return `${prefix}_${Date.now().toString(36)}_${Math.random()
     .toString(36)
     .slice(2, 8)}`;
@@ -92,11 +72,7 @@ export function makeVehicle(
   p: SicroPoint,
   label = "V1",
   body_type: VehicleBodyType = "car",
-  /**
-   * Escala do doc (px por metro). Quando definida e o tipo tem arte do
-   * designer (desenhada em escala real), o veículo é inserido já no TAMANHO
-   * REAL — ex.: sedan 4,60×2,21 m. Sem escala, caem os presets em px.
-   */
+  /** Escala do doc (px/m). Com escala e arte do designer, entra no tamanho real; sem escala, preset em px. */
   pxPerM?: number | null,
 ): SicroVehicleObject {
   const preset = VEHICLE_DIMENSIONS[body_type] ?? VEHICLE_DIMENSIONS.car;
@@ -121,8 +97,7 @@ export function makeVehicle(
   };
 }
 
-/** Central palette for line subtypes (color + width + dashing). MVP 6+9. */
-export const LINE_STYLES: Record<
+const LINE_STYLES: Record<
   LineSubtype,
   { color: string; width: number; dashed: boolean }
 > = {
@@ -134,7 +109,6 @@ export const LINE_STYLES: Record<
   sidewalk: { color: "#52525b", width: 3, dashed: false },
   arrow: { color: "#111827", width: 3, dashed: false },
   freehand: { color: "#111827", width: 2, dashed: false },
-  // MVP 9
   canteiro: { color: "#22c55e", width: 8, dashed: false }, // verde grosso
   acostamento: { color: "#a8a29e", width: 4, dashed: false },
   trajetoria: { color: "#2563eb", width: 3, dashed: true },
@@ -169,8 +143,7 @@ export function makeLine(
   };
 }
 
-/** Marker palette and default labels. MVP 6 + MVP 9. */
-export const MARKER_STYLES: Record<
+const MARKER_STYLES: Record<
   MarkerSubtype,
   { color: string; defaultLabel: string; defaultSize: number }
 > = {
@@ -184,21 +157,18 @@ export const MARKER_STYLES: Record<
   debris: { color: "#a16207", defaultLabel: "Destroços", defaultSize: 30 },
   pedestrian: { color: "#0f172a", defaultLabel: "Pedestre", defaultSize: 22 },
   body: { color: "#0f172a", defaultLabel: "Vítima", defaultSize: 32 },
-  // Frota SVG do designer — pedestres em decúbito (size = comprimento; com
-  // escala definida o makeMarker usa a altura humana real ~1,6–1,75 m).
+  // Pedestres em decúbito: size = comprimento; com escala, makeMarker usa a altura humana real.
   pedestre_m_dorsal: { color: "#0f172a", defaultLabel: "Vítima M (dorsal)", defaultSize: 60 },
   pedestre_m_lateral: { color: "#0f172a", defaultLabel: "Vítima M (lateral)", defaultSize: 60 },
   pedestre_m_ventral: { color: "#0f172a", defaultLabel: "Vítima M (ventral)", defaultSize: 60 },
   pedestre_f_dorsal: { color: "#0f172a", defaultLabel: "Vítima F (dorsal)", defaultSize: 56 },
   pedestre_f_lateral: { color: "#0f172a", defaultLabel: "Vítima F (lateral)", defaultSize: 56 },
   pedestre_f_ventral: { color: "#0f172a", defaultLabel: "Vítima F (ventral)", defaultSize: 56 },
-  // MVP 9 — vestígios adicionais
   skid_curve: { color: "#1f2937", defaultLabel: "Derrapagem", defaultSize: 70 },
   sulcagem: { color: "#451a03", defaultLabel: "Sulcagem", defaultSize: 60 },
   ranhura: { color: "#78350f", defaultLabel: "Ranhura", defaultSize: 50 },
   impact_area: { color: "#b91c1c", defaultLabel: "Área de impacto", defaultSize: 80 },
   rest_position: { color: "#0e7490", defaultLabel: "Repouso final", defaultSize: 28 },
-  // MVP 9 — mobiliário urbano
   semaforo: { color: "#f97316", defaultLabel: "Semáforo", defaultSize: 22 },
   placa_pare: { color: "#dc2626", defaultLabel: "PARE", defaultSize: 26 },
   placa_preferencia: { color: "#f59e0b", defaultLabel: "Preferência", defaultSize: 26 },
@@ -221,7 +191,6 @@ export function makeMarker(
     pessoa && typeof pxPerM === "number" && pxPerM > 0
       ? pessoa.lengthM * pxPerM
       : style.defaultSize;
-  // Mobiliário urbano vai para a categoria dedicada (MVP 9).
   const isMobiliario =
     subtype === "semaforo" ||
     subtype === "placa_pare" ||
@@ -280,13 +249,8 @@ export function makeMeasurement(
 }
 
 /**
- * Clone an object with a new id (Ctrl+D / duplicate).
- *
- * Fase S — agora aceita também os tipos parity (`road_parity`,
- * `roundabout_parity`); o offset de 16 px aplica em coordenadas
- * de mundo (metros) — efetivamente um deslocamento sub-pixel quando
- * `px_per_m` está em torno de 10. Para um clone que se distinga
- * visualmente, o caller deve adicionar offset adicional. (TODO Fase S+1)
+ * Clone com id novo (Ctrl+D), deslocado para não cobrir o original: 16 px nos
+ * objetos em pixels, 1 m nos objetos parity (coordenadas em metros).
  */
 export function cloneObject<T extends SicroVehicleObject
   | SicroLineObject
@@ -296,7 +260,6 @@ export function cloneObject<T extends SicroVehicleObject
   | SicroParityObject>(source: T): T {
   const cloned = { ...source } as T;
   cloned.id = uid(source.kind);
-  // Nudge so the duplicate doesn't overlap the source visually.
   if ("x" in cloned && typeof cloned.x === "number") {
     cloned.x += 16;
   }
@@ -314,7 +277,6 @@ export function cloneObject<T extends SicroVehicleObject
       cloned.p2 = { x: source.p2.x + 16, y: source.p2.y + 16 };
     }
   }
-  // Parity road — desloca todos os pontos de controle.
   if (cloned.kind === "road_parity" && source.kind === "road_parity") {
     cloned.ax = source.ax + 1;
     cloned.ay = source.ay + 1;
@@ -325,7 +287,6 @@ export function cloneObject<T extends SicroVehicleObject
     cloned.cx2 = source.cx2 + 1;
     cloned.cy2 = source.cy2 + 1;
   }
-  // Parity roundabout — desloca o centro.
   if (cloned.kind === "roundabout_parity" && source.kind === "roundabout_parity") {
     cloned.cx = source.cx + 1;
     cloned.cy = source.cy + 1;

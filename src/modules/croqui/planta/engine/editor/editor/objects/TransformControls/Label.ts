@@ -5,8 +5,7 @@ import { METER, Tool, WALL_THICKNESS } from "../../constants";
 import { useStore } from "../../../../stores/EditorStore";
 import { labelOffsetMap, wallStyleKey } from "../../../../wallStyles";
 
-// Callback SICRO: avisa quando uma cota foi ARRASTADA, pra persistir o offset
-// (em doc.labelOffsets) e entrar no Ctrl+Z. Registrado pelo PlantaEditor.
+// Callback SICRO: cota arrastada → persiste o offset (doc.labelOffsets) e entra no Ctrl+Z.
 let labelMovedHandler: ((key: string, x: number, y: number) => void) | null =
   null;
 export function setLabelMovedHandler(
@@ -35,7 +34,7 @@ export class Label extends Container {
         this.on("toggleLabel", this.toggleLabel);
         this.toggleLabel({});
 
-        // Editar a medida (clique) ou ARRASTAR a cota (drag), no modo Selecionar.
+        // Editar a medida (duplo-clique) ou arrastar a cota, no modo Selecionar.
         this.interactive = true;
         this.cursor = "text";
         this.on("pointerdown", this.onLabelDown);
@@ -84,19 +83,18 @@ export class Label extends Container {
     };
 
     private lastClickTs = 0;
-    private _dirty = false; // o valor da cota foi REALMENTE digitado?
+    private _dirty = false; // a cota foi realmente digitada?
 
     private onClick(ev: any) {
-        // Se acabou de arrastar, não faz nada (foi mover a cota).
+        // Acabou de arrastar: foi mover a cota, não editar.
         if (this.wasDragged) {
             this.wasDragged = false;
             return;
         }
         if (useStore.getState().activeTool !== Tool.Edit) return;
-        // Clique SIMPLES = só seleção (tratada pelo host SICRO). DUPLO-clique
-        // abre o editor de medida. Isso evita que o clique de SELECIONAR a parede
-        // — que cai sobre a cota, no meio dela — abra o editor e, num blur com
-        // valor stale do input compartilhado, redimensione a parede sem querer.
+        // Clique simples = seleção (host SICRO); só o duplo-clique abre o editor.
+        // Senão o clique de selecionar a parede (que cai sobre a cota) abria o
+        // editor e, num blur com valor stale, redimensionava a parede sem querer.
         const now = performance.now();
         if (now - this.lastClickTs < 320) {
             this.lastClickTs = 0;
@@ -111,18 +109,16 @@ export class Label extends Container {
         const input = document.getElementById("label-input") as HTMLInputElement | null;
         if (!input) return;
 
-        // No arcada o canvas ocupa a janela toda (coords ≈ página); no SICRO o
-        // canvas tem offset (sidebar+cabeçalho), então somamos o rect do canvas.
+        // No SICRO o canvas tem offset (sidebar+cabeçalho): soma o rect do canvas.
         const canvas = document.getElementById("planta-pixi-canvas");
         const cr = canvas ? canvas.getBoundingClientRect() : { left: 0, top: 0 };
         const b = this.getBounds();
         input.style.pointerEvents = "auto";
-        // O input (translate(-50%,-50%)) é centrado no CENTRO do rótulo — assim
-        // o caret bate com os dígitos.
+        // Input (translate -50%) centrado no rótulo pro caret bater com os dígitos.
         input.style.top = `${cr.top + b.y + b.height / 2}px`;
         input.style.left = `${cr.left + b.x + b.width / 2}px`;
 
-        // Esconde o rótulo Pixi enquanto edita (o campo visível fica por cima).
+        // Esconde o rótulo Pixi enquanto edita; o campo fica por cima.
         this.text.visible = false;
         this._dirty = false;
 
@@ -143,16 +139,14 @@ export class Label extends Container {
 
     private _handleBlurInput = (ev: any) => {
         const v = parseFloat(ev.target.value);
-        // Só redimensiona se o valor foi REALMENTE alterado (digitação). Abrir e
-        // fechar sem mexer NÃO altera a parede — mata o "selecionar encolhe".
+        // Só redimensiona se digitou; abrir e fechar sem mexer não altera a parede.
         if (this._dirty && isFinite(v) && v > 0) {
             // a cota mostra o vão (comprimento − espessura) → soma de volta.
             this.parent?.updateWallLength?.(v * METER + WALL_THICKNESS);
         }
         this._dirty = false;
         this.text.visible = true; // volta o rótulo Pixi
-        // Estaciona o campo FORA da tela ao fechar — agora ele é visível (antes
-        // era transparente), então sem isso ficava aparecendo no lugar da cota.
+        // Estaciona o campo fora da tela: ele é visível, senão ficaria sobre a cota.
         ev.target.style.pointerEvents = "none";
         ev.target.style.left = "-9999px";
         ev.target.style.top = "-9999px";

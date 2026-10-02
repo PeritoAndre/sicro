@@ -1,14 +1,6 @@
-//! HTML integrity report writer (MVP 5).
-//!
-//! Produces a self-contained, single-file HTML report from a
-//! `WorkspaceIntegrityReport`. The HTML is intentionally static (no JS,
-//! no external CSS) so it can be opened by any browser, archived as
-//! evidence and printed if needed.
-//!
-//! Caller pipeline:
-//!   `verify_workspace` → `render_html_report` → `atomic_write_bytes`.
-//!
-//! Filename convention: `reports/workspace_integrity_YYYYMMDD_HHMMSS.html`.
+//! Relatório HTML de integridade, auto-contido (sem JS nem CSS externo) para
+//! abrir em qualquer navegador, arquivar e imprimir.
+//! Nome: `reports/workspace_integrity_YYYYMMDD_HHMMSS.html`.
 
 use chrono::{DateTime, SecondsFormat, Utc};
 
@@ -349,8 +341,7 @@ mod tests {
     #[test]
     fn escapes_workspace_path_with_backslashes() {
         let html = render_html_report(&fixture_report());
-        // Backslashes don't need escaping per se, but quotes inside paths
-        // would; sanity-check that the path appears.
+        // Só confere que o caminho aparece.
         assert!(html.contains("C:\\tmp\\fake.sicro"));
     }
 

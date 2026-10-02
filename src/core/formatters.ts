@@ -1,7 +1,4 @@
-/**
- * String/date formatters used across the UI.
- * Keep these locale-aware (pt-BR) but pure — no side effects.
- */
+/** Formatadores de data (pt-BR), puros. */
 
 const PT_BR = "pt-BR";
 

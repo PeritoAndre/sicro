@@ -1,15 +1,6 @@
 /**
- * VideoTimeline — régua técnica + playhead + marcadores de evento.
- *
- *   - Clicar OU ARRASTAR na régua posiciona o vídeo (a imagem acompanha).
- *   - Zoom: Ctrl + roda do mouse (no ponto do cursor), teclas = / − / 0 ou os
- *     botões. Aproximado, a roda sozinha rola a janela e aparece a faixa de
- *     visão geral (clique/arraste nela para mover a janela). No zoom máximo a
- *     régua marca cada quadro.
- *   - Trecho entrada/saída (I/O) aparece destacado; mais forte quando repete.
- *   - Tocando com zoom, a janela acompanha o playhead.
- *   - Altura ajustável: arrastar a borda de cima (duplo clique volta ao
- *     padrão). Lembrada por máquina e igual em todas as linhas do tempo.
+ * Régua técnica + playhead + marcadores de evento. Zoom (Ctrl+roda, = − 0) até
+ * um risco por quadro; altura ajustável, lembrada por máquina.
  */
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Maximize2, ZoomIn, ZoomOut } from "lucide-react";
@@ -42,12 +33,12 @@ interface View {
   end: number;
 }
 
-// ---- altura da régua (preferência compartilhada) -------------------------------
+// altura da régua (preferência compartilhada entre todas as linhas do tempo)
 
 const HEIGHT_KEY = "sicro.video.timelineHeight.v1";
-export const TIMELINE_MIN_H = 36;
-export const TIMELINE_MAX_H = 240;
-export const TIMELINE_DEFAULT_H = 60;
+const TIMELINE_MIN_H = 36;
+const TIMELINE_MAX_H = 240;
+const TIMELINE_DEFAULT_H = 60;
 const clampH = (h: number) => Math.round(Math.min(TIMELINE_MAX_H, Math.max(TIMELINE_MIN_H, h)));
 let railHeight = (() => {
   try {
@@ -114,7 +105,6 @@ export function VideoTimeline({
   const span = view.end - view.start;
   const zoomed = span < safeDuration - 1e-6;
 
-  // Duração conhecida/alterada → mostra o vídeo inteiro.
   useEffect(() => {
     setView({ start: 0, end: safeDuration });
   }, [safeDuration]);
@@ -178,8 +168,8 @@ export function VideoTimeline({
     else if (currentTime < v.start) setView(clampView(currentTime - s * 0.9, s));
   }, [currentTime, safeDuration, clampView]);
 
-  // Roda do mouse: Ctrl = zoom no cursor; sem Ctrl (com zoom) = rolar a janela.
-  // Listener nativo não-passivo, para o preventDefault valer.
+  // Roda: Ctrl = zoom no cursor; sem Ctrl (com zoom) = rolar a janela.
+  // Listener nativo não-passivo para o preventDefault valer.
   useEffect(() => {
     const el = railRef.current;
     if (!el) return;
@@ -405,7 +395,7 @@ export function VideoTimeline({
   );
 }
 
-// ---- régua ------------------------------------------------------------------
+// régua
 
 const NICE_STEPS = [
   0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600,
@@ -417,9 +407,8 @@ export interface Ticks {
 }
 
 /**
- * Riscos da régua para a janela [start, end] numa régua de `widthPx`:
- * menores com ≥ 8 px entre si (no zoom máximo, um por quadro — 1/fps) e
- * maiores rotulados com ≥ 80 px.
+ * Riscos da janela [start, end] numa régua de `widthPx`: menores com ≥ 8 px
+ * entre si (no zoom máximo, um por quadro) e maiores rotulados com ≥ 80 px.
  */
 export function buildTicks(start: number, end: number, widthPx: number, fps: number | null): Ticks {
   const span = end - start;

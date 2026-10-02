@@ -1,19 +1,6 @@
 /**
- * Atalhos customizáveis do módulo **Croqui**. Escopo `croqui`.
- * Convenção: `group: "Croqui · <subárea>"`, label PT-BR, `defaultBinding` na
- * forma canônica de `keymap.ts`.
- *
- * Este é o módulo com mais ações: ferramentas de desenho, referencial,
- * vias, objetos (veículos / vestígios / mobiliário / pessoas), anotações,
- * edição (desfazer/duplicar/excluir/salvar), vista (zoom/enquadrar/grade),
- * imagem de fundo e exportação.
- *
- * NOTA sobre os "objetos" (veículo / vestígio / mobiliário / pessoa): a
- * própria toolbar agrupa dezenas de subtipos atrás de um "chip de
- * categoria" com popover (e lembra o último subtipo escolhido). Em vez de
- * dezenas de combinações obscuras, cada categoria tem UM atalho que ativa
- * a ferramenta padrão daquela categoria (sedan, ponto-de-colisão X,
- * semáforo, pedestre); o perito troca o subtipo pelo popover/Inspector.
+ * Atalhos do módulo Croqui. Objetos (veículo/vestígio/mobiliário/pessoa) têm UM
+ * atalho por categoria, que ativa a ferramenta padrão; o subtipo se troca no popover.
  */
 import type { ShortcutAction } from "../keymapActions";
 
@@ -37,7 +24,7 @@ export const CROQUI_ACTIONS: ShortcutAction[] = [
   { id: "croqui.tool.roadParking", scope: "croqui", group: "Croqui · Vias", label: "Estacionamento", defaultBinding: "P" },
   { id: "croqui.tool.roundabout", scope: "croqui", group: "Croqui · Vias", label: "Rotatória", defaultBinding: "O" },
 
-  // Objetos — cada atalho ativa a ferramenta PADRÃO da categoria.
+  // Objetos.
   { id: "croqui.tool.vehicle", scope: "croqui", group: "Croqui · Objetos", label: "Veículo (sedan)", defaultBinding: "C" },
   { id: "croqui.tool.vestigio", scope: "croqui", group: "Croqui · Objetos", label: "Vestígio (ponto de colisão X)", defaultBinding: "X" },
   { id: "croqui.tool.mobiliario", scope: "croqui", group: "Croqui · Objetos", label: "Mobiliário urbano (semáforo)", defaultBinding: "U" },

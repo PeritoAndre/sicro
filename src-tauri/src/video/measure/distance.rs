@@ -1,52 +1,17 @@
-//! Medição de distância por fotogrametria — Fase 1 (matemática pura).
-//!
-//! A MESMA calibração que o Calculador de Velocidade usa para projetar
-//! pixel → mundo (uma [`Homography`]) entrega, quase de graça, a distância
-//! real entre dois pontos marcados na cena. Este módulo é só a aritmética
-//! determinística disso — sem banco, sem comando, sem UI.
-//!
-//! Princípio do projeto (KNOWN_LIMITATIONS §13): a ferramenta NÃO calibra a
-//! cena por conta própria aqui; ela **consome** uma calibração já criada
-//! pelo perito (plano/linha/razão cruzada). A medição é determinística e o
-//! resultado é honesto sobre o que não sabe — a incerteza é propagada pelo
-//! Monte Carlo de distância (em `video/speed/montecarlo.rs`), nunca fingida.
-//!
-//! ## Como cada modo de calibração se comporta
-//!
-//! `world_distance` é agnóstico ao modo porque tudo passa por
-//! [`Homography::project`]:
-//!   - **plano** (DLT de 4 pontos): `project` devolve `(X, Y)` em metros no
-//!     plano do solo → distância euclidiana 2D real;
-//!   - **linha** (afim, 2 pontos): `project` devolve `(X, Y)` no eixo
-//!     escalado pela linha → distância na escala da referência;
-//!   - **razão cruzada**: a 3×3 levantada projeta para `(s, 0)` (s = posição
-//!     ao longo da linha), então a euclidiana reduz a `|s₂ − s₁|` — a
-//!     distância **ao longo da linha de referência**.
+//! Distância real entre dois pixels via `Homography::project`. Plano (DLT):
+//! euclidiana no solo; linha (afim): na escala da referência; razão cruzada:
+//! a 3×3 projeta para `(s, 0)`, logo sai `|s₂ − s₁|` ao longo da linha.
 
 use crate::video::speed::homography::{Homography, HomographyError};
 
-/// Erros da camada de medição. Por ora, o único modo de falha é a projeção
-/// de um ponto no infinito (calibração singular para aquele pixel) — que
-/// vem de [`HomographyError`]. O enum próprio segue a convenção do projeto
-/// (cada módulo de matemática carrega seu erro) e reserva espaço para
-/// medições futuras (ex.: altura por projeção reversa).
 #[derive(Debug, thiserror::Error)]
 pub enum MeasureError {
-    /// Algum dos pontos projetou no infinito (componente projetivo ~0): a
-    /// homografia não consegue levar aquele pixel ao plano do mundo.
+    /// Algum ponto projetou no infinito.
     #[error(transparent)]
     Homography(#[from] HomographyError),
 }
 
-/// Distância real, em metros, entre dois pixels segundo uma calibração.
-///
-/// Projeta `p1_px` e `p2_px` para coordenadas de mundo com
-/// [`Homography::project`] e devolve a distância euclidiana entre elas.
-/// Funciona para qualquer modo de calibração (ver doc do módulo).
-///
-/// # Erros
-/// Devolve [`MeasureError::Homography`] (`Singular`) se algum dos pontos
-/// projetar no infinito (denominador projetivo ~0).
+/// Distância (m) entre dois pixels; `Singular` se algum projeta no infinito.
 pub fn world_distance(
     homography: &Homography,
     p1_px: (f64, f64),
@@ -66,8 +31,6 @@ mod tests {
     use crate::video::speed::homography::{line_calibration, solve_homography_dlt};
     use nalgebra::Matrix3;
 
-    /// Calibração identidade-escala (100 px = 1 m). Dois pixels cujas
-    /// coordenadas de mundo são conhecidas devolvem a distância exata.
     #[test]
     fn identity_scale_recovers_known_distance() {
         let image = [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)];
@@ -80,7 +43,6 @@ mod tests {
         assert!((d - expected).abs() < 1e-9, "d = {d}, esperado {expected}");
     }
 
-    /// Caso eixo-alinhado: a aresta de calibração mede exatamente 1 metro.
     #[test]
     fn identity_scale_axis_aligned_one_meter() {
         let image = [(0.0, 0.0), (100.0, 0.0), (100.0, 100.0), (0.0, 100.0)];
@@ -90,11 +52,8 @@ mod tests {
         assert!((d - 1.0).abs() < 1e-9, "d = {d}");
     }
 
-    /// **Validação real da perspectiva.** Parte de uma homografia verdadeira
-    /// COM termo projetivo, gera 4 cantos com mundo conhecido, resolve o DLT
-    /// só com eles, e mede entre dois pixels que NÃO entraram no ajuste — a
-    /// distância tem que bater com a verdadeira (encurtamento perspectivo que
-    /// só a homografia completa reproduz).
+    /// Homografia verdadeira com perspectiva: o DLT dos 4 cantos tem de medir
+    /// certo entre dois pixels que não entraram no ajuste.
     #[test]
     fn perspective_plane_recovers_known_distance() {
         let h_true = Homography::from_matrix(Matrix3::new(
@@ -109,7 +68,6 @@ mod tests {
         ];
         let h_est = solve_homography_dlt(&corners_img, &corners_world).unwrap();
 
-        // Dois pontos interiores (não usados na calibração).
         let a = (220.0, 180.0);
         let b = (430.0, 350.0);
         let (ax, ay) = h_true.project(a).unwrap();
@@ -120,9 +78,7 @@ mod tests {
         assert!((got - expected).abs() < 1e-9, "got = {got}, esperado {expected}");
     }
 
-    /// Razão cruzada: a distância é medida AO LONGO da linha. Referências
-    /// colineares a posições conhecidas (0, 5, 10 m); medir dois pixels cujas
-    /// posições na linha são 2.5 m e 12.5 m deve devolver 10 m.
+    /// Razão cruzada mede ao longo da linha: 2.5 m → 12.5 m = 10 m.
     #[test]
     fn cross_ratio_distance_along_line() {
         let refs = vec![
@@ -132,7 +88,6 @@ mod tests {
         ];
         let h = fit_cross_ratio_homography(&refs).unwrap();
 
-        // Sanidade: a referência do meio projeta para ~(5, 0).
         let (mx, my) = h.project((200.0, 200.0)).unwrap();
         assert!((mx - 5.0).abs() < 1e-6, "mx = {mx}");
         assert!(my.abs() < 1e-6, "my = {my}");
@@ -142,8 +97,6 @@ mod tests {
         assert!((d - 10.0).abs() < 1e-6, "d = {d}");
     }
 
-    /// Linha afim: distância na escala. p1 ↦ (0,0), p2 ↦ (d,0); medir entre
-    /// os dois pixels de calibração devolve a distância informada.
     #[test]
     fn line_calibration_distance_in_scale() {
         let h = line_calibration((100.0, 200.0), (300.0, 200.0), 8.0).unwrap();
@@ -151,8 +104,7 @@ mod tests {
         assert!((d - 8.0).abs() < 1e-9, "d = {d}");
     }
 
-    /// Ponto que projeta no infinito devolve erro, não um número fabricado.
-    /// Uma 3×3 com última linha `[0, 0, 0]` zera o denominador projetivo.
+    /// Última linha `[0, 0, 0]` zera o denominador projetivo.
     #[test]
     fn point_at_infinity_errors() {
         let h = Homography::from_matrix(Matrix3::new(

@@ -1,24 +1,12 @@
-//! W20 (S2) — Máscara de seleção: confina uma operação a uma região.
-//!
-//! Filosofia (§13): SUPORTE e reprodutível. O filtro é aplicado à imagem
-//! inteira numa cópia e o resultado é composto SÓ dentro da máscara; fora
-//! dela o pixel original é preservado. A máscara chega em coordenadas
-//! **normalizadas** `[0,1]` (ver `crate::models::MaskSpec`), então a MESMA
-//! geometria rasteriza corretamente tanto no preview reduzido quanto no
-//! export em resolução cheia. Borda DURA nesta fase (sem feather) — limite
-//! honesto, documentado para o perito.
-//!
-//! As geometrias (rect/elipse/polígono) e o `inverted` vivem em
-//! `MaskSpec::contains_base`; aqui ficam só o ray-casting e o composite, que
-//! dependem do `image` crate (mantém `models` livre dessa dependência).
+//! Máscara de seleção: o filtro roda na imagem inteira e o resultado é composto
+//! só dentro da máscara. Coordenadas normalizadas [0,1] (`MaskSpec`), então a
+//! mesma geometria vale no preview reduzido e no export. Borda dura, sem feather.
 
 use image::RgbaImage;
 
 use crate::models::MaskSpec;
 
-/// Ray-casting em coordenadas (quaisquer — aqui normalizadas): o ponto
-/// `(x, y)` está dentro do polígono `poly`? Polígono com < 3 vértices nunca
-/// contém nada.
+/// Ray-casting; polígono com < 3 vértices nunca contém nada.
 pub fn point_in_polygon(x: f32, y: f32, poly: &[[f32; 2]]) -> bool {
     let n = poly.len();
     if n < 3 {
@@ -40,14 +28,9 @@ pub fn point_in_polygon(x: f32, y: f32, poly: &[[f32; 2]]) -> bool {
     inside
 }
 
-/// Composita `filtered` sobre `base` apenas na região da `mask`. Para cada
-/// pixel: dentro da seleção → `filtered`; fora → `base`. `inverted` troca
-/// dentro/fora. Devolve uma nova imagem.
-///
-/// Se as dimensões de `filtered` divergirem de `base` (op interna mudou o
-/// tamanho — ex.: crop/resize/rotação), não há como compor pixel-a-pixel;
-/// devolve `filtered` como fallback seguro (o front evita esse caso só
-/// oferecendo escopo "seleção" para filtros que preservam dimensão).
+/// Dentro da seleção → `filtered`; fora → `base`; `inverted` troca.
+/// Se as dimensões divergirem (op interna mudou o tamanho), devolve `filtered`:
+/// não há como compor pixel a pixel.
 pub fn composite_with_mask(
     base: &RgbaImage,
     filtered: &RgbaImage,
@@ -69,7 +52,6 @@ pub fn composite_with_mask(
         let ny = (y as f32 + 0.5) / hf;
         for x in 0..w {
             let nx = (x as f32 + 0.5) / wf;
-            // `inside` = está na região onde o filtro vale (após inverter).
             let inside = mask.contains_base(nx, ny) != inv;
             if inside {
                 out.put_pixel(x, y, *filtered.get_pixel(x, y));
@@ -79,9 +61,8 @@ pub fn composite_with_mask(
     out
 }
 
-/// W20 (S3) — Caixa delimitadora (px inteiros, clampada à imagem) que contém a
-/// região da máscara. Para máscara INVERTIDA a região é "tudo menos a forma",
-/// então a caixa é a imagem inteira.
+/// Caixa delimitadora em px (clampada à imagem) da região da máscara.
+/// Máscara invertida = imagem inteira.
 pub fn mask_bbox_px(mask: &MaskSpec, w: u32, h: u32) -> (u32, u32, u32, u32) {
     if w == 0 || h == 0 {
         return (0, 0, w.max(1), h.max(1));
@@ -132,10 +113,8 @@ pub fn mask_bbox_px(mask: &MaskSpec, w: u32, h: u32) -> (u32, u32, u32, u32) {
     (x0, y0, bw, bh)
 }
 
-/// W20 (S3) — Recorta a região da máscara de `img` para uma nova imagem do
-/// tamanho da bbox; pixels FORA da seleção ficam transparentes (alpha 0).
-/// Devolve a imagem recortada + o offset `(x, y)` da bbox na imagem original
-/// (para posicionar a camada de pixels). Coords da máscara normalizadas `[0,1]`.
+/// Recorta a bbox da máscara; fora da seleção fica transparente. Devolve a
+/// imagem e o offset `(x, y)` da bbox na original.
 pub fn crop_masked(img: &RgbaImage, mask: &MaskSpec) -> (RgbaImage, u32, u32) {
     let (w, h) = (img.width(), img.height());
     let (bx, by, bw, bh) = mask_bbox_px(mask, w, h);

@@ -1,15 +1,6 @@
 /**
- * ImportSicroappDialog — modal opened from Home's "Importar .sicroapp" button.
- *
- * Three states, switched on `phase`:
- *   - "idle"      — user just opened the dialog; show "Pick file" UX.
- *   - "running"   — file picked, importer running (no granular progress yet —
- *                   the Rust side is synchronous; we just show a spinner).
- *   - "done"      — import completed; show the ImportReport summary.
- *   - "error"     — import threw; show the error message with retry/cancel.
- *
- * The summary panel mirrors §18 of `SICRO_OPERACIONAL_INTEGRACAO_DESKTOP_2.md`:
- * ocorrência created, type, BO, photos counts, hashes verified, warnings.
+ * Modal de importação de .sicroapp. Sem progresso granular: o lado Rust é
+ * síncrono, então só há spinner até o ImportReport chegar.
  */
 
 import { useEffect, useState } from "react";
@@ -45,7 +36,6 @@ export function ImportSicroappDialog({ open, onClose, onOpenWorkspace }: Props) 
   const [error, setError] = useState<string | null>(null);
   const loadRecents = useWorkspaceStore((s) => s.loadRecents);
 
-  // Reset state every time the dialog re-opens.
   useEffect(() => {
     if (open) {
       setPhase("idle");
@@ -69,7 +59,6 @@ export function ImportSicroappDialog({ open, onClose, onOpenWorkspace }: Props) 
       });
       if (typeof selected !== "string") return;
 
-      // Display the leaf name immediately for visual confirmation.
       const leaf = selected.split(/[\\/]/).pop() ?? selected;
       setFilename(leaf);
 
@@ -79,7 +68,6 @@ export function ImportSicroappDialog({ open, onClose, onOpenWorkspace }: Props) 
         const r = await commands.importSicroapp({ package_path: selected });
         setResult(r);
         setPhase("done");
-        // Refresh the recents so the just-imported occurrence shows up.
         void loadRecents();
       } catch (err) {
         const e = toSicroError(err);

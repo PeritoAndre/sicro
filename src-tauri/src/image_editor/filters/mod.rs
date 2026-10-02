@@ -1,16 +1,5 @@
-//! G12 — Filtros forenses para o Image Engine Pro.
-//!
-//! Cada submódulo cobre uma família:
-//!   - `edges`        — Sobel, Laplacian, Canny.
-//!   - `blur`         — Gaussian, Median, Bilateral.
-//!   - `morphology`   — Dilate, Erode, Open, Close.
-//!   - `enhancement`  — CLAHE, Histogram EQ, Auto-Levels, White Balance.
-//!   - `geometric`    — Perspective warp (4-point homography).
-//!   - `misc`         — Unsharp mask, Threshold, Pixelize.
-//!
-//! Todas as funções recebem `&RgbaImage` ou consomem `RgbaImage` e
-//! retornam novo `RgbaImage`. Não dependem de OpenCV nem de bindings de
-//! sistema — só `image` crate + Rust puro.
+//! Filtros forenses em Rust puro (só `image` crate): cada submódulo é uma
+//! família; todos recebem `&RgbaImage` e devolvem uma nova.
 
 pub mod blur;
 pub mod channels;

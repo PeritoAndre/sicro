@@ -1,35 +1,8 @@
 /**
- * OsmImportModal — MVP 10 "Importar OSM" (Round 4 — safe-mode rewrite).
- *
- * Round 3 froze the app on open because the modal mounted Leaflet
- * eagerly with inline-closure callbacks whose identity changed on
- * every render. The effect that called `invalidateSize()` and the
- * `tileload` handler each triggered `setState`, which re-rendered
- * the parent, which produced new closure identities, which re-fired
- * the effect, which set state again — classic infinite update loop
- * that locked the WebView thread before the modal could paint.
- *
- * Round 4 (this file) takes the staged approach the user demanded:
- *
- *   1. Click "Importar OSM" → modal appears INSTANTLY with title,
- *      coords input, "Carregar mapa" button, close button. **No
- *      Leaflet** in the initial render. No Overpass call. No work.
- *   2. User clicks "Carregar mapa" → the heavy `OsmMapPanel` mounts
- *      (Leaflet, tiles, react-leaflet). Wrapped in an ErrorBoundary
- *      so any Leaflet error stays contained — the modal itself stays
- *      open.
- *   3. User clicks "Buscar vias" → Overpass POST + JSON parse +
- *      polylines on the map (or a list-only fallback if the map
- *      never loaded).
- *   4. User clicks "Importar selecionadas" → conversion via
- *      `osmDatasetToRoadsFit` + parent `onConfirm`.
- *
- * Nothing heavy runs in the render phase. Nothing fetches by
- * itself. The "Importar OSM" button is now safe to click.
- *
- * Privacy reminder: the only thing this modal ever sends out is the
- * geographic bbox to the Overpass endpoint — no BO, no occurrence,
- * no laudo content.
+ * Wizard "Importar OSM": coordenadas + raio → Overpass → seleção de vias →
+ * objetos parity. Nada pesado roda no render e nada busca sozinho; o Leaflet
+ * fica isolado em `OsmMapPanel` + ErrorBoundary.
+ * Privacidade: só a bbox geográfica sai para o Overpass, nunca dado pericial.
  */
 
 import { useCallback, useMemo, useState, type ReactNode } from "react";
@@ -47,10 +20,6 @@ import {
   type OsmViewport,
   type OsmWay,
 } from "../engine";
-// Fase S — adapter parity é o ÚNICO motor de conversão OSM agora.
-// `convertOsmDatasetToSicroObjects` (Road v2) foi descontinuado em S.
-// Gera `SicroRoadObject_parity` + `SicroRoundaboutObject_parity` em
-// coordenadas de mundo (metros).
 import {
   convertOsmDatasetToParityObjects,
   type SicroRoadObject_parity,
@@ -59,24 +28,12 @@ import {
 import { OsmMapPanel } from "./OsmMapPanel";
 import styles from "./CroquiEditor.module.css";
 
-// ---------------------------------------------------------------------------
-// Public API — unchanged from previous rounds.
-
 export interface OsmImportResult {
-  /**
-   * Vias Python Parity Engine (`SicroRoadObject_parity`) em coordenadas
-   * de mundo (metros). Único produto do modal pós-Fase S.
-   */
+  /** Em coordenadas de mundo (metros). */
   parity_roads: SicroRoadObject_parity[];
-  /**
-   * Rotatórias Python Parity Engine (`SicroRoundaboutObject_parity`)
-   * em coordenadas de mundo (metros).
-   */
+  /** Em coordenadas de mundo (metros). */
   parity_roundabouts: SicroRoundaboutObject_parity[];
-  /**
-   * Mensagens humanas (Português) — way ignorada, geometria
-   * irregular, etc. Mostrar no feedback do editor.
-   */
+  /** Mensagens em português para o feedback do editor. */
   warnings: string[];
   session: {
     imported_at: string;
@@ -95,7 +52,7 @@ export interface OsmImportResult {
   };
 }
 
-export interface OsmImportModalProps {
+interface OsmImportModalProps {
   canvasWidth: number;
   canvasHeight: number;
   dossieCoords?: LatLon | null;
@@ -116,8 +73,6 @@ export function OsmImportModal({
   onCancel,
 }: OsmImportModalProps) {
   if (typeof console !== "undefined") {
-    // One-shot log on every modal mount so we can tell from the
-    // console exactly when the React component appears.
     console.info("[OSM] modal mounted (safe mode)");
   }
 
@@ -137,11 +92,8 @@ export function OsmImportModal({
   const [dataset, setDataset] = useState<OsmDataset | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [busy, setBusy] = useState(false);
-  // MVP 10 Round 5 — the map now mounts automatically. The previous
-  // "Click Carregar mapa" placeholder confused the perito (it suggests
-  // the map is unavailable). Leaflet still lives inside the
-  // `LazyMapBoundary`, so a Leaflet crash still falls back gracefully
-  // — but the default UX is "the map just works".
+  // Mapa já aberto por padrão: o placeholder "Carregar mapa" parecia
+  // indisponibilidade. Falha do Leaflet ainda cai no placeholder.
   const [mapEnabled, setMapEnabled] = useState(true);
 
   const viewport: OsmViewport | null = useMemo(() => {
@@ -239,10 +191,6 @@ export function OsmImportModal({
         selected_way_ids: Array.from(selectedIds).sort((a, b) => a - b),
       };
 
-      // Fase S — único adapter ativo é o parity. Devolve
-      // `SicroRoadObject_parity` + `SicroRoundaboutObject_parity` em
-      // coords de mundo (metros). O perito ajusta posição/escala
-      // depois pela ferramenta "Definir escala".
       const result = convertOsmDatasetToParityObjects({
         ways: chosen,
         nodes: dataset.nodes,
@@ -306,8 +254,7 @@ export function OsmImportModal({
     >
       <div
         className={styles.dialog}
-        // Round 3 lesson: the `.dialog` CSS module hard-codes
-        // `width: 520px`; inline `width: 1080` overrides it.
+        // `.dialog` fixa width: 520px no CSS; o inline sobrepõe.
         style={{ width: 1080, maxWidth: "min(1080px, 95vw)", minHeight: 520 }}
       >
         <header className={styles.dialogHeader}>
@@ -325,8 +272,7 @@ export function OsmImportModal({
         <div
           style={{
             display: "grid",
-            // Map area collapses to a thin column when the map is OFF —
-            // the layout still fits both side panels comfortably.
+            // Sem mapa, a coluna central encolhe e os painéis laterais crescem.
             gridTemplateColumns: mapEnabled
               ? "260px 1fr 300px"
               : "320px 1fr 360px",
@@ -334,7 +280,6 @@ export function OsmImportModal({
             minHeight: 440,
           }}
         >
-          {/* ============================== LEFT ============================== */}
           <LeftPanel
             coordInput={coordInput}
             onCoordInputChange={setCoordInput}
@@ -359,7 +304,6 @@ export function OsmImportModal({
             hasDataset={!!dataset}
           />
 
-          {/* ============================== CENTRE ============================= */}
           <CentrePanel
             mapEnabled={mapEnabled}
             onLoadMap={() => {
@@ -382,7 +326,6 @@ export function OsmImportModal({
             onToggleWay={toggleWay}
           />
 
-          {/* ============================== RIGHT ============================== */}
           <RightPanel
             phase={phase}
             dataset={dataset}
@@ -395,10 +338,6 @@ export function OsmImportModal({
           />
         </div>
 
-        {/* ============================== FOOTER ============================== */}
-        {/* Fase S — único motor de importação OSM é o Python Parity
-            Engine. Antes existia toggle v2/parity; v1 e v2 foram
-            removidos do app. */}
         <div
           style={{
             marginTop: 10,
@@ -411,9 +350,7 @@ export function OsmImportModal({
             lineHeight: 1.4,
           }}
         >
-          {/* Implementação: as vias viram objetos do Road Parity Engine —
-              cubic Bézier de 4 pontos + rotatórias dedicadas (paridade com o
-              SICRO 1.0/Python). O texto da UI é neutro de propósito. */}
+          {/* Texto neutro de propósito (não cita o motor). */}
           <strong style={{ color: "#7c3aed" }}>
             Importação do OpenStreetMap — referência geográfica
           </strong>{" "}
@@ -458,8 +395,7 @@ export function OsmImportModal({
 }
 
 // ===========================================================================
-// LEFT — coordinate input + radius + search button.
-// Pure controlled component, no Leaflet imports.
+// Esquerda: coordenadas, raio e busca
 
 function LeftPanel({
   coordInput,
@@ -616,7 +552,7 @@ function LeftPanel({
 }
 
 // ===========================================================================
-// CENTRE — map placeholder OR the lazy-mounted OsmMapPanel.
+// Centro: mapa (ou placeholder)
 
 function CentrePanel({
   mapEnabled,
@@ -671,12 +607,7 @@ function CentrePanel({
   );
 }
 
-/**
- * Placeholder shown only when the perito explicitly clicked "Esconder
- * mapa" (or when the ErrorBoundary above brought us back to this view
- * after a Leaflet crash). The default modal state mounts the map
- * directly — no manual step required.
- */
+/** Só aparece após "Esconder mapa" ou falha do Leaflet. */
 function PlaceholderMap({ onLoadMap }: { onLoadMap: () => void }) {
   return (
     <div
@@ -719,13 +650,9 @@ function PlaceholderMap({ onLoadMap }: { onLoadMap: () => void }) {
   );
 }
 
-/**
- * ErrorBoundary that isolates Leaflet failures: if anything inside
- * OsmMapPanel throws (tile load, react-leaflet bug, missing CSS,
- * etc.), the modal stays open with the placeholder shown.
- */
 import { Component, type ErrorInfo } from "react";
 
+/** Isola falhas do Leaflet: o modal continua aberto no modo sem mapa. */
 class LazyMapBoundary extends Component<
   { children: ReactNode; onUnloadMap: () => void },
   { error: Error | null }
@@ -795,7 +722,7 @@ class LazyMapBoundary extends Component<
 }
 
 // ===========================================================================
-// RIGHT — way list with checkboxes. No Leaflet either.
+// Direita: lista de vias
 
 function RightPanel({
   phase,

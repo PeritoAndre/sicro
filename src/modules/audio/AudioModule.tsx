@@ -1,8 +1,6 @@
 /**
- * AudioModule — módulo Áudio (Camada 1): importar/extrair, listar e tocar.
- *
+ * Módulo Áudio: importar/extrair, listar, tocar, realçar, analisar e recortar.
  * Determinístico e com cadeia de custódia (o backend hasheia e registra tudo).
- * Sem transcrição/IA ainda — isso é Camada 2.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -59,9 +57,8 @@ const AUDIO_EXT = ["opus", "mp3", "m4a", "wav", "amr", "aac", "ogg", "flac", "wm
 const VIDEO_EXT = ["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpg", "mpeg", "ts"];
 
 /**
- * Filtros de realce — auxílio de escuta, todos determinísticos e locais. A
- * ordem de aplicação é fixa no backend (limpeza → zumbido/graves → ruído →
- * faixa → volume), não a ordem em que são marcados.
+ * Filtros de realce. A ordem de aplicação é fixa no backend (limpeza →
+ * zumbido/graves → ruído → faixa → volume), não a ordem em que são marcados.
  */
 interface RealceFilter {
   key: string;
@@ -107,8 +104,7 @@ const REALCE_GROUPS: { title: string; filters: RealceFilter[] }[] = [
 ];
 const REALCE_KEYS = REALCE_GROUPS.flatMap((g) => g.filters.map((f) => f.key));
 
-// W16 — abas do detalhe por INTENÇÃO (o player fica sempre visível acima).
-// Substitui a rolagem única onde tudo ficava empilhado.
+// Abas do detalhe; o player fica sempre visível acima delas.
 type DetailTab = "realcar" | "analisar" | "trechos" | "ficha";
 const DETAIL_TABS: {
   key: DetailTab;
@@ -256,7 +252,6 @@ export function AudioModule() {
     rel: string;
   } | null>(null);
   const [spectroBusy, setSpectroBusy] = useState(false);
-  // W16 — aba ativa do detalhe (Realçar/Analisar/Trechos/Ficha).
   const [detailTab, setDetailTab] = useState<DetailTab>("realcar");
   // Aba irmã Vídeos: pedido "o áudio deste vídeo, neste instante".
   const [loadedOnce, setLoadedOnce] = useState(false);
@@ -607,9 +602,8 @@ export function AudioModule() {
     );
   }
 
-  // "Extrair do vídeo do caso": o mesmo controle na tela inicial (logo abaixo
-  // dos botões) e na lista (na barra do topo). Vídeo sem trilha de áudio
-  // aparece marcado e não pode ser escolhido.
+  // "Extrair do vídeo do caso": mesmo controle na tela inicial e na barra da
+  // lista. Vídeo sem trilha de áudio aparece marcado e não pode ser escolhido.
   const caseExtract =
     caseVideos.length > 0 ? (
       <div className={styles.caseExtract}>
@@ -823,8 +817,6 @@ export function AudioModule() {
                   />
                 )}
 
-                {/* W16 — abas por intenção. O player fica sempre visível
-                    acima; aqui embaixo só troca a "bancada" de ferramentas. */}
                 <nav className={styles.tabs} role="tablist">
                   {DETAIL_TABS.map((t) => {
                     const Icon = t.icon;
@@ -845,7 +837,7 @@ export function AudioModule() {
                 </nav>
 
                 <div className={styles.tabBody}>
-                  {/* ---- Realçar (escuta, não-destrutivo) ---- */}
+                  {/* Realçar */}
                   {detailTab === "realcar" &&
                     (selected.kind === "realce" ? (
                       <div className={styles.realceNote}>
@@ -929,7 +921,7 @@ export function AudioModule() {
                       </div>
                     ))}
 
-                  {/* ---- Analisar (medição objetiva, §13) ---- */}
+                  {/* Analisar */}
                   {detailTab === "analisar" && (
                     <>
                       <div className={styles.spectroBox}>
@@ -988,7 +980,7 @@ export function AudioModule() {
                     </>
                   )}
 
-                  {/* ---- Trechos (recorte A-B + compilação) ---- */}
+                  {/* Trechos */}
                   {detailTab === "trechos" && (
                     <>
                       <div className={styles.clipBar}>
@@ -1111,7 +1103,7 @@ export function AudioModule() {
                     </>
                   )}
 
-                  {/* ---- Ficha (metadados + custódia) ---- */}
+                  {/* Ficha */}
                   {detailTab === "ficha" && (
                     <>
                       <div className={styles.metaGrid}>

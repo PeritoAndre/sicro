@@ -12,21 +12,9 @@ interface AppShellProps {
   children: ReactNode;
 }
 
-/**
- * AppShell — layout principal do SICRO.
- *
- * Grid: activity rail (esquerda) + topbar (topo) + main + statusbar (base).
- *
- * J — A integração SIGDOC usa "cover mode": um webview borderless do
- * Tauri é posicionado por cima da área de conteúdo do laudo (`.body`
- * do LaudoEditorView). O AppShell NÃO precisa colapsar — o webview
- * fica em cima do React, dando a impressão de que o site abriu "no
- * lugar" do laudo. Quando o user clica em "Fechar" no header do
- * cover, o webview some e o React reaparece naturalmente.
- */
+/** Layout principal: rail (esquerda) + topbar + main + statusbar. */
 export function AppShell({ children }: AppShellProps) {
-  // Zoom da interface inteira — vale em qualquer tela, inclusive com o foco
-  // num campo de texto (Ctrl+Shift+= não digita nada).
+  // Zoom da interface vale até com foco em campo de texto (Ctrl+Shift+= não digita nada).
   const setUiZoom = useSettingsStore((s) => s.setUiZoom);
   useShortcuts(
     {

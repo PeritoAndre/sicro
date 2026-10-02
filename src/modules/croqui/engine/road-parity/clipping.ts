@@ -1,63 +1,24 @@
 /**
- * Python Parity Engine — clipping de marcações.
- *
- * Emulação geométrica do `_em_outra` + `_segs` do SICRO 1.0 Python
- * (`editor_croqui.py:2851-2911`). Para cada ponto de uma marcação,
- * checa se está dentro do polígono de outra via / rotatória; se sim,
- * pula. Recorta o segmento exato na fronteira.
- *
- * Por que NÃO usamos `polygon-clipping` (Vatti) aqui:
- *   - polygon-clipping retorna multipolygon, não polilinha;
- *   - precisamos manter ORDEM dos segmentos resultantes para
- *     desenhar dash contínuo;
- *   - per-point ray casting é simples, debugável, com fallback fácil.
- *
- * **Regra fundamental do perito:** se o clipping gerar resultado vazio
- * ou degenerado, o renderer ainda deve mostrar ALGO (a marcação não
- * clipada). NUNCA deixar o croqui virar aberração por causa de
- * boolean op.
+ * Clipping de marcações: corta polilinhas onde entram em polígonos de outras
+ * vias/rotatórias (ponto-em-polígono por ray casting). Não usa `polygon-clipping`
+ * porque precisamos da ORDEM dos trechos para o dash contínuo.
+ * Regra do perito: em qualquer erro, devolve a marcação inteira — nunca lança.
  */
 
 import type { Vec2World } from "./geometry";
 
-// ---------------------------------------------------------------------------
-// Resultado.
+/** Sub-polilinhas preservadas; cada uma com ≥ 2 pontos. */
+type ClippedSegments = Vec2World[][];
 
-/**
- * Lista de sub-polilinhas (trechos preservados após clipping).
- * Cada sub-polilinha tem >= 2 pontos.
- */
-export type ClippedSegments = Vec2World[][];
-
-/**
- * Diagnóstico do clipping — útil para warnings e debug overlay.
- */
-export interface ClipReport {
-  /** Quantidade de trechos retornados após clipping. */
+interface ClipReport {
   segments_count: number;
-  /** Quantidade de obstáculos considerados. */
   obstacles_count: number;
-  /** True quando algum erro foi capturado pelo try-catch e o fallback foi acionado. */
+  /** true quando um erro foi capturado e a polilinha original foi devolvida. */
   fallback_used: boolean;
-  /** Mensagem do erro, se houve. */
   fallback_reason?: string;
 }
 
-// ---------------------------------------------------------------------------
-// Algoritmo principal.
-
-/**
- * Clipa uma polilinha `line` contra `obstacles` (lista de polígonos
- * fechados). Retorna sub-polilinhas dos trechos que NÃO estão dentro
- * de qualquer obstáculo.
- *
- * Comportamento defensivo:
- *   - se `obstacles.length === 0` → retorna `[line.slice()]`.
- *   - se `line.length < 2` → retorna `[]`.
- *   - se algum cálculo lança (geometria degenerada) → captura o erro,
- *     marca `fallback_used = true`, retorna a polilinha original
- *     intacta. **Nunca propaga exceção.**
- */
+/** Trechos de `line` fora de todos os `obstacles`. Sem obstáculos devolve a linha intacta. */
 export function clipPolylineAgainstPolygons(
   line: ReadonlyArray<Vec2World>,
   obstacles: ReadonlyArray<ReadonlyArray<Vec2World>>,
@@ -78,17 +39,13 @@ export function clipPolylineAgainstPolygons(
   }
 
   try {
-    // Densifica a linha antes de clipar. Garante que segmentos
-    // longos que atravessam um obstáculo (ambos endpoints fora,
-    // mas trecho intermediário dentro) sejam corretamente cortados.
-    // Sem isso, o algoritmo per-ponto perderia a interseção.
+    // Densifica antes: um segmento longo com os dois extremos fora mas o meio
+    // dentro do obstáculo passaria despercebido pelo teste por ponto.
     const densified = densifyPolyline(line, 1.0);
     const segments = doClip(densified, obstacles);
     report.segments_count = segments.length;
     return { segments, report };
   } catch (err) {
-    // FALLBACK — qualquer erro de geometria devolve a marcação inteira.
-    // Garante que o croqui não vira aberração.
     report.fallback_used = true;
     report.fallback_reason =
       err instanceof Error ? err.message : String(err);
@@ -97,21 +54,8 @@ export function clipPolylineAgainstPolygons(
   }
 }
 
-// ---------------------------------------------------------------------------
-// Densificação — garante que segmentos não passem por dentro de um
-// obstáculo sem nenhum vértice intermediário ser detectado.
-
-/**
- * Subdivide cada segmento longo da polilinha, inserindo pontos
- * intermediários, até que nenhum segmento exceda `maxSegLen` metros.
- *
- * Sem isso, o algoritmo per-ponto perderia interseções quando ambos
- * os endpoints de um segmento estão fora do obstáculo mas o trecho
- * intermediário passa por dentro.
- *
- * Aceita `maxSegLen <= 0` como "não densificar" (passa direto).
- */
-export function densifyPolyline(
+/** Insere pontos até nenhum segmento exceder `maxSegLen` metros; `maxSegLen <= 0` não densifica. */
+function densifyPolyline(
   line: ReadonlyArray<Vec2World>,
   maxSegLen: number,
 ): Vec2World[] {
@@ -134,9 +78,6 @@ export function densifyPolyline(
   }
   return out;
 }
-
-// ---------------------------------------------------------------------------
-// Implementação.
 
 function doClip(
   line: ReadonlyArray<Vec2World>,
@@ -188,9 +129,6 @@ function doClip(
   return result;
 }
 
-/**
- * Ray casting clássico (ponto-em-polígono).
- */
 function pointInPolygon(
   p: Vec2World,
   polygon: ReadonlyArray<Vec2World>,
@@ -208,13 +146,7 @@ function pointInPolygon(
   return inside;
 }
 
-/**
- * Localiza o ponto exato em que o segmento `a→b` cruza a fronteira
- * de algum obstáculo. Busca binária no parâmetro `t ∈ [0, 1]` — 24
- * iterações ≈ 1e-7 de precisão.
- *
- * Retorna `null` se `a` e `b` estão do mesmo lado (não há cruzamento).
- */
+/** Ponto onde `a→b` cruza a fronteira de um obstáculo (busca binária em t, 24 iterações ≈ 1e-7). */
 function findBoundaryCrossing(
   a: Vec2World,
   b: Vec2World,

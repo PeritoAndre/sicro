@@ -1,17 +1,6 @@
 /**
- * CanvasStage — the Konva Stage + Layers + Shapes.
- *
- * Why React-Konva (vs SVG/Canvas/own engine): see
- * `docs/archive/SPIKE_E_CROQUI_ENGINE_RELATORIO.md` §1.
- *
- * Layer split (each Layer is a separate <canvas> under the hood):
- *   - bgLayer        — grid + background image
- *   - objectsLayer   — every SicroObject + the Transformer for the selection
- *   - uiLayer        — transient cues (pending two-click first point,
- *                      preview line during measurement, etc.)
- *
- * The Stage exposes the underlying Konva Stage via the `stageRef` so the
- * parent can call `toDataURL()` for the PNG export.
+ * Stage Konva do croqui: layers de fundo, objetos (+ Transformer) e UI
+ * transitória. Expõe `toPng()` para o export.
  */
 
 import {
@@ -52,10 +41,6 @@ import {
   type SicroVehicleObject,
   type VehicleBodyType,
 } from "../engine";
-// Fase S clean cut — Road v1 (RoadNode) e Road v2 (RoadNetworkLayerV2,
-// RoundaboutMeshNode) foram removidos. Vias e rotatórias são
-// EXCLUSIVAMENTE renderizadas pelo `RoadParityRenderer` do Python
-// Parity Engine.
 import {
   RoadParityRenderer,
   isParityObject,
@@ -77,31 +62,19 @@ import {
 import type { EditorState, Tool } from "./useEditorState";
 
 export interface CanvasStageHandle {
-  /** Returns a PNG data URL of the current scene (incl. background + grid). */
+  /** PNG data URL da cena (com fundo e grid). */
   toPng(pixelRatio?: number): string | null;
   getStageSize(): { width: number; height: number };
 }
 
-/**
- * Limites de zoom do canvas do croqui. Generosos por design: peritos
- * trabalham com arte vetorial detalhada (manchas de sangue, pegadas,
- * fragmentos) e precisam de muito zoom de aproximação. Em cima a faixa
- * cobre desde visão geral de cena ampla (5 %) até trabalho pixel-perfect
- * em detalhes mínimos (10 000 % = 100×). Konva aguenta esse range sem
- * problemas — o stage é Canvas2D, então não há custo de "DOM zoom".
- */
+// Zoom de 5 % a 100×: o perito precisa chegar perto de vestígios pequenos
+// (manchas, fragmentos). Canvas2D aguenta sem custo de "DOM zoom".
 export const CROQUI_ZOOM_MIN = 0.05;
 export const CROQUI_ZOOM_MAX = 100;
-/** Fator multiplicativo aplicado a cada "tick" do scroll wheel. */
-export const CROQUI_ZOOM_WHEEL_FACTOR_IN = 1.08;
-export const CROQUI_ZOOM_WHEEL_FACTOR_OUT = 0.92;
+const CROQUI_ZOOM_WHEEL_FACTOR_IN = 1.08;
+const CROQUI_ZOOM_WHEEL_FACTOR_OUT = 0.92;
 
-/**
- * Sentinel `selectedId` used to mean "the user has clicked the
- * background image and wants to edit it" (MVP 9 Round 5). Picking a
- * sentinel that can't collide with any UUID keeps the regular
- * selection model intact.
- */
+/** `selectedId` sentinela (não colide com UUID) para a imagem de fundo selecionada. */
 export const BACKGROUND_SELECTION_ID = "_background";
 
 interface Props {
@@ -109,26 +82,18 @@ interface Props {
   editor: EditorState;
   containerWidth: number;
   containerHeight: number;
-  /** Called when the user clicks the canvas with an "add object" tool. */
+  /** Clique no canvas com ferramenta de inserir objeto. */
   onCanvasClick: (worldPoint: SicroPoint) => void;
-  /** Called when the user double-clicks the canvas (used to finish road drafts). */
+  /** Duplo clique (finaliza rascunho de via). */
   onCanvasDblClick?: () => void;
-  /** Called when the user finishes a Konva drag/transform on an object. */
+  /** Fim de drag/transform de um objeto. */
   onObjectChange: (id: string, patch: Partial<SicroObject>) => void;
-  /**
-   * Fase H.3 — handler dedicado para parity_objects (que vivem em
-   * array separado de doc.objects). Opcional; quando ausente, handles
-   * parity ficam estáticos (renderiza mas não dragga).
-   */
+  /** Idem para objetos parity; sem ele, os handles parity ficam estáticos. */
   onParityObjectChange?: (
     id: string,
     patch: Partial<SicroParityObject>,
   ) => void;
-  /**
-   * Called when the user drags / transforms the background image
-   * (MVP 9 Round 5). The patch carries the deltas: `x`, `y`, `width`,
-   * `height`, `rotation` — whichever the gesture changed.
-   */
+  /** Fim de drag/transform da imagem de fundo. */
   onBackgroundChange?: (patch: Partial<SicroCroquiBackgroundImage>) => void;
   onSelect: (id: string | null) => void;
   workspacePath: string;
@@ -153,14 +118,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
   const stageRef = useRef<Konva.Stage | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const objectsLayerRef = useRef<Konva.Layer | null>(null);
-  // Flag pra evitar que o click logo após mouseUp do marquee limpe
-  // a seleção recém-criada. Browser emite mousedown→mouseup→click como
-  // 3 eventos separados; cancelBubble no mouseUp não impede o click.
+  // O browser emite `click` depois do mouseup do marquee (cancelBubble não
+  // impede); a flag evita que esse click limpe a seleção recém-criada.
   const justFinishedMarqueeRef = useRef(false);
-  // Sessão de drag em grupo: quando o usuário arrasta um objeto que
-  // está em `selectedIds` (com mais de 1 item), snapshotamos as posições
-  // dos OUTROS aqui pra sincronizar visualmente durante o drag e
-  // commitar via `onObjectChange` no final.
+  // Drag em grupo: posições iniciais dos outros selecionados.
   const dragSessionRef = useRef<{
     draggedId: string;
     startX: number;
@@ -182,18 +143,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     },
   }));
 
-  // Group drag — listeners de stage-level (eventos do Konva bubbleiam).
-  // Quando o usuário arrasta um objeto que está em `selectedIds` E há
-  // mais de 1 item selecionado, snapshotamos as posições dos OUTROS
-  // no dragstart, sincronizamos visualmente durante dragmove (direto
-  // no Konva, sem state), e commitamos via onObjectChange no dragend.
+  // Drag em grupo via listeners no stage (eventos do Konva sobem): os outros
+  // selecionados são movidos direto no Konva durante o drag e commitados no fim.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
 
     const dragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
       const node = e.target;
-      // O target é o Konva.Group/Shape do objeto. Pega o id.
       const id = typeof node.id === "function" ? node.id() : undefined;
       if (!id) return;
       if (!editor.selectedIds.includes(id)) return;
@@ -247,9 +204,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       dragSessionRef.current = null;
       if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return;
 
-      // Commit cada um dos OUTROS via o callback apropriado (parity vs
-      // não-parity). O dragged é commitado pelo handler dele próprio
-      // (no renderer específico do tipo).
+      // O arrastado é commitado pelo próprio renderer; aqui só os outros.
       const pxPerM = doc.scale?.px_per_m ?? 1;
       for (const o of session.others) {
         const obj = doc.objects.find((x) => x.id === o.id);
@@ -264,8 +219,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       }
     };
 
-    // Namespace `.group` permite remover só esses handlers no cleanup
-    // sem afetar outros listeners eventualmente atachados ao stage.
+    // Namespace `.group`: o cleanup remove só estes handlers.
     stage.on("dragstart.group", dragStart);
     stage.on("dragmove.group", dragMove);
     stage.on("dragend.group", dragEnd);
@@ -276,9 +230,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     };
   }, [editor.selectedIds, doc, onObjectChange, onParityObjectChange]);
 
-  // Attach the Transformer to the currently-selected Konva node(s).
-  // Multi-select via marquee: o Transformer aceita uma lista de nodes
-  // e desenha uma bounding box ao redor de todos eles.
+  // Transformer nos nós selecionados (aceita lista → uma caixa em volta de todos).
   useEffect(() => {
     const transformer = transformerRef.current;
     const layer = objectsLayerRef.current;
@@ -304,8 +256,6 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     if (!pos) return;
     const world = toWorld(stage, pos);
     editor.setPointerWorld(world);
-    // Marquee em curso: atualiza o canto "current" pra estender o
-    // retângulo conforme o cursor.
     if (editor.marquee) {
       editor.setMarquee({
         ...editor.marquee,
@@ -315,19 +265,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     }
   };
 
-  // Marquee de seleção (rubber-band): no modo `select`, mousedown sobre
-  // a área vazia da stage inicia o drag de um retângulo. mousemove
-  // estende o retângulo (via handleStageMouseMove acima). mouseup
-  // computa quais objetos caem dentro e seleciona todos via
-  // `setSelectedIds`. Esc cancela.
+  // Marquee: mousedown no fundo (modo select) inicia; mouseup seleciona
+  // quem intersecta o retângulo.
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    // Sempre reseta a flag — novo gesto começa do zero.
     justFinishedMarqueeRef.current = false;
     if (editor.tool !== "select") return;
-    // Só inicia marquee quando o clique foi no FUNDO (não em um objeto).
+    // Só no fundo, não sobre um objeto.
     if (e.target !== e.target.getStage()) return;
-    // Botão esquerdo apenas. Botão direito reservado pra menu contextual
-    // (que ainda não existe — futuro).
     if (e.evt.button !== 0) return;
     const stage = stageRef.current;
     if (!stage) return;
@@ -346,8 +290,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     if (!editor.marquee) return;
     const m = editor.marquee;
     editor.setMarquee(null);
-    // Se o usuário só clicou (sem arrastar — área < 9 px²), trata
-    // como deseleção (clique no vazio = limpar).
+    // Área < 9 px² = clique sem arrasto → limpa a seleção.
     const rect = rectFromPoints(
       m.startWorldX,
       m.startWorldY,
@@ -359,7 +302,6 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       onSelect(null);
       return;
     }
-    // Hit test: pega todos os objetos cujo AABB intersecta o retângulo.
     const pxPerM = doc.scale?.px_per_m ?? 1;
     const hits: string[] = [];
     for (const obj of doc.objects) {
@@ -367,29 +309,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       if (rectsIntersect(b, rect)) hits.push(obj.id);
     }
     editor.setSelectedIds(hits);
-    // CRÍTICO — o browser emite `click` LOGO DEPOIS de mouseup (são
-    // eventos separados, cancelBubble do mouseup não afeta o click).
-    // Sem essa flag, o handleStageClick rodaria em seguida e chamaria
-    // onSelect(null), apagando a seleção recém-criada pelo marquee.
-    // A flag é resetada no próximo mousedown.
+    // O `click` que o browser emite em seguida seria tratado como clique
+    // no vazio e apagaria a seleção; ver justFinishedMarqueeRef.
     justFinishedMarqueeRef.current = true;
     e.cancelBubble = true;
   };
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
-    // Se o usuário acabou de fazer um marquee com seleção, ignora o
-    // `click` espúrio que vem logo depois do mouseup — senão o
-    // onSelect(null) abaixo apagaria a seleção. A flag é resetada no
-    // próximo mousedown (handleStageMouseDown).
+    // Click espúrio logo após o mouseup do marquee.
     if (justFinishedMarqueeRef.current) {
       justFinishedMarqueeRef.current = false;
       return;
     }
-    // Clicks that hit an interactive node bubble through Konva; we only care
-    // about clicks on empty canvas here.
     if (e.target !== e.target.getStage()) {
-      // Click on an object — leave it to the Group's own handler unless we're
-      // in an "add" tool (in which case the user still wants to add).
+      // Clique sobre objeto: o Group trata, salvo ferramenta de inserir
+      // (o usuário ainda quer adicionar ali).
       if (isAddTool(editor.tool)) {
         const stage = stageRef.current;
         if (!stage) return;
@@ -414,10 +348,6 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     onCanvasClick(world);
   };
 
-  // Fase S clean cut — separa vias/rotatórias parity dos demais objetos
-  // (vehicle/line/marker/text/measurement) para que cada grupo seja
-  // renderizado pelo renderer apropriado. O `RoadParityRenderer` cuida
-  // de TODAS as vias e rotatórias parity.
   const { parityObjects, otherObjects } = useMemo(() => {
     const parity: SicroParityObject[] = [];
     const others: SicroObject[] = [];
@@ -435,16 +365,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     const pointer = stage.getPointerPosition();
     if (!pointer) return;
 
-    // Windows precision touchpad e mouse wheel geram `wheel` event. Pra
-    // distinguir intenção:
-    //   - `ctrlKey: true`  → pinch zoom (touchpad pinch OU Ctrl+roda do mouse)
-    //   - `ctrlKey: false` → pan (touchpad scroll de 2 dedos)
-    // Em macOS, `metaKey` (Cmd) tem o mesmo papel que Ctrl no Windows pra
-    // zoom forçado, então tratamos ambos.
+    // Touchpad pinch chega como `wheel` com ctrlKey (metaKey no macOS);
+    // scroll de dois dedos vem sem modificador e vira pan.
     const isPinch = e.evt.ctrlKey || e.evt.metaKey;
 
     if (isPinch) {
-      // Zoom ancorado no ponto do gesto (mesma lógica de antes).
+      // Zoom ancorado no ponteiro.
       const oldScale = editor.viewport.scale;
       const direction = e.evt.deltaY > 0 ? -1 : 1;
       const factor =
@@ -468,10 +394,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       return;
     }
 
-    // Pan: arrasta a viewport pelo delta do scroll de 2 dedos. `deltaX` e
-    // `deltaY` são em pixels (em Precision Touchpads). Negativo porque o
-    // gesto natural é "dedos descem → conteúdo sobe" (viewport.y aumenta
-    // pra mostrar conteúdo de cima).
+    // Pan; sinal negativo = "dedos descem, conteúdo sobe".
     editor.setViewport({
       scale: editor.viewport.scale,
       x: editor.viewport.x - e.evt.deltaX,
@@ -498,8 +421,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       onMouseUp={handleStageMouseUp}
       onWheel={handleWheel}
       onDragEnd={(e) => {
-        // Stage drag emits position changes — keep our state in sync so
-        // wheel-zoom anchors correctly afterwards.
+        // Sincroniza o pan para o zoom pela roda ancorar certo depois.
         if (editor.tool !== "pan") return;
         const stage = e.target;
         editor.setViewport({
@@ -522,15 +444,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       />
 
       <Layer ref={objectsLayerRef}>
-        {/* Road Engine Pro — render roads first so subsequent objects
-            (vehicles / markers / measurements) stack visually above the
-            asphalt. Intersection patches sit between the two passes so
-            they cover the road markings at crossings but don't hide the
-            objects above. */}
-        {/* Fase S — Python Parity Engine: único motor de vias e
-            rotatórias. Renderiza primeiro (camada de "asfalto") para
-            que demais objetos (veículos, vestígios, anotações)
-            empilhem visualmente por cima. */}
+        {/* Vias primeiro ("asfalto"); o resto empilha por cima. */}
         <RoadParityRenderer
           objects={parityObjects}
           pxPerM={doc.scale?.px_per_m ?? null}
@@ -542,16 +456,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
               : undefined
           }
         />
-        {/* Demais objetos (vehicle / line / marker / text / measurement)
-            renderizam em cima das vias. */}
         {otherObjects.map((obj) => (
           <ObjectNode
             key={obj.id}
             obj={obj}
             doc={doc}
             tool={editor.tool}
-            // `selectedIds.includes` mostra destaque individual pra TODOS
-            // os itens marquee-selecionados, não só pro primeiro.
             selected={editor.selectedIds.includes(obj.id)}
             onSelect={() => onSelect(obj.id)}
             onChange={(patch) => onObjectChange(obj.id, patch)}
@@ -567,14 +477,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
             "bottom-right",
           ]}
           boundBoxFunc={(_old, next) => {
-            // Reject negative size to avoid flips during scaling.
+            // Evita flip por tamanho negativo.
             if (Math.abs(next.width) < 4 || Math.abs(next.height) < 4) return _old;
             return next;
           }}
         />
-        {/* Retângulo do marquee — só visível enquanto o usuário está
-            arrastando no modo `select`. Coords em world (stage), então
-            a stage já aplica viewport.scale/x/y automaticamente. */}
+        {/* Marquee em coords world; a stage aplica o viewport. */}
         {editor.marquee && (() => {
           const m = editor.marquee;
           const r = rectFromPoints(
@@ -583,8 +491,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
             m.currentWorldX,
             m.currentWorldY,
           );
-          // Stroke fino dividido pelo scale pra ficar com aparência
-          // constante no zoom. Idem dash.
+          // Stroke e dash divididos pelo scale: espessura constante no zoom.
           const invScale = 1 / Math.max(editor.viewport.scale, 0.0001);
           return (
             <Rect
@@ -611,16 +518,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
 });
 
 // ===========================================================================
-// Background (color + grid) — drawn on its own non-listening layer.
+// Fundo (cor + grid)
 
 function CanvasBackground({ doc }: { doc: SicroCroquiDoc }) {
   const { width_px, height_px, background_color, grid } = doc.canvas;
   const gridSize = grid?.size_px ?? 50;
   const gridEnabled = grid?.enabled ?? true;
 
-  // Branco puro cansa a vista — substitui por off-white levemente
-  // tingido. Croquis com cor customizada (não-branca) são respeitados
-  // como vieram.
+  // Branco puro cansa a vista; só o branco é trocado por off-white.
   const effectiveBg =
     background_color === "#ffffff" || background_color === "#FFFFFF"
       ? "#f5f6f8"
@@ -663,7 +568,7 @@ function CanvasBackground({ doc }: { doc: SicroCroquiDoc }) {
 }
 
 // ===========================================================================
-// Background image (separate layer so the user can toggle visibility).
+// Imagem de fundo
 
 function BackgroundImageLayer({
   doc,
@@ -697,9 +602,8 @@ function BackgroundImageLayer({
     img.onerror = () => setImage(null);
   }, [bg, workspacePath]);
 
-  // Attach the Transformer when the background is selected AND unlocked.
-  // We always rebind even if the bg.locked flag flips, so the user gets
-  // visual feedback immediately when they toggle the lock in the toolbar.
+  // Transformer só com fundo selecionado e destravado; depende de `bg` para
+  // reagir na hora ao toggle do cadeado.
   useEffect(() => {
     const transformer = transformerRef.current;
     const node = groupRef.current;
@@ -717,17 +621,13 @@ function BackgroundImageLayer({
     return <Layer listening={false} />;
   }
 
-  // Resolve display dimensions: when the doc was saved without a
-  // size (legacy 0/0), fall back to the image's natural dimensions.
-  // Future drag/transform commits the resolved values back to the doc.
+  // Doc antigo salvo com 0/0 → usa o tamanho natural da imagem.
   const resolvedW = bg.width || image.width;
   const resolvedH = bg.height || image.height;
   const rotation = bg.rotation ?? 0;
 
-  // The Group's origin lives at the image's centre so rotation rotates
-  // around the geometric centre (the natural pivot). The internal
-  // KonvaImage is positioned at (-w/2, -h/2) inside the Group so it
-  // still occupies the same screen rectangle.
+  // Origem do Group no centro da imagem para a rotação girar em torno dele;
+  // a KonvaImage fica em (-w/2, -h/2).
   return (
     <Layer listening={!bg.locked}>
       <Group
@@ -738,7 +638,7 @@ function BackgroundImageLayer({
         rotation={rotation}
         draggable={!bg.locked && selected}
         onClick={(e) => {
-          // Stop the Stage's onClick from firing an `onSelect(null)`.
+          // Senão o onClick da Stage chama onSelect(null).
           e.cancelBubble = true;
           onSelect();
         }}
@@ -795,7 +695,7 @@ function BackgroundImageLayer({
           "bottom-center",
         ]}
         boundBoxFunc={(_old, next) => {
-          // Refuse tiny boxes so the image can't be scaled to invisibility.
+          // Mínimo de 20 px para a imagem não sumir.
           if (Math.abs(next.width) < 20 || Math.abs(next.height) < 20) return _old;
           return next;
         }}
@@ -805,7 +705,7 @@ function BackgroundImageLayer({
 }
 
 // ===========================================================================
-// Per-object rendering
+// Objetos
 
 function ObjectNode({
   obj,
@@ -822,7 +722,6 @@ function ObjectNode({
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  // Only allow drag when the "select" tool is active.
   const draggable = tool === "select";
 
   switch (obj.kind) {
@@ -879,19 +778,12 @@ function ObjectNode({
       );
     case "road_parity":
     case "roundabout_parity":
-      // Fase S — vias e rotatórias parity NÃO passam pelo ObjectNode:
-      // são renderizadas em camada separada pelo `RoadParityRenderer`.
-      // Defensivo: se algum caller passar por aqui, não renderiza nada
-      // (o renderer parity já cuidou).
+      // Parity é renderizado pelo RoadParityRenderer.
       return null;
   }
 }
 
-/**
- * Arte SVG do designer pro par (tipo, cor) — carrega 1× (cache no engine) e
- * devolve a HTMLImageElement pronta pro Konva. `null` = sem arte (tipo sem SVG
- * ou ainda carregando) → o caller cai na silhueta vetorial antiga.
- */
+/** Arte SVG do par (tipo, cor), com cache no engine. `null` → silhueta vetorial. */
 function useVehicleArtImage(
   body: VehicleBodyType,
   color: string | null | undefined,
@@ -962,9 +854,8 @@ function VehicleNode({
     >
       {art ? (
         <>
-          {/* Área de clique cheia (o hit do Konva.Image ignora pixels
-              transparentes da arte — sem isto, selecionar exigiria acertar
-              um pixel pintado). Invisível, mas presente no hit canvas. */}
+          {/* Hit cheio invisível: o hit do Konva.Image ignora pixels
+              transparentes da arte. */}
           <Rect
             x={-obj.width / 2}
             y={-obj.height / 2}
@@ -973,9 +864,8 @@ function VehicleNode({
             fill="#000"
             opacity={0}
           />
-          {/* Arte do designer: SVG retrato (frente pra cima) girado 90° pra
-              frente apontar +x (convenção do croqui). width/height trocados
-              por causa do giro; origem no centro do Group. */}
+          {/* SVG é retrato (frente para cima); gira 90° para a frente
+              apontar +x (convenção do croqui), por isso width/height trocados. */}
           <KonvaImage
             image={art}
             width={obj.height}
@@ -1007,8 +897,7 @@ function VehicleNode({
           selected={selected}
         />
       )}
-      {/* "Frente" do veículo — pequeno triângulo apontando para +x (a arte do
-          designer já mostra a frente; o triângulo fica só no fallback). */}
+      {/* Triângulo da frente (+x), só no fallback sem arte. */}
       {!art && !isTwoWheel && (
         <Line
           points={[
@@ -1042,11 +931,7 @@ function VehicleNode({
   );
 }
 
-/**
- * Vector silhouettes for each vehicle body subtype (MVP 6). Drawn as
- * primitives so we don't ship raster assets and the canvas stays
- * resolution-independent. Top-down orientation: +x = "front".
- */
+/** Silhueta vetorial por tipo de carroceria (fallback sem arte). +x = frente. */
 function VehicleSilhouette({
   body,
   width,
@@ -1293,7 +1178,7 @@ function VehicleSilhouette({
     );
   }
 
-  // ---- sedan / suv / hatch / car / other — fallback do MVP 6 ----
+  // ---- sedan / suv / hatch / car / other ----
   const radius = body === "sedan" ? 6 : body === "hatch" ? 8 : 5;
   return (
     <Group>
@@ -1342,7 +1227,6 @@ function LineNode({
       onClick={onSelect}
       onTap={onSelect}
       onDragEnd={(e) => {
-        // Translate the entire polyline by the drag offset.
         const dx = e.target.x();
         const dy = e.target.y();
         const next = obj.points.map((v, i) => v + (i % 2 === 0 ? dx : dy));
@@ -1404,7 +1288,7 @@ function ArrowHead({
   if (len === 0) return null;
   const ux = dx / len;
   const uy = dy / len;
-  // 30° on each side of the tip.
+  // 30° de cada lado da ponta.
   const rad = (30 * Math.PI) / 180;
   const cos = Math.cos(rad);
   const sin = Math.sin(rad);
@@ -1424,7 +1308,7 @@ function ArrowHead({
   );
 }
 
-/** Arte de pedestre (decúbito) pro subtype — mesmo cache do engine. */
+/** Arte de pedestre (decúbito) do subtype, com cache no engine. */
 function usePessoaArtImage(subtype: string): HTMLImageElement | null {
   const [img, setImg] = useState<HTMLImageElement | null>(() =>
     getCachedPessoaArtImage(subtype),
@@ -1462,8 +1346,8 @@ function MarkerNode({
 }) {
   const pessoa = getPessoaArt(obj.subtype);
   const pessoaImg = usePessoaArtImage(obj.subtype);
-  // Pedestre com arte: size = COMPRIMENTO (corpo deitado); largura segue a
-  // proporção real da prancha. Retrato (sem giro — a rotação é do marker).
+  // Pedestre com arte: `size` é o comprimento do corpo deitado; a largura
+  // segue a proporção real da prancha.
   const pessoaW = pessoa ? obj.size * (pessoa.widthM / pessoa.lengthM) : 0;
   return (
     <Group
@@ -1528,10 +1412,7 @@ function MarkerNode({
   );
 }
 
-/**
- * Per-subtype glyph for `marker` objects. Drawn centred at (0,0) — the
- * parent `Group` handles position/rotation/drag.
- */
+/** Glifo por subtype de `marker`, centrado em (0,0); o Group pai posiciona. */
 function MarkerGlyph({
   obj,
   selected,
@@ -1672,8 +1553,7 @@ function MarkerGlyph({
     );
   }
 
-  // ---------------------------------------------------------------------
-  // MVP 9 — vestígios + mobiliário urbano
+  // ----- Vestígios -----
 
   if (subtype === "skid_curve") {
     // Derrapagem em curva — arco tracejado.
@@ -1997,7 +1877,7 @@ function MeasurementNode({
 }
 
 // ===========================================================================
-// Two-click "first point" preview
+// Previews (camada de UI)
 
 function PendingTwoClickPreview({ editor }: { editor: EditorState }) {
   if (!editor.pending) return null;
@@ -2022,12 +1902,7 @@ function PendingTwoClickPreview({ editor }: { editor: EditorState }) {
   );
 }
 
-/**
- * Live preview of an in-progress road draft (MVP 9 Road Engine Pro).
- * Drawn on the non-listening UI layer so the user keeps clicking through
- * to add control points. The preview reuses Konva.Line `tension` so the
- * shape the user sees while clicking matches the final committed road.
- */
+/** Preview da via em rascunho; mesmo `tension` da via final para bater a forma. */
 function RoadDraftPreview({ editor }: { editor: EditorState }) {
   const draft = editor.roadDraft;
   if (!draft || draft.points.length === 0) return null;
@@ -2037,7 +1912,7 @@ function RoadDraftPreview({ editor }: { editor: EditorState }) {
   const previewFlat = [...flat, cursor.x, cursor.y];
   return (
     <Group listening={false}>
-      {/* Ghost asphalt body so the user sees the eventual paved width */}
+      {/* Asfalto fantasma: mostra a largura que a via vai ter. */}
       <Line
         points={previewFlat}
         stroke="#3f3f46"
@@ -2047,7 +1922,6 @@ function RoadDraftPreview({ editor }: { editor: EditorState }) {
         lineCap="round"
         lineJoin="round"
       />
-      {/* Centerline preview */}
       <Line
         points={previewFlat}
         stroke="#0ea5e9"
@@ -2055,7 +1929,6 @@ function RoadDraftPreview({ editor }: { editor: EditorState }) {
         dash={[6, 4]}
         tension={0.5}
       />
-      {/* Control-point chips */}
       {draft.points.map((p, i) => (
         <Rect
           key={`pt_${i}`}
@@ -2071,7 +1944,7 @@ function RoadDraftPreview({ editor }: { editor: EditorState }) {
 }
 
 // ===========================================================================
-// helpers
+// Helpers
 
 function toWorld(stage: Konva.Stage, screen: SicroPoint): SicroPoint {
   const scale = stage.scaleX();
@@ -2097,8 +1970,8 @@ function clamp(v: number, min: number, max: number): number {
 }
 
 function resolveAssetPath(workspacePath: string, src: string): string | null {
-  // Absolute-looking path → resolve through Tauri's asset protocol.
-  // Workspace-relative → join with workspacePath.
+  // Caminho absoluto vai direto; relativo é juntado ao workspace. Sempre
+  // passa pelo asset protocol do Tauri.
   try {
     const sep = workspacePath.includes("\\") ? "\\" : "/";
     const looksAbsolute =

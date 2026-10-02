@@ -1,16 +1,11 @@
 /**
- * Núcleo de atalhos de teclado (puro, sem React/DOM além do tipo de evento).
- *
- * Canonicaliza teclas por `KeyboardEvent.code` (físico, independente de layout)
- * — assim "V" é sempre a tecla V, e não muda com acento/teclado. Captura e
- * casamento usam EXATAMENTE a mesma função, então o que o usuário grava é o
- * que casa depois (determinístico). Modificadores explícitos: Ctrl, Alt, Shift.
- *
- * §13: atalhos são conveniência de UI — não alteram nenhuma lógica forense.
+ * Núcleo de atalhos (puro, sem React). Canonicaliza por `KeyboardEvent.code`
+ * (tecla física, independe de layout); captura e casamento usam a mesma
+ * função, então o que o usuário grava é o que casa depois.
  */
 
 /** Combinação canônica, ex.: "V", "Ctrl+S", "Ctrl+Shift+Z", "Shift+/". */
-export type Binding = string;
+type Binding = string;
 
 const MODIFIER_CODES = new Set([
   "ShiftLeft",
@@ -23,7 +18,6 @@ const MODIFIER_CODES = new Set([
   "MetaRight",
 ]);
 
-/** Mapa de `KeyboardEvent.code` → token legível e estável. */
 const CODE_TOKENS: Record<string, string> = {
   Minus: "-",
   Equal: "=",
@@ -53,7 +47,6 @@ const CODE_TOKENS: Record<string, string> = {
   PageDown: "PgDn",
 };
 
-/** Converte um `code` físico no token canônico do atalho. */
 export function codeToToken(code: string): string {
   if (code.startsWith("Key")) return code.slice(3); // KeyV → V
   if (code.startsWith("Digit")) return code.slice(5); // Digit1 → 1
@@ -62,10 +55,7 @@ export function codeToToken(code: string): string {
   return CODE_TOKENS[code] ?? code;
 }
 
-/**
- * Deriva a combinação canônica de um evento de teclado. Retorna `""` para
- * pressionamentos só-de-modificador (Shift/Ctrl/Alt sozinhos) — úteis ignorar.
- */
+/** Devolve `""` para pressionamento só de modificador. */
 export function eventToBinding(e: {
   code: string;
   ctrlKey: boolean;
@@ -84,10 +74,7 @@ export function eventToBinding(e: {
 
 const MOD_ORDER: Record<string, number> = { Ctrl: 0, Alt: 1, Shift: 2 };
 
-/**
- * Normaliza uma combinação digitada à forma canônica (ordem dos modificadores
- * Ctrl→Alt→Shift, tecla por último). Tolerante a "Cmd"/"Control"/"Option".
- */
+/** Forma canônica: Ctrl→Alt→Shift e tecla por último; aceita "Cmd"/"Control"/"Option". */
 export function normalizeBinding(binding: Binding): Binding {
   const raw = binding
     .split("+")
@@ -112,7 +99,6 @@ export function normalizeBinding(binding: Binding): Binding {
   return key ? [...mods, key].join("+") : mods.join("+");
 }
 
-/** `true` se o evento corresponde à combinação (ambos canonizados). */
 export function matchesBinding(
   e: {
     code: string;
@@ -127,14 +113,13 @@ export function matchesBinding(
   return eventToBinding(e) === normalizeBinding(binding);
 }
 
-/** Partes de uma combinação para renderizar (cada uma vira um <kbd>). */
+/** Cada parte vira um <kbd>. */
 export function bindingParts(binding: Binding): string[] {
   if (!binding) return [];
   return normalizeBinding(binding).split("+");
 }
 
-/** Rótulo amigável de um token isolado (para exibição). */
-export function prettyToken(token: string): string {
+function prettyToken(token: string): string {
   const map: Record<string, string> = {
     Space: "Espaço",
     Esc: "Esc",
@@ -150,12 +135,11 @@ export function prettyToken(token: string): string {
   return map[token] ?? token;
 }
 
-/** Combinação inteira para exibição compacta, ex.: "Ctrl + S". */
+/** Ex.: "Ctrl + S". */
 export function formatBinding(binding: Binding): string {
   return bindingParts(binding).map(prettyToken).join(" + ");
 }
 
-/** `true` se o alvo do evento é um campo editável (input/textarea/cE). */
 export function isEditableTarget(target: EventTarget | null): boolean {
   const el = target as HTMLElement | null;
   if (!el) return false;

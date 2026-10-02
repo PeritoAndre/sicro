@@ -1,11 +1,6 @@
 /**
- * CaseDataDialog — os dados "de cadastro" do caso aberto: nome, protocolo,
- * ofício, BO, tipo de perícia, município, peritos. Tudo opcional — o Início
- * só pede o nome; o resto entra aqui quando (e se) fizer falta.
- *
- * `update_occurrence` sobrescreve todos os campos editáveis, por isso o patch
- * parte de `editFromOccurrence` (os campos que não aparecem aqui — bairro,
- * natureza, coordenadas de importação… — seguem como estão).
+ * Dados de cadastro do caso aberto (todos opcionais). `update_occurrence` zera
+ * campo ausente, por isso o patch parte de `editFromOccurrence`.
  */
 
 import { useEffect, useState, type FormEvent } from "react";

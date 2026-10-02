@@ -1,8 +1,6 @@
-//! Miniatura de um vídeo para a lista do módulo (qualidade de vida, não prova).
-//!
-//! Um JPEG pequeno extraído com seek RÁPIDO (antes do `-i`): para reconhecer a
-//! câmera de olho, snap no keyframe é irrelevante. Vai para o cache do app,
-//! nomeado pelo SHA-256 do vídeo — nunca para dentro do `.sicro`.
+//! Miniatura JPEG para a lista de vídeos (não é prova): seek rápido antes do
+//! `-i` (cair no quadro-chave não importa), no cache do app nomeada pelo
+//! SHA-256 do vídeo — nunca dentro do `.sicro`.
 
 use std::path::Path;
 

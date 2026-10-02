@@ -1,6 +1,4 @@
-/* Centraliza o card EmptyState no viewport do módulo (mesmo enquadramento do
-   módulo Laudo, que era o padrão "certo"). O slot do módulo no AppShell é
-   posicionado, então `position:absolute; inset:0` preenche a área toda. */
+/* O slot do módulo no AppShell é posicionado: `absolute; inset:0` preenche a área toda. */
 .center {
   position: absolute;
   inset: 0;

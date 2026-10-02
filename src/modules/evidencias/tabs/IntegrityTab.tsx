@@ -1,7 +1,4 @@
-/**
- * IntegrityTab — relatório de integridade completo + verificação
- * profunda sob demanda. Cumpre o critério 9-13 do MVP 5.
- */
+/** Aba Integridade: relatório completo + verificação profunda sob demanda. */
 
 import { useState } from "react";
 import { AlertTriangle, FileText, RefreshCw, ShieldCheck } from "lucide-react";

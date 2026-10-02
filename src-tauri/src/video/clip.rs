@@ -1,15 +1,9 @@
-//! Exportar um TRECHO de um vídeo do caso como arquivo NOVO (o original nunca
-//! é tocado). Dois modos, com consequências periciais diferentes:
-//!
-//!   - `Copy` (padrão): sem recompressão — os pacotes de vídeo/áudio são
-//!     copiados byte a byte. Como um trecho copiado só pode começar num
-//!     quadro-chave, o início RECUA até o quadro-chave anterior ao ponto
-//!     marcado; o recuo é devolvido para ser declarado.
-//!   - `Reencode`: começa e termina exatamente no trecho marcado, mas a imagem
-//!     é recodificada (H.264, CRF 16) — os pixels deixam de ser os originais.
-//!
-//! Tempos em segundos de APRESENTAÇÃO (os mesmos do player e do ffprobe,
-//! inclusive em arquivos com trecho vazio no início / edit list).
+//! Exporta um trecho do vídeo como arquivo novo (o original não é tocado).
+//!   - `Copy`: sem recompressão; só pode começar em quadro-chave, então o
+//!     início recua até o anterior ao marcado (o recuo é devolvido).
+//!   - `Reencode`: corte exato, mas recodificado (H.264, CRF 16).
+//! Tempos em segundos de apresentação (os do player/ffprobe, inclusive com
+//! start_time > 0).
 
 use std::path::{Path, PathBuf};
 
@@ -156,15 +150,12 @@ pub fn export_clip(opts: &ClipOptions<'_>) -> Result<ClipResult> {
     }
     let ffmpeg = detect_ffmpeg()?;
     let plan = plan_clip(opts.video, opts.start_s, opts.end_s)?;
-    // O `-ss` de entrada conta a partir do início do arquivo (ver probe::container_start_time).
+    // O `-ss` de entrada conta do start_time do arquivo (probe::container_start_time).
     let file_start = crate::video::probe::read_start_time(opts.video).unwrap_or(0.0);
 
-    // Onde começa de fato e onde buscar:
-    //  - Copy: no quadro-chave; busca um tiquinho DEPOIS dele para o ffmpeg cair
-    //    nele (a busca de entrada vai ao quadro-chave <= alvo).
-    //  - Reencode: no quadro mostrado na entrada; busca a 1/4 de quadro ANTES
-    //    dele (a busca exata descarta o que vem antes do alvo — o quadro
-    //    anterior sai, este fica, sem depender de arredondamento).
+    // Copy: busca um tiquinho DEPOIS do quadro-chave (a busca de entrada cai no
+    // quadro-chave <= alvo). Reencode: 1/4 de quadro ANTES do quadro mostrado
+    // (a busca exata descarta o anterior e fica com este, sem arredondamento).
     let (actual_start, seek) = match opts.mode {
         ClipMode::Copy => (plan.keyframe, plan.keyframe + 0.0005),
         ClipMode::Reencode => (plan.first_frame, plan.first_frame - plan.frame_dur * 0.25),

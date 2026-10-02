@@ -1,10 +1,6 @@
 /**
- * AudioPlayer — player forense para o módulo Áudio (Camada 1).
- *
- * Forma de onda via Web Audio API (decodeAudioData → picos em canvas), sem
- * dependência externa. Transporte com seek preciso, velocidade, loop A‑B e
- * marcadores temporais PERSISTIDOS (timestamp + rótulo) no caso. Tudo
- * descritivo; nada interpreta o conteúdo.
+ * Player de áudio: forma de onda via Web Audio API (picos em canvas), seek,
+ * velocidade, loop A-B e marcadores persistidos no caso.
  */
 
 import {
@@ -52,7 +48,6 @@ export interface AudioPlayerHandle {
   getLoop: () => { a: number; b: number } | null;
   /** Define o trecho A-B (ex.: seleção feita no espectrograma). */
   setLoop: (a: number, b: number) => void;
-  /** Toca (se parado). */
   play: () => void;
 }
 
@@ -72,7 +67,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
   const [loopA, setLoopA] = useState<number | null>(null);
   const [loopB, setLoopB] = useState<number | null>(null);
 
-  // Expõe controle de tempo/transporte para a tela de degravação (sync).
   useImperativeHandle(
     ref,
     () => ({
@@ -105,7 +99,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
     [loopA, loopB],
   );
 
-  // Reset de transporte ao trocar de arquivo.
   useEffect(() => {
     setLoopA(null);
     setLoopB(null);
@@ -113,7 +106,6 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
     setPlaying(false);
   }, [fileUrl]);
 
-  // Carrega marcadores persistidos do caso (por hash do áudio).
   useEffect(() => {
     let cancelled = false;
     setMarkers([]);
@@ -130,7 +122,7 @@ export const AudioPlayer = forwardRef<AudioPlayerHandle, Props>(function AudioPl
     };
   }, [workspacePath, audioSha256]);
 
-  // Decodifica os picos da forma de onda (best-effort).
+  // picos da forma de onda (best-effort)
   useEffect(() => {
     let cancelled = false;
     setPeaks(null);

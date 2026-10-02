@@ -1,12 +1,4 @@
-/**
- * fitImageToCanvas — unit tests (MVP 9 Round 5).
- *
- * The helper feeds the drone-import and "Importar imagem" pipelines:
- * it has to keep a 4K photo from blowing past the canvas while
- * preserving aspect ratio + leaving a configurable margin. Tests
- * cover the canonical cases (landscape, portrait, square, image
- * smaller than canvas, clamp behaviour).
- */
+/** Testes de fitImageToCanvas (paisagem, retrato, quadrado, imagem menor, clamp da margem). */
 
 import { describe, expect, it } from "vitest";
 import { fitImageToCanvas } from "./geometry";

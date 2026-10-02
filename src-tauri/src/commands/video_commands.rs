@@ -1,18 +1,5 @@
-//! Tauri commands for the Video module (Spike F).
-//!
-//! Surface required by the frontend:
-//!   - register_video_media    → copia o vídeo, calcula SHA-256, roda ffprobe
-//!   - list_video_media        → lista todas as mídias de uma ocorrência
-//!   - open_video_media        → VideoBundle agregado para hidratar a UI
-//!   - create/update/delete_video_event
-//!   - collect_video_frame     → roda ffmpeg, grava PNG + sidecar JSON,
-//!                                cria video_export + video_storyboard_frame
-//!   - update_storyboard_frame
-//!   - delete_storyboard_frame
-//!   - list_video_operation_logs
-//!   - list/set/delete_video_clock → relógio da câmera (migration 018)
-//!   - video_thumbnail             → miniatura (cache do app, não o `.sicro`)
-//!   - export_video_clip           → trecho como CÓPIA registrada (migration 019)
+//! Comandos Tauri do módulo Vídeo: registro de mídia (hash + ffprobe), eventos,
+//! coleta de frames (storyboard), relógio da câmera, trechos e miniatura.
 
 use std::path::{Path, PathBuf};
 
@@ -60,11 +47,9 @@ pub async fn register_video_media(
         )));
     }
 
-    // 1. Hash the source BEFORE copying — confirms identity even if copy
-    //    is interrupted later.
+    // Hash da origem ANTES de copiar: identidade garantida mesmo se a cópia falhar.
     let sha256 = sha256_file(&source)?;
 
-    // 2. Duplicate check inside this workspace.
     if let Some(existing) =
         video_repo::find_media_by_sha256(&conn, &occurrence_id, &sha256)?
     {
@@ -74,7 +59,6 @@ pub async fn register_video_media(
         )));
     }
 
-    // 3. Copy under videos/originais/, picking a non-colliding filename.
     let videos_dir = ws.join(VIDEOS_SUBDIR);
     std::fs::create_dir_all(&videos_dir).map_err(|e| {
         SicroError::Filesystem(format!(
@@ -95,8 +79,7 @@ pub async fn register_video_media(
 
     let size_bytes = std::fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
 
-    // 4. Probe metadata via ffprobe (best-effort: failure is recorded as
-    //    warning rather than aborting the registration).
+    // ffprobe é best-effort: falha vira warning, não aborta o registro.
     let mut warnings: Vec<String> = Vec::new();
     let mut raw_probe = "{}".to_string();
     let mut duration_s = None;
@@ -133,7 +116,6 @@ pub async fn register_video_media(
         }
     }
 
-    // 5. Persist.
     let id = Uuid::new_v4();
     let now = Utc::now();
     let relative_path = format!("{VIDEOS_SUBDIR}/{}", target_name);
@@ -365,7 +347,6 @@ pub async fn collect_video_frame(
     let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
     run_migrations(&mut conn)?;
 
-    // Find the media row by hash within this occurrence.
     let media = video_repo::find_media_by_sha256(&conn, &occurrence_id, &input.media_hash)?
         .ok_or_else(|| {
             SicroError::Validation(format!(
@@ -381,7 +362,6 @@ pub async fn collect_video_frame(
         )));
     }
 
-    // Build the target paths under videos/storyboards/frames/.
     let frames_dir = ws.join(FRAMES_SUBDIR);
     std::fs::create_dir_all(&frames_dir).ok();
     let ts_for_name = ((input.timestamp_s * 1000.0).round() as i64).max(0);
@@ -391,7 +371,6 @@ pub async fn collect_video_frame(
     let sidecar_name = format!("frame_{stamp}_{ts_for_name}ms.json");
     let sidecar_target = frames_dir.join(&sidecar_name);
 
-    // Sidecar extra context — domain data the video module knows about.
     let sidecar_extra = json!({
         "media_id": media.id.to_string(),
         "media_sha256": media.sha256,
@@ -415,7 +394,6 @@ pub async fn collect_video_frame(
         start_time_s: crate::video::probe::container_start_time(&media.raw_probe_json),
     })?;
 
-    // Persist video_exports + video_storyboard_frames.
     let now = Utc::now();
     let export = VideoExport {
         id: Uuid::new_v4(),
@@ -696,10 +674,8 @@ pub async fn delete_video_clock(workspace_path: String, media_hash: String) -> R
 // ---------------------------------------------------------------------------
 // Exportar trecho
 
-/// Grava parte de um vídeo do caso como ARQUIVO NOVO em `videos/trechos/`
-/// (o original não é tocado), com JSON ao lado, e registra a cópia como vídeo
-/// do caso ligado à origem (`derived_from_hash`). Ver `video::clip` para a
-/// diferença entre "copy" (sem recompressão) e "reencode".
+/// Grava o trecho como ARQUIVO NOVO em `videos/trechos/` (original intacto), com
+/// JSON ao lado, registrado como vídeo do caso ligado à origem (`derived_from_hash`).
 #[tauri::command]
 pub async fn export_video_clip(
     workspace_path: String,
@@ -932,7 +908,6 @@ fn pick_unique_filename(dir: &Path, src: &Path) -> String {
         .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("video.bin");
-    // Run through the same sanitizer used by workspaces.
     let safe = crate::filesystem::sanitize_folder_name(raw);
     let target = dir.join(&safe);
     if !target.exists() {

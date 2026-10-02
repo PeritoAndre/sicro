@@ -1,15 +1,5 @@
-//! Detect references inside `.sicrodoc` envelopes whose target asset
-//! no longer lives in the workspace.
-//!
-//! Walks every `EvidenceKind::Laudo` row of the registry, loads the
-//! corresponding `.sicrodoc`, walks the JSON tree looking for nodes
-//! that carry a `relative_path` (figure / storyboardItem / evidenceTable
-//! references — anything the Document Engine inserts with MVP 4
-//! provenance attributes) and verifies whether the file is on disk.
-//!
-//! This is intentionally tolerant: malformed JSON or unreadable
-//! `.sicrodoc` files become a single warning per laudo instead of
-//! crashing the whole verification pass.
+//! Referências dentro de `.sicrodoc` cujo arquivo não está no workspace.
+//! Tolerante: JSON malformado vira um aviso por laudo, não derruba a verificação.
 
 use std::path::Path;
 
@@ -39,9 +29,8 @@ pub fn detect_broken_laudo_links(
         let Some(rel) = item.relative_path.as_deref() else {
             continue;
         };
-        // Desde o 3.0 o laudo é um .docx (editado no Word): só se confere que
-        // o arquivo existe. As figuras internas só são seguidas no .sicrodoc
-        // (JSON) dos laudos do 2.0 — ler um .docx como JSON dava alarme falso.
+        // Laudo .docx: só confere que o arquivo existe. Figuras só são seguidas
+        // no .sicrodoc (JSON) — ler um .docx como JSON dava alarme falso.
         let is_sicrodoc = rel.to_ascii_lowercase().ends_with(".sicrodoc");
         let file_kind = match Path::new(rel).extension().and_then(|e| e.to_str()) {
             Some(ext) => format!(".{}", ext.to_ascii_lowercase()),
@@ -153,8 +142,7 @@ struct NodeRef {
     relative_path: String,
 }
 
-/// Recursively walk the TipTap JSON tree and collect every node whose
-/// `attrs.relative_path` is a non-empty string.
+/// Percorre a árvore TipTap e coleta todo nó com `attrs.relative_path` não vazio.
 fn collect_refs(node: &Value, out: &mut Vec<NodeRef>) {
     if let Some(rel) = node
         .get("attrs")
@@ -307,7 +295,7 @@ mod tests {
 
     #[test]
     fn docx_laudo_present_is_not_flagged() {
-        // Laudo do 3.x: um .docx (ZIP) não é JSON e não pode virar "link quebrado".
+        // Um .docx (ZIP) não é JSON e não pode virar "link quebrado".
         let tmp = TempDir::new().unwrap();
         let (_id, item) = fixture_laudo_item("laudos/laudo_1.docx", "Laudo 3.x");
         let abs = tmp.path().join("laudos").join("laudo_1.docx");

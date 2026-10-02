@@ -1,11 +1,4 @@
-/**
- * Atalhos customizáveis do módulo **Imagem** (editor de imagem pericial).
- * Escopo `imagem`. Convenção: `group: "Imagem · <subárea>"`, label PT-BR,
- * `defaultBinding` na forma canônica de `keymap.ts`.
- *
- * Cobre ferramentas (seleção/pan + anotações + medição/escala + tarja +
- * corte), edição (excluir/salvar), vista (zoom/enquadrar) e exportação.
- */
+/** Atalhos do módulo Imagem. */
 import type { ShortcutAction } from "../keymapActions";
 
 export const IMAGEM_ACTIONS: ShortcutAction[] = [
@@ -24,7 +17,7 @@ export const IMAGEM_ACTIONS: ShortcutAction[] = [
   { id: "imagem.tool.redaction", scope: "imagem", group: "Imagem · Ferramentas", label: "Tarja (redação)", defaultBinding: "X" },
   { id: "imagem.tool.crop", scope: "imagem", group: "Imagem · Ferramentas", label: "Cortar imagem", defaultBinding: "C" },
 
-  // Seleção (W20) — região estilo Photoshop (marquee + inverter).
+  // Seleção de região (marquee + inverter).
   { id: "imagem.tool.select_rect", scope: "imagem", group: "Imagem · Seleção", label: "Seleção retangular", defaultBinding: "Shift+R" },
   { id: "imagem.tool.select_ellipse", scope: "imagem", group: "Imagem · Seleção", label: "Seleção elíptica", defaultBinding: "Shift+E" },
   { id: "imagem.tool.select_lasso", scope: "imagem", group: "Imagem · Seleção", label: "Laço (segue o mouse)", defaultBinding: "Shift+L" },

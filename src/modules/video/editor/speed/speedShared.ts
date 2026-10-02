@@ -1,6 +1,4 @@
-/**
- * Helpers compartilhados do Calculador de Velocidade (UI).
- */
+/** Helpers compartilhados das abas Velocidade e Medições. */
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { VideoStoryboardFrame } from "@domain/video";
@@ -20,12 +18,9 @@ export function frameAssetSrc(
 }
 
 /**
- * `actual_timestamp_s` é confiável? Em VFR, o seek do ffmpeg pode falhar e
- * gravar `0` (PTS não resolvido) — note que `0` NÃO é capturado por `?? `,
- * então vários frames acabariam com o mesmo instante 0 e a regressão de
- * velocidade abortaria com "amplitude temporal zero". Tratamos um actual
- * ausente OU não-positivo como não confiável (um frame real em t=0.000 cairia
- * no `requested` ≈ 0, então não há perda prática).
+ * Em VFR o seek do ffmpeg pode falhar e gravar `actual_timestamp_s = 0` (PTS não
+ * resolvido); `??` não pega 0 e vários frames cairiam no mesmo instante, abortando
+ * a regressão. Por isso actual ausente OU não-positivo conta como não confiável.
  */
 function hasReliableActual(frame: VideoStoryboardFrame): boolean {
   const a = frame.actual_timestamp_s;
@@ -33,10 +28,8 @@ function hasReliableActual(frame: VideoStoryboardFrame): boolean {
 }
 
 /**
- * Tempo técnico do frame: o `actual_timestamp_s` real (entregue pelo ffmpeg)
- * é a fonte de verdade QUANDO confiável; caso contrário cai para o
- * `requested_timestamp_s`, que preserva a separação temporal pedida pelo
- * perito (a ressalva de VFR documenta a aproximação).
+ * Tempo técnico do frame: `actual_timestamp_s` quando confiável; senão o
+ * `requested_timestamp_s` (preserva a separação pedida; a ressalva de VFR registra).
  */
 export function frameTimestamp(frame: VideoStoryboardFrame): number {
   return hasReliableActual(frame)

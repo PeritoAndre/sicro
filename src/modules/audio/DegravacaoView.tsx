@@ -1,10 +1,6 @@
 /**
- * DegravacaoView — tela dedicada (modo foco) de degravação assistida MANUAL.
- *
- * Sincroniza o player (via ref) com uma lista de segmentos editáveis
- * (timestamp + locutor + texto). Autosave com indicador (replace-all no
- * backend). O tool NÃO transcreve nem interpreta — a degravação é trabalho do
- * perito. A IA (Fase 2) apenas preencherá candidatos nesta mesma lista.
+ * Degravação assistida: player sincronizado com a lista de trechos (tempo +
+ * locutor + texto), autosave. A IA só preenche rascunhos; a degravação é do perito.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -108,7 +104,7 @@ export function DegravacaoView() {
   const dirtyRef = useRef(false);
   const textRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
 
-  // ---- Carga: áudio + degravação persistida ------------------------------
+  // carga: áudio + degravação persistida
   useEffect(() => {
     if (!ws || !audioId) return;
     let cancelled = false;
@@ -149,7 +145,7 @@ export function DegravacaoView() {
     };
   }, [ws, audioId]);
 
-  // ---- Persistência (replace-all) ----------------------------------------
+  // persistência (replace-all)
   const persistNow = useCallback(() => {
     if (!ws || !media) return;
     const payload = segsRef.current.map((s, i) => ({
@@ -195,7 +191,7 @@ export function DegravacaoView() {
     };
   }, [persistNow]);
 
-  // ---- Mutações (marcam dirty) -------------------------------------------
+  // mutações (marcam dirty)
   const mutate = useCallback((updater: (prev: LocalSeg[]) => LocalSeg[]) => {
     dirtyRef.current = true;
     setSegments(updater);
@@ -268,13 +264,9 @@ export function DegravacaoView() {
     [mutate],
   );
 
-  // ---- Atalhos de pedal (customizáveis, escopo `audio`) ------------------
-  //
-  // Todos usam Ctrl de propósito para conviver com a digitação nos campos da
-  // degravação, então passamos `allowInInputs: true` — disparam mesmo com o
-  // cursor num textarea/input. As funções referenciadas (capture, persistNow,
-  // copy, runTranscribe, setEnd) são lidas só no momento do disparo, então a
-  // ordem de declaração no corpo do componente não importa.
+  // Atalhos de pedal (escopo `audio`): todos com Ctrl para conviver com a
+  // digitação, por isso `allowInInputs`. As funções são lidas só no disparo —
+  // a ordem de declaração no componente não importa.
   useShortcuts(
     {
       "audio.playPause": () => playerRef.current?.togglePlay(),
@@ -348,7 +340,7 @@ export function DegravacaoView() {
     [],
   );
 
-  // ---- Transcrição (Fase 2 — whisper.cpp local, RASCUNHO) ----------------
+  // transcrição (whisper.cpp local, rascunho)
   useEffect(() => {
     const bin =
       aiSettings.whisper_bin_path || (localStorage.getItem("sicro.whisper.bin") ?? "");

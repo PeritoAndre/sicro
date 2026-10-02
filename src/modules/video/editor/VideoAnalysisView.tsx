@@ -1,19 +1,7 @@
 /**
- * VideoAnalysisView — orquestrador do editor de vídeo.
- *
- *   ┌────────────────────────────────────────────────────────────────┐
- *   │ Toolbar (voltar + arquivo)                                     │
- *   ├────────────────────────────┬───────────────────────────────────┤
- *   │  VideoPlayerPanel           │  VideoMetadataPanel              │
- *   │  (HTMLVideoElement)         │                                  │
- *   │                             │  VideoEventPanel                 │
- *   │  VideoTimeline              │                                  │
- *   │  Status (timestamp / dur)   │  VideoStoryboardPanel            │
- *   └────────────────────────────┴───────────────────────────────────┘
- *
- * O player local mantém o tempo corrente (`currentTime`). Quando o
- * usuário cria evento ou coleta frame, esse tempo é usado como
- * timestamp técnico.
+ * Orquestrador do editor de vídeo: reprodutor + linha do tempo à esquerda,
+ * metadados/eventos/storyboard à direita. O tempo corrente do player é o
+ * timestamp técnico de eventos e quadros coletados.
  */
 
 import { registerOpenVideo } from "@modules/midia/midiaLink";
@@ -109,8 +97,7 @@ export function VideoAnalysisView() {
   );
   const controllerRef = useRef<PlayerController | null>(null);
 
-  // Autor (perito) do contexto do app — usado nas calibrações/cálculos de
-  // velocidade. Nunca vazio: cai para "Perito" se a ocorrência não listar.
+  // Autor das calibrações/cálculos; nunca vazio (cai para "Perito").
   const author = useMemo(() => {
     const peritos = occurrence?.peritos ?? [];
     return peritos.length > 0 ? peritos.join(", ") : "Perito";
@@ -131,10 +118,8 @@ export function VideoAnalysisView() {
     [bundle],
   );
 
-  // Tela cheia do reprodutor (F / duplo clique / botão): o painel inteiro —
-  // vídeo, controles, linha do tempo e "Coletar frame" — vai para a tela
-  // cheia pela Fullscreen API; os atalhos seguem valendo (ouvem a janela).
-  // Se o WebView recusar, cai num modo "expandido" que cobre a janela.
+  // Tela cheia: o painel inteiro (vídeo, controles, linha do tempo) vai pela
+  // Fullscreen API; se o WebView recusar, cai num modo "expandido" que cobre a janela.
   const playerPaneRef = useRef<HTMLDivElement | null>(null);
   const [fullscreen, setFullscreen] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -188,7 +173,7 @@ export function VideoAnalysisView() {
 
   const bigScreen = fullscreen || expanded;
 
-  // ---- comparação de câmeras (item 16) ------------------------------------
+  // comparação de câmeras
   const [compareWith, setCompareWith] = useState<VideoMedia | null>(null);
   const [pickCompare, setPickCompare] = useState(false);
   // Galeria do storyboard e diálogo de trecho abertos: o teclado é deles.
@@ -198,7 +183,7 @@ export function VideoAnalysisView() {
     mainTab === "player" && compareWith == null && galleryIndex == null && !clipOpen;
   useShortcuts({ "video.fullscreen": toggleFullscreen }, { enabled: playerKeys });
 
-  // ---- vídeos do caso: alternar e adicionar sem sair da análise ----------
+  // vídeos do caso: alternar e adicionar sem sair da análise
   const switchVideo = (id: string) => {
     if (!workspacePath || id === bundle?.media.id) return;
     exitFullscreen();
@@ -254,7 +239,7 @@ export function VideoAnalysisView() {
     [media0?.raw_probe_json],
   );
 
-  // ---- trecho entrada/saída (I/O) + repetição ----------------------------
+  // trecho entrada/saída (I/O) + repetição
   const [markIn, setMarkIn] = useState<number | null>(null);
   const [markOut, setMarkOut] = useState<number | null>(null);
   const [loopOn, setLoopOn] = useState(false);
@@ -281,7 +266,7 @@ export function VideoAnalysisView() {
     setLoopOn(false);
   };
 
-  // ---- ir para tempo / quadro (digitado) ---------------------------------
+  // ir para tempo / quadro (digitado)
   const [gotoOpen, setGotoOpen] = useState(false);
   const [gotoText, setGotoText] = useState("");
   const [gotoError, setGotoError] = useState(false);
@@ -301,7 +286,7 @@ export function VideoAnalysisView() {
     setGotoOpen(false);
   };
 
-  // ---- pular entre eventos -----------------------------------------------
+  // pular entre eventos
   const jumpEvent = (dir: 1 | -1) => {
     const evs = [...(bundle?.events ?? [])].sort((x, y) => x.timestamp_s - y.timestamp_s);
     const now = nowTime();
@@ -339,7 +324,7 @@ export function VideoAnalysisView() {
     { enabled: playerKeys },
   );
 
-  // ---- relógio da câmera (item 14) ----------------------------------------
+  // relógio da câmera
   const [clocks, setClocks] = useState<VideoClockCalibration[]>([]);
   const [clockOpen, setClockOpen] = useState(false);
   const [clockBusy, setClockBusy] = useState(false);
@@ -396,7 +381,7 @@ export function VideoAnalysisView() {
     }
   };
 
-  // ---- evento com uma tecla (item 12) e copiar o tempo (item 13) -----------
+  // evento com uma tecla e copiar o tempo
   const quickEvent = async () => {
     if (!workspacePath || !media0) return;
     const t = nowTime();
@@ -441,7 +426,7 @@ export function VideoAnalysisView() {
   const copyFrameTime = (f: VideoStoryboardFrame) =>
     copyText(timeText(f.actual_timestamp_s ?? f.requested_timestamp_s));
 
-  // ---- exportar trecho (cópia) ---------------------------------------------
+  // exportar trecho (cópia)
   const [clipBusy, setClipBusy] = useState(false);
   const [clipResult, setClipResult] = useState<ExportClipResult | null>(null);
   const exportClip = async (mode: ClipMode, includeAudio: boolean) => {
@@ -474,7 +459,7 @@ export function VideoAnalysisView() {
     setClipOpen(true);
   };
 
-  // ---- painel lateral redimensionável -------------------------------------
+  // painel lateral redimensionável
   const [sideWidth, setSideWidth] = useState(() => {
     try {
       const n = Number(localStorage.getItem("sicro.video.sideWidth.v1"));
@@ -511,7 +496,7 @@ export function VideoAnalysisView() {
     el.addEventListener("pointercancel", up);
   };
 
-  // ---- menus de botão direito --------------------------------------------
+  // menus de botão direito
   const videoMenuItems = (): MenuItem[] => [
     { label: "Coletar frame", shortcut: "Ctrl+1", onSelect: () => void handleCollectFrame() },
     { label: "Coletar sequência…", shortcut: "Ctrl+2", onSelect: () => setSeqOpen(true) },
@@ -531,7 +516,7 @@ export function VideoAnalysisView() {
     { label: "Marcar saída aqui", onSelect: () => setMarkAt("out", t) },
   ];
 
-  // ---- coletar sequência de quadros (item 11) ------------------------------
+  // coletar sequência de quadros
   const [seqOpen, setSeqOpen] = useState(false);
   const [seqRun, setSeqRun] = useState<{ done: number; total: number } | null>(null);
   const seqCancelRef = useRef(false);
@@ -848,9 +833,8 @@ export function VideoAnalysisView() {
             </button>
           </div>
 
-          {/* Reprodutor e Velocidade ficam ambos MONTADOS; alternamos só a
-              visibilidade para preservar a marcação em andamento e o estado
-              do player ao trocar de aba. */}
+          {/* Reprodutor, Velocidade e Medições ficam montados (só muda a
+              visibilidade) para preservar marcações e o estado do player ao trocar de aba. */}
           <div
             ref={playerPaneRef}
             className={`${styles.tabPane} ${expanded ? styles.tabPaneExpanded : ""}`}
@@ -1094,9 +1078,6 @@ export function VideoAnalysisView() {
             />
           </div>
 
-          {/* Medições e Velocidade compartilham a calibração; ambos os painéis
-              ficam MONTADOS (só alternamos a visibilidade) para preservar
-              marcações em andamento ao trocar de aba. */}
           <div
             className={styles.tabPaneScroll}
             style={{ display: mainTab === "measure" ? "flex" : "none" }}

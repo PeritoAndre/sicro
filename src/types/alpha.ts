@@ -1,7 +1,4 @@
-/**
- * Mirror of `src-tauri/src/workspace/{backup,health}.rs` and
- * `src-tauri/src/commands/alpha_commands.rs` (MVP 8 — Consolidação Alpha).
- */
+/** Espelha `src-tauri/src/workspace/{backup,health,global_backup}.rs` e `commands/alpha_commands.rs`. */
 
 export interface BackupArtifact {
   absolute_path: string;
@@ -63,16 +60,14 @@ export interface HealthReportArtifact {
   overall_status: string;
 }
 
-// ---- Backup geral (todos os casos) — W22 ----
-// Espelho de `src-tauri/src/workspace/global_backup.rs`.
+// ---- Backup geral (todos os casos) ----
 
-/** Um caso a entrar no backup geral (origem + rótulo humano). */
 export interface GlobalCaseInput {
   workspace_path: string;
   label: string;
 }
 
-/** Evento `global-backup-progress` emitido por caso durante a execução. */
+/** Evento `global-backup-progress`, por caso. */
 export interface GlobalBackupProgress {
   index: number;
   total: number;
@@ -108,7 +103,7 @@ export interface GlobalBackupReport {
   cases: CaseBackupResult[];
 }
 
-/** Progresso por caso na restauração de um conjunto de backup. */
+/** Evento `restore-backup-progress`, por caso. */
 export interface RestoreProgress {
   index: number;
   total: number;

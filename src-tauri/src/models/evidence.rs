@@ -1,15 +1,11 @@
-//! Evidence link model (MVP 4 — Evidência → Laudo).
-//!
-//! `EvidenceLink` rows are written when the perito clicks "Inserir" on the
-//! Laudo Inspector's "Evidências" tab. They are the audit trail; the
-//! source-of-truth attributes still live on the `.sicrodoc` node.
+//! Vínculo evidência → laudo. As linhas são trilha de auditoria; os atributos
+//! de verdade vivem no nó do `.sicrodoc`. Espelhado em `src/types/evidence.ts`.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Discriminator for what kind of evidence was inserted. Matches the
-/// `source_kind` column in `evidence_links`.
+/// Casa com a coluna `source_kind` de `evidence_links`.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceSourceKind {
@@ -44,9 +40,9 @@ impl EvidenceSourceKind {
 pub struct EvidenceLink {
     pub id: Uuid,
     pub occurrence_id: Uuid,
-    /// Always `"laudo"` for now; reserved for future surfaces.
+    /// Sempre "laudo" por enquanto.
     pub target_type: String,
-    /// UUID of the laudo (when target_type == "laudo").
+    /// UUID do laudo.
     pub target_id: String,
     pub relation_type: String,
     pub source_kind: EvidenceSourceKind,
@@ -65,8 +61,7 @@ pub struct EvidenceLink {
     pub created_at: DateTime<Utc>,
 }
 
-/// Wire payload for `record_evidence_link`. Most fields are optional —
-/// the frontend supplies whatever the kind requires.
+/// Payload de `record_evidence_link`; o front manda o que o kind exige.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RecordEvidenceLinkInput {
     pub target_type: String,
@@ -101,13 +96,12 @@ fn default_metadata() -> String {
     "{}".to_string()
 }
 
-/// Returned by `read_evidence_asset` so the frontend / renderer can embed
-/// the bytes (data URI for HTML/PDF, binary for DOCX).
+/// Bytes para o front/renderer embutir (data URI no HTML/PDF, binário no DOCX).
 #[derive(Debug, Clone, Serialize)]
 pub struct EvidenceAsset {
     pub relative_path: String,
     pub mime_type: String,
-    /// Base64-encoded bytes (no `data:` prefix).
+    /// Sem prefixo `data:`.
     pub base64: String,
     pub size_bytes: u64,
 }

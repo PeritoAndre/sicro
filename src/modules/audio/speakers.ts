@@ -15,7 +15,7 @@ export interface SpeakerSeg {
   speakerMixed?: boolean;
 }
 
-export const SPEAKER_COLORS = [
+const SPEAKER_COLORS = [
   "#4fa3e0",
   "#e0864f",
   "#5bc48a",

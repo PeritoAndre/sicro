@@ -1,7 +1,6 @@
 /**
- * Construção da LEGENDA numerada a partir dos marcadores. Função PURA e
- * determinística (testável) — vira a tabela exibida no painel e embutida no
- * PNG exportado. Ordena por número crescente.
+ * Legenda numerada a partir dos marcadores (função pura): vira a tabela do
+ * painel e a embutida no PNG exportado.
  */
 
 import { lesaoMeta } from "./lesions";
@@ -32,10 +31,9 @@ function rowFromMarker(m: SicroLesaoMarker): LegendRow {
 }
 
 /**
- * @param templateId quando informado, lista só as lesões DAQUELA prancha
- * (marcações são autocontidas por prancha; markers antigos sem o campo
- * pertencem à prancha atual do doc). A numeração segue global no documento
- * (contínua entre pranchas — útil pro laudo de uma mesma vítima).
+ * @param templateId lista só as lesões daquela prancha (markers antigos sem o
+ * campo pertencem à prancha atual). A numeração é global no doc, contínua
+ * entre pranchas (mesma vítima, mesmo laudo).
  */
 export function buildLegend(
   doc: SicroCorpoDoc,

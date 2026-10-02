@@ -1,11 +1,8 @@
 /**
- * Schema do `.sicroplanta` — croqui de planta baixa (patrimonial / cena).
- *
- * O backend trata o arquivo como JSON OPACO; este módulo é a fonte de verdade.
- * `coercePlantaDoc` carrega qualquer JSON, preenche defaults e nunca quebra ao
- * abrir. O `floorplan` é o modelo do motor de planta (fork arcada) e é mantido
- * INTACTO (opaco aqui — o Serializer do motor cuida dele). A camada PERICIAL
- * (vestígios + bússola + escala) é nossa.
+ * Schema do `.sicroplanta` (planta baixa). O backend trata o arquivo como JSON
+ * opaco; `coercePlantaDoc` carrega qualquer JSON com defaults e nunca quebra ao
+ * abrir. `floorplan` é o modelo do motor (fork arcada) e passa intacto; a
+ * camada pericial (vestígios, bússola, escala) é nossa.
  */
 
 import {
@@ -14,7 +11,7 @@ import {
   type EvidenceLabelKind,
 } from "./evidence";
 
-export const PLANTA_SCHEMA_VERSION = "0.1";
+const PLANTA_SCHEMA_VERSION = "0.1";
 
 /** Marcador de vestígio posicionado sobre a planta (coords do mundo Pixi). */
 export interface PlantaEvidenceMarker {
@@ -87,7 +84,7 @@ export interface SicroPlantaDoc {
   trajectories: PlantaTrajectory[];
   /** Rótulos de texto livre. */
   texts: PlantaText[];
-  /** Estruturas lineares (LEGADO — substituídas por skins de parede). */
+  /** Estruturas lineares (legado; substituídas por skins de parede). */
   structures: PlantaStructure[];
   /** Estilo ("skin") por parede: chave = par de nós ordenado, valor = tipo. */
   wallStyles: Record<string, PlantaStructureKind>;

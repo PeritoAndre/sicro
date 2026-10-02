@@ -1,11 +1,9 @@
 /**
- * Formatação de degravação para exportação — funções PURAS (sem efeitos).
- *
- * Determinístico: mesma entrada → mesma saída. É auxílio de exportação; o texto
- * é o trabalho revisado do perito (o tool não transcreve nem interpreta).
+ * Formatação da degravação para exportação (TXT/SRT): funções puras e
+ * determinísticas. O texto é o trabalho revisado do perito.
  */
 
-export interface TranscriptSegmentLike {
+interface TranscriptSegmentLike {
   t_start: number;
   t_end: number | null;
   speaker: string;

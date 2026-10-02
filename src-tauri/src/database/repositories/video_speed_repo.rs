@@ -1,13 +1,6 @@
-//! Repositório do Calculador de Velocidade (Fase 2 — camada de dados).
-//!
-//! Duas tabelas: `video_speed_calibrations` e `video_speed_calculations`.
-//! Diferente do `video_repo` (que guarda JSON como `String` opaca), aqui o
-//! repositório **(de)serializa** as colunas `*_json` para tipos estruturados
-//! (matriz da homografia, pontos da trajetória, sigmas do Monte Carlo). Isso é
-//! deliberado: o laudo precisa reabrir um cálculo e reproduzir o número exato,
-//! então a forma estruturada — e não um blob opaco — é o que cruza o limite.
-//!
-//! Sem comandos Tauri e sem UI nesta fase: apenas insert / get / list.
+//! Tabelas `video_speed_calibrations` e `video_speed_calculations`. As colunas
+//! `*_json` são (de)serializadas para tipos estruturados: o laudo precisa
+//! reabrir um cálculo e reproduzir o número exato.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -280,9 +273,7 @@ mod tests {
     use crate::database::migrations::run_migrations;
     use crate::models::{ControlPoint, McSigmas, TrajectoryPoint};
 
-    /// In-memory DB with the full migration set and FK enforcement ON, plus a
-    /// parent occurrence so the FK chain (occurrence → calibration → calculation)
-    /// is actually exercised.
+    /// Banco em memória com migrações, FK ON e uma ocorrência pai.
     fn setup() -> (Connection, Uuid) {
         let mut conn = Connection::open_in_memory().expect("open in-memory");
         conn.pragma_update(None, "foreign_keys", "ON")

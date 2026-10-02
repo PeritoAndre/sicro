@@ -84,9 +84,7 @@
 }
 
 /* ---- Manual renderizado ----
- * Coluna de leitura ALINHADA À ESQUERDA (max-width fixo). Todos os blocos e as
- * linhas divisórias (borda dos títulos / <hr>) começam no MESMO x — sem o efeito
- * de "linha torta" da versão centralizada. */
+ * Coluna alinhada à esquerda: blocos e divisórias começam no mesmo x. */
 .content {
   flex: 1;
   min-width: 0;
@@ -198,7 +196,7 @@
   color: var(--sicro-fg);
   font-weight: 600;
 }
-/* Citações / callouts (💡 dicas, ⚠️ limites §13) */
+/* Citações / callouts */
 .content :global(blockquote) {
   margin: 0 0 var(--space-4);
   padding: 10px 14px;

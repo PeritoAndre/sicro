@@ -1,8 +1,5 @@
-//! Application-level error type.
-//!
-//! Errors that cross the Tauri boundary (i.e. propagate to JavaScript)
-//! are serialized as a small JSON object `{ kind, message }`. The front-end
-//! `toSicroError()` reads exactly that shape, so do NOT change it lightly.
+//! Erro da aplicação. Ao cruzar a fronteira Tauri vira `{ kind, message }`; o
+//! `toSicroError()` do front lê exatamente esse formato — não mudar sem o front.
 
 use serde::{Serialize, Serializer};
 use thiserror::Error;
@@ -44,14 +41,9 @@ impl SicroError {
     }
 }
 
-/// Tauri serializes command errors with the type's `Serialize` impl.
-/// We emit `{ kind, message }` so the front-end can rely on the shape.
-///
-/// NOTE: the return type is explicitly qualified as `std::result::Result`
-/// because the `Result` alias declared at the bottom of this file shadows the
-/// prelude one. Without the qualifier the compiler would resolve
-/// `Result<S::Ok, S::Error>` to `std::result::Result<S::Ok, SicroError>` —
-/// the wrong error type for `Serializer::serialize`.
+/// Tauri serializa erros de comando por este `Serialize`: `{ kind, message }`.
+/// `std::result::Result` qualificado porque o alias `Result` no fim do arquivo
+/// faz sombra ao da prelude.
 impl Serialize for SicroError {
     fn serialize<S: Serializer>(
         &self,

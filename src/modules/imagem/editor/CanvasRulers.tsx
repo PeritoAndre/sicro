@@ -1,23 +1,13 @@
 /**
- * W13 — Réguas do canvas (estilo GIMP/Photoshop): barras no TOPO e na
- * ESQUERDA com marcação numérica + um **marcador ao vivo** que segue o mouse
- * e indica exatamente onde ele está NA IMAGEM. Traz precisão para anotações,
- * medições e recortes.
- *
- * - Coordenadas em **px da imagem** (0 = canto superior-esquerdo da imagem) ou,
- *   quando há escala calibrada, na **unidade real** (cm/m/mm).
- * - Overlay SVG absoluto, `pointer-events: none` → não atrapalha o canvas.
- * - O marcador (triângulo na régua + crosshair fino) usa o MESMO `pointer`
- *   (coords-mundo) e `viewport` que a barra de status — então é exato.
- *
- * Substitui o antigo `GridOverlay` (que só tinha rótulos soltos, nunca foi
- * ligado e não seguia o mouse).
+ * Réguas do canvas (topo e esquerda) com marcador que segue o mouse.
+ * Coordenadas em px da imagem ou, com escala calibrada, na unidade real.
+ * Overlay SVG com `pointer-events: none`; usa o mesmo `pointer`/`viewport` da barra de status.
  */
 
 import { useMemo } from "react";
 import type { SicroImageScale } from "../engine/schema";
 
-export const RULER_SIZE = 18; // px da faixa da régua
+const RULER_SIZE = 18; // px da faixa da régua
 
 interface Props {
   /** Dimensões da imagem original (px). */
@@ -25,14 +15,13 @@ interface Props {
   imageHeight: number;
   /** Transform do Konva: scale + translate (x, y) em px de tela. */
   viewport: { scale: number; x: number; y: number };
-  /** Posição do cursor em coordenadas-MUNDO (px da imagem). */
+  /** Posição do cursor em coordenadas-mundo (px da imagem). */
   pointer: { x: number; y: number };
   /** Tamanho da área de canvas (px de tela). */
   width: number;
   height: number;
-  /** Escala calibrada (px → unidade real), opcional. */
+  /** Escala calibrada (px → unidade real). */
   scale?: SicroImageScale | null;
-  /** Mostra ou não. */
   visible?: boolean;
 }
 
@@ -131,7 +120,7 @@ export function CanvasRulers({
       style={{ position: "absolute", inset: 0, width: "100%", height: "100%", pointerEvents: "none" }}
       aria-hidden="true"
     >
-      {/* Crosshair fino seguindo o cursor (precisão visual) */}
+      {/* Crosshair fino seguindo o cursor */}
       {markerXOn && (
         <line x1={mx} y1={RULER_SIZE} x2={mx} y2={height} stroke={CROSSHAIR} strokeWidth={1} />
       )}
@@ -209,7 +198,7 @@ export function CanvasRulers({
         </>
       )}
 
-      {/* Leitura numérica ao vivo perto do canto (precisão exata) */}
+      {/* Leitura numérica ao vivo perto do canto */}
       {overImage && (
         <g>
           <rect x={RULER_SIZE + 2} y={RULER_SIZE + 2} width={118} height={16} rx={3} fill="rgba(17,24,39,0.85)" />

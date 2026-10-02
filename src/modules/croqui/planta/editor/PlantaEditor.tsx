@@ -1,11 +1,7 @@
 /**
- * PlantaEditor — orquestra o croqui de planta baixa (motor Pixi forkado do
- * arcada). Monta a Application + viewport Main, expõe a toolbar no design system
- * do SICRO e persiste o floorplan no `.sicroplanta` via commands (read/save).
- *
- * O motor (vendored, @ts-nocheck) é acessado por um helper tipado-frouxo
- * (engine/mount.ts). A camada PERICIAL (vestígios + legenda + export) entra na
- * fase seguinte (P-D).
+ * Editor do croqui de planta baixa (motor Pixi forkado do arcada, acessado via
+ * engine/mount.ts): toolbar, camada pericial (vestígios, trajetórias, textos,
+ * estruturas), histórico e persistência no `.sicroplanta` via commands.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -136,7 +132,7 @@ export function PlantaEditor() {
   const setSnap = useStore((s) => s.setSnap);
   const floor = useStore((s) => s.floor);
 
-  // Catálogo de mobília (placeholders locais; o perito troca a arte depois).
+  // Catálogo de mobília (local/offline).
   const [furnitureOpen, setFurnitureOpen] = useState(false);
   const [catalog, setCatalog] = useState<
     { cat: CategoryDef; items: FurnitureDef[] }[]
@@ -166,8 +162,7 @@ export function PlantaEditor() {
   // Texto livre + Estruturas (muro/cerca/calçada) — camadas SICRO em escala.
   const [texts, setTexts] = useState<PlantaText[]>([]);
   const [structures, setStructures] = useState<PlantaStructure[]>([]);
-  // Skin por parede (muro/cerca/calçada): mapa par-de-nós → tipo. A parede é
-  // desenhada com o tool Parede (preview ao vivo) e ganha aparência aqui.
+  // Skin por parede (muro/cerca/calçada): par-de-nós → tipo.
   const [wallStyles, setWallStyles] = useState<Record<string, PlantaStructureKind>>(
     {},
   );
@@ -239,9 +234,8 @@ export function PlantaEditor() {
   // Esc no editor de texto cancela em vez de comitar (via onBlur).
   const textCancelRef = useRef(false);
   const textInputRef = useRef<HTMLInputElement | null>(null);
-  // Foca o input no FRAME seguinte ao abrir (não no mount): com autoFocus, o
-  // clique que abriu o editor disparava blur imediato e fechava o campo.
-  // Como o input monta SEM foco, não há blur espúrio; o rAF então o foca.
+  // Foca no frame seguinte, não no mount: com autoFocus o clique que abriu o
+  // editor disparava blur imediato e fechava o campo.
   useEffect(() => {
     if (!textEditor) return undefined;
     const id = requestAnimationFrame(() => {
@@ -252,7 +246,7 @@ export function PlantaEditor() {
       }
     });
     return () => cancelAnimationFrame(id);
-    // depende só da IDENTIDADE de abertura (não do valor digitado).
+    // depende só da identidade de abertura, não do valor digitado.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [textEditor?.editId, textEditor?.sx, textEditor?.sy]);
 
@@ -264,20 +258,17 @@ export function PlantaEditor() {
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  // Erro de montagem do Pixi (WebGL/WebView2). Capturado no effect e RELANÇADO
-  // no render, pois um throw dentro de useEffect não é pego pelo ErrorBoundary.
+  // Erro de montagem do Pixi (WebGL/WebView2): guardado aqui e relançado no
+  // render, pois um throw dentro de useEffect não é pego pelo ErrorBoundary.
   const [mountError, setMountError] = useState<Error | null>(null);
 
-  // --- Histórico (Ctrl+Z) baseado em snapshot do floorplan ---
-  // Cada item = string do FloorPlan.save(). Cobre TUDO (parede, mover,
-  // rotacionar, porta/janela, deletar), pois snapshota o plano inteiro.
+  // --- Histórico (Ctrl+Z): snapshots combinados floorplan + overlays SICRO ---
   const undoStack = useRef<string[]>([]);
   const redoStack = useRef<string[]>([]);
   const restoringRef = useRef(false);
   const snapTimer = useRef<number | null>(null);
   const [, bumpHist] = useState(0);
-  // Refs com o estado de overlay (vestígios/trajetórias/textos/estruturas) para o
-  // histórico ler o valor atual sem recriar o listener.
+  // Refs dos overlays pro histórico ler o valor atual sem recriar o listener.
   const evidencesRef = useRef(evidences);
   const trajectoriesRef = useRef(trajectories);
   const textsRef = useRef(texts);
@@ -296,8 +287,7 @@ export function PlantaEditor() {
   }, [structures]);
   const captureSnapRef = useRef<(() => void) | null>(null);
 
-  // Restaura um snapshot COMBINADO (floorplan arcada + overlays SICRO). Assim o
-  // Ctrl+Z cobre vestígios, trajetórias, textos e estruturas — não só paredes.
+  // Restaura um snapshot combinado (floorplan + overlays SICRO).
   const applySnapshot = useCallback((str: string) => {
     try {
       const o = JSON.parse(str);
@@ -322,8 +312,6 @@ export function PlantaEditor() {
     const host = hostRef.current;
     if (!workspacePath || !activeCroqui || !host) return undefined;
 
-    // Um throw dentro do useEffect é assíncrono ao render → o ErrorBoundary não
-    // pega. Capturamos no state e relançamos no render (vide `mountError`).
     let app;
     try {
       app = mountPlanta(host);
@@ -334,14 +322,11 @@ export function PlantaEditor() {
     appRef.current = app;
     setTool(Tool.View);
 
-    // Captura snapshot pro histórico (debounced) ao soltar o ponteiro — cobre
-    // criar/mover/rotacionar/deletar, pois qualquer interação termina em pointerup.
+    // Snapshot (debounced) no pointerup: toda interação do motor termina nele.
     const captureSnap = () => {
       if (restoringRef.current) return;
-      // Parede em andamento com só o 1º clique (nó solto): estado transitório,
-      // não vira passo de histórico — senão o Ctrl+Z volta pro nó órfão.
+      // Nó solto do 1º clique é transitório: não vira passo (Ctrl+Z voltaria pro nó órfão).
       if (wallChainPending()) return;
-      // Snapshot COMBINADO: floorplan + overlays SICRO (lidos via refs).
       const s = JSON.stringify({
         fp: floorplanSnapshot(),
         ev: evidencesRef.current,
@@ -382,7 +367,7 @@ export function PlantaEditor() {
         setLabelOffsets(d.labelOffsets ?? {});
         loadLabelOffsets(d.labelOffsets ?? {});
         setLabelKind(d.label_kind ?? "letra");
-        // Estado inicial = base do histórico (combinado: floorplan + overlays).
+        // Estado inicial = base do histórico.
         const init = JSON.stringify({
           fp: floorplanSnapshot(),
           ev: d.evidences ?? [],
@@ -412,9 +397,7 @@ export function PlantaEditor() {
   }, [workspacePath, activeCroqui, setTool]);
 
   const undo = useCallback(() => {
-    // Se há uma parede em andamento com só o 1º clique (nó solto), o Ctrl+Z
-    // cancela esse desenho (remove o nó órfão) — igual ao botão direito — em
-    // vez de mexer no histórico.
+    // Parede em andamento (nó solto): Ctrl+Z cancela o desenho, como o botão direito.
     if (wallChainPending()) {
       cancelWallChain();
       bumpHist((v) => v + 1);
@@ -434,8 +417,7 @@ export function PlantaEditor() {
   }, [applySnapshot]);
 
   const redo = useCallback(() => {
-    // Simetria com undo(): se há parede em andamento (nó solto), Ctrl+Y cancela
-    // o desenho em vez de aplicar o redo sobre um estado transitório.
+    // Simetria com undo(): nó solto → cancela o desenho.
     if (wallChainPending()) {
       cancelWallChain();
       bumpHist((v) => v + 1);
@@ -477,7 +459,7 @@ export function PlantaEditor() {
     return () => window.removeEventListener("keydown", onKey);
   }, [undo, redo]);
 
-  // Carrega o catálogo de mobília uma vez (local/offline).
+  // Carrega o catálogo de mobília.
   useEffect(() => {
     let alive = true;
     void (async () => {
@@ -573,8 +555,7 @@ export function PlantaEditor() {
     renderStructures(structures, selectedStructureId);
   }, [structures, selectedStructureId, ready]);
 
-  // Mudança em qualquer overlay SICRO agenda um snapshot (debounced) — assim o
-  // Ctrl+Z cobre vestígios/trajetórias/textos/estruturas, não só o floorplan.
+  // Overlays mudaram → agenda snapshot (Ctrl+Z cobre também os overlays).
   useEffect(() => {
     if (!ready || restoringRef.current) return;
     if (snapTimer.current) window.clearTimeout(snapTimer.current);
@@ -592,9 +573,8 @@ export function PlantaEditor() {
     ready,
   ]);
 
-  // Nós (handles) aparecem só onde fazem sentido: desenhando (Parede) → todos
-  // (snap/conexão); Selecionar com parede selecionada → só os 2 nós dela;
-  // Navegar/demais → escondidos. Mantém a planta limpa (os pontos somem).
+  // Nós (handles): todos ao desenhar parede; só os 2 da parede selecionada no
+  // Selecionar; escondidos nos demais modos.
   useEffect(() => {
     if (!ready) return;
     if (activeTool === Tool.WallAdd) {
@@ -606,8 +586,7 @@ export function PlantaEditor() {
     }
   }, [activeTool, selectedWall, ready]);
 
-  // Delete/Backspace remove a ESTRUTURA selecionada (só no modo Selecionar, e
-  // não enquanto digita num campo). Esc desseleciona.
+  // Delete/Backspace remove a parede/estrutura selecionada (fora de campos); Esc desseleciona.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
@@ -632,7 +611,7 @@ export function PlantaEditor() {
         trajetoriaActiveRef.current ||
         !!evidenceTypeRef.current;
       if (placing) return;
-      // PAREDE selecionada → remove via motor (mesmo efeito do Remover).
+      // Parede selecionada: remove via motor.
       const wall = selectedWallRef.current;
       if (wall) {
         e.preventDefault();
@@ -654,7 +633,7 @@ export function PlantaEditor() {
         window.setTimeout(() => captureSnapRef.current?.(), 60);
         return;
       }
-      // ESTRUTURA (legado) selecionada.
+      // Estrutura (legado) selecionada.
       const id = selectedStructIdRef.current;
       if (!id) return;
       e.preventDefault();
@@ -775,7 +754,7 @@ export function PlantaEditor() {
         setEvidences((prev) => [...prev, { id: uid(), x, y, tipo }]);
         return;
       }
-      // Selecionar (modo Selecionar): clicar numa PAREDE abre Propriedades.
+      // Clique numa parede abre Propriedades.
       const wallHit = pickWallAt(x, y) as {
         key: string;
         kind: PlantaStructureKind | "parede";
@@ -789,7 +768,7 @@ export function PlantaEditor() {
       }
       setSelectedWall(null);
 
-      // (legado) seleção de estrutura overlay — desativável.
+      // (legado) seleção de estrutura overlay.
       const sList = structuresRef.current || [];
       let bestId: string | null = null;
       let bestD = Infinity;
@@ -955,13 +934,11 @@ export function PlantaEditor() {
     [setTool, setPendingFurniture],
   );
 
-  // Compõe a PRANCHA TÉCNICA (captura Pixi enquadrada + cabeçalho + escala +
-  // rosa dos ventos + legenda dos vestígios). Retorna data URL PNG.
+  // Compõe a prancha técnica (captura Pixi + cabeçalho + escala + legenda) → data URL.
   const composePlate = useCallback(async (): Promise<string | null> => {
     const app = appRef.current;
     if (!app) return null;
-    // Remove o highlight de seleção da captura (não deve sair na prancha) e
-    // restaura logo após.
+    // Highlight de seleção não sai na prancha.
     const selId = selectedStructIdRef.current;
     if (selId) renderStructures(structuresRef.current, null);
     const cap = capturePlantaDataUrl(app);
@@ -1010,8 +987,7 @@ export function PlantaEditor() {
     }
   }, [workspacePath, activeCroqui, handleSave, composePlate, exportPngStore]);
 
-  // PDF → abre view de impressão A4 (perito salva como PDF). Também salva o PNG
-  // (pra ficar disponível ao laudo).
+  // PDF: view de impressão A4 (perito salva como PDF); também salva o PNG pro laudo.
   const handleExportPdf = useCallback(async () => {
     if (!workspacePath || !activeCroqui) return;
     setBusy(true);
@@ -1036,8 +1012,7 @@ export function PlantaEditor() {
   const canUndo = undoStack.current.length > 1;
   const canRedo = redoStack.current.length > 0;
 
-  // Relança o erro de montagem do Pixi pra o PlantaBoundary exibir um card
-  // legível (em vez de canvas em branco silencioso).
+  // Relança pro PlantaBoundary exibir um card em vez de canvas em branco.
   if (mountError) throw mountError;
 
   return (
@@ -1142,7 +1117,7 @@ export function PlantaEditor() {
             );
           })}
 
-          {/* Mobília — seletor por cômodo (placeholders; o perito troca a arte) */}
+          {/* Mobília — seletor por cômodo */}
           <div style={{ position: "relative" }}>
             <button
               type="button"
@@ -1435,7 +1410,7 @@ export function PlantaEditor() {
             aria-hidden
           />
 
-          {/* Snap pra grade (0,5 m) — desliga pra posicionar livre */}
+          {/* Snap à grade (desliga pra posicionar livre) */}
           <button
             type="button"
             onClick={() => setSnap(!snap)}
@@ -1647,15 +1622,14 @@ export function PlantaEditor() {
                 />
               );
             })()}
-          {/* Caixa (invisível) p/ digitar a medida da parede ao clicar na cota,
-              no modo Selecionar. O texto é transparente — o que aparece é o
-              próprio rótulo do Pixi atualizando ao vivo. (port arcada PR #14) */}
+          {/* Campo de edição da cota (medida da parede); o Label.openEditor o
+              posiciona sobre o rótulo. */}
           <input
             id="label-input"
             type="text"
             inputMode="decimal"
             onBlur={(e) => {
-              // Estaciona o campo fora da tela ao fechar (ele é visível agora).
+              // Estaciona o campo fora da tela ao fechar.
               e.currentTarget.style.pointerEvents = "none";
               e.currentTarget.style.left = "-9999px";
               e.currentTarget.style.top = "-9999px";
@@ -1764,7 +1738,7 @@ export function PlantaEditor() {
         </div>
       </div>
 
-      {/* Rodapé §13 */}
+      {/* Rodapé */}
       <div
         style={{
           padding: "4px 12px",
@@ -1862,12 +1836,8 @@ const zoomBtn: React.CSSProperties = {
   cursor: "pointer",
 };
 
-// Caixa de digitação da cota (medida da parede). Texto transparente: só o caret
-// aparece; o rótulo do Pixi muda ao vivo. Escala com o zoom via --viewport-zoom.
-// Campo VISÍVEL de edição da cota, centrado sobre o rótulo. Antes era invisível
-// (só caret) e tinha que casar pixel-a-pixel com o Text do Pixi — desalinhava.
-// Agora é um campinho real centrado no ponto que o Label.onClick fornece
-// (transform translate(-50%,-50%)), então o caret bate com os dígitos.
+// Campo de edição da cota: estacionado fora da tela; o Label.openEditor o centra
+// sobre o rótulo (translate -50%) pro caret bater com os dígitos.
 const labelInputStyle: React.CSSProperties = {
   position: "fixed",
   top: -9999,

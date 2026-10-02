@@ -4,8 +4,6 @@ export {
   BODY_VIEW_ORDER,
   BODY_TEMPLATE_GROUPS,
   LEGACY_TEMPLATE_MAP,
-  type ArtViewBox,
-  type BodyTemplate,
   type BodyTemplateView,
   type BodyView,
 } from "../assets/bodyTemplates";
@@ -14,7 +12,6 @@ export {
   lesaoMeta,
   isLesaoTipo,
   type LesaoTipo,
-  type LesaoTipoMeta,
 } from "./lesions";
 export {
   REGIOES,
@@ -22,12 +19,10 @@ export {
   regiaoComLado,
   LATERALIDADE_LABEL,
   type Lateralidade,
-  type RegiaoAnatomica,
 } from "./regions";
 export {
   POP_FRENTE,
   POP_COSTAS,
-  POP_REGIOES,
   popRegiaoId,
   popRegiaoLabel,
   isPopRegiao,
@@ -38,14 +33,12 @@ export {
   type PopCalibration,
 } from "./regionsPop";
 export {
-  CORPO_SCHEMA_VERSION,
   coerceCorpoDoc,
   nextMarkerNumber,
   type SicroCorpoDoc,
-  type SicroCorpoCanvas,
   type SicroLesaoMarker,
 } from "./schema";
-export { makeCorpoDoc, makeLesao, type MakeCorpoDocOptions } from "./factories";
+export { makeCorpoDoc, makeLesao } from "./factories";
 export {
   buildLegend,
   summarizeLesoes,

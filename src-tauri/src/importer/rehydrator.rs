@@ -1,13 +1,5 @@
-//! Rehydrate a workspace's Dossiê tables from the staged `.sicroapp`.
-//!
-//! Used in two scenarios:
-//!   1. A workspace was created by the Spike D importer (no MVP 3 tables);
-//!      opening the Dossiê triggers `rehydrate_workspace` automatically.
-//!   2. The user clicks "Recarregar dados do pacote" in the dossiê UI.
-//!
-//! Both paths share this function. It reads `imports/<id>/original_package.sicroapp`
-//! of the most-recent successful import, parses the relevant JSONs, and
-//! calls `dossie_mapper::persist_all` to (re)populate every table.
+//! Repopula as tabelas do Dossiê a partir do pacote copiado em
+//! `imports/<id>/original_package.sicroapp` do import mais recente.
 
 use std::path::Path;
 
@@ -23,11 +15,8 @@ use crate::workspace::manifest::Manifest;
 use super::dossie_mapper::{self, DossieLoadCounts};
 use super::package_reader::PackageReader;
 
-/// Re-extract the Dossiê tables for the given workspace.
-///
-/// Returns `Ok(outcome)` even if the workspace has no imports — the caller
-/// can decide whether absence is a problem. `outcome.rehydrated == false`
-/// means "nothing was done" (no imports / no staged package).
+/// `outcome.rehydrated == false` = nada feito (sem imports ou sem pacote
+/// copiado); não é erro.
 pub fn rehydrate_workspace(
     workspace_path: &Path,
     conn: &Connection,
@@ -35,7 +24,7 @@ pub fn rehydrate_workspace(
     let manifest = Manifest::read(workspace_path)?;
     let occurrence_id = manifest.occurrence_id;
 
-    // Pick the most recent successful import. `list_all` is ordered DESC.
+    // `list_all` vem em ordem decrescente: o primeiro é o mais recente.
     let imports = import_repo::list_all(conn)?;
     let import = match imports.into_iter().next() {
         Some(i) => i,
@@ -77,8 +66,7 @@ pub fn rehydrate_workspace(
     })
 }
 
-/// Same logic used by the orchestrator at first-import time. Pulled into
-/// its own helper so the orchestrator stays small.
+/// Mesmo caminho usado pelo orchestrator no primeiro import.
 pub fn load_from_reader(
     conn: &Connection,
     occurrence_id: Uuid,

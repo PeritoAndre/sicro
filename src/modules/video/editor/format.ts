@@ -1,4 +1,4 @@
-/** Small formatters shared by the video panels. */
+/** Formatadores e leitores de probe compartilhados pelos painéis de vídeo. */
 
 export function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
@@ -26,7 +26,7 @@ export function parseWarnings(raw: string): string[] {
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return parsed.filter((x) => typeof x === "string");
   } catch {
-    /* fall through */
+    /* não é JSON: sem avisos */
   }
   return [];
 }
@@ -41,9 +41,8 @@ function pad3(n: number): string {
 }
 
 /**
- * Índice ESTIMADO do quadro no instante `t` — mesma convenção do Rust
- * (`estimate_frame_index`: round(t × fps), contado do 0:00 da mídia), para o
- * número do player bater com o do storyboard/sidecar.
+ * Quadro estimado = round(t × fps), contado do 0:00 da mídia — mesma convenção
+ * do Rust (`estimate_frame_index`), para o player bater com o storyboard.
  */
 export function estimateFrameIndex(t: number, fps: number | null | undefined): number | null {
   if (!fps || !Number.isFinite(fps) || fps <= 0 || !Number.isFinite(t)) return null;
@@ -51,9 +50,8 @@ export function estimateFrameIndex(t: number, fps: number | null | undefined): n
 }
 
 /**
- * Instante do PRIMEIRO quadro, lido do ffprobe (start_time do stream de vídeo,
- * ou do container). Vídeos recortados podem ter um trecho vazio no início
- * (edit list) — o 1º quadro chega depois do 0:00. Sem dado → 0.
+ * Instante do 1º quadro (start_time do stream de vídeo, ou do container).
+ * Vídeo recortado pode ter trecho vazio no início (edit list). Sem dado → 0.
  */
 export function probeStartTime(rawProbeJson: string | null | undefined): number {
   if (!rawProbeJson) return 0;
@@ -72,10 +70,8 @@ export function probeStartTime(rawProbeJson: string | null | undefined): number 
 }
 
 /**
- * Lê o que o perito digitou em "ir para": tempo ou número de quadro.
- *   "12" · "12.48" · "12,48" · "1:02.5" · "01:02:03.250"  → segundos
- *   "#312" · "q312" · "quadro 312"                       → quadro (÷ fps)
- * Retorna null se não entender (ou se pedir quadro sem fps conhecido).
+ * "Ir para": tempo ("12,48", "1:02.5", "01:02:03.250") ou quadro ("#312",
+ * "q312", "quadro 312" → ÷ fps). Null se não entender ou sem fps para quadro.
  */
 export function parseTimeInput(
   input: string,
@@ -97,12 +93,9 @@ export function parseTimeInput(
   return nums.reduce((acc, n) => acc * 60 + n, 0);
 }
 
-// ---- relógio da câmera / texto para o laudo ---------------------------------
+// relógio da câmera / texto para o laudo
 
-/**
- * Lê o horário que a câmera imprime: "03:36:05", "3:36:05.5", "03:36" (s = 0),
- * "03h36m05s". Retorna segundos desde 00:00 ou null.
- */
+/** Horário impresso pela câmera ("03:36:05", "03:36", "03h36m05s") → s desde 00:00, ou null. */
 export function parseClockInput(input: string): number | null {
   const s = input.trim().toLowerCase().replace(/,/g, ".");
   const hms = /^(\d{1,2})\s*[:h]\s*(\d{1,2})(?:\s*[:m]\s*(\d{1,2}(?:\.\d+)?)\s*s?)?$/.exec(s);
@@ -136,10 +129,7 @@ export function cameraClockAt(
   return t - cal.media_time_s + cal.clock_seconds;
 }
 
-/**
- * Deslocamento para ver o MESMO instante real em duas câmeras calibradas:
- * tempo_B = tempo_A + offset.
- */
+/** Mesmo instante real em duas câmeras calibradas: tempo_B = tempo_A + offset. */
 export function clockSyncOffset(
   a: { media_time_s: number; clock_seconds: number },
   b: { media_time_s: number; clock_seconds: number },
@@ -168,9 +158,8 @@ export function probeHasAudio(rawProbeJson: string | null | undefined): boolean 
 }
 
 /**
- * Onde a trilha de áudio começa no tempo do vídeo (s). O WAV extraído começa
- * nesse ponto: tempo do WAV = tempo do vídeo − este valor. Sem trilha de
- * áudio declarada, cai no início do vídeo.
+ * Início da trilha de áudio no tempo do vídeo (s): tempo do WAV extraído =
+ * tempo do vídeo − este valor. Sem trilha declarada, cai no início do vídeo.
  */
 export function audioStreamStart(rawProbeJson: string | null | undefined): number {
   if (!rawProbeJson) return 0;

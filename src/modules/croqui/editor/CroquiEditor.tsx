@@ -1,21 +1,6 @@
 /**
- * CroquiEditor — orquestra Toolbar + Canvas + InspectorPanel + StatusBar.
- *
- * MVP 6 (Croqui Pericial):
- *   - Toolbar agrupada por domínio (Seleção / Referencial / Via /
- *     Veículos / Pessoas / Vestígios / Anotação / Imagem / Export).
- *   - Mais ferramentas (subtipos de veículo, vestígios, pessoas,
- *     R1/R2 dedicados, setas, faixas, divisões tracejadas, calçada).
- *   - Templates de via inseríveis em um clique.
- *   - Layer panel com agrupamento por categoria + ações por objeto
- *     (visibilidade, lock, renomear, mover, excluir).
- *   - Atalhos: Esc, V, H, Delete, Ctrl+Z, Ctrl+Y/Ctrl+Shift+Z,
- *     Ctrl+D, Ctrl+S.
- *   - Exportação PNG com carimbo técnico (título + escala + timestamp).
- *
- * O `.sicrocroqui` continua sendo a fonte da verdade do croqui; PNG é
- * exportação. Compatibilidade total com docs do Spike E (v0.1) —
- * `coerceCroquiDoc` aplica defaults para campos novos.
+ * Editor do croqui viário: orquestra Toolbar + CanvasStage + InspectorPanel
+ * + StatusBar. O `.sicrocroqui` é a fonte da verdade; o PNG é só exportação.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -99,37 +84,23 @@ export function CroquiEditor() {
   const stageRef = useRef<CanvasStageHandle | null>(null);
   const [canvasSize, setCanvasSize] = useState({ width: 800, height: 600 });
 
-  // MVP 9 Round 3 — dirty tracking.
-  //
-  // `lastSavedJson` is a JSON snapshot of the doc at the moment it was
-  // last saved. The doc is considered "dirty" whenever the local doc's
-  // serialized form differs from `lastSavedJson` — that's the cheapest
-  // way to detect any structural change (object added / moved / edited
-  // / removed) without instrumenting every mutation path.
+  // Dirty = JSON do doc difere do snapshot salvo; evita instrumentar
+  // cada caminho de mutação.
   const [lastSavedJson, setLastSavedJson] = useState<string | null>(null);
   const dirty = useMemo(() => {
     if (!doc || !lastSavedJson) return false;
     return JSON.stringify(doc) !== lastSavedJson;
   }, [doc, lastSavedJson]);
 
-  // MVP 9 Round 3 — unsaved-changes modal. When the user tries to
-  // navigate away while `dirty`, we stash the intended target here and
-  // present the modal; the user picks Save+leave, Discard, or Cancel.
+  // Navegação pendente enquanto o modal "salvar antes de sair?" está aberto.
   const [pendingNav, setPendingNav] = useState<null | {
-    /** Run after the user confirms (save+leave) or discards. */
     proceed: () => void;
-    /** Human-readable target — shown in the modal copy. */
+    /** Destino, para o texto do modal. */
     label?: string;
-    /**
-     * `resolve` is set when the guard was triggered via the global nav
-     * guard (ActivityRail). Resolving it tells the guard whether to
-     * proceed or stay.
-     */
+    /** Presente quando veio do nav guard global (ActivityRail). */
     resolve?: (proceed: boolean) => void;
   }>(null);
 
-  // Sync the local doc with the store when the active croqui changes
-  // — also reset `lastSavedJson` so dirty derivation starts fresh.
   useEffect(() => {
     if (activeDoc) {
       setDoc(activeDoc);
@@ -137,7 +108,6 @@ export function CroquiEditor() {
     }
   }, [activeDoc]);
 
-  // Resize observer for the central canvas column.
   useEffect(() => {
     const el = canvasRef.current;
     if (!el) return;
@@ -152,7 +122,7 @@ export function CroquiEditor() {
     return () => ro.disconnect();
   }, []);
 
-  // ----- Mutation helpers (with undo/redo bookkeeping) -----
+  // ----- Mutações (com undo/redo) -----
 
   const mutateObjects = useCallback(
     (mutator: (objs: SicroObject[]) => SicroObject[]) => {
@@ -176,11 +146,7 @@ export function CroquiEditor() {
     );
   };
 
-  /**
-   * Fase S — patch handler para objetos parity. Imutável e preserva a
-   * discriminação `kind` do objeto. Parity objects coexistem com vehicles/
-   * lines/markers/text/measurement no array `doc.objects`.
-   */
+  /** Patch de objeto parity preservando o `kind` discriminante. */
   const handleParityObjectChange = useCallback(
     (
       id: string,
@@ -188,9 +154,6 @@ export function CroquiEditor() {
     ) => {
       setDoc((prev) => {
         if (!prev) return prev;
-        // Empurra snapshot no history ANTES de mutar — assim edits de
-        // parity (largura de via, cor da marcação, raio de rotatória, etc.)
-        // ficam undoable via Ctrl+Z, mesmo padrão de `mutateObjects`.
         editor.pushHistory(prev.objects);
         const next = prev.objects.map((o) => {
           if (o.id !== id) return o;
@@ -211,10 +174,7 @@ export function CroquiEditor() {
   const handleDelete = useCallback(() => {
     const ids = editor.selectedIds;
     if (ids.length === 0) return;
-    // MVP 9 Round 5 — Del with the background selected removes it.
-    // Background sentinel sempre vem sozinho na seleção (não dá pra
-    // marquee-selecionar background), então tratamento legado fica
-    // intacto.
+    // O sentinela do fundo nunca entra no marquee, então vem sempre sozinho.
     if (ids.length === 1 && ids[0] === BACKGROUND_SELECTION_ID) {
       setDoc((prev) =>
         prev ? { ...prev, background_image: null } : prev,
@@ -222,8 +182,6 @@ export function CroquiEditor() {
       editor.setSelectedId(null);
       return;
     }
-    // Apaga TODOS os objetos cujos IDs estão na seleção. Mantém ordem
-    // dos demais.
     const idSet = new Set(ids);
     mutateObjects((objs) => objs.filter((o) => !idSet.has(o.id)));
     editor.setSelectedId(null);
@@ -243,7 +201,6 @@ export function CroquiEditor() {
     const prev = editor.popHistory();
     setDoc((d) => {
       if (!d) return d;
-      // Push current onto redo before swapping in the undone snapshot.
       editor.pushRedo(d.objects);
       return prev ? { ...d, objects: prev } : d;
     });
@@ -278,10 +235,8 @@ export function CroquiEditor() {
     [editor],
   );
 
-  // ----- View / zoom helpers (keyboard-driven; wheel zoom lives in the
-  // CanvasStage). Zoom in/out are anchored to the CENTRE of the visible
-  // canvas so the framing stays stable. Fit computes the scale + offset
-  // that centres the whole logical canvas in the available viewport. -----
+  // ----- Zoom por teclado (o da roda fica no CanvasStage) -----
+  // Ancorado no centro do canvas visível para o enquadramento não pular.
 
   const zoomAroundCenter = useCallback(
     (factor: number) => {
@@ -337,13 +292,9 @@ export function CroquiEditor() {
     });
   }, []);
 
-  // ----- Background image helpers -----
+  // ----- Imagem de fundo -----
 
-  /**
-   * Resolve a workspace-relative-or-absolute background path into a URL
-   * the browser can fetch. Mirrors what `CanvasStage.resolveAssetPath`
-   * does — duplicated here to avoid leaking that helper into the editor.
-   */
+  /** Caminho relativo ao workspace ou absoluto → URL via asset protocol do Tauri. */
   const resolveBackgroundUrl = useCallback(
     (sourcePath: string): string => {
       const looksAbsolute =
@@ -360,16 +311,8 @@ export function CroquiEditor() {
   );
 
   /**
-   * Set (or replace) the croqui background. MVP 9 Round 5:
-   *   - measures the image in the browser so we know its natural size;
-   *   - fits the image into the canvas useful area (10% margin);
-   *   - centres it;
-   *   - starts the background UNLOCKED so the user can immediately drag
-   *     / resize it. The toolbar's lock toggle locks it whenever the
-   *     perito is happy with the framing.
-   *
-   * When `extra.preMeasured` is passed (drone import path), skips the
-   * browser-side measure and uses the dimensions Rust already produced.
+   * Define o fundo: mede a imagem, encaixa na área útil (10 % de margem) e
+   * deixa destravado para ajuste. `preMeasured` (drone) pula a medição.
    */
   const setBackgroundFromPath = useCallback(
     (
@@ -413,9 +356,7 @@ export function CroquiEditor() {
               }
             : prev,
         );
-        // Auto-select the new background so the Transformer handles
-        // appear straight away — the user can drag/resize without an
-        // extra click.
+        // Já seleciona para os handles do Transformer aparecerem.
         editor.setSelectedId(BACKGROUND_SELECTION_ID);
         setFeedback(
           `Fundo aplicado (${Math.round(rect.width)}×${Math.round(rect.height)}px), centralizado e desbloqueado para ajuste.`,
@@ -425,8 +366,6 @@ export function CroquiEditor() {
         apply(extra.preMeasured.width, extra.preMeasured.height);
         return;
       }
-      // Pre-measure via an off-screen Image so fit-to-canvas has real
-      // numbers. Fall back to canvas dimensions if measurement fails.
       const url = resolveBackgroundUrl(sourcePath);
       const probe = new window.Image();
       probe.crossOrigin = "anonymous";
@@ -437,18 +376,13 @@ export function CroquiEditor() {
         apply(w, h);
       };
       probe.onerror = () => {
-        // Could not pre-measure — apply with canvas-sized placeholder so
-        // the image at least gets inserted and the user can re-frame.
+        // Sem medida, insere no tamanho do canvas para o usuário reenquadrar.
         apply(doc.canvas.width_px, doc.canvas.height_px);
       };
     },
     [doc, resolveBackgroundUrl],
   );
 
-  /**
-   * Patch the current background — used by both the Konva drag/transform
-   * pipeline and the toolbar action buttons (Center, Fit, Reset…).
-   */
   const handleBackgroundChange = useCallback(
     (patch: Partial<SicroCroquiBackgroundImage>) => {
       setDoc((prev) =>
@@ -463,7 +397,6 @@ export function CroquiEditor() {
     [],
   );
 
-  /** Centre the background on the canvas, keeping its current size. */
   const handleCenterBackground = useCallback(() => {
     if (!doc?.background_image) return;
     const bg = doc.background_image;
@@ -474,12 +407,9 @@ export function CroquiEditor() {
     setFeedback("Fundo centralizado.");
   }, [doc, handleBackgroundChange]);
 
-  /** Re-fit the background into the canvas useful area (10% margin). */
   const handleFitBackground = useCallback(() => {
     if (!doc?.background_image) return;
     const bg = doc.background_image;
-    // Use current aspect ratio (which already matches the image's), then
-    // fit into the canvas with the standard margin.
     const rect = fitImageToCanvas(
       bg.width || 1,
       bg.height || 1,
@@ -491,24 +421,16 @@ export function CroquiEditor() {
     setFeedback("Fundo ajustado à área útil.");
   }, [doc, handleBackgroundChange]);
 
-  /** Reset the background's rotation back to 0°. */
   const handleResetBackgroundRotation = useCallback(() => {
     handleBackgroundChange({ rotation: 0 });
     setFeedback("Rotação do fundo reiniciada.");
   }, [handleBackgroundChange]);
 
-  /**
-   * MVP 10 — OSM import done. Append the new RoadObjects, stamp the
-   * session into `doc.osm_imports`, mark the doc dirty. Suggested
-   * scale is recorded but NOT auto-applied: the perito has to confirm
-   * via the existing "Definir escala" tool.
-   */
+  /** Import OSM confirmado: troca as vias OSM anteriores e registra a sessão. */
   const handleOsmImportConfirm = useCallback(
     (result: OsmImportResult) => {
       if (!doc) return;
 
-      // Fase S — único motor de importação OSM é o parity.
-      // O modal devolve apenas `parity_roads` + `parity_roundabouts`.
       setDoc((prev) => {
         if (!prev) return prev;
         editor.pushHistory(prev.objects);
@@ -516,9 +438,7 @@ export function CroquiEditor() {
           ...(prev.osm_imports ?? []),
           result.session,
         ];
-        // Substituir objetos parity OSM antigos. Não toca em objetos
-        // parity criados manualmente (sem source === "osm") nem em
-        // outros kinds (vehicle/line/marker/text/measurement).
+        // Só substitui parity vindo do OSM; o criado à mão fica.
         const isOsmParity = (o: SicroObject): boolean => {
           if (o.kind !== "road_parity" && o.kind !== "roundabout_parity") {
             return false;
@@ -532,11 +452,8 @@ export function CroquiEditor() {
           }
         };
         const keptObjects = prev.objects.filter((o) => !isOsmParity(o));
-        // O adapter parity calcula coords MUNDO assumindo
-        // `pxPerM = suggested_px_per_m`. Se o doc.scale tiver outro
-        // valor, o renderer projeta com offset errado e os objetos
-        // saem do canvas. Por isso o import OSM SOBRESCREVE a escala
-        // do doc (sai um aviso na barra de feedback).
+        // O adapter assume `pxPerM = suggested_px_per_m`; com outra escala
+        // os objetos saem do canvas. Por isso o import sobrescreve a escala.
         const importedScale: SicroCroquiDoc["scale"] = result.session
           .suggested_px_per_m
           ? {
@@ -581,7 +498,6 @@ export function CroquiEditor() {
     [doc, editor],
   );
 
-  /** Remove the background entirely. */
   const handleRemoveBackground = useCallback(() => {
     setDoc((prev) =>
       prev ? { ...prev, background_image: null } : prev,
@@ -629,28 +545,22 @@ export function CroquiEditor() {
     );
   };
 
-  // ----- Canvas click dispatcher (after `doc` and helpers are defined) -----
+  // ----- Cliques no canvas -----
 
-  // Fase S — Road engine legacy v1/v2 removido. As ferramentas road_*
-  // / roundabout deixaram de existir; a única forma de criar via
-  // hoje é via OSM import ou o demo parity.
   const handleCanvasDblClick = useCallback(() => {
-    // Reservado para futuras gestures (ex.: finalizar polilinha
-    // parity). Hoje é no-op.
+    // No-op por ora.
   }, []);
 
   const handleCanvasClick = (p: SicroPoint) => {
     if (!doc) return;
     const tool = editor.tool;
 
-    // Helper: converte ponto canvas (px) → mundo (m). Coords parity
-    // são em metros — o renderer multiplica por pxPerM ao desenhar.
+    // Parity guarda metros; o renderer multiplica por pxPerM.
     const pxToM = (pt: SicroPoint): SicroPoint => {
       const pxPerM = doc.scale?.px_per_m ?? 10;
       return { x: pt.x / pxPerM, y: pt.y / pxPerM };
     };
 
-    // Rotatória parity — clique único insere centro com raio default.
     if (tool === "roundabout") {
       const pm = pxToM(p);
       const rb = makeParityRoundabout(pm.x, pm.y, 15, {
@@ -662,9 +572,7 @@ export function CroquiEditor() {
       return;
     }
 
-    // Vias parity — 2 cliques (p1 → p2). Cada tool tem preset de
-    // largura/superfície/marcação. O perito ajusta no Inspector
-    // depois.
+    // Via em dois cliques; o preset da ferramenta é ajustado depois no Inspector.
     const roadPreset = roadToolToParityPreset(tool);
     if (roadPreset) {
       if (!editor.pending) {
@@ -683,8 +591,8 @@ export function CroquiEditor() {
     const vehicleType = toolToVehicleBody(tool);
     if (vehicleType) {
       const nextLabel = nextVehicleLabel(doc.objects);
-      // Com escala definida, o veículo entra no TAMANHO REAL (arte do designer
-      // foi desenhada em 1mm=1m); sem escala, caem os presets em px.
+      // Com escala, o veículo entra em tamanho real (arte desenhada em
+      // 1 mm = 1 m); sem escala, presets em px.
       addObject(
         makeVehicle(p, nextLabel, vehicleType, doc.scale?.px_per_m ?? null),
       );
@@ -778,19 +686,10 @@ export function CroquiEditor() {
     }
   };
 
-  // ----- Keyboard shortcuts (customizáveis, escopo `croqui`) -----
-  //
-  // `useShortcuts` já ignora foco em INPUT/TEXTAREA/SELECT (mesmo guard do
-  // antigo listener manual) e só dispara as ações cujo handler é fornecido.
-  // Cada combinação é resolvida do override do usuário ?? padrão do catálogo.
-  //
-  // Os handlers referenciados que são definidos mais abaixo no corpo do
-  // componente (handleSave, handleExportPng, handleInsertInLaudo) só são
-  // LIDOS quando uma tecla dispara — nunca durante o render — então a ordem
-  // de declaração não importa (mesmo padrão do listener anterior).
+  // ----- Atalhos (escopo `croqui`) -----
+  // handleSave/handleExportPng são declarados mais abaixo: só são lidos
+  // quando a tecla dispara, nunca no render, então a ordem não importa.
   useShortcuts({
-    // Esc — limpa pending/rascunho, deseleciona e volta pra ferramenta de
-    // seleção (comportamento idêntico ao listener anterior).
     "croqui.cancel": () => {
       editor.setPending(null);
       editor.setRoadDraft(null);
@@ -857,8 +756,6 @@ export function CroquiEditor() {
     setFeedback(null);
     try {
       await saveCurrent(workspacePath, doc);
-      // The store stamps the doc with a new updated_at — capture the
-      // saved-snapshot JSON so dirty derivation starts fresh.
       setLastSavedJson(JSON.stringify(doc));
       setFeedback("Croqui salvo.");
       setTimeout(() => setFeedback(null), 2500);
@@ -871,13 +768,8 @@ export function CroquiEditor() {
     }
   };
 
-  // MVP 9 Round 3 — unsaved-changes guard glue.
-  //
-  // `tryNavigateAway` is the single entry point used by every UI affordance
-  // that takes the user out of the editor (Voltar button, Abrir Laudo,
-  // ActivityRail link). When the doc isn't dirty we just run the target
-  // immediately; when it is, we stash the target and show the modal so the
-  // user can decide.
+  // Único ponto de saída do editor: sem dirty executa direto, com dirty
+  // guarda o destino e abre o modal.
   const tryNavigateAway = useCallback(
     (target: () => void, label?: string) => {
       if (!dirty) {
@@ -889,10 +781,7 @@ export function CroquiEditor() {
     [dirty],
   );
 
-  // Register a guard with the global nav-guard store so the ActivityRail
-  // can ask permission before taking the user to another module. The
-  // guard returns a Promise that resolves true (proceed) or false (stay)
-  // depending on what the user picks in the modal.
+  // Guard global para o ActivityRail: a Promise resolve com a escolha do modal.
   useEffect(() => {
     if (!dirty) {
       unregisterNavGuard();
@@ -919,10 +808,7 @@ export function CroquiEditor() {
       await saveCurrent(workspacePath, doc);
       const rawDataUrl = stageRef.current.toPng(2);
       if (!rawDataUrl) throw new Error("toDataURL retornou null");
-      // MVP 6 + MVP 9: dois modos de PNG.
-      //   - "tecnico" → carimbo institucional (BO, escala, timestamp);
-      //   - "limpo"   → PNG cru sem carimbo, ideal para inserir no
-      //                 corpo de um laudo onde o cabeçalho já existe.
+      // "limpo" = sem carimbo, para o corpo do laudo onde o cabeçalho já existe.
       const final =
         variant === "limpo"
           ? rawDataUrl
@@ -986,11 +872,11 @@ export function CroquiEditor() {
   const handleBackToList = () =>
     tryNavigateAway(() => clearCurrent(), "a lista de croquis");
 
-  // Modal handlers ---------------------------------------------------------
+  // ----- Modal de alterações não salvas -----
   const handleModalSaveAndLeave = async () => {
     if (!pendingNav) return;
     const ok = await handleSave();
-    if (!ok) return; // stay on the editor so the user can retry
+    if (!ok) return; // fica no editor para tentar de novo
     const { proceed, resolve } = pendingNav;
     setPendingNav(null);
     proceed();
@@ -1113,13 +999,8 @@ export function CroquiEditor() {
           croquiId={activeCroqui.id}
           occurrenceId={activeCroqui.occurrence_id}
           onConfirm={(result) => {
-            // The corrected + cropped PNG becomes the croqui background.
-            // We pass the Rust-side dimensions as `preMeasured` so
-            // `setBackgroundFromPath` skips the off-screen probe and
-            // fits the image into the canvas useful area immediately.
-            // The sidecar path is carried into `background_image` so
-            // the chain of custody (lens correction + crop parameters)
-            // stays attached to the doc.
+            // O sidecar (parâmetros de lente/crop) vai junto no doc para
+            // manter a cadeia de custódia.
             setBackgroundFromPath(result.output_relative_path, {
               preMeasured: {
                 width: result.output_width,
@@ -1147,8 +1028,6 @@ export function CroquiEditor() {
               ? { lat: occurrence.latitude, lon: occurrence.longitude }
               : null
           }
-          // Fase S — `engine` prop removida. O modal agora sempre usa o
-          // Python Parity Engine; Road v2 OSM adapter foi descontinuado.
           onConfirm={handleOsmImportConfirm}
           onCancel={() => setShowOsmImport(false)}
         />
@@ -1169,7 +1048,7 @@ export function CroquiEditor() {
 }
 
 // ---------------------------------------------------------------------------
-// Tool dispatching helpers
+// Ferramenta → subtipo
 
 function toolToVehicleBody(tool: Tool): VehicleBodyType | null {
   switch (tool) {
@@ -1188,7 +1067,6 @@ function toolToVehicleBody(tool: Tool): VehicleBodyType | null {
       return "moto";
     case "vehicle_bike":
       return "bike";
-    // MVP 9
     case "vehicle_pickup":
       return "pickup";
     case "vehicle_van":
@@ -1203,7 +1081,6 @@ function toolToVehicleBody(tool: Tool): VehicleBodyType | null {
       return "caminhao_pesado";
     case "vehicle_carreta":
       return "carreta";
-    // Frota SVG do designer — civis
     case "vehicle_van_furgao":
       return "van_furgao";
     case "vehicle_micro_onibus":
@@ -1218,7 +1095,7 @@ function toolToVehicleBody(tool: Tool): VehicleBodyType | null {
       return "bike_estrada";
     case "vehicle_bike_cargueira":
       return "bike_cargueira";
-    // Frota SVG do designer — viaturas/especiais
+    // Viaturas/especiais
     case "vehicle_ambulancia":
       return "ambulancia";
     case "vehicle_taxi":
@@ -1256,7 +1133,7 @@ function toolToMarkerSubtype(tool: Tool): MarkerSubtype | null {
       return "pedestrian";
     case "marker_body":
       return "body";
-    // Pedestres em decúbito (frota SVG do designer)
+    // Pedestres em decúbito
     case "marker_pedestre_m_dorsal":
       return "pedestre_m_dorsal";
     case "marker_pedestre_m_lateral":
@@ -1269,7 +1146,7 @@ function toolToMarkerSubtype(tool: Tool): MarkerSubtype | null {
       return "pedestre_f_lateral";
     case "marker_pedestre_f_ventral":
       return "pedestre_f_ventral";
-    // MVP 9 — vestígios extras
+    // Vestígios
     case "marker_skid_curve":
       return "skid_curve";
     case "marker_sulcagem":
@@ -1280,7 +1157,7 @@ function toolToMarkerSubtype(tool: Tool): MarkerSubtype | null {
       return "impact_area";
     case "marker_rest_position":
       return "rest_position";
-    // MVP 9 — mobiliário urbano
+    // Mobiliário urbano
     case "marker_semaforo":
       return "semaforo";
     case "marker_placa_pare":
@@ -1316,7 +1193,6 @@ function toolToLineSubtype(tool: Tool): LineSubtype | null {
       return "sidewalk";
     case "line_arrow":
       return "arrow";
-    // MVP 9
     case "line_canteiro":
       return "canteiro";
     case "line_acostamento":
@@ -1330,7 +1206,7 @@ function toolToLineSubtype(tool: Tool): LineSubtype | null {
   }
 }
 
-/** Find the next "V1", "V2", … label that isn't taken yet. */
+/** Próximo rótulo "V1", "V2", … livre. */
 function nextVehicleLabel(objs: SicroObject[]): string {
   const taken = new Set<number>();
   for (const o of objs) {
@@ -1357,11 +1233,7 @@ function nextRoundaboutLabel(objs: SicroObject[]): string {
   return "Rotatória";
 }
 
-/**
- * Fase S — mapeia tool `road_*` da Toolbar para um preset de via parity
- * (largura, superfície, mão dupla, marcação). O perito refina depois
- * pelo Inspector.
- */
+/** Preset de via parity por ferramenta `road_*`; o perito refina no Inspector. */
 function roadToolToParityPreset(
   tool: Tool,
 ):
@@ -1374,7 +1246,6 @@ function roadToolToParityPreset(
   | null {
   switch (tool) {
     case "road_urban":
-      // Via urbana — 7m, mão dupla, eixo amarelo (default arterial).
       return {
         largura_m: 7,
         superficie: "asfalto",
@@ -1382,7 +1253,6 @@ function roadToolToParityPreset(
         marcacao: "amarela",
       };
     case "road_avenue":
-      // Avenida — 14m (duas pistas largas), mão dupla, eixo amarelo.
       return {
         largura_m: 14,
         superficie: "asfalto",
@@ -1390,7 +1260,6 @@ function roadToolToParityPreset(
         marcacao: "amarela",
       };
     case "road_highway":
-      // Rodovia — 12m, mão dupla, eixo amarelo.
       return {
         largura_m: 12,
         superficie: "asfalto",
@@ -1398,7 +1267,6 @@ function roadToolToParityPreset(
         marcacao: "amarela",
       };
     case "road_dirt":
-      // Estrada de terra — 5m, sem marcação central.
       return {
         largura_m: 5,
         superficie: "terra",
@@ -1406,7 +1274,6 @@ function roadToolToParityPreset(
         marcacao: "nenhuma",
       };
     case "road_parking":
-      // Acesso de estacionamento — 6m, sem marcação central.
       return {
         largura_m: 6,
         superficie: "asfalto",
@@ -1419,7 +1286,7 @@ function roadToolToParityPreset(
 }
 
 // ---------------------------------------------------------------------------
-// Status bar (bottom)
+// Barra de status
 
 function StatusBar({
   tool,
@@ -1450,8 +1317,6 @@ function StatusBar({
   feedback: string | null;
   croquiTitle: string;
 }) {
-  // MVP 9 Round 3 — show two new chips so the perito knows at a glance
-  // whether their work is safe.
   const saveLabel = saving
     ? "salvando…"
     : dirty
@@ -1506,11 +1371,7 @@ function StatusBar({
       <span style={{ color: exportColor, fontWeight: 600 }}>
         ● {exportLabel}
       </span>
-      {/* Fase S — indicador estático "Road Parity". Antes era um toggle
-          que ciclava v1 → v2 → parity → v1; v1 e v2 foram removidos (viraram
-          stubs no-op) e o único motor real agora é o Road Engine.
-          Mantemos o pill apenas para o perito ver de relance qual motor
-          está ativo. Não é clicável. */}
+      {/* Indicador estático do motor de via; não é clicável. */}
       <span
         title="Road Engine — motor de via compatível com o estilo visual do SICRO 1.0"
         style={{
@@ -1607,14 +1468,9 @@ function DossiePhotoPicker({
 }
 
 // ---------------------------------------------------------------------------
-// PNG stamping (MVP 6 — exportação técnica)
+// Carimbo técnico do PNG
 
-/**
- * Take the raw PNG data URL produced by Konva and prepend a thin
- * technical header (title · escala · timestamp · BO opcional). Runs
- * entirely off-screen via a 2D canvas; no Konva involved here. Returns
- * a new data URL.
- */
+/** Cabeçalho (título · escala · data · BO) e rodapé em canvas 2D off-screen. */
 async function stampPng(
   rawDataUrl: string,
   meta: {
@@ -1635,11 +1491,10 @@ async function stampPng(
   const ctx = canvas.getContext("2d");
   if (!ctx) return rawDataUrl;
 
-  // White background
   ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // Header band
+  // Cabeçalho
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, canvas.width, headerH);
   ctx.fillStyle = "#f8fafc";
@@ -1664,10 +1519,9 @@ async function stampPng(
   );
   ctx.textAlign = "left";
 
-  // Sketch body
   ctx.drawImage(img, 0, headerH);
 
-  // Footer band
+  // Rodapé
   ctx.fillStyle = "#1f2937";
   ctx.fillRect(0, headerH + img.height, canvas.width, footerH);
   ctx.fillStyle = "#94a3b8";

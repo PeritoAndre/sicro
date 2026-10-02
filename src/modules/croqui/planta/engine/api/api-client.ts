@@ -1,11 +1,7 @@
 /**
- * Catálogo LOCAL e OFFLINE de mobília / portas / janelas do croqui de planta.
- *
- * Substitui o `api-client` do arcada, que buscava categorias e definições de
- * porta/janela de um servidor (localhost:4133 / MongoDB). §13: tudo offline,
- * com assets ORIGINAIS (SVG top-view) bundlados pelo Vite. A assinatura das
- * funções é mantida compatível com os consumidores do motor (que faziam
- * `fetch(...).json()`).
+ * Catálogo local e offline de mobília/portas/janelas. Substitui o api-client
+ * do arcada (que buscava de um servidor); assinaturas mantidas compatíveis com
+ * o motor, que fazia `fetch(...).json()`.
  */
 
 import camaUrl from "../../assets/2d/cama.svg?url";
@@ -77,15 +73,15 @@ const WINDOW: FurnitureDef[] = [
   { _id: "janela", name: "Janela", width: 1.2, height: 0.2, imagePath: janelaUrl, zIndex: 5 },
 ];
 
-// Pessoas (vista de cima) — colocadas como mobília (move/gira/persiste/exporta).
-// Placeholders; o perito substitui a arte depois. zIndex alto p/ ficar acima.
+// Pessoas (vista de cima) entram como mobília (move/gira/persiste/exporta);
+// zIndex alto pra ficar acima.
 const PEOPLE: FurnitureDef[] = [
   { _id: "pessoa_pe", name: "Pessoa — em pé", width: 0.5, height: 0.5, imagePath: pessoaPeUrl, category: "pessoa", zIndex: 8 },
   { _id: "pessoa_caido", name: "Pessoa — caída", width: 0.5, height: 1.7, imagePath: pessoaCaidoUrl, category: "pessoa", zIndex: 8 },
   { _id: "pessoa_sentado", name: "Pessoa — sentada", width: 0.5, height: 0.6, imagePath: pessoaSentadoUrl, category: "pessoa", zIndex: 8 },
 ];
 
-/** Poses de pessoa (vista de cima) — usadas pelo botão "Pessoas" da planta. */
+/** Poses de pessoa (botão "Pessoas" da planta). */
 export function getPeople(): FurnitureDef[] {
   return PEOPLE;
 }

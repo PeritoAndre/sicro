@@ -1,8 +1,4 @@
-//! Workspace integrity checks.
-//!
-//! Spike A only verifies *structural* validity (manifest readable, DB file
-//! present). Deep integrity (hash-checking media against the manifest) is
-//! deferred to later spikes.
+//! Validação estrutural do workspace (manifesto legível, banco presente).
 
 use std::path::Path;
 

@@ -1,12 +1,5 @@
-//! G12.4 — Morfologia matemática (Dilate, Erode, Open, Close).
-//!
-//! Operações morfológicas em luminância (grayscale). Útil para:
-//!   - Limpar texto em scans (Open).
-//!   - Engrossar contornos (Dilate).
-//!   - Conectar linhas quebradas (Close).
-//!   - Remover ruído pontual (Open).
-//!
-//! Kernel é quadrado de raio `radius` (centrado no pixel).
+//! Morfologia em luminância (dilatação, erosão, abertura, fechamento) com
+//! janela quadrada de raio `radius`.
 
 use image::{Rgba, RgbaImage};
 
@@ -15,29 +8,28 @@ fn lum_u8(p: Rgba<u8>) -> u8 {
     (0.299 * p.0[0] as f32 + 0.587 * p.0[1] as f32 + 0.114 * p.0[2] as f32) as u8
 }
 
-/// Dilate — substitui cada pixel pelo MÁXIMO dos pixels na vizinhança.
+/// Máximo da vizinhança.
 pub fn dilate(img: &RgbaImage, radius: u32) -> RgbaImage {
     apply_morph(img, radius, true)
 }
 
-/// Erode — substitui cada pixel pelo MÍNIMO dos pixels na vizinhança.
+/// Mínimo da vizinhança.
 pub fn erode(img: &RgbaImage, radius: u32) -> RgbaImage {
     apply_morph(img, radius, false)
 }
 
-/// Open = Erode → Dilate. Remove pequenas projeções (ruído branco).
+/// Erosão → dilatação: remove ruído branco pontual.
 pub fn open(img: &RgbaImage, radius: u32) -> RgbaImage {
     let e = erode(img, radius);
     dilate(&e, radius)
 }
 
-/// Close = Dilate → Erode. Preenche pequenas concavidades (ruído preto).
+/// Dilatação → erosão: preenche buracos pretos pequenos.
 pub fn close(img: &RgbaImage, radius: u32) -> RgbaImage {
     let d = dilate(img, radius);
     erode(&d, radius)
 }
 
-/// Implementação base: max ou min em janela quadrada.
 fn apply_morph(img: &RgbaImage, radius: u32, dilation: bool) -> RgbaImage {
     let r = radius.max(1) as i32;
     let w = img.width() as i32;

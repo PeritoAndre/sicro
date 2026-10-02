@@ -1,6 +1,4 @@
-/**
- * Mirror of `src-tauri/src/models/evidence.rs` (MVP 4).
- */
+/** Espelha `src-tauri/src/models/evidence.rs`. */
 
 export type EvidenceSourceKind =
   | "photo"
@@ -28,7 +26,6 @@ export interface EvidenceLink {
   field_note_id: string | null;
   relative_path: string | null;
   source_hash: string | null;
-  /** JSON object preserved verbatim. */
   metadata_json: string;
   created_at: string;
 }
@@ -52,7 +49,7 @@ export interface RecordEvidenceLinkInput {
 export interface EvidenceAsset {
   relative_path: string;
   mime_type: string;
-  /** Base64-encoded bytes (no `data:` prefix). */
+  /** Sem o prefixo `data:`. */
   base64: string;
   size_bytes: number;
 }

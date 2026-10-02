@@ -1,9 +1,7 @@
 /**
- * W20 — Camada do "marquee" da seleção (estilo Photoshop). Konva Layer não-
- * interativa (listening=false): desenha a seleção confirmada (`doc.selection`)
- * e o rascunho em andamento (`draft`) com contorno tracejado animado
- * (marching ants). Coordenadas em px da imagem (mesma convenção das
- * anotações). Stroke/traço invariantes ao zoom (÷viewportScale).
+ * Camada Konva (não interativa) do marquee da seleção: seleção confirmada e
+ * rascunho em andamento com "marching ants". Coordenadas em px da imagem;
+ * traços divididos por viewportScale para não mudarem com o zoom.
  */
 import { useEffect, useState } from "react";
 import { Layer, Rect, Ellipse, Line, Circle } from "react-konva";
@@ -54,8 +52,7 @@ export function SelectionMarqueeLayer({
   const dashOffset = offset * (2 / s);
   const vtx = 4 / s; // raio dos vértices do polígono em construção
 
-  // Desenha contorno "marching ants" (linha branca sólida embaixo + ciano
-  // tracejado animado em cima) para uma forma genérica via render-prop.
+  // Contorno: linha escura sólida embaixo + ciano tracejado animado em cima.
   const antsProps = {
     stroke: ANTS,
     strokeWidth: stroke,
@@ -198,8 +195,8 @@ export function SelectionMarqueeLayer({
           ))}
         </>
       )}
-      {/* imageWidth/imageHeight reservados p/ futura visualização do "fora"
-          quando invertida; mantidos na assinatura para S2. */}
+      {/* imageWidth/imageHeight ficam na assinatura para a futura visualização
+          do "fora" da seleção invertida. */}
       {false && <Rect width={imageWidth} height={imageHeight} listening={false} />}
     </Layer>
   );

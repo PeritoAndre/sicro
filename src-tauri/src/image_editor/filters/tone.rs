@@ -1,11 +1,5 @@
-//! W12 (GIMP-parity) — Operações TONAIS por LUT (lookup table).
-//!
-//! Inspiração: ferramentas Cores → Níveis / Curvas / Posterizar do GIMP.
-//! Todas são DETERMINÍSTICAS, NÃO-destrutivas (operam num clone e entram na
-//! pilha de processamento) e auditáveis. Nada fabrica conteúdo: apenas
-//! redistribuem a tonalidade já presente (realce de visualização §13).
-//!
-//! Implementação por LUT de 256 entradas por canal — exata e barata.
+//! Operações tonais por LUT de 256 entradas: níveis, curvas, posterizar
+//! (equivalentes aos diálogos Cores do GIMP).
 
 use image::{Rgba, RgbaImage};
 
@@ -51,12 +45,8 @@ fn apply_lut(img: &RgbaImage, lut: &[u8; 256], channel: ToneChannel) -> RgbaImag
     out
 }
 
-/// **Níveis** (Levels): remapeia [in_black, in_white] → [out_black, out_white]
-/// com gama no meio. Igual ao diálogo Cores → Níveis do GIMP.
-///
-/// - `in_black`/`in_white`: ponto preto/branco de entrada (0..255).
-/// - `gamma`: > 1 clareia os meios-tons; < 1 escurece.
-/// - `out_black`/`out_white`: faixa de saída (compressão de contraste).
+/// Níveis: remapeia [in_black, in_white] → [out_black, out_white] com gama no
+/// meio (gamma > 1 clareia meios-tons). Igual ao diálogo do GIMP.
 pub fn levels(
     img: &RgbaImage,
     channel: ToneChannel,
@@ -97,10 +87,8 @@ pub fn levels_lut(
     lut
 }
 
-/// **Curvas** (Curves): LUT por interpolação linear monotônica entre pontos
-/// de controle `(x, y)` em 0..255. Determinística e previsível (sem
-/// overshoot de spline — importante pra honestidade forense). Pontos fora de
-/// ordem são ordenados; <2 pontos → identidade.
+/// Curvas: interpolação linear entre pontos de controle `(x, y)` em 0..255
+/// (sem overshoot de spline). Pontos são ordenados; < 2 pontos → identidade.
 pub fn curves(img: &RgbaImage, channel: ToneChannel, points: &[(f32, f32)]) -> RgbaImage {
     let lut = curves_lut(points);
     apply_lut(img, &lut, channel)
@@ -132,7 +120,6 @@ pub fn curves_lut(points: &[(f32, f32)]) -> [u8; 256] {
             *slot = pts[pts.len() - 1].1.round() as u8;
             continue;
         }
-        // Encontra o segmento [p0, p1] que contém x e interpola linearmente.
         let mut y = pts[pts.len() - 1].1;
         for w in pts.windows(2) {
             let (x0, y0) = w[0];
@@ -152,9 +139,7 @@ pub fn curves_lut(points: &[(f32, f32)]) -> [u8; 256] {
     lut
 }
 
-/// **Posterizar** (Posterize): reduz cada canal a `levels` níveis igualmente
-/// espaçados (2..=255). Útil pra evidenciar bandas/contornos e degradês
-/// artificiais (ex.: re-compressão, gradientes inseridos).
+/// Posterizar: reduz cada canal a `levels` níveis igualmente espaçados (2..=255).
 pub fn posterize(img: &RgbaImage, levels: u8) -> RgbaImage {
     let lut = posterize_lut(levels);
     apply_lut(img, &lut, ToneChannel::Rgb)

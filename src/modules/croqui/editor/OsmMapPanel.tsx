@@ -1,38 +1,8 @@
 /**
- * OsmMapPanel — the Leaflet map for the OSM import wizard.
- *
- * Round 4 (MVP 10) split this out of `OsmImportModal` so that:
- *
- *   1. The modal can mount and become visible WITHOUT touching
- *      Leaflet. Only when the perito clicks "Carregar mapa" does
- *      this component get rendered.
- *   2. If Leaflet crashes (any reason — missing CSS, tile server
- *      down, react-leaflet bug), the `<LazyMapBoundary>` in the
- *      parent catches it and the modal stays usable in
- *      coordinate-only mode.
- *
- * Round 3 had two infinite-loop sources that locked the WebView
- * thread on modal open:
- *
- *   - `MapInvalidator.onReady` was an inline closure created every
- *     parent render. Its identity changed each render → effect deps
- *     `[map, refreshKey, onReady]` re-fired → onReady called
- *     setState → parent re-rendered → new onReady → loop.
- *   - `TileLayer.eventHandlers` was a fresh object literal every
- *     render whose `tileload`/`tileerror` handlers called setState
- *     on every tile (dozens per second).
- *
- * This file fixes both by:
- *
- *   - storing the few diagnostic counters in **refs** (not state),
- *     so they don't trigger re-renders;
- *   - using a `useRef` for the "is map ready" boolean and updating
- *     a single `<div>` text node via `useEffect(() => …, [])`
- *     ONLY once;
- *   - giving `MapInvalidator` a stable empty-dep effect — schedule
- *     the four `invalidateSize` calls on mount and never again
- *     (a separate `refreshKey` prop wires up the "Recarregar mapa"
- *     button via a controlled remount).
+ * Mapa Leaflet do wizard OSM. Separado do modal para ele abrir sem carregar
+ * o Leaflet e para o ErrorBoundary do pai isolar falhas (modo só-coordenadas).
+ * Callbacks vão em refs e efeitos têm deps vazias: closures inline recriadas
+ * a cada render re-disparavam efeitos com setState e travavam o WebView em loop.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -50,8 +20,7 @@ import {
 import L from "leaflet";
 import type { LatLon, OsmDataset } from "../engine";
 
-// One-shot synthetic pin so we don't depend on Leaflet's PNG sprites
-// (which can 404 in Vite/Tauri builds and never render).
+// Pino em divIcon: os sprites PNG do Leaflet dão 404 em build Vite/Tauri.
 const SITE_PIN_ICON = L.divIcon({
   className: "sicro-osm-pin",
   html: `<div style="
@@ -86,13 +55,9 @@ export function OsmMapPanel({
 }: Props) {
   console.info("[OSM] OsmMapPanel mounting (Leaflet starts now)");
   const [mapReady, setMapReady] = useState(false);
-  // `refreshNonce` triggers a remount of `MapInvalidator` when the
-  // user clicks "Recarregar mapa". We use `key={nonce}` so a stale
-  // map measurement gets thrown out cleanly.
+  // "Recarregar mapa" remonta o MapInvalidator via `key`.
   const [refreshNonce, setRefreshNonce] = useState(0);
 
-  // Build the polylines lazily and only re-derive when the dataset
-  // or the selection truly changes — no per-tile re-renders.
   const wayPolylines = useMemo(() => {
     if (!dataset) return [];
     const nodeMap = new Map(dataset.nodes.map((n) => [n.id, n]));
@@ -154,11 +119,8 @@ export function OsmMapPanel({
             >
               <Popup>Centro do sinistro</Popup>
             </Marker>
-            {/* Círculo do raio — usa `Circle` (raio em METROS geográficos)
-                ao invés do `CircleMarker` (que usa pixels). Assim o
-                círculo cresce/diminui com o zoom do mapa e sempre
-                representa visualmente o raio real selecionado.
-                Hard-cap do clip de importação. */}
+            {/* `Circle` tem raio em metros geográficos (acompanha o zoom);
+                `CircleMarker` seria em pixels. */}
             <Circle
               center={[centre.lat, centre.lon]}
               radius={radius}
@@ -170,10 +132,8 @@ export function OsmMapPanel({
                 dashArray: "6 4",
               }}
             />
-            {/* Pino central pequeno (CircleMarker — pixels fixos) por
-                cima do `Circle` pra deixar a posição exata visível
-                mesmo em zoom alto, quando o `Circle` ocupa toda a
-                tela. */}
+            {/* Pino em pixels fixos: mantém o centro visível quando o
+                `Circle` ocupa a tela toda em zoom alto. */}
             <CircleMarker
               center={[centre.lat, centre.lon]}
               radius={4}
@@ -202,8 +162,6 @@ export function OsmMapPanel({
         ))}
       </MapContainer>
 
-      {/* Top-right note — emphasises that the map is for LOCATION
-          only; the final shape on the croqui comes from Road Engine. */}
       <div
         style={{
           position: "absolute",
@@ -224,7 +182,6 @@ export function OsmMapPanel({
         SICRO — o mapa OSM serve apenas para localizar e selecionar
         as vias.
       </div>
-      {/* Floating control strip — independent of Leaflet state. */}
       <div
         style={{
           position: "absolute",
@@ -299,16 +256,11 @@ export function OsmMapPanel({
 }
 
 // ---------------------------------------------------------------------------
-// Leaflet helpers — each one has an EMPTY dep array or a stable ref
-// pattern so no parent re-render can re-fire them.
+// Helpers Leaflet
 
 /**
- * Calls `invalidateSize` once when mounted (with a microtask + 50/200/500 ms
- * fallbacks). To force a re-measurement after the user clicks "Recarregar
- * mapa", remount the component by bumping its `key`.
- *
- * Uses a ref for `onReady` so the effect doesn't depend on the callback's
- * identity → no re-fire loop.
+ * `invalidateSize` na montagem (microtask + 50/200/500 ms, o container ainda
+ * pode estar sem tamanho). Para medir de novo, o pai remonta via `key`.
  */
 function MapInvalidator({ onReady }: { onReady: () => void }) {
   const map = useMap();
@@ -340,8 +292,7 @@ function MapInvalidator({ onReady }: { onReady: () => void }) {
       clearTimeout(t200);
       clearTimeout(t500);
     };
-    // Empty deps — mount-only. To force a fresh measurement,
-    // the parent remounts this via `key={refreshNonce}`.
+    // Só na montagem; `onReady` via ref para não re-disparar.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return null;
@@ -355,13 +306,9 @@ function CentreSync({
   radius: number;
 }) {
   const map = useMap();
-  // Effect re-runs quando o centro ou o raio muda — fitBounds enquadra
-  // o círculo do raio com uma pequena margem (1.4x para deixar
-  // respiração visual).
   useEffect(() => {
     if (!centre) return;
-    // Cria bounds com extensão de ~1.4x do raio em torno do centro.
-    // L.LatLng.toBounds(meters) gera um quadrado de lado 2 * meters.
+    // Enquadra o círculo com folga de 1.4×; `toBounds(m)` dá um quadrado de lado 2m.
     const padded = radius * 1.4;
     const ll = L.latLng(centre.lat, centre.lon);
     const bounds = ll.toBounds(padded * 2);

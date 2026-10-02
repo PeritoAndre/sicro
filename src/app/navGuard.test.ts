@@ -1,7 +1,3 @@
-/**
- * Global navigation guard — unit tests (MVP 9 Round 3).
- */
-
 import { describe, expect, it, beforeEach } from "vitest";
 import { useNavGuard } from "./navGuard";
 

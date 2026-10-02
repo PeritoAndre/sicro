@@ -1,26 +1,6 @@
-//! Análise de incerteza por Monte Carlo do Calculador de Velocidade.
-//!
-//! O perito raramente conhece com certeza absoluta:
-//!   - a posição em pixel de cada marca de calibração (erro de clique);
-//!   - a dimensão real do retângulo de calibração (erro de medição em
-//!     campo, em metros);
-//!   - a posição em pixel de cada quadro da trajetória do veículo;
-//!   - o instante exato de cada quadro (VFR, sincronia do reprodutor).
-//!
-//! Cada uma dessas fontes é modelada como uma Normal de média 0 e
-//! desvio padrão σ (fornecido pelo perito ou estimado em laudo). O
-//! módulo amostra `N` realizações independentes do cenário, executa todo
-//! o pipeline (homografia → projeção → regressão de velocidade) e
-//! resume a distribuição resultante da velocidade.
-//!
-//! Resultado:
-//!   - média, mediana, desvio padrão;
-//!   - percentis 2.5/5/95/97.5 (ICs aproximados 95% e 90%);
-//!   - amostras brutas para histogramação na UI.
-//!
-//! As iterações que falham (homografia singular, regressão degenerada)
-//! são descartadas e contabilizadas em `failed_iterations` — o perito
-//! pode usar isso pra detectar configurações instáveis.
+//! Monte Carlo do Calculador de Velocidade: cada fonte de erro (marcação em
+//! pixel, dimensão real, tempo do quadro) vira Normal(0, σ); N realizações do
+//! pipeline homografia → projeção → regressão dão a distribuição da velocidade.
 
 use rand::rngs::StdRng;
 use rand::SeedableRng;
@@ -42,84 +22,54 @@ pub enum MonteCarloError {
     Velocity(#[from] VelocityError),
 }
 
-/// Configuração do experimento Monte Carlo.
-///
-/// Todos os `sigma_*` são desvios padrão (σ) de uma distribuição Normal
-/// com média 0. Valores 0 desligam ruído naquela fonte. Valores
-/// negativos são tratados como 0 (sem panic).
+/// Cada `sigma_*` é o desvio de uma Normal(0, σ); 0 desliga a fonte; negativo vira 0.
 #[derive(Debug, Clone)]
 pub struct MonteCarloConfig {
-    /// 4 pontos de calibração em pixel.
     pub calibration_image_pts: [(f64, f64); 4],
-    /// 4 pontos correspondentes no mundo (metros).
+    /// Em metros.
     pub calibration_world_pts: [(f64, f64); 4],
-    /// Trajetória do alvo em pixel (≥ 3 amostras).
+    /// `>= 3` amostras, em pixel.
     pub trajectory_image_pts: Vec<(f64, f64)>,
-    /// Tempos correspondentes em segundos (mesmo tamanho de
-    /// `trajectory_image_pts`).
+    /// Em segundos, mesmo tamanho de `trajectory_image_pts`.
     pub trajectory_times: Vec<f64>,
-    /// σ de erro de marcação nos pontos de calibração (em pixels).
+    /// Pixels.
     pub sigma_calibration_px: f64,
-    /// σ de erro de medição das dimensões reais (em metros),
-    /// aplicado isotropicamente em cada coordenada de `calibration_world_pts`.
+    /// Metros, por coordenada de `calibration_world_pts`.
     pub sigma_world_m: f64,
-    /// σ de erro de marcação nos pontos da trajetória (em pixels).
+    /// Pixels.
     pub sigma_trajectory_px: f64,
-    /// σ de incerteza temporal (em segundos), por quadro.
+    /// Segundos, por quadro.
     pub sigma_time_s: f64,
-    /// Número de iterações Monte Carlo. Mínimo 10 (validado).
+    /// Mínimo 10.
     pub iterations: usize,
-    /// Seed do RNG pra reprodutibilidade. `None` usa entropia do SO.
+    /// `None` usa entropia do SO.
     pub seed: Option<u64>,
 }
 
-/// Estatísticas da distribuição da velocidade estimada pelo Monte Carlo.
+/// Distribuição da velocidade (m/s e km/h): p2.5/p97.5 = IC 95%, p5/p95 = IC 90%.
 #[derive(Debug, Clone)]
 pub struct MonteCarloResult {
-    /// Iterações que produziram velocidade finita.
     pub successful_iterations: usize,
-    /// Iterações descartadas (singularidade ou erro).
     pub failed_iterations: usize,
-    /// Média da velocidade (m/s).
     pub mean_m_per_s: f64,
-    /// Mediana (m/s).
     pub median_m_per_s: f64,
-    /// Desvio padrão (m/s).
     pub std_m_per_s: f64,
-    /// Percentil 2.5% (limite inferior do IC 95%) em m/s.
     pub p2_5_m_per_s: f64,
-    /// Percentil 5% (limite inferior do IC 90%) em m/s.
     pub p5_m_per_s: f64,
-    /// Percentil 95% (limite superior do IC 90%) em m/s.
     pub p95_m_per_s: f64,
-    /// Percentil 97.5% (limite superior do IC 95%) em m/s.
     pub p97_5_m_per_s: f64,
-    /// Conversões em km/h (= valor em m/s × 3.6).
     pub mean_km_per_h: f64,
     pub median_km_per_h: f64,
     pub p2_5_km_per_h: f64,
     pub p5_km_per_h: f64,
     pub p95_km_per_h: f64,
     pub p97_5_km_per_h: f64,
-    /// Amostras brutas da velocidade (m/s) — uma por iteração bem-sucedida.
-    /// Útil pra plot de histograma na UI.
+    /// Uma amostra (m/s) por iteração bem-sucedida, para o histograma.
     pub samples_m_per_s: Vec<f64>,
 }
 
-/// Executa o experimento Monte Carlo.
-///
-/// Para cada iteração:
-///   1. Perturba os 4 pontos de calibração (imagem) com Normal(0, σ_cal_px)
-///   2. Perturba os 4 pontos de calibração (mundo) com Normal(0, σ_world_m)
-///   3. Resolve a homografia perturbada (DLT)
-///   4. Perturba cada ponto da trajetória (imagem) com Normal(0, σ_traj_px)
-///   5. Perturba cada timestamp com Normal(0, σ_time_s)
-///   6. Projeta a trajetória para o mundo via homografia perturbada
-///   7. Calcula a velocidade por regressão
-///   8. Registra a velocidade da iteração (se finita)
-///
-/// Iterações que falham em algum passo (ex: homografia singular após
-/// perturbação) são descartadas e contadas em `failed_iterations`.
+/// Por iteração: perturba calibração (pixel + mundo) → DLT → perturba trajetória
+/// (pixel + tempo) → projeta → regressão. Iterações que falham são contadas.
 pub fn monte_carlo_velocity(
     config: &MonteCarloConfig,
 ) -> Result<MonteCarloResult, MonteCarloError> {
@@ -142,14 +92,12 @@ pub fn monte_carlo_velocity(
         ));
     }
 
-    // RNG semeado pra reprodutibilidade. Sem seed, usa entropia do SO.
     let mut rng: StdRng = match config.seed {
         Some(s) => StdRng::seed_from_u64(s),
         None => StdRng::from_entropy(),
     };
 
-    // Distribuições. Normal::new(0, σ) com σ = 0 é constante 0 (rand_distr
-    // aceita); valores negativos são saneados para 0.
+    // σ = 0 é aceito pelo rand_distr (constante 0); negativo vira 0.
     let n_cal = Normal::new(0.0, config.sigma_calibration_px.max(0.0))
         .map_err(|e| MonteCarloError::InvalidConfig(format!("sigma_calibration_px inválido: {e}")))?;
     let n_world = Normal::new(0.0, config.sigma_world_m.max(0.0))
@@ -163,7 +111,6 @@ pub fn monte_carlo_velocity(
     let mut failed = 0_usize;
 
     for _ in 0..config.iterations {
-        // 1+2. Calibração perturbada.
         let mut cal_img = config.calibration_image_pts;
         let mut cal_world = config.calibration_world_pts;
         for i in 0..4 {
@@ -173,7 +120,6 @@ pub fn monte_carlo_velocity(
             cal_world[i].1 += n_world.sample(&mut rng);
         }
 
-        // 3. Homografia perturbada.
         let h = match solve_homography_dlt(&cal_img, &cal_world) {
             Ok(h) => h,
             Err(_) => {
@@ -182,7 +128,6 @@ pub fn monte_carlo_velocity(
             }
         };
 
-        // 4+5+6. Trajetória + tempos perturbados → projeção para mundo.
         let n_pts = config.trajectory_image_pts.len();
         let mut world_pts = Vec::with_capacity(n_pts);
         let mut times = Vec::with_capacity(n_pts);
@@ -207,7 +152,6 @@ pub fn monte_carlo_velocity(
             continue;
         }
 
-        // 7. Velocidade via regressão.
         let res = match regression_velocity(&world_pts, &times) {
             Ok(r) => r,
             Err(_) => {
@@ -227,14 +171,8 @@ pub fn monte_carlo_velocity(
     summarize_samples(samples, failed, config.iterations)
 }
 
-/// Estatística bruta de uma distribuição amostral, AGNÓSTICA À UNIDADE:
-/// média/mediana/desvio + percentis 2.5/5/95/97.5 sobre as amostras cruas.
-/// É o núcleo compartilhado por velocidade (m/s → km/h, aqui) e distância (m,
-/// em `video::measure::montecarlo`), para que ambas usem exatamente a mesma
-/// matemática de resumo e a mesma regra de "todas as iterações falharam".
-///
-/// `pub(crate)` porque o módulo `measure` consome este núcleo (dependência em
-/// MÃO ÚNICA measure → speed); `speed` nunca importa `measure`.
+/// Resumo agnóstico à unidade, compartilhado por velocidade e distância
+/// (`measure` → `speed`, nunca o contrário).
 pub(crate) struct DistributionStats {
     pub(crate) successful: usize,
     pub(crate) failed: usize,
@@ -248,8 +186,7 @@ pub(crate) struct DistributionStats {
     pub(crate) samples: Vec<f64>,
 }
 
-/// Calcula a `DistributionStats` a partir das amostras finitas coletadas.
-/// Erro `AllIterationsFailed` se nenhuma iteração produziu amostra.
+/// `AllIterationsFailed` se não há amostra.
 pub(crate) fn summarize_distribution(
     samples: Vec<f64>,
     failed: usize,
@@ -281,9 +218,7 @@ pub(crate) fn summarize_distribution(
     })
 }
 
-/// Resume as amostras de velocidade (m/s) numa `MonteCarloResult`, anexando a
-/// conversão km/h. Compartilhado pelas variantes `monte_carlo_velocity*` para
-/// garantir a mesma estatística (núcleo em `summarize_distribution`).
+/// Resumo em m/s + km/h.
 fn summarize_samples(
     samples: Vec<f64>,
     failed: usize,
@@ -310,10 +245,8 @@ fn summarize_samples(
     })
 }
 
-/// Percentil por interpolação linear (método 7 do NIST / "linear"
-/// pra `numpy.percentile`).
-///
-/// `sorted` deve estar ordenado ascendente. `p` em `[0, 100]`.
+/// Percentil por interpolação linear (NIST método 7 / numpy "linear");
+/// `sorted` ascendente, `p` em [0, 100].
 fn percentile_linear(sorted: &[f64], p: f64) -> f64 {
     if sorted.is_empty() {
         return 0.0;
@@ -332,41 +265,34 @@ fn percentile_linear(sorted: &[f64], p: f64) -> f64 {
 }
 
 // ===========================================================================
-// Monte Carlo — variante para calibração por RAZÃO CRUZADA.
+// Monte Carlo — calibração por razão cruzada
 
-/// Configuração do Monte Carlo no modo razão cruzada. Diferente do modo plano,
-/// a calibração não é um quadrilátero de 4 cantos, mas `>= 3` referências
-/// **colineares** ao longo do eixo de tráfego (cada uma com sua posição real
-/// `world_m`). Por isso `solve_homography_dlt` NÃO serve aqui — re-ajustamos
-/// linha + projetividade 1D e re-levantamos a 3×3 a cada iteração.
+/// Modo razão cruzada: `>= 3` referências colineares, re-ajustadas (linha +
+/// projetividade + lift) a cada iteração. Mesmos σ do modo plano.
 #[derive(Debug, Clone)]
 pub struct MonteCarloCrossRatioConfig {
-    /// Referências colineares (pixel + posição real em metros).
+    /// Pixel + posição real (m) ao longo da linha.
     pub references: Vec<CrossRatioReference>,
-    /// Trajetória do alvo em pixel (≥ 3 amostras).
+    /// `>= 3` amostras, em pixel.
     pub trajectory_image_pts: Vec<(f64, f64)>,
-    /// Tempos correspondentes em segundos.
+    /// Em segundos.
     pub trajectory_times: Vec<f64>,
-    /// σ de marcação dos pontos de referência (em pixels).
+    /// Pixels.
     pub sigma_calibration_px: f64,
-    /// σ da posição real das referências (em metros).
+    /// Metros.
     pub sigma_world_m: f64,
-    /// σ de marcação dos pontos da trajetória (em pixels).
+    /// Pixels.
     pub sigma_trajectory_px: f64,
-    /// σ de incerteza temporal (em segundos), por quadro.
+    /// Segundos, por quadro.
     pub sigma_time_s: f64,
-    /// Número de iterações Monte Carlo. Mínimo 10.
+    /// Mínimo 10.
     pub iterations: usize,
-    /// Seed do RNG para reprodutibilidade. `None` usa entropia do SO.
+    /// `None` usa entropia do SO.
     pub seed: Option<u64>,
 }
 
-/// Executa o Monte Carlo no modo razão cruzada, espelhando
-/// `monte_carlo_velocity` mas perturbando as **referências colineares**
-/// (pixel + posição real), re-ajustando linha + projetividade 1D,
-/// re-levantando a 3×3 (`fit_cross_ratio_homography`) e reprojetando a
-/// trajetória perturbada. Mesma disciplina de semente e mesmo resumo
-/// estatístico (`summarize_samples`).
+/// Como `monte_carlo_velocity`, perturbando as referências colineares e
+/// refazendo `fit_cross_ratio_homography` a cada iteração.
 pub fn monte_carlo_velocity_cross_ratio(
     config: &MonteCarloCrossRatioConfig,
 ) -> Result<MonteCarloResult, MonteCarloError> {
@@ -412,7 +338,6 @@ pub fn monte_carlo_velocity_cross_ratio(
     let mut failed = 0_usize;
 
     for _ in 0..config.iterations {
-        // 1. Referências perturbadas (pixel + posição real).
         let perturbed: Vec<CrossRatioReference> = config
             .references
             .iter()
@@ -423,7 +348,6 @@ pub fn monte_carlo_velocity_cross_ratio(
             })
             .collect();
 
-        // 2. Re-ajuste (linha + projetividade) + lift → 3×3.
         let h = match fit_cross_ratio_homography(&perturbed) {
             Ok(h) => h,
             Err(_) => {
@@ -432,7 +356,7 @@ pub fn monte_carlo_velocity_cross_ratio(
             }
         };
 
-        // 3. Trajetória + tempos perturbados → projeção (s, 0) para o mundo.
+        // A 3×3 projeta para (s, 0): a regressão mede ao longo da linha.
         let n_pts = config.trajectory_image_pts.len();
         let mut world_pts = Vec::with_capacity(n_pts);
         let mut times = Vec::with_capacity(n_pts);
@@ -454,7 +378,6 @@ pub fn monte_carlo_velocity_cross_ratio(
             continue;
         }
 
-        // 4. Velocidade via regressão (a 3×3 já projeta para (s, 0)).
         let res = match regression_velocity(&world_pts, &times) {
             Ok(r) => r,
             Err(_) => {
@@ -477,11 +400,8 @@ pub fn monte_carlo_velocity_cross_ratio(
 mod tests {
     use super::*;
 
-    /// Cenário-base realista: calibração 100 px = 1 m (1 px/cm — escala
-    /// típica de câmera de fiscalização a 30m do local), retângulo de
-    /// referência 10×10 metros, trajetória retilínea constante.
+    /// Retângulo 10×10 m a 100 px/m, trajetória retilínea constante em y = 5 m.
     fn build_base_config(true_v: f64, n_traj: usize, dt: f64) -> MonteCarloConfig {
-        // Retângulo 10×10 m no mundo, 1000×1000 px na imagem (escala 100 px/m).
         const PX_PER_M: f64 = 100.0;
         let cal_img = [
             (0.0, 0.0),
@@ -491,7 +411,6 @@ mod tests {
         ];
         let cal_world = [(0.0, 0.0), (10.0, 0.0), (10.0, 10.0), (0.0, 10.0)];
 
-        // Veículo no meio da pista (y=5m = 500 px), movendo-se em X.
         let trajectory_image_pts: Vec<(f64, f64)> = (0..n_traj)
             .map(|i| (i as f64 * true_v * dt * PX_PER_M, 5.0 * PX_PER_M))
             .collect();
@@ -511,8 +430,6 @@ mod tests {
         }
     }
 
-    /// Com `sigma = 0` em todas as fontes, todas as iterações produzem
-    /// exatamente a mesma velocidade.
     #[test]
     fn no_noise_is_deterministic() {
         let true_v = 10.0;
@@ -524,12 +441,9 @@ mod tests {
         assert!(r.std_m_per_s < 1e-9, "std = {}", r.std_m_per_s);
         assert!((r.p2_5_m_per_s - true_v).abs() < 1e-9);
         assert!((r.p97_5_m_per_s - true_v).abs() < 1e-9);
-        // Conversão km/h consistente.
         assert!((r.mean_km_per_h - true_v * 3.6).abs() < 1e-9);
     }
 
-    /// Cenário com ruído moderado: o IC 95% (p2.5 .. p97.5) deve conter
-    /// a velocidade verdadeira, e a média deve estar próxima dela.
     #[test]
     fn ci95_contains_true_velocity_under_noise() {
         let true_v = 25.0; // m/s = 90 km/h
@@ -547,27 +461,23 @@ mod tests {
             r.successful_iterations,
             r.failed_iterations
         );
-        // Média próxima do verdadeiro (tolerância ampla — depende do σ).
         assert!(
             (r.mean_m_per_s - true_v).abs() < 1.0,
             "mean = {}, true = {}",
             r.mean_m_per_s,
             true_v
         );
-        // IC 95% contém o verdadeiro.
         assert!(
             r.p2_5_m_per_s <= true_v && true_v <= r.p97_5_m_per_s,
             "true_v = {true_v} fora de IC95 ({}, {})",
             r.p2_5_m_per_s,
             r.p97_5_m_per_s,
         );
-        // IC 90% também (sanity: deve ser subconjunto de IC 95%).
+        // IC 90% dentro do IC 95%.
         assert!(r.p5_m_per_s >= r.p2_5_m_per_s);
         assert!(r.p95_m_per_s <= r.p97_5_m_per_s);
     }
 
-    /// Reprodutibilidade: mesma seed deve gerar exatamente as mesmas
-    /// amostras (até precisão de ponto flutuante).
     #[test]
     fn same_seed_produces_same_samples() {
         let true_v = 15.0;
@@ -586,7 +496,6 @@ mod tests {
         }
     }
 
-    /// Sementes diferentes devem gerar amostras diferentes (sanity).
     #[test]
     fn different_seeds_produce_different_samples() {
         let true_v = 15.0;
@@ -599,8 +508,6 @@ mod tests {
         cfg.seed = Some(2);
         let r2 = monte_carlo_velocity(&cfg).unwrap();
 
-        // Improvável que duas seeds resultem em médias idênticas com 100
-        // amostras ruidosas. Diferença deve ser detectável.
         assert!((r1.mean_m_per_s - r2.mean_m_per_s).abs() > 1e-9);
     }
 
@@ -627,7 +534,7 @@ mod tests {
     #[test]
     fn rejects_dimension_mismatch() {
         let mut cfg = build_base_config(10.0, 5, 0.1);
-        cfg.trajectory_times.pop(); // tamanhos divergentes agora
+        cfg.trajectory_times.pop();
         cfg.iterations = 100;
         assert!(matches!(
             monte_carlo_velocity(&cfg),
@@ -635,8 +542,6 @@ mod tests {
         ));
     }
 
-    /// Aumentar `sigma_trajectory_px` deve aumentar a largura do IC 95%.
-    /// Sanity: o experimento responde monotonicamente ao ruído de entrada.
     #[test]
     fn larger_noise_yields_wider_ci() {
         let true_v = 20.0;

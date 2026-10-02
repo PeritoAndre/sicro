@@ -1,11 +1,6 @@
 /**
- * croquiStore — unit tests for the dirty/export tracking added in
- * MVP 9 Round 3 (Croqui Avançado corrections).
- *
- * The store talks to the Rust backend via `@core/commands`, which is
- * not available under vitest/jsdom. So instead of exercising the
- * async loaders, these tests poke the store's setState directly and
- * verify the pure derivations (`isExportStale`).
+ * Testes de `isExportStale`. `@core/commands` não existe no vitest/jsdom,
+ * então o estado é injetado por `setState` em vez dos loaders async.
  */
 
 import { describe, expect, it, beforeEach } from "vitest";
@@ -29,7 +24,6 @@ function makeCroqui(id: string, updated_at: string): Croqui {
 
 describe("croquiStore.isExportStale", () => {
   beforeEach(() => {
-    // Reset store to a known state before each test.
     useCroquiStore.setState({
       list: [],
       lastExportedAt: {},

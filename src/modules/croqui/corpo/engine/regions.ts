@@ -1,26 +1,20 @@
 /**
- * Nômina anatômica NUMERADA — subdivisões do corpo (anterior e posterior),
- * com numeração por face (igual aos formulários de croqui de morte violenta) e
- * a posição (x,y) de cada número na prancha COMBINADA (viewBox 820×700,
- * vide bodyTemplates).
- *
- * §13 / direito autoral: a nomenclatura é anatômica padrão (fatos), a numeração
- * e o posicionamento são ORIGINAIS do SICRO — não reproduzem nenhum formulário
- * específico. O perito escolhe a região; o sistema não infere.
+ * Nômina anatômica numerada da 1ª geração (prancha combinada 820×700), mantida
+ * só pra resolver ids de docs antigos. Numeração e posições são originais do
+ * SICRO (não reproduzem formulário algum); o perito escolhe a região.
  */
 
 import { popRegiaoLabel } from "./regionsPop";
 
 export type Lateralidade = "D" | "E" | "central";
-export type RegiaoSide = "ant" | "post";
+type RegiaoSide = "ant" | "post";
 
-export interface RegiaoAnatomica {
+interface RegiaoAnatomica {
   id: string;
   /** Número exibido na prancha e na legenda (por face). */
   n: number;
   side: RegiaoSide;
   label: string;
-  /** Agrupador pro dropdown. */
   grupo: string;
   /** Posição do número na prancha combinada (coords absolutas do viewBox). */
   x: number;
@@ -81,8 +75,6 @@ const POSTERIOR: RegiaoAnatomica[] = [
   { id: "pe_post", n: 19, side: "post", label: "Calcâneo / pé", grupo: "Membro inferior", x: 408, y: 626 },
 ];
 
-export const REGIOES_ANTERIOR = ANTERIOR;
-export const REGIOES_POSTERIOR = POSTERIOR;
 export const REGIOES: RegiaoAnatomica[] = [...ANTERIOR, ...POSTERIOR];
 
 const REGIAO_INDEX: Record<string, RegiaoAnatomica> = REGIOES.reduce(
@@ -95,9 +87,8 @@ const REGIAO_INDEX: Record<string, RegiaoAnatomica> = REGIOES.reduce(
 
 export function regiaoLabel(id?: string | null): string {
   if (!id) return "";
-  // Regiões NOVAS (nômina do POP, ids "pop_frente_N"/"pop_costas_N") têm
-  // prioridade; ids legados (1ª geração) continuam resolvendo pelo índice
-  // antigo — docs salvos antes da reformulação seguem legíveis.
+  // Ids do POP ("pop_frente_N") têm prioridade; ids legados ainda resolvem pelo
+  // índice antigo pra docs salvos antes da reformulação seguirem legíveis.
   return popRegiaoLabel(id) ?? REGIAO_INDEX[id]?.label ?? id;
 }
 

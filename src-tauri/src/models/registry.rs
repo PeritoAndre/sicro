@@ -1,27 +1,13 @@
-//! Evidence Registry models (MVP 5).
-//!
-//! The registry is a *consolidated read* over the existing tables — we do
-//! NOT migrate everyone into a single table. Instead, the aggregator (in
-//! `crate::registry`) walks each module's repository and projects rows
-//! into `EvidenceRegistryItem` so the frontend gets one uniform list.
-//!
-//! Two read paths cross the Tauri boundary:
-//!   - `EvidenceRegistryItem` — one entry per piece of evidence /
-//!     derivative / artefact owned by the workspace.
-//!   - `WorkspaceIntegrityReport` — outcome of a verification pass.
-//!
-//! These models intentionally keep snake_case for serde so the
-//! TypeScript mirror reads straight off the wire.
+//! Modelos do Registro de Evidências: projeção consolidada das tabelas de cada
+//! módulo (nada é migrado para uma tabela única). Espelhados em
+//! `src/types/evidence_registry.ts` — mudar nos dois.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Top-level discriminator for the evidence registry.
-///
-/// The string form is stable — it shows up in the integrity report and
-/// can be filtered on by the UI. New kinds may be added in future MVPs,
-/// but old ones must not be renamed.
+/// A forma string é estável (vai para o relatório e para filtros da UI):
+/// nunca renomear um valor antigo.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum EvidenceKind {
@@ -34,12 +20,9 @@ pub enum EvidenceKind {
     Laudo,
     LaudoExport,
     ImportedPackage,
-    // MVP 7 — Editor de Imagem Pericial
     ImageAnalysis,
     ImageExport,
-    // Módulo Áudio
     Audio,
-    // Documentoscopia — documento importado (.pdf/imagem)
     Document,
     Other,
 }
@@ -65,12 +48,8 @@ impl EvidenceKind {
     }
 }
 
-/// Outcome of the lightweight integrity check for a single item.
-///
-/// The deep check (hash verification) overlays additional states
-/// (`HashMismatch`, `MissingSidecar`). Items that don't carry a
-/// `relative_path` at all surface as `Unknown` so the UI can show them
-/// without a misleading green/red marker.
+/// Veredito de integridade de um item. Sem `relative_path` o item fica
+/// `Unknown`, para a UI não mostrar verde/vermelho enganoso.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum IntegrityStatus {
@@ -101,25 +80,20 @@ impl IntegrityStatus {
     }
 }
 
-/// One row of the consolidated registry. Each piece of evidence in a
-/// workspace projects into exactly one of these.
+/// Uma linha do registro consolidado.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EvidenceRegistryItem {
-    /// Stable, but synthesised — composed as "<kind>:<source-id>". Not
-    /// the underlying repo row id by itself, to avoid collisions across
-    /// kinds.
+    /// Sintético: "<kind>:<id-da-origem>", para não colidir entre kinds.
     pub id: String,
     pub occurrence_id: Uuid,
     pub kind: EvidenceKind,
-    /// Free-form subtype (e.g. `image/png`, `image/jpeg`, `mp4`, etc.).
+    /// Ex.: `image/png`, `mp4`.
     pub subtype: Option<String>,
     pub title: Option<String>,
     pub description: Option<String>,
-    /// Originating module name (`importer`, `croqui`, `video`, `laudo`,
-    /// `dossie`, …) — purely for display / filtering.
+    /// Módulo de origem (`importer`, `croqui`, `video`…) — só exibição/filtro.
     pub source_module: String,
-    /// Original identifier on the mobile side (for items that came from
-    /// the importer) or another stable upstream id when available.
+    /// Id no mobile (itens importados) ou outro id estável de origem.
     pub original_id: Option<String>,
     pub relative_path: Option<String>,
     pub sidecar_relative_path: Option<String>,
@@ -132,12 +106,11 @@ pub struct EvidenceRegistryItem {
     pub integrity_status: IntegrityStatus,
     pub integrity_detail: Option<String>,
     pub linked_laudos_count: u32,
-    /// JSON object preserved verbatim for the UI ("Ver metadados…").
+    /// JSON preservado como veio ("Ver metadados…").
     pub metadata_json: String,
 }
 
-/// Counts surfaced on the "Resumo" tab. Numbers are kept conservative
-/// (u32) — workspaces with 4-billion-something items are out of scope.
+/// Contadores da aba "Resumo".
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct RegistrySummary {
     pub photos: u32,
@@ -149,7 +122,6 @@ pub struct RegistrySummary {
     pub laudos: u32,
     pub laudo_exports: u32,
     pub imported_packages: u32,
-    // MVP 7
     pub image_analyses: u32,
     pub image_exports: u32,
     pub total_items: u32,
@@ -160,7 +132,7 @@ pub struct RegistrySummary {
     pub unsafe_paths: u32,
     pub broken_links: u32,
     pub hash_mismatches: u32,
-    /// Aggregate health: `ok` | `warning` | `critical`.
+    /// `ok` | `warning` | `critical`.
     pub overall_status: String,
 }
 
@@ -176,7 +148,7 @@ impl RegistrySummary {
     }
 }
 
-/// A broken reference inside a `.sicrodoc`.
+/// Referência quebrada dentro de um `.sicrodoc`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BrokenLaudoLink {
     pub laudo_id: Uuid,
@@ -188,8 +160,7 @@ pub struct BrokenLaudoLink {
     pub detail: Option<String>,
 }
 
-/// Top-level integrity report — used both for the "Integridade" tab
-/// and the persisted HTML report.
+/// Relatório de integridade — aba "Integridade" e HTML persistido.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WorkspaceIntegrityReport {
     pub occurrence_id: Uuid,
@@ -200,27 +171,25 @@ pub struct WorkspaceIntegrityReport {
     pub items: Vec<EvidenceRegistryItem>,
     pub broken_laudo_links: Vec<BrokenLaudoLink>,
     pub warnings: Vec<String>,
-    /// `false` when the perito asked only for the lightweight check.
+    /// `false` quando o perito pediu só a verificação leve.
     pub deep_check_executed: bool,
 }
 
-/// Saved report descriptor returned by `generate_workspace_integrity_report`.
+/// Relatório salvo, devolvido por `generate_workspace_integrity_report`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntegrityReportArtifact {
-    /// Workspace-relative path (e.g.
-    /// `reports/workspace_integrity_20260525_143012.html`).
+    /// Relativo ao workspace (`reports/workspace_integrity_<TS>.html`).
     pub relative_path: String,
     pub generated_at: DateTime<Utc>,
     pub overall_status: String,
     pub item_count: u32,
 }
 
-/// Options for `verify_workspace_integrity`.
+/// Opções de `verify_workspace_integrity`.
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct VerifyOptions {
-    /// When `true` the verifier recomputes SHA-256 for every item that
-    /// has a stored hash and is otherwise OK. Heavy; reserved for the
-    /// "Verificação profunda" button.
+    /// Recalcula SHA-256 de todo item com hash guardado. Pesado — botão
+    /// "Verificação profunda".
     #[serde(default)]
     pub deep: bool,
 }

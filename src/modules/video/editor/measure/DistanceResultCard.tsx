@@ -1,11 +1,7 @@
 /**
- * DistanceResultCard — apresenta UMA medição de distância como ESTIMATIVA.
- *
- * Distância de 2 pontos NÃO tem intervalo de confiança de regressão: a única
- * fonte de incerteza é o Monte Carlo. Sem σ informado, o card mostra só a
- * distância pontual e deixa EXPLÍCITO que não há intervalo (não esconde a
- * ausência de incerteza). As ressalvas vêm em destaque, e o enquadramento é
- * sempre "auxílio de medição — a conclusão é do perito".
+ * Card de uma medição de distância (estimativa). Distância de 2 pontos não tem
+ * IC de regressão: a única incerteza é o Monte Carlo; sem σ, mostra só a
+ * distância pontual e deixa explícito que não há intervalo.
  */
 
 import type { VideoDistanceMeasurement } from "@domain/video_distance";

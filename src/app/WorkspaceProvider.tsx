@@ -1,10 +1,4 @@
-/**
- * WorkspaceProvider — bootstraps global state on app mount.
- *
- * Owns no JSX of its own beyond `{children}`. It just kicks off the initial
- * recents load. Future cross-cutting concerns (event listeners for Tauri
- * window focus, save indicators, etc.) live here.
- */
+/** Dispara a carga inicial dos recentes no mount. */
 
 import { useEffect, type ReactNode } from "react";
 import { useWorkspaceStore } from "@stores/workspaceStore";

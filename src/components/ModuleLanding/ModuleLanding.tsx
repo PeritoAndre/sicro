@@ -1,13 +1,4 @@
-/**
- * ModuleLanding — tela inicial padrão dos módulos (padrão "ouro" extraído da
- * Documentoscopia). Herói centralizado: ícone grande + título + subtítulo +
- * ações primárias, uma grade de cards explicando as capacidades, e um rodapé
- * com a nota metodológica (§13 — apoio técnico, decisão humana).
- *
- * Usada por Laudo, Croqui, Vídeo, Áudio e Imagem para uniformizar a entrada
- * de cada módulo. `children` (opcional) entra entre os cards e o rodapé —
- * útil para listar itens já existentes logo abaixo do herói.
- */
+/** Tela inicial padrão dos módulos: herói + cards de capacidades + nota de rodapé. */
 import type { ReactNode } from "react";
 import styles from "./ModuleLanding.module.css";
 
@@ -18,17 +9,16 @@ export interface ModuleLandingFeature {
 }
 
 interface Props {
-  /** Ícone grande do herói (ex.: lucide com size ~44, strokeWidth 1.2). */
+  /** Ícone grande (lucide size ~44, strokeWidth 1.2). */
   icon: ReactNode;
   title: string;
   subtitle: string;
-  /** Botões de ação primária (ex.: Importar / Nova análise). */
   actions?: ReactNode;
   /** Cards de capacidades (3–6). */
   features?: ModuleLandingFeature[];
-  /** Nota metodológica do rodapé (§13). */
+  /** Nota metodológica do rodapé. */
   note?: string;
-  /** Conteúdo extra (ex.: lista de itens existentes) entre cards e rodapé. */
+  /** Entra entre os cards e o rodapé. */
   children?: ReactNode;
 }
 

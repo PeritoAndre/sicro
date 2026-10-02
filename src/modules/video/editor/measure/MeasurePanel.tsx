@@ -1,16 +1,8 @@
 /**
- * MeasurePanel — aba "Medições" do editor de vídeo (distância por fotogrametria).
- *
- * Princípio de arquitetura: esta aba NÃO cria um conceito próprio de
- * calibração. Ela COMPARTILHA a calibração da aba Velocidade (a geometria da
- * cena, uma só) — seleciona uma já existente ou cria uma nova reusando o mesmo
- * `CalibrationControls`. Cada medição referencia a `calibration_id` escolhida.
- *
- * Fluxo em 2 passos sobre FRAMES COLETADOS:
- *   1. Calibração: escolha uma existente OU crie uma nova.
- *   2. Medição: marque EXATAMENTE 2 pontos (extremidades), SOBRE o plano
- *      calibrado / contato com o solo (paralaxe). Informe σ se quiser intervalo
- *      de incerteza — sem σ, sai só a distância pontual (KNOWN_LIMITATIONS §13).
+ * Aba "Medições" (distância por fotogrametria). Não tem calibração própria:
+ * compartilha a da aba Velocidade (uma geometria por cena) e reusa o
+ * `CalibrationControls`; cada medição referencia a `calibration_id` escolhida.
+ * Dois pontos num frame coletado; sem σ, sai só a distância pontual.
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -84,12 +76,11 @@ export function MeasurePanel({ workspacePath, media, frames, author }: Props) {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Carrega medições + (re)carrega as calibrações compartilhadas da mídia.
   useEffect(() => {
     void loadDistanceData(workspacePath, media.sha256);
   }, [workspacePath, media.sha256, loadDistanceData]);
 
-  // Seleciona a calibração mais recente e pula para a medição.
+  // Calibração mais recente já selecionada: pula para a medição.
   useEffect(() => {
     if (selectedCalibrationId === null && speedCalibrations.length > 0) {
       setSelectedCalibrationId(speedCalibrations[0]!.id);
@@ -243,8 +234,8 @@ export function MeasurePanel({ workspacePath, media, frames, author }: Props) {
       setError("Marque exatamente 2 pontos (as duas extremidades da distância).");
       return;
     }
-    // σ: o MC só roda se o perito informar ≥1 incerteza > 0. Sem σ, o backend
-    // pula o MC e sai só a distância pontual — a UI não esconde isso.
+    // O Monte Carlo só roda se o perito informar ≥1 incerteza > 0; sem σ, o
+    // backend pula o MC e sai só a distância pontual.
     const sCal = parseNum(sigmaCalPx);
     const sWorld = parseNum(sigmaWorldM);
     const sMeas = parseNum(sigmaMeasurePx);
@@ -526,7 +517,6 @@ export function MeasurePanel({ workspacePath, media, frames, author }: Props) {
   );
 }
 
-// ===========================================================================
 // Controles da medição (frame + σ + calcular)
 
 function MeasureControls(props: {
@@ -676,7 +666,6 @@ function MeasureControls(props: {
   );
 }
 
-// ===========================================================================
 // helpers
 
 function calMethodLabel(method: string): string {

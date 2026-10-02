@@ -1,8 +1,8 @@
 // @ts-nocheck -- ponte com o motor Pixi vendido (arcada); tipos isolados aqui.
 /**
- * Montagem/desmontagem do motor de planta (Pixi + Main/Viewport do arcada) e
- * ponte de persistência (FloorPlan.save/load). Mantido fora do PlantaEditor
- * (que é tipado) pra concentrar aqui o atrito de tipos do Pixi 6 + motor vendido.
+ * Montagem/desmontagem do motor de planta (Pixi + Main do arcada) e ponte de
+ * persistência. Fica fora do PlantaEditor (tipado) pra concentrar aqui o
+ * atrito de tipos do Pixi 6 + motor vendido.
  */
 import { Application } from "pixi.js";
 import { Main } from "./editor/editor/Main";
@@ -32,9 +32,8 @@ export function mountPlanta(host) {
   app.view.id = "planta-pixi-canvas"; // o Label usa pra posicionar o input da cota
   host.appendChild(app.view);
 
-  // Falha ALTO em vez de entregar `undefined` ao pixi-viewport (que viraria
-  // um canvas em branco silencioso): se o contexto WebGL não inicializou no
-  // WebView2, o plugin de interação não existe.
+  // Falha alto em vez de entregar `undefined` ao pixi-viewport (canvas em
+  // branco silencioso): sem WebGL no WebView2 o plugin de interação não existe.
   const interaction = app.renderer.plugins?.interaction;
   if (!interaction) {
     app.destroy(true, true);
@@ -53,10 +52,9 @@ export function mountPlanta(host) {
   setMain(main); // expõe pro motor (Floor/ViewportCoordinates)
   app.stage.addChild(main);
 
-  // Pixi 6 `resizeTo` só escuta o 'resize' do window, NÃO mudanças de tamanho
-  // do elemento. Quando o layout flex assenta (painel mais largo que no mount),
-  // o canvas ficava pequeno e a área restante do host não era canvas (logo,
-  // não-editável). Observamos o host e redimensionamos renderer + viewport.
+  // Pixi 6 `resizeTo` só escuta o 'resize' do window, não do elemento: quando o
+  // layout flex assenta, o canvas ficava menor que o host. Observa o host e
+  // redimensiona renderer + viewport.
   const resizeBoth = () => {
     const w = host.clientWidth;
     const h = host.clientHeight;
@@ -106,21 +104,18 @@ export function restoreFloorplan(snapshot) {
   if (!snapshot) return;
   try {
     FloorPlan.Instance.load(snapshot);
-    // O load recria os objetos; a TransformLayer (caixa de seleção) ainda
-    // apontava pro objeto antigo, deixando os handles "presos". Desseleciona.
+    // O load recria os objetos: a TransformLayer apontaria pro objeto antigo
+    // (handles presos) e o previousNode da parede em andamento pra um nó
+    // recriado (parede fantasma no próximo clique).
     TransformLayer.Instance?.deselect?.();
-    // Zera a sequência de parede em andamento — o previousNode apontaria pra um
-    // nó recriado (referência velha) e geraria parede fantasma no próximo clique.
     AddWallManager.Instance?.unset?.();
   } catch {
     /* snapshot inválido — ignora */
   }
 }
 
-/**
- * true se há uma parede em andamento com só o 1º clique (nó solto, sem parede).
- * O histórico de undo NÃO deve registrar esse estado transitório.
- */
+/** true se há parede em andamento com só o 1º clique (nó solto); o undo não
+ *  deve registrar esse estado transitório. */
 export function wallChainPending() {
   try {
     return !!AddWallManager.Instance?.isPendingLoneNode?.();
@@ -139,8 +134,7 @@ export function cancelWallChain() {
 }
 
 // ---------------------------------------------------------------------------
-// Estilo ("skin") por parede: muro / cerca / calçada. Persistido pelo SICRO em
-// doc.wallStyles (mapa por par-de-nós). O Wall.drawLine lê o wallStyleMap.
+// Estilo ("skin") por parede: persistido em doc.wallStyles; Wall.drawLine lê o mapa.
 
 function distSeg(px, py, x1, y1, x2, y2) {
   const dx = x2 - x1;
@@ -176,12 +170,9 @@ export function setWallStyle(key, kind) {
   }
 }
 
-/**
- * Mostra/esconde TODOS os nós de parede (os "pontos pretos"). Eles são handles
- * de edição (ligação/rotação): visíveis só ao editar; escondidos no Navegar e no
- * export. visible=false também desliga o hit-test — OK, pois só escondemos em
- * modos read-only.
- */
+/** Mostra/esconde os nós de parede (handles de edição): visíveis só ao editar.
+ *  visible=false também desliga o hit-test, ok porque só escondemos em modos
+ *  read-only. */
 export function setNodesVisible(visible) {
   try {
     const nodes = FloorPlan.Instance.getWallNodeSeq().getWallNodes();
@@ -268,27 +259,21 @@ export function pickWallAt(wx, wy) {
   }
 }
 
-/**
- * Troca de andar/piso. `by` = +1 sobe (cria o piso se não existir), -1 desce.
- * Descer abaixo do térreo (0) é ignorado. O índice do piso atual é refletido
- * em useStore().floor pelo próprio FloorPlan.
- */
+/** Troca de piso: +1 sobe (cria se não existir), -1 desce; abaixo do térreo é
+ *  ignorado. O FloorPlan reflete o índice em useStore().floor. */
 export function changeFloor(by) {
   const fp = FloorPlan.Instance;
   if (by < 0 && (fp.CurrentFloor ?? 0) <= 0) return;
   fp.changeFloor(by);
 }
 
-/**
- * Captura a planta como PNG (data URL) enquadrando o CONTEÚDO desenhado
- * (paredes/mobília/vestígios) com margem, fundo branco, independente do
- * zoom/pan atual (restaura a vista ao final). Retorna também `imgPxPerM`
- * (px/metro na imagem) pra barra de escala exata na prancha.
- */
+/** Captura a planta como PNG enquadrando o conteúdo desenhado, fundo branco,
+ *  independente do zoom/pan (restaura a vista ao final). Retorna também
+ *  `imgPxPerM` pra barra de escala exata na prancha. */
 export function capturePlantaDataUrl(app) {
   if (!main || !app) return null;
 
-  // bounds do conteúdo (mundo): floorplan (paredes/mobília) ∪ vestígios.
+  // bounds do conteúdo (mundo): floorplan ∪ camadas periciais
   const fp = FloorPlan.Instance;
   let fpB = null;
   try {
@@ -331,7 +316,7 @@ export function capturePlantaDataUrl(app) {
   const savedPosX = main.position.x;
   const savedPosY = main.position.y;
   const savedBg = app.renderer.backgroundColor;
-  // Esconde os nós (handles) na prancha — não devem sair no PNG técnico.
+  // Nós (handles) não saem no PNG técnico.
   let savedNodes = [];
   try {
     savedNodes = Array.from(
@@ -368,13 +353,12 @@ export function capturePlantaDataUrl(app) {
 }
 
 /** Zoom multiplicativo mantendo o centro (clampado por clampZoom no Main). */
-export function zoomBy(factor) {
+function zoomBy(factor) {
   if (!main) return;
-  main.pause = false; // garante viewport ativo (despausa qualquer estado preso)
+  main.pause = false; // despausa qualquer estado preso do viewport
   main.setZoom(main.scale.x * factor, true);
 }
 
-/** Zoom in / out / 100% — wrappers usados pelos botões da UI. */
 export const zoomIn = () => zoomBy(1.25);
 export const zoomOut = () => zoomBy(0.8);
 export function zoomReset() {

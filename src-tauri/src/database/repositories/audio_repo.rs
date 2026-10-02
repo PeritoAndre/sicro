@@ -1,4 +1,4 @@
-//! Repositório do módulo Áudio (Camada 1) — espelha `video_repo`.
+//! Repositório do módulo Áudio.
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension, Row};
@@ -248,8 +248,7 @@ pub fn list_segments(
     Ok(rows)
 }
 
-/// Substitui TODA a degravação de um áudio pelos segmentos informados
-/// (transação: apaga os existentes e insere os novos). Ids são gerados aqui.
+/// Substitui toda a degravação do áudio (transação: apaga e insere). Ids gerados aqui.
 pub fn replace_segments(
     conn: &mut Connection,
     occurrence_id: &Uuid,
@@ -289,8 +288,7 @@ pub fn replace_segments(
 // ---------------------------------------------------------------------------
 // audio_diarizations (separação de locutores — uma por áudio)
 
-/// Grava a separação de locutores do áudio (substitui a anterior; os nomes
-/// dados pelo perito são mantidos).
+/// Substitui a separação anterior; os nomes dados pelo perito são mantidos.
 pub fn replace_diarization(
     conn: &Connection,
     occurrence_id: &Uuid,

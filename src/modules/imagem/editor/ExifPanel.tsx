@@ -1,10 +1,6 @@
 /**
- * ExifPanel — exibe metadados EXIF da imagem.
- *
- * G12.13 — Lê o `exif_json` retornado pelo backend (via
- * `get_image_metadata` com compute_hash=true). Mostra resumo bonito
- * (data/câmera/GPS/ISO/exposição) + tabela completa colapsável com
- * todas as tags raw.
+ * Painel de metadados EXIF: resumo (data/câmera/GPS/exposição) + tabela
+ * completa colapsável, a partir do `exif_json` do backend.
  */
 
 import { useEffect, useMemo, useState } from "react";

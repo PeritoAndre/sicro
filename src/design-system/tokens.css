@@ -1,15 +1,6 @@
 /*
- * SICRO 2.0 — Design System tokens
- * Fonte: docs/03 Sicro 2 Design System.pdf, seção 31.
- *
- * Convenções:
- *   --sicro-*    : superfície/UI escura do shell.
- *   --doc-*      : superfície clara, usada no módulo Laudo.
- *   --font-*     : famílias tipográficas.
- *   --space-*    : escala de espaçamento (base 4px).
- *   --radius-*   : escala de raios.
- *   --text-*     : escala tipográfica de UI.
- *   --icon-*     : tamanhos de ícone.
+ * Tokens do design system. --sicro-* é o shell escuro; --doc-* a superfície
+ * clara de documento; --space-* tem base 4px.
  */
 
 :root {
@@ -123,11 +114,8 @@
 }
 
 /*
- * Tema CLARO — aplicado via `data-theme="light"` no <html> (ver
- * settingsStore.applyAppearance). Só sobrescreve as superfícies/texto do
- * shell; as cores funcionais, as marcas técnicas e as cores de documento
- * (--doc-*) permanecem. A cor de destaque (--sicro-accent*) é setada inline
- * pelo settingsStore e vale nos dois temas.
+ * Tema claro (`data-theme="light"`): só superfícies/texto do shell mudam;
+ * cores funcionais, marcas técnicas e --doc-* ficam. O accent vem inline do settingsStore.
  */
 :root[data-theme="light"] {
   color-scheme: light;
@@ -138,10 +126,7 @@
   --sicro-surface-3: #e9edf3;
   --sicro-surface-hi: #dde3ec;
 
-  /* Bordas/divisores DEFINIDOS — antes (#d3dae4/#e3e8ef) quase sumiam contra o
-     fundo claro e os cards brancos, dando aquele efeito de "canvas único". Agora
-     contornam cada superfície (tom ardósia, não preto puro — preto literal num
-     tema claro fica pesado; se quiser mais escuro, é só baixar estes valores). */
+  /* Bordas em tom ardósia, não preto: preto literal num tema claro fica pesado. */
   --sicro-border: #9aa6b6;
   --sicro-border-strong: #586677;
   --sicro-divider: #c5ced9;

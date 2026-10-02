@@ -1,43 +1,26 @@
 /**
- * bounds — AABB (axis-aligned bounding box) em coordenadas STAGE (world
- * pixels — depois de aplicar `doc.scale.px_per_m` quando o objeto é
- * parity). Usado pelo marquee de seleção pra testar quais objetos
- * caem dentro do retângulo do usuário.
- *
- * AABB ignora rotação dos vehicles (aceitável pra marquee — quem precisa
- * de precisão usa click direto). Lines/measurements/parity_roads usam
- * AABB dos pontos de controle, o que envolve os Béziers/segmentos.
+ * AABB em coordenadas da stage (world px) para o marquee de seleção.
+ * Ignora rotação dos veículos; quem precisa de precisão usa clique direto.
  */
 
 import type { SicroObject } from "../engine";
-import type { SicroParityObject } from "../engine/road-parity";
 
-export interface BoundsPx {
+interface BoundsPx {
   x: number;
   y: number;
   width: number;
   height: number;
 }
 
-/** Retângulo nulo (largura/altura 0) usado como fallback. */
 const ZERO: BoundsPx = { x: 0, y: 0, width: 0, height: 0 };
 
-/**
- * Computa o AABB de um objeto em coordenadas world-px da stage.
- *
- * @param obj         Objeto SicroObject (qualquer tipo do schema)
- * @param pxPerM      `doc.scale.px_per_m` — usado pra converter
- *                    coordenadas em metros dos parity objects pra world-px.
- *                    Quando o objeto não é parity, ignorado.
- * @returns           AABB em stage coords, ou `ZERO` se o tipo for desconhecido.
- */
+/** AABB de um objeto em world px; `pxPerM` converte os objetos parity (metros). */
 export function getObjectBoundsStagePx(
   obj: SicroObject,
   pxPerM: number,
 ): BoundsPx {
   switch (obj.kind) {
     case "vehicle": {
-      // AABB centrado em (x, y), dimensões width x height. Ignora rotation.
       const halfW = obj.width / 2;
       const halfH = obj.height / 2;
       return {
@@ -57,8 +40,7 @@ export function getObjectBoundsStagePx(
       };
     }
     case "text": {
-      // Estimativa grosseira — não temos métrica de texto sem o canvas.
-      // `font_size` × ~0.6 × length aproxima a largura em monoespaço.
+      // Sem canvas não há métrica de texto; ~0.6 × font_size por caractere.
       const fontSize = obj.font_size ?? 16;
       const approxW = Math.max(
         fontSize,
@@ -72,7 +54,7 @@ export function getObjectBoundsStagePx(
       };
     }
     case "line": {
-      // Flat array [x1, y1, x2, y2, ...]
+      // Array plano [x1, y1, x2, y2, ...]
       const pts = obj.points;
       if (!pts || pts.length < 2) return ZERO;
       let minX = Infinity;
@@ -97,14 +79,12 @@ export function getObjectBoundsStagePx(
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
     case "road_parity": {
-      // 4 pontos de controle (ax/ay, cx1/cy1, cx2/cy2, bx/by) em METROS.
-      // O AABB dos 4 pontos engloba a curva (propriedade do convex hull
-      // de Béziers cúbicas), com folga pra largura da via.
+      // Pontos de controle em metros. O AABB dos 4 pontos engloba a Bézier
+      // (convex hull), com folga de meia largura da via.
       const minXm = Math.min(obj.ax, obj.cx1, obj.cx2, obj.bx);
       const maxXm = Math.max(obj.ax, obj.cx1, obj.cx2, obj.bx);
       const minYm = Math.min(obj.ay, obj.cy1, obj.cy2, obj.by);
       const maxYm = Math.max(obj.ay, obj.cy1, obj.cy2, obj.by);
-      // Folga = metade da largura efetiva da via (largura/2 em metros).
       const halfWidthM = (obj.largura_m ?? 7) / 2;
       const minX = (minXm - halfWidthM) * pxPerM;
       const maxX = (maxXm + halfWidthM) * pxPerM;
@@ -113,7 +93,7 @@ export function getObjectBoundsStagePx(
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
     case "roundabout_parity": {
-      // cx, cy em metros; r_m = raio externo em metros.
+      // cx, cy e r_m (raio externo) em metros.
       const rM = obj.r_m ?? 10;
       const minX = (obj.cx - rM) * pxPerM;
       const maxX = (obj.cx + rM) * pxPerM;
@@ -126,15 +106,7 @@ export function getObjectBoundsStagePx(
   }
 }
 
-/** Type guard pra usar o helper com objetos parity também. */
-export function getParityBoundsStagePx(
-  obj: SicroParityObject,
-  pxPerM: number,
-): BoundsPx {
-  return getObjectBoundsStagePx(obj as unknown as SicroObject, pxPerM);
-}
-
-/** Retângulo `a` intersecta retângulo `b`? (AABB clássico) */
+/** Interseção AABB clássica; retângulo degenerado nunca intersecta. */
 export function rectsIntersect(a: BoundsPx, b: BoundsPx): boolean {
   if (a.width === 0 || a.height === 0) return false;
   if (b.width === 0 || b.height === 0) return false;
@@ -146,7 +118,7 @@ export function rectsIntersect(a: BoundsPx, b: BoundsPx): boolean {
   );
 }
 
-/** Normaliza dois pontos arbitrários num retângulo com width/height > 0. */
+/** Normaliza dois pontos arbitrários num retângulo com width/height >= 0. */
 export function rectFromPoints(
   x1: number,
   y1: number,
@@ -164,15 +136,8 @@ export function rectFromPoints(
 }
 
 /**
- * Computa o patch necessário pra TRANSLADAR um objeto por (dx, dy) em
- * stage coords. Usado pelo group-move: quando o usuário arrasta um dos
- * objetos multi-selecionados, os outros recebem essa translação no
- * `onDragEnd` pra ficarem sincronizados.
- *
- * Para parity (que armazena em metros), `dx`/`dy` em stage coords são
- * convertidos para metros via divisão por `pxPerM`.
- *
- * Retorna `null` quando o tipo não suporta translação (tipo desconhecido).
+ * Patch que translada o objeto por (dx, dy) em world px (group-move).
+ * Parity guarda metros, então divide por `pxPerM`. `null` para tipo desconhecido.
  */
 export function translateObjectPatch(
   obj: SicroObject,

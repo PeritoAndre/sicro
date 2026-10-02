@@ -105,9 +105,8 @@ export class Wall extends Graphics {
         if (theta < 0) theta = 360 + theta; // range [0, 360)
         this.length = euclideanDistance(this.x1, this.x2, this.y1, this.y2)
 
-        // SKIN por parede (SICRO): parede normal, muro, cerca ou calçada. O estilo
-        // vem do mapa por par-de-nós; ausência = parede normal. Desenhado em coords
-        // locais (x 0..length, eixo central cy), em escala — a cota segue valendo.
+        // Skin por parede (SICRO): estilo do mapa por par-de-nós, ausência = parede
+        // normal. Em coords locais (x 0..length, eixo cy), em escala: a cota vale.
         const __style =
             wallStyleMap.get(
                 wallStyleKey(this.leftNode.getId(), this.rightNode.getId()),
@@ -151,10 +150,8 @@ export class Wall extends Graphics {
             this.lineStyle(1, 0x1a1a1a, 1);
             this.beginFill().drawRect(0, 0, L, this.thickness).endFill();
         }
-        // Área de clique RETANGULAR fixa (independe da skin). Sem isto, as
-        // cercas — que só desenham linhas, sem preenchimento — não têm área
-        // hittável e a ferramenta Remover (que depende do clique na parede) não
-        // pegava. Cobre a faixa da parede com uma folga mínima de 28px.
+        // Área de clique retangular fixa, independente da skin: cercas só desenham
+        // linhas (sem preenchimento) e não teriam área hittável pra ferramenta Remover.
         const hitH = Math.max(this.thickness, 28);
         this.hitArea = new Rectangle(0, cy - hitH / 2, L, hitH);
 
@@ -250,11 +247,8 @@ export class Wall extends Graphics {
 
     }
 
-    /**
-     * Define o comprimento da parede (em px) digitando a medida — mantém o
-     * centro e o ângulo, movendo os dois nós simetricamente. (port arcada PR #14,
-     * SSakibHossain10) Usado pela edição da cota (Label).
-     */
+    /** Define o comprimento (px) pela cota digitada: mantém centro e ângulo,
+     *  movendo os dois nós simetricamente. */
     public updateWallLength(size: number) {
         if (!isFinite(size) || size <= 0) return; // campo vazio/zero → ignora
 

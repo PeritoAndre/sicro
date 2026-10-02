@@ -1,7 +1,4 @@
-/**
- * VideoMetadataPanel — verdade técnica do ffprobe. Exibe os campos
- * principais + chip de aviso se algum warning de probe foi reportado.
- */
+/** Metadados técnicos do ffprobe + avisos do probe. */
 
 import type { VideoMedia } from "@domain/video";
 import { formatDuration, prettyBytes } from "./format";
@@ -15,7 +12,6 @@ interface Props {
 export function VideoMetadataPanel({ media, warnings }: Props) {
   return (
     <section className={styles.panel}>
-      {/* Fonte dos metadados: ffprobe (FFmpeg). Rótulo da UI neutro. */}
       <h3 className={styles.title}>Metadados técnicos</h3>
       <dl className={styles.grid}>
         <Row label="Codec" value={media.codec ?? "—"} mono />

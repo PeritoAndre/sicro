@@ -1,9 +1,4 @@
-/**
- * AllItemsTab — uma tabela única com todas as evidências da ocorrência.
- *
- * Filtros: tipo, status de integridade, módulo, "inserido em laudo",
- * busca livre por nome/caminho.
- */
+/** Tabela única com todas as evidências da ocorrência, com filtros e busca. */
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";

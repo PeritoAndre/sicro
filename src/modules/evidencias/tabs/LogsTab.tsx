@@ -1,18 +1,6 @@
 /**
- * LogsTab — consolida logs operacionais do workspace.
- *
- * Fontes atuais:
- *   - `video_operation_logs` (Spike F) — por vídeo, via `list_video_operation_logs`.
- *   - `evidence_links` (MVP 4) — uma linha por inserção de evidência em laudo.
- *
- * Lacunas conhecidas (documentadas no relatório do MVP 5):
- *   - O Importador não tem tabela própria de logs estruturados, apenas
- *     `imports.warnings_json` / `errors_json` (mostrados como linhas
- *     únicas aqui).
- *   - Croqui não tem log próprio: só persiste o último PNG exportado.
- *
- * Quando os logs de outros módulos forem padronizados (futuro), basta
- * adicioná-los ao agregador desta aba.
+ * Consolida logs operacionais: `video_operation_logs`, `evidence_links` e os
+ * warnings/errors das importações (o Importador não tem tabela de log própria).
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -27,7 +15,7 @@ import styles from "../EvidenciasModule.module.css";
 
 interface Props {
   workspacePath: string;
-  /** Items kind=video — to know which media_hashes to query. */
+  /** Itens kind=video: de onde saem os media_hashes a consultar. */
   videos: EvidenceRegistryItem[];
 }
 
@@ -50,7 +38,7 @@ export function LogsTab({ workspacePath, videos }: Props) {
       try {
         const all: LogEntry[] = [];
 
-        // 1. Video operation logs (per media)
+        // 1. Logs de operação de vídeo (por mídia)
         const hashes = videos
           .map((v) => v.hash_sha256)
           .filter((h): h is string => !!h);
@@ -89,8 +77,7 @@ export function LogsTab({ workspacePath, videos }: Props) {
           /* */
         }
 
-        // 3. imports — read warnings/errors as text rows so something is
-        // visible until the importer has its own log table.
+        // 3. imports — warnings/errors como linhas de texto
         try {
           const imports: Import[] =
             await commands.listWorkspaceImports(workspacePath);

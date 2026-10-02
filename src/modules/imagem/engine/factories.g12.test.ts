@@ -1,6 +1,4 @@
-/**
- * G12 — Testes para os novos factories e cálculos geométricos.
- */
+/** Testes das fábricas polygon/angle/freehand. */
 
 import { describe, expect, it } from "vitest";
 import { makeAngle, makeFreehand, makePolygon } from "./factories";

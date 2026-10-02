@@ -1,9 +1,6 @@
 /**
- * openInModule — abre uma prova da Central de Provas no seu módulo de origem,
- * com o item carregado. Seta o store do módulo (mesma ação que a lista do
- * módulo usa) e navega para a rota. Itens derivados (export) apontam para o
- * "pai" via `original_id`. Itens que vivem só como arquivo (foto, pacote,
- * export de laudo, frame) não têm módulo "casa" → `moduleTargetFor` = null.
+ * Abre uma prova no módulo de origem com o item carregado. Derivados (export)
+ * apontam para o pai via `original_id`; item que só existe como arquivo → null.
  */
 import type { NavigateFunction } from "react-router-dom";
 
@@ -12,12 +9,11 @@ import { useImagemStore } from "@modules/imagem/store/imagemStore";
 import { useVideoStore } from "@modules/video/store/videoStore";
 import type { EvidenceRegistryItem } from "@domain/evidence_registry";
 
-export interface ModuleTarget {
+interface ModuleTarget {
   route: string;
   moduleLabel: string;
 }
 
-/** Módulo "casa" do item, ou null se ele só existe como arquivo. */
 export function moduleTargetFor(item: EvidenceRegistryItem): ModuleTarget | null {
   switch (item.kind) {
     case "video":
@@ -43,10 +39,7 @@ function sourceId(item: EvidenceRegistryItem): string {
   return i >= 0 ? item.id.slice(i + 1) : item.id;
 }
 
-/**
- * Carrega o item no store do módulo e navega. Lança se o carregamento falhar
- * (o chamador trata e mostra feedback).
- */
+/** Lança se o carregamento falhar; o chamador mostra o feedback. */
 export async function openInModule(
   item: EvidenceRegistryItem,
   workspacePath: string,

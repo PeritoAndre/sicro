@@ -1,9 +1,5 @@
-//! Áudio — núcleo determinístico (Camada 1).
-//!
-//! Só faz duas coisas, ambas reproduzíveis e sem interpretação: extrair a
-//! trilha de áudio de um vídeo e converter um arquivo de áudio para WAV PCM
-//! 16-bit (formato de análise sem perda). Localiza os binários FFmpeg/ffprobe
-//! no PATH — mesma estratégia do módulo Vídeo.
+//! Áudio: extração/conversão para WAV PCM via FFmpeg, whisper.cpp (rascunho
+//! de transcrição) e medições do FFmpeg. Nada aqui altera o áudio original.
 
 use std::path::{Path, PathBuf};
 
@@ -12,8 +8,6 @@ use uuid::Uuid;
 
 use crate::error::{Result, SicroError};
 
-/// W12 (paridade Audacity) — análise forense de áudio em Rust puro
-/// (medição, espectro, ENF). Determinístico e testável; não altera o áudio.
 pub mod analysis;
 pub mod authenticity;
 pub mod diarize;
@@ -137,9 +131,8 @@ pub struct WhisperWord {
     pub p: f64,
 }
 
-/// Roda o whisper.cpp sobre um WAV 16 kHz mono e devolve os segmentos do JSON.
-/// Decodificação gulosa padrão (reproduzível). NÃO interpreta — só transcreve;
-/// a saída é rascunho a ser revisado.
+/// Roda o whisper.cpp sobre um WAV 16 kHz mono (decodificação gulosa,
+/// reproduzível). A saída é rascunho a ser revisado.
 pub fn transcribe_wav(
     bin: &Path,
     model: &Path,
@@ -187,13 +180,10 @@ pub fn transcribe_wav(
     parse_whisper_output(&String::from_utf8_lossy(&raw), &String::from_utf8_lossy(&output.stderr))
 }
 
-/// Lê o JSON completo do whisper.cpp (`-ojf`): trechos, confiança e palavras.
-///
-/// Com VAD, o whisper.cpp devolve o tempo dos TRECHOS no áudio original, mas o
-/// das PALAVRAS (tokens) no áudio só de fala (silêncios cortados). O mapa vem
-/// das linhas `vad_segment_info` do log e é aplicado como o próprio whisper faz
-/// nos trechos — só quando encaixa as palavras no trecho melhor que o tempo cru
-/// (se uma versão futura já corrigir, não corrige duas vezes).
+/// Lê o JSON `-ojf`: trechos, confiança e palavras. Com VAD, o tempo dos
+/// TRECHOS é no áudio original, mas o das PALAVRAS é no áudio só de fala; o
+/// mapa vem das linhas `vad_segment_info` do log e só é aplicado se encaixar
+/// as palavras melhor que o tempo cru (não corrige duas vezes).
 pub fn parse_whisper_output(json_text: &str, stderr: &str) -> Result<Vec<WhisperSegment>> {
     let v: serde_json::Value = serde_json::from_str(json_text)
         .map_err(|e| SicroError::Validation(format!("JSON do whisper inválido: {e}")))?;
@@ -377,10 +367,8 @@ pub fn extract_clip_wav(src: &Path, out_wav: &Path, start_s: f64, end_s: f64) ->
     ])
 }
 
-/// Concatena vários trechos (cada um: WAV de origem + [start,end] em segundos)
-/// num único WAV PCM 16-bit, normalizado para 44,1 kHz mono, com uma pausa de
-/// `gap_s` segundos entre trechos (junção audível, transparente). Cada trecho
-/// entra como uma entrada independente do FFmpeg. NÃO altera os originais.
+/// Concatena trechos (WAV de origem + [start, end] em s) num WAV PCM 16-bit
+/// 44,1 kHz mono, com pausa de `gap_s` s entre eles (junção audível).
 pub fn concat_clips_wav(
     segments: &[(std::path::PathBuf, f64, f64)],
     gap_s: f64,
@@ -425,8 +413,7 @@ pub fn concat_clips_wav(
     run_ffmpeg(&refs)
 }
 
-/// Gera um espectrograma (tempo × frequência) PNG via FFmpeg — visualização
-/// OBJETIVA do sinal (não interpreta nada). Determinístico dada a mesma entrada.
+/// Espectrograma PNG (tempo × frequência) via FFmpeg.
 pub fn spectrogram_png(wav: &Path, out_png: &Path) -> Result<()> {
     let i = wav.to_string_lossy();
     let o = out_png.to_string_lossy();

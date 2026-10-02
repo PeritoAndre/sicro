@@ -1,9 +1,8 @@
 // @ts-nocheck -- ponte do motor vendido (arcada). Vide planta/ATTRIBUTION.md.
 /**
- * No arcada, `EditorRoot.tsx` (componente React) exportava `export let main: Main`
- * e o atribuía ao montar; vários módulos do motor (Floor, ViewportCoordinates)
- * importam esse `main` pra converter coordenadas. No SICRO a montagem é feita por
- * `mount.ts`, que chama `setMain(...)`. Mantemos só essa ponte (sem React/Mantine).
+ * No arcada, `main` era exportado pelo componente React EditorRoot e módulos do
+ * motor o importam pra converter coordenadas. No SICRO, mount.ts chama
+ * `setMain`; fica só esta ponte.
  */
 import type { Main } from "./editor/Main";
 

@@ -1,43 +1,6 @@
 /**
- * VideoPlayerPanel — HTMLVideoElement embedded in the Tauri WebView.
- *
- * The asset is served via Tauri's asset protocol (`convertFileSrc`) — on
- * Linux via file:// instead, see `@core/mediaSrc`. Why
- * HTMLVideoElement is the right starting point in 2026:
- *   - Chromium (the WebView) plays H.264/AAC inside MP4/MOV out of the
- *     box on Windows;
- *   - the perito's most common footage is MP4 from phones / dashcams;
- *   - the API is well-known (`currentTime`, `play()`, `pause()`,
- *     `requestVideoFrameCallback`);
- *   - everything we don't trust the player for (metadata, frame
- *     extraction) goes through Rust+ffmpeg, as the lab decided.
- *
- * Keyboard (active only while the "Reprodutor" tab is visible and no text
- * field is focused):
- *   →/←  tap = ±1 frame · hold = reproduz à frente / em ré (até o início)
- *   ,/.  frame anterior / próximo            Shift+→/←  ±1 s
- *   Espaço/K  play-pause   Home/End  1º quadro / fim
- *   J/L  ré / frente — repetir acelera 1× → 2× → 4× → 8× (como nos editores)
- *   ↑/↓  velocidade (0,1× … 8×)   Ctrl+1  coletar frame
- *   F / duplo clique no vídeo  tela cheia (quem executa é o VideoAnalysisView)
- *
- * Só de tela (nada disso altera o arquivo nem os quadros coletados):
- *   roda do mouse / Ctrl+= / Ctrl+− / Ctrl+0  lupa (arrastar move a imagem)
- *   A  liga/desliga os ajustes de brilho/contraste/gama (comparar)
- *   Ctrl+M mudo · Ctrl+↑/↓ volume (lembrado entre sessões)
- *
- * Também: repete o trecho entrada/saída (`loop`), publica o tempo ~30×/s
- * enquanto toca (a linha do tempo com zoom precisa), junta os seeks de quem
- * arrasta a régua e lembra a posição de cada vídeo (abre no 1º quadro real).
- *
- * Reverse playback is synthesized with requestAnimationFrame (Chromium
- * ignores a negative playbackRate), so it is an *approximation* for visual
- * scrubbing — the pericial truth (exact frames/instants) always comes from
- * ffmpeg via "Coletar frame".
- *
- * Known limits surfaced in `docs/archive/SPIKE_F_VIDEO_ENGINE_RELATORIO.md`:
- * AVI / MKV with unusual codecs may NOT play. The status bar shows the
- * player's `error` event with a clear message if that happens.
+ * Reprodutor de vídeo (HTMLVideoElement no WebView): só visualização e
+ * navegação. A verdade pericial (metadados, quadros exatos) vem do Rust+ffmpeg.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -77,13 +40,13 @@ import styles from "./VideoPlayerPanel.module.css";
 interface Props {
   workspacePath: string;
   relativePath: string;
-  /** Declared frame rate, used to size a frame step (≈ 1/fps). */
+  /** Taxa declarada; dimensiona o passo de um quadro (≈ 1/fps). */
   fps?: number | null;
-  /** Only handle keyboard shortcuts while the player tab is visible. */
+  /** Atalhos só valem com a aba do reprodutor visível. */
   active: boolean;
   onTimeUpdate: (t: number) => void;
   onDurationLoaded: (d: number) => void;
-  /** Ctrl+1 — collect the current frame (resolved upstream via ffmpeg). */
+  /** Ctrl+1 — coleta o quadro atual (o pai resolve via ffmpeg). */
   onCollectFrame: () => void;
   /** Entrega ao pai os comandos imperativos (seek, arrastar, tempo atual). */
   registerController: (c: PlayerController) => void;
@@ -115,9 +78,8 @@ const PLAYBACK_RATES = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 /** J/L repetidos: 1× → 2× → 4× → 8× (fica em 8×). */
 const nextShuttle = (r: number) => (r < 1 ? 1 : Math.min(8, r * 2));
 
-// Volume/mudo e a legenda aberta/fechada: preferência de UI por máquina.
+// Volume/mudo e legenda aberta/fechada: preferência de UI por máquina.
 const AUDIO_KEY = "sicro.video.audio.v1";
-// v2: a legenda passou a começar escondida (v1 guardava "1" para todo mundo).
 const LEGEND_KEY = "sicro.video.legend.v2";
 function loadAudioPrefs(): { volume: number; muted: boolean } {
   try {
@@ -138,7 +100,7 @@ function loadLegendOpen(): boolean {
     return false;
   }
 }
-/** Hold longer than this (ms) and an arrow switches from frame-step to play. */
+/** Seta segurada além disto (ms) deixa de ser passo de quadro e vira play. */
 const HOLD_MS = 300;
 const DEFAULT_FPS = 30;
 
@@ -170,7 +132,7 @@ export function VideoPlayerPanel({
   const [audio, setAudio] = useState(loadAudioPrefs);
   const [legendOpen, setLegendOpen] = useState(loadLegendOpen);
 
-  // --- refs read by the single bound key listener (avoid stale closures) ---
+  // refs lidas pelo listener de teclado (ligado uma vez; evita closures velhas)
   const activeRef = useRef(active);
   const fpsRef = useRef(fps ?? null);
   const rateRef = useRef(1);
@@ -183,17 +145,16 @@ export function VideoPlayerPanel({
   startTimeRef.current = startTime;
   const mediaKeyRef = useRef(mediaKey);
   mediaKeyRef.current = mediaKey;
-  // posição restaurada uma vez por mídia; arrastar a régua
   const restoredRef = useRef(false);
   const scrubRef = useRef<{ wasPlaying: boolean; pending: number | null } | null>(null);
   const lastSaveRef = useRef(0);
   /** Último tempo conhecido — ao desmontar, o <video> já pode ter zerado. */
   const lastTimeRef = useRef(0);
-  // reverse-playback state — paced by the decoder (one seek at a time)
+  // ré sintetizada
   const revActiveRef = useRef(false);
   const revRafRef = useRef<number | null>(null);
   const revLastWallRef = useRef(0);
-  // tap-vs-hold state for the arrow keys
+  // toque-vs-segurar das setas
   const pressedDirRef = useRef<null | 1 | -1>(null);
   const holdTimerRef = useRef<number | null>(null);
   const holdActiveRef = useRef<null | 1 | -1>(null);
@@ -223,11 +184,9 @@ export function VideoPlayerPanel({
     setAdjust(ADJUST_DEFAULT);
   }, [src]);
 
-  // Pausado, o WebKitGTK não redesenha o quadro quando o <video> muda de
-  // tamanho (linha do tempo mais alta, divisória, janela): a imagem fica
-  // "rasgada". Parou de mudar de tamanho → força um quadro novo: vai meio
-  // milissegundo adiante e volta ao instante exato (buscar no MESMO instante
-  // o WebKit ignora). O tempo final é o de antes, sem arredondar nada.
+  // WebKitGTK: pausado, o <video> não redesenha ao mudar de tamanho e a imagem
+  // "rasga". Ao parar de redimensionar, vai 0,5 ms adiante e volta ao instante
+  // exato (buscar no MESMO instante o WebKit ignora).
   useEffect(() => {
     const v = videoRef.current;
     if (!v || typeof ResizeObserver === "undefined") return;
@@ -257,7 +216,6 @@ export function VideoPlayerPanel({
     };
   }, [src]);
 
-  // Volume/mudo: aplica no <video> e lembra.
   useEffect(() => {
     const v = videoRef.current;
     if (v) {
@@ -300,8 +258,7 @@ export function VideoPlayerPanel({
     }
   }, [legendOpen]);
 
-  // ---- imperative helpers (only read refs + stable setState; safe to
-  // capture once inside the key listener) --------------------------------
+  // helpers imperativos: só leem refs e setters estáveis (capturados uma vez)
   const frameDur = () => {
     const f = fpsRef.current;
     return f && f > 0 ? 1 / f : 1 / DEFAULT_FPS;
@@ -329,32 +286,21 @@ export function VideoPlayerPanel({
   };
 
   /**
-   * Reverse is synthesized by walking `currentTime` backward. The catch:
-   * a backward seek to a non-keyframe position forces the decoder to jump
-   * to the previous keyframe and decode forward, which can take far longer
-   * than one animation frame. A naive 60 Hz rAF loop that re-assigns
-   * `currentTime` every tick would keep superseding the still-pending seek,
-   * so the painted frame FREEZES until `currentTime` re-enters a
-   * keyframe-dense region (exactly the "stuck until ~3 s" symptom).
-   *
-   * Fix: a persistent rAF that only issues the next backward seek when the
-   * previous one finished (`!video.seeking`), and that accumulates elapsed
-   * wall-time so it steps back by the time actually elapsed × rate. This
-   * holds a true ~1× average where the decoder keeps up and degrades to
-   * coarser-but-always-moving steps where seeks are slow — never frozen,
-   * never faster than real time. MAX_REVERSE_STEP_S caps a jump after a
-   * long stall (e.g. the tab was backgrounded).
+   * Ré sintetizada (Chromium ignora playbackRate negativo). Seek para trás cai
+   * no keyframe anterior e decodifica adiante — pode demorar mais que um rAF;
+   * reatribuir currentTime a cada tick congelaria a imagem. Por isso só emite
+   * o próximo seek quando o anterior terminou, descontando o tempo real × rate.
    */
   const startReverse = () => {
     const v = videoRef.current;
     if (!v) return;
-    if (revActiveRef.current) return; // already reversing
+    if (revActiveRef.current) return;
     if (!v.paused) v.pause();
     const lp0 = loopRef.current;
     if (lp0 && (v.currentTime <= lp0.a + 1e-3 || v.currentTime > lp0.b + 1e-3)) {
       v.currentTime = lp0.b; // repetindo: ré começa do fim do trecho
     } else if (v.currentTime <= startTimeRef.current + 1e-3) {
-      return; // already at the first frame
+      return;
     }
     revActiveRef.current = true;
     setIsReversing(true);
@@ -372,12 +318,10 @@ export function VideoPlayerPanel({
         stopReverse();
         return;
       }
-      // Only advance once the previous backward seek has actually landed.
       if (!vid.seeking) {
         const now = performance.now();
         const owed = (Math.max(0, now - revLastWallRef.current) / 1000) * rateRef.current;
-        // Wait until at least one frame is owed, so each seek crosses a real
-        // frame boundary; the wall clock keeps accumulating until then.
+        // só quando deve ao menos um quadro: cada seek cruza uma borda real
         if (owed >= frameDur()) {
           revLastWallRef.current = now;
           const step = Math.min(owed, MAX_REVERSE_STEP_S);
@@ -410,7 +354,7 @@ export function VideoPlayerPanel({
     try {
       await v.play();
     } catch {
-      /* autoplay/permission errors surface via the error event */
+      /* erros de autoplay chegam pelo evento error */
     }
   };
 
@@ -418,7 +362,7 @@ export function VideoPlayerPanel({
     const v = videoRef.current;
     if (!v) return;
     if (revActiveRef.current) {
-      stopReverse(); // reversing → treat the toggle as "stop"
+      stopReverse(); // em ré, o toggle vira "parar"
       return;
     }
     if (v.paused) await playForward();
@@ -474,8 +418,7 @@ export function VideoPlayerPanel({
     startReverse();
   };
 
-  // ---- arrastar a régua: um seek de cada vez; o último pedido espera o
-  // anterior terminar (evento `seeked`) em vez de empilhar -----------------
+  // arrastar a régua: um seek de cada vez; o pedido novo espera o `seeked` do anterior
   const scrubStart = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -499,12 +442,8 @@ export function VideoPlayerPanel({
     if (s?.wasPlaying) void playForward();
   };
 
-  // ---- atalhos discretos do reprodutor (customizáveis, escopo `video`) ---
-  //
-  // Só disparam enquanto a aba "Reprodutor" está visível (`enabled: active`).
-  // O guard padrão de inputs evita que Espaço/K/J/L atrapalhem a digitação
-  // nos painéis laterais (título de evento, etc.). As setas ←/→ ficam no
-  // listener manual acima (gesto toque-vs-segurar).
+  // atalhos discretos (escopo `video`); as setas ←/→ ficam no listener manual
+  // abaixo por causa do gesto toque-vs-segurar
   useShortcuts(
     {
       "video.playPause": () => void togglePlay(),
@@ -541,7 +480,7 @@ export function VideoPlayerPanel({
     { enabled: active },
   );
 
-  // Coletar frame (Ctrl+1) — chord deliberado: vale mesmo com foco em campo.
+  // Ctrl+1 vale mesmo com foco em campo de texto.
   useShortcuts(
     {
       "video.collectFrame": () => onCollectFrameRef.current(),
@@ -549,7 +488,6 @@ export function VideoPlayerPanel({
     { enabled: active, allowInInputs: true },
   );
 
-  // ---- wiring: expose the controller to the parent ----------------------
   useEffect(() => {
     registerController({
       seek: (seconds: number) => {
@@ -565,28 +503,22 @@ export function VideoPlayerPanel({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [registerController]);
 
-  // ---- nova mídia: restaurar a posição de novo ---------------------------
   useEffect(() => {
     restoredRef.current = false;
     setNotice(null);
   }, [src]);
 
-  // Aviso curto sobre o vídeo (retomada / 1º quadro) — some sozinho.
   useEffect(() => {
     if (!notice) return;
     const id = window.setTimeout(() => setNotice(null), 5000);
     return () => clearTimeout(id);
   }, [notice]);
 
-  // ---- relógio fino + repetição do trecho enquanto toca -------------------
-  // `timeupdate` só vem ~4×/s: pouco para a régua com zoom e para repetir um
-  // trecho curto sem passar do ponto. Enquanto toca, um rAF publica o tempo
-  // (~30×/s), cumpre a repetição e salva a posição de tempos em tempos.
-  //
-  // Rede de segurança: numa sessão o WebKit/GStreamer "travou tocando" (play
-  // ativo, tempo parado) e só destravou ao mudar a velocidade. Se o tempo não
-  // anda por 1 s tocando (sem seek pendente), reaplica a velocidade e
-  // reposiciona no mesmo ponto — no máximo a cada 2 s.
+  // `timeupdate` vem só ~4×/s: pouco para a régua com zoom e para repetir um
+  // trecho curto. Tocando, um rAF publica o tempo (~30×/s), cumpre a repetição
+  // e salva a posição. Rede de segurança: o WebKit/GStreamer já "travou
+  // tocando" (play ativo, tempo parado) e só destravou ao mudar a velocidade —
+  // se não anda por 1 s, reaplica a velocidade e reposiciona (no máx. a cada 2 s).
   useEffect(() => {
     if (!isPlaying) return;
     let raf = 0;
@@ -635,7 +567,6 @@ export function VideoPlayerPanel({
     };
   }, [src, mediaKey]);
 
-  // ---- media element event listeners ------------------------------------
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -668,7 +599,7 @@ export function VideoPlayerPanel({
     };
     const onMeta = () => {
       onDurationLoaded(v.duration);
-      v.playbackRate = rateRef.current; // keep the chosen rate across loads
+      v.playbackRate = rateRef.current; // mantém a velocidade escolhida ao recarregar
       if (restoredRef.current) return;
       restoredRef.current = true;
       // Continua de onde parou; senão abre no 1º quadro (se houver vazio antes).
@@ -709,7 +640,7 @@ export function VideoPlayerPanel({
     };
   }, [onTimeUpdate, onDurationLoaded]);
 
-  // ---- track tab visibility; stop motion when we leave the player tab ----
+  // saiu da aba do reprodutor: para qualquer movimento
   useEffect(() => {
     activeRef.current = active;
     if (!active) {
@@ -723,7 +654,6 @@ export function VideoPlayerPanel({
     }
   }, [active]);
 
-  // ---- keyboard shortcuts (bound once) ----------------------------------
   useEffect(() => {
     const isTypingTarget = () => {
       const el = document.activeElement as HTMLElement | null;
@@ -737,11 +667,8 @@ export function VideoPlayerPanel({
       );
     };
 
-    // Apenas as SETAS ←/→ continuam no listener manual: o gesto de
-    // toque-vs-segurar (com keyup + temporizador) não cabe no modelo
-    // customizável (só keydown). Todos os demais atalhos discretos
-    // (Espaço/K, J/L, , / ., Home/End, ↑/↓, Ctrl+1) são resolvidos via
-    // `useShortcuts` — veja `usePlayerShortcut*` mais abaixo.
+    // Só as setas ←/→ ficam aqui: toque-vs-segurar precisa de keyup +
+    // temporizador, e `useShortcuts` só trata keydown.
     const onKeyDown = (e: KeyboardEvent) => {
       if (!activeRef.current) return;
       if (isTypingTarget()) return;
@@ -754,8 +681,8 @@ export function VideoPlayerPanel({
         seekBy(dir * 1); // ±1 s
         return;
       }
-      if (e.repeat) return; // hold handled by our timer, not OS auto-repeat
-      if (pressedDirRef.current !== null) return; // one direction at a time
+      if (e.repeat) return; // segurar é o nosso timer, não o auto-repeat do SO
+      if (pressedDirRef.current !== null) return; // uma direção por vez
       pressedDirRef.current = dir;
       holdTimerRef.current = window.setTimeout(() => {
         holdActiveRef.current = dir;
@@ -774,12 +701,12 @@ export function VideoPlayerPanel({
         holdTimerRef.current = null;
       }
       if (holdActiveRef.current === dir) {
-        // it was a hold → stop the continuous motion
+        // foi segurar: para o movimento
         if (dir === 1) videoRef.current?.pause();
         else stopReverse();
         holdActiveRef.current = null;
       } else {
-        // it was a tap → single frame step
+        // foi toque: um quadro
         frameStep(dir);
       }
     };
@@ -792,8 +719,7 @@ export function VideoPlayerPanel({
       if (holdTimerRef.current != null) clearTimeout(holdTimerRef.current);
       if (revRafRef.current != null) cancelAnimationFrame(revRafRef.current);
     };
-    // Bound once: every handler reads refs / stable setters, so the
-    // first-render closures stay correct.
+    // Ligado uma vez: os handlers só leem refs e setters estáveis.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

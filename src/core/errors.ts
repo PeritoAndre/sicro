@@ -1,9 +1,6 @@
 /**
- * Normalized error type returned by command wrappers.
- *
- * Tauri's `invoke` rejects with whatever the Rust side returned through
- * `Result::Err`. We standardize that on the front-end so the UI can render
- * a consistent message without inspecting unknown shapes.
+ * Erro normalizado dos wrappers de comando: o `invoke` rejeita com o que o
+ * Rust devolveu em `Result::Err`, em formato variável.
  */
 
 export type SicroErrorKind =
@@ -17,7 +14,7 @@ export type SicroErrorKind =
 export interface SicroError {
   kind: SicroErrorKind;
   message: string;
-  /** Original payload from Rust, useful for debugging. */
+  /** Payload original do Rust. */
   raw?: unknown;
 }
 

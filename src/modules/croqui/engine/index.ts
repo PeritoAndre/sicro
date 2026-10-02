@@ -1,12 +1,6 @@
-/** Public surface of the Croqui Engine — framework-agnostic.
- *
- * Fase S clean cut — Road v1 e Road v2 foram completamente removidos.
- * O único motor de via/rotatória é o Python Parity Engine
- * (`./road-parity/*`).
- *
- * O parity expõe seus próprios tipos, factories, guards, geometria,
- * clipping, renderer e adapter OSM. Quem precisar deles importa
- * diretamente de `road-parity/...`.
+/**
+ * Superfície pública do Croqui Engine (sem framework). O motor de vias
+ * (`./road-parity/*`) é importado diretamente por quem precisa.
  */
 
 export * from "./schema";

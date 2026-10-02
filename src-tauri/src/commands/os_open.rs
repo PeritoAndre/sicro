@@ -1,9 +1,5 @@
-//! Pequeno utilitário compartilhado para abrir um arquivo com o aplicativo
-//! padrão do sistema operacional.
-//!
-//! Centraliza a lógica multiplataforma (Windows `cmd /C start`, macOS `open`,
-//! Linux `xdg-open`) que antes vivia privada em `registry_commands.rs`, e o
-//! `reveal_path_in_explorer` (abrir a pasta de um arquivo no gerenciador).
+//! Abrir um arquivo com o app padrão do SO (Windows `cmd /C start`, macOS `open`,
+//! Linux `xdg-open`) e revelar no gerenciador de arquivos.
 
 use std::path::Path;
 
@@ -37,11 +33,9 @@ pub(crate) fn open_with_os(path: &Path) -> Result<()> {
 }
 
 // ---------------------------------------------------------------------------
-// reveal_path_in_explorer — abre o gerenciador de arquivos na pasta de um arquivo
-// ---------------------------------------------------------------------------
+// Revelar no gerenciador de arquivos
 
-/// Abre o gerenciador de arquivos do SO na pasta contendo `absolute_path`,
-/// idealmente selecionando o arquivo (Início → Abrir pasta, backup, croqui).
+/// Abre o gerenciador de arquivos na pasta de `absolute_path`, selecionando-o onde dá.
 #[tauri::command]
 pub async fn reveal_path_in_explorer(absolute_path: String) -> Result<()> {
     let p = std::path::PathBuf::from(&absolute_path);

@@ -1,15 +1,10 @@
 /**
- * Lupa do reprodutor: zoom e deslocamento SÓ DE TELA sobre o <video> (CSS
- * transform) — o arquivo, os quadros coletados (ffmpeg) e as medições não
- * mudam.
- *
- *   - roda do mouse sobre o vídeo: aproxima/afasta no ponto do cursor;
- *   - aproximado, arrastar move a imagem;
- *   - `zoomAt` / `reset` para os atalhos (Ctrl+= / Ctrl+− / Ctrl+0).
+ * Lupa do reprodutor: zoom e deslocamento só de tela (CSS transform) — o
+ * arquivo, os quadros coletados e as medições não mudam.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-export const MAGNIFIER_MAX = 8;
+const MAGNIFIER_MAX = 8;
 
 interface View {
   s: number;

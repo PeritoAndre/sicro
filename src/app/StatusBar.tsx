@@ -1,9 +1,4 @@
-/**
- * StatusBar — bottom strip with discreet technical info.
- *
- * doc 03 §6.6 — zoom/coordinates/page/selection/jobs/save status/errors.
- * Spike A surfaces only workspace path + last error.
- */
+/** Faixa inferior: caminho do workspace ativo + último erro. */
 
 import { useWorkspaceStore } from "@stores/workspaceStore";
 import styles from "./StatusBar.module.css";

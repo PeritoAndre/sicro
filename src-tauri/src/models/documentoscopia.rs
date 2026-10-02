@@ -1,15 +1,12 @@
-//! Modelos do módulo Documentoscopia.
-//!
-//! Espelham as tabelas de `migrations/016_documentoscopia.sql`. Coordenadas de
-//! bounding box são NORMALIZADAS (0..1) em relação à página. O arquivo original
-//! nunca é alterado — `relative_path` aponta para a cópia preservada no
-//! workspace, com `sha256` próprio (cadeia de custódia).
+//! Modelos da Documentoscopia (migration 016). Bounding boxes normalizados (0..1)
+//! em relação à página. O arquivo original nunca é alterado: `relative_path` é a
+//! cópia preservada no workspace, com `sha256` próprio (cadeia de custódia).
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-/// Um documento (PDF ou imagem) importado para análise documentoscópica.
+/// Documento (PDF ou imagem) importado.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentCaseFile {
     pub id: Uuid,
@@ -35,7 +32,7 @@ pub struct DocumentCaseFile {
     pub updated_at: DateTime<Utc>,
 }
 
-/// Uma página renderizada (imagem = 1 página; PDF = N páginas).
+/// Página renderizada (imagem = 1; PDF = N).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentPage {
     pub id: Uuid,
@@ -50,8 +47,8 @@ pub struct DocumentPage {
     pub created_at: DateTime<Utc>,
 }
 
-/// Uma execução de OCR / extração de texto (qualquer motor, inclusive a camada
-/// textual de PDF digital ou o motor mock).
+/// Execução de OCR/extração de texto (qualquer motor, inclusive a camada
+/// textual do PDF ou o mock).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrRun {
     pub id: Uuid,
@@ -68,7 +65,6 @@ pub struct OcrRun {
     pub created_at: DateTime<Utc>,
 }
 
-/// Um bloco de texto extraído (com bbox normalizado e confiança).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OcrTextBlock {
     pub id: Uuid,
@@ -88,7 +84,7 @@ pub struct OcrTextBlock {
     pub created_at: DateTime<Utc>,
 }
 
-/// Um campo extraído por heurística/OCR/manual, com revisão humana.
+/// Campo extraído (heurística/OCR/manual), com revisão humana.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DetectedField {
     pub id: Uuid,
@@ -107,7 +103,7 @@ pub struct DetectedField {
     pub created_at: DateTime<Utc>,
 }
 
-/// Uma região marcada sobre o documento (detectada ou manual).
+/// Região marcada sobre o documento (detectada ou manual).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentRegion {
     pub id: Uuid,
@@ -124,7 +120,7 @@ pub struct DocumentRegion {
     pub created_at: DateTime<Utc>,
 }
 
-/// Uma análise documentoscópica assistida (ELA, ruído, integridade…).
+/// Análise assistida (ELA, ruído, integridade…).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentAnalysis {
     pub id: Uuid,
@@ -137,7 +133,7 @@ pub struct DocumentAnalysis {
     pub created_at: DateTime<Utc>,
 }
 
-/// Uma sessão de comparação entre documento questionado e padrão.
+/// Comparação entre documento questionado e padrão.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ComparisonSession {
     pub id: Uuid,
@@ -150,7 +146,6 @@ pub struct ComparisonSession {
     pub created_at: DateTime<Utc>,
 }
 
-/// Uma entrada do histórico/auditoria do documento.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DocumentLog {
     pub id: Uuid,

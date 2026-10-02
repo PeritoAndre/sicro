@@ -1,20 +1,6 @@
 /**
- * CroquiModule — shell da umbrella Croquis.
- *
- * Estados:
- *   - nenhum croqui aberto → CroquiListView (lista + "Novo croqui")
- *   - croqui aberto        → editor conforme o `kind`:
- *       viario   → CroquiEditor (Konva)
- *       corporal → CorpoEditor (Konva)
- *       planta   → PlantaEditor (Pixi, fork arcada) — LAZY + ErrorBoundary
- *
- * O PlantaEditor é carregado sob demanda (React.lazy): o motor Pixi (pesado)
- * fica num chunk separado, então abrir o módulo / a lista / um croqui viário ou
- * corporal NÃO carrega o Pixi. Se o motor de planta falhar, o ErrorBoundary
- * local mostra um erro legível em vez de derrubar o módulo inteiro (tela azul).
- *
- * O id do croqui ativo vive no `croquiStore`, então o usuário pode navegar e
- * voltar sem perder o estado.
+ * Shell do módulo Croquis: lista ou o editor conforme o `kind`
+ * (viario → Konva, corporal → Konva, planta → Pixi).
  */
 
 import { Component, lazy, Suspense, useEffect } from "react";
@@ -32,7 +18,7 @@ import { CorpoEditor } from "./corpo/editor/CorpoEditor";
 import { useCroquiStore } from "./store/croquiStore";
 import styles from "./CroquiModule.module.css";
 
-// Pixi só entra no bundle quando uma planta é aberta.
+// Lazy: o Pixi (pesado) fica em chunk separado e só carrega ao abrir uma planta.
 const PlantaEditor = lazy(() =>
   import("./planta/editor/PlantaEditor").then((m) => ({
     default: m.PlantaEditor,
@@ -47,7 +33,7 @@ interface PlantaBoundaryState {
   error: Error | null;
 }
 
-/** Isola crashes do motor de planta (Pixi / carregamento do chunk). */
+/** Isola falhas do Pixi/chunk da planta para não derrubar o módulo inteiro. */
 class PlantaBoundary extends Component<PlantaBoundaryProps, PlantaBoundaryState> {
   state: PlantaBoundaryState = { error: null };
 

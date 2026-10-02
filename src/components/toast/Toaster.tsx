@@ -1,9 +1,4 @@
-/**
- * Toaster — renderiza a pilha de toasts na raiz do app.
- *
- * F12.10 — Posicionado bottom-right (canto direito inferior) com
- * stacking vertical. Cada toast tem botão X para dismiss manual.
- */
+/** Pilha de toasts na raiz do app (canto inferior direito). */
 
 import {
   AlertTriangle,

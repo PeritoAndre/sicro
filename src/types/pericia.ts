@@ -1,10 +1,6 @@
-/**
- * Listas de domínio reutilizadas na criação de ocorrência e no perfil do perito:
- * municípios do Amapá e tipos de perícia. São DEFAULTS editáveis — o tipo de
- * perícia aceita valor livre (combobox), e o município é escolhido entre os 16.
- */
+/** Listas padrão usadas na criação de ocorrência e no perfil do perito. */
 
-/** 16 municípios do Amapá — Macapá e Santana primeiro; o resto em ordem alfabética. */
+/** Macapá e Santana primeiro; o resto em ordem alfabética. */
 export const MUNICIPIOS_AP: readonly string[] = [
   "Macapá",
   "Santana",
@@ -24,7 +20,7 @@ export const MUNICIPIOS_AP: readonly string[] = [
   "Vitória do Jari",
 ];
 
-/** Principais tipos de perícia (sugestões do dropdown — aceita digitar outro). */
+/** Sugestões do combobox; aceita digitar outro. */
 export const TIPOS_PERICIA: readonly string[] = [
   "Sinistro de Trânsito",
   "Identificação Veicular",

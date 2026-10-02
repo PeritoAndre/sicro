@@ -1,19 +1,6 @@
-//! Workspace backup (MVP 8 — Consolidação Alpha).
-//!
-//! Comprime o workspace inteiro (`.sicro/`) em um arquivo
-//! `.sicrobackup` (ZIP com deflate) e grava um manifesto JSON dentro
-//! do próprio backup descrevendo o que foi incluído.
-//!
-//! Regras:
-//!   - O workspace original NUNCA é modificado.
-//!   - O backup carrega SQLite, .sicrodoc, .sicrocroqui, .sicroimage,
-//!     fotos importadas, vídeos, frames, croquis exportados, imagens
-//!     derivadas, exports (HTML/PDF/DOCX/PNG) e reports.
-//!   - Pastas `cache/` e `logs/` são ignoradas (efêmero).
-//!   - Path traversal já é impossível porque caminhamos diretórios
-//!     absolutos via `walk_dir` — não confiamos em entrada externa.
-//!   - SHA-256 do `.sicrobackup` final é computado depois da escrita
-//!     atômica para garantir audit.
+//! Backup do workspace: ZIP (deflate) `.sicrobackup` com manifesto JSON embutido.
+//! O workspace original nunca é modificado; `cache/` e `logs/` ficam de fora;
+//! o SHA-256 do arquivo final é calculado depois da escrita.
 
 use std::fs::File;
 use std::io::{BufWriter, Read, Write};
@@ -28,14 +15,11 @@ use zip::CompressionMethod;
 use crate::error::{Result, SicroError};
 use crate::workspace::manifest::{Manifest, APP_VERSION};
 
-/// Folders inside the workspace that should be skipped (efêmero / pesado).
-/// `pub(crate)` para o backup geral usar a MESMA regra de skip no fingerprint
-/// (senão o fingerprint mudaria por causa de cache/logs e o incremental
-/// nunca pularia um caso de fato inalterado).
+/// Pastas efêmeras fora do backup. `pub(crate)` porque o fingerprint do backup
+/// geral precisa usar a mesma regra (senão cache/logs invalidariam o incremental).
 pub(crate) const SKIP_DIRS: &[&str] = &["cache", "logs"];
 
-/// Descriptor returned by `create_backup`. The caller uses it to
-/// populate the response and the system audit log.
+/// Devolvido por `create_backup`.
 #[derive(Debug, Clone)]
 pub struct BackupArtifact {
     pub absolute_path: PathBuf,
@@ -49,11 +33,8 @@ pub struct BackupArtifact {
     pub occurrence_id: Uuid,
 }
 
-/// Create a backup of `workspace_root` into the same workspace's
-/// `backups/` directory (or `dest_dir` when provided).
-///
-/// `bo_hint` is a label used in the filename (e.g. BO number). When
-/// empty, falls back to "ocorrencia".
+/// Gera o backup em `backups/` do próprio workspace (ou em `dest_dir`).
+/// `bo_hint` entra no nome do arquivo; vazio → "ocorrencia".
 pub fn create_backup(
     workspace_root: &Path,
     dest_dir: Option<&Path>,
@@ -80,7 +61,6 @@ pub fn create_backup(
     })?;
     let absolute_path = dest_root.join(&filename);
 
-    // 1. Stream files into the zip with deflate.
     let file = File::create(&absolute_path).map_err(|e| {
         SicroError::Filesystem(format!(
             "cannot create backup file {}: {}",
@@ -105,7 +85,6 @@ pub fn create_backup(
         &mut total_bytes,
     )?;
 
-    // 2. Manifesto JSON embedded inside the backup.
     let inner_manifest = serde_json::json!({
         "format": "sicro-backup",
         "format_version": "1.0",
@@ -131,14 +110,11 @@ pub fn create_backup(
     zip.finish()
         .map_err(|e| SicroError::Workspace(format!("zip finish: {e}")))?;
 
-    // 3. Hash + size of the final artifact.
     let meta = std::fs::metadata(&absolute_path)?;
     let size_bytes = meta.len();
     let hash = hash_file(&absolute_path)?;
 
-    // 4. Relative path — best-effort. When `dest_dir` is inside the
-    // workspace we report a workspace-relative path; otherwise we
-    // report the absolute path string.
+    // Relativo ao workspace quando `dest_dir` está dentro dele; senão, absoluto.
     let relative_path = match absolute_path.strip_prefix(workspace_root) {
         Ok(p) => p.to_string_lossy().replace('\\', "/"),
         Err(_) => absolute_path.to_string_lossy().into_owned(),
@@ -179,13 +155,12 @@ fn walk_into_zip<W: Write + std::io::Seek>(
             SicroError::Filesystem(format!("file_type error: {e}"))
         })?;
 
-        // Skip ephemeral subdirs only at the workspace root level.
+        // Só no nível raiz: pastas efêmeras e a própria `backups/`.
         if file_type.is_dir() && dir == root {
             if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
                 if SKIP_DIRS.iter().any(|d| *d == name) {
                     continue;
                 }
-                // Don't re-include the backups dir itself.
                 if name == "backups" {
                     continue;
                 }
@@ -230,7 +205,7 @@ fn walk_into_zip<W: Write + std::io::Seek>(
             }
             *file_count = file_count.saturating_add(1);
         }
-        // Symlinks and other non-file types are skipped silently.
+        // Symlinks e outros tipos são ignorados.
     }
     Ok(())
 }
@@ -274,7 +249,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn fake_workspace(dir: &Path) -> Result<()> {
-        // Mimic a minimal `.sicro/` so `Manifest::read` succeeds.
+        // `.sicro/` mínimo para `Manifest::read` funcionar.
         fs::create_dir_all(dir.join("imagens").join("originais"))?;
         fs::create_dir_all(dir.join("laudos"))?;
         fs::create_dir_all(dir.join("logs"))?;  // should be skipped
@@ -303,7 +278,7 @@ mod tests {
             dir.join("imagens").join("originais").join("img.png"),
             &[137, 80, 78, 71, 0xD, 0xA, 0x1A, 0xA, 1, 2, 3],
         )?;
-        // Files inside skipped dirs:
+        // Dentro das pastas puladas:
         fs::write(dir.join("logs").join("app.log"), b"should be skipped")?;
         fs::write(dir.join("cache").join("scratch.bin"), b"should be skipped")?;
         Ok(())
@@ -321,11 +296,9 @@ mod tests {
         assert!(artifact.filename.ends_with(".sicrobackup"));
         assert!(artifact.size_bytes > 0);
         assert_eq!(artifact.hash_sha256.len(), 64);
-        // 3 user files (manifest.json + sicro.sqlite + 2 nested)
-        // but excludes logs + cache files (2 files skipped).
+        // manifest.json + sicro.sqlite + 2 aninhados; logs e cache ficam de fora.
         assert!(artifact.file_count >= 4, "file_count was {}", artifact.file_count);
 
-        // Read back the zip and verify some entries.
         let zr = File::open(&artifact.absolute_path).unwrap();
         let mut archive = zip::ZipArchive::new(zr).unwrap();
         let names: Vec<String> = (0..archive.len())
@@ -336,7 +309,6 @@ mod tests {
         assert!(names.contains(&"laudos/laudo-1.sicrodoc".to_string()));
         assert!(names.contains(&"imagens/originais/img.png".to_string()));
         assert!(names.contains(&"_sicro_backup_manifest.json".to_string()));
-        // Skipped dirs are not present.
         assert!(!names.iter().any(|n| n.starts_with("logs/")));
         assert!(!names.iter().any(|n| n.starts_with("cache/")));
         assert!(!names.iter().any(|n| n.starts_with("backups/")));

@@ -36,7 +36,6 @@ src-tauri/gen/
 *.sicro/
 # pdf.js wasm (OpenJPEG/JBIG2) — copiado de node_modules/pdfjs-dist/wasm
 # pelo vite.config a cada build/dev; gerado, não versionar.
-public/pdfjs-wasm/
 
 # Documentação interna (relatórios de MVP/Spike/auditoria) — fica só no disco,
 # para uso da equipe; não é publicada no git. EXCEÇÃO: o manual do perito é

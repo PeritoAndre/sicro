@@ -13,7 +13,7 @@ use crate::models::{NewOccurrenceInput, Occurrence, OccurrenceStatus};
 use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
 use crate::workspace::paths::{derive_workspace_name, unique_workspace_path};
 
-/// Top-level folders that every workspace must have, per doc 02 §9.
+/// Pastas que todo workspace tem.
 const SUBDIRS: &[&str] = &[
     "dossie",
     "laudos",
@@ -51,7 +51,6 @@ pub fn create_workspace(
     input: NewOccurrenceInput,
     default_parent: &Path,
 ) -> Result<CreatedWorkspace> {
-    // 1. Resolve where the workspace will live on disk.
     let parent: PathBuf = match &input.parent_directory {
         Some(p) if !p.trim().is_empty() => PathBuf::from(p),
         _ => default_parent.to_path_buf(),
@@ -73,9 +72,8 @@ pub fn create_workspace(
         )));
     }
 
-    // 2. Generate ids and pick a unique folder name.
     let workspace_id = Uuid::new_v4();
-    let occurrence_id = workspace_id; // Spike A: 1 workspace = 1 occurrence.
+    let occurrence_id = workspace_id; // 1 workspace = 1 ocorrência: mesmo UUID.
     let short_id = workspace_id.to_string()[..8].to_string();
     let base_name = derive_workspace_name(
         input.titulo.as_deref(),
@@ -85,18 +83,15 @@ pub fn create_workspace(
     );
     let workspace_path = unique_workspace_path(&parent, &base_name)?;
 
-    // 3. Build the directory tree.
     fs::create_dir_all(&workspace_path)?;
     for sub in SUBDIRS {
         fs::create_dir_all(workspace_path.join(sub))?;
     }
 
-    // 4. Initialize SQLite and run migrations.
     let db_path = workspace_path.join(SQLITE_FILENAME);
     let mut conn = open_connection(&db_path)?;
     run_migrations(&mut conn)?;
 
-    // 5. Insert the initial occurrence row.
     let now = Utc::now();
     let occurrence = Occurrence {
         id: occurrence_id,
@@ -129,7 +124,7 @@ pub fn create_workspace(
         status: OccurrenceStatus::Aberta,
         created_at: now,
         updated_at: now,
-        // Spike A occurrence — not imported from a .sicroapp.
+        // Não veio de .sicroapp.
         import_id: None,
         original_mobile_id: None,
         primary_accuracy_m: None,
@@ -150,7 +145,6 @@ pub fn create_workspace(
         None,
     )?;
 
-    // 6. Write the manifest.
     let manifest = Manifest::new(workspace_id, occurrence_id);
     manifest.write(&workspace_path)?;
 

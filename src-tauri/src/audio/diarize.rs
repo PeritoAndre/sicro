@@ -1,10 +1,6 @@
-//! Separação de locutores ("quem fala quando") com o sherpa-onnx LOCAL
-//! (baixado sob demanda no gerenciador de IA; roda offline). Segmentação
-//! pyannote 3.0 + assinatura de voz WeSpeaker + agrupamento.
-//!
-//! É apoio à degravação: diz que vozes DIFERENTES falam em tais trechos — não
-//! identifica ninguém. O agrupamento automático pode juntar ou separar vozes;
-//! informar o número de locutores, quando conhecido, é mais confiável.
+//! Separação de locutores com o sherpa-onnx local (pyannote 3.0 + WeSpeaker +
+//! agrupamento). Diz que vozes DIFERENTES falam em tais trechos — não
+//! identifica ninguém; com o número de locutores informado é mais confiável.
 
 use std::path::Path;
 

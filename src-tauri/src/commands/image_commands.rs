@@ -1,23 +1,5 @@
-//! Tauri commands for the Image Editor (MVP 7).
-//!
-//! Oito commands cobrindo o ciclo de vida da análise:
-//!   - `create_image_analysis_from_evidence` — cria a partir de um item
-//!     já no workspace (`relative_path` conhecido — foto do Dossiê,
-//!     frame do Vídeo, evidência da Central).
-//!   - `create_image_analysis_from_file` — copia uma imagem do disco
-//!     do usuário para `imagens/originais/`, calcula hash e cria a
-//!     análise.
-//!   - `list_image_analyses` — todas da ocorrência ativa.
-//!   - `read_image_analysis` — row + envelope `.sicroimage` parseado.
-//!   - `save_image_analysis` — grava o `.sicroimage` no disco e
-//!     atualiza `updated_at` (e o `metadata_json` quando o frontend
-//!     passar).
-//!   - `export_image_derivative` — pipeline + sidecar + linha em
-//!     `image_exports`.
-//!   - `read_image_asset` — bytes base64 (mesmo contrato do MVP 4).
-//!   - `get_image_metadata` — dimensões / mime / hash sem decodificar.
-//!
-//! Path safety usa o helper compartilhado do MVP 5.
+//! Comandos Tauri do Editor de Imagens: análises (`.sicroimage`), exportação
+//! de derivados, leitura de assets e processamento (pilha de operações).
 
 use std::path::{Path, PathBuf};
 
@@ -51,14 +33,10 @@ const CAMADAS_DIR: &str = "imagens/camadas";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SaveImageAnalysisInput {
-    /// JSON inteiro do `.sicroimage`. O backend valida apenas que é
-    /// um objeto JSON; o schema completo vive no frontend.
+    /// JSON inteiro do `.sicroimage`; o schema vive no frontend.
     pub doc: serde_json::Value,
-    /// Quando presente, é o novo `metadata_json` a gravar na linha
-    /// SQLite (tamanho/preview/dimensões etc.). Quando ausente, a
-    /// linha existente é mantida.
+    /// Novo `metadata_json` da linha; ausente = mantém o existente.
     pub metadata_json: Option<String>,
-    /// Optional new title — atualiza o registro.
     pub title: Option<String>,
 }
 
@@ -72,7 +50,6 @@ pub async fn create_image_analysis_from_evidence(
     let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
     run_migrations(&mut conn)?;
 
-    // Validate the source path exists.
     let abs_src = resolve_workspace_relative(&ws, &input.original_relative_path)?;
     if !abs_src.is_file() {
         return Err(SicroError::Filesystem(format!(
@@ -310,7 +287,6 @@ pub async fn save_image_analysis(
     let mut analysis = image_analysis_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("análise {} não encontrada", id)))?;
 
-    // Persist the .sicroimage JSON.
     let abs_doc = resolve_workspace_relative(&ws, &analysis.analysis_relative_path)?;
     if let Some(parent) = abs_doc.parent() {
         std::fs::create_dir_all(parent).ok();
@@ -573,14 +549,9 @@ fn sanitize_slug(s: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// G12 — Image Engine Pro: novos commands.
-// ---------------------------------------------------------------------------
+// Processamento: histograma, pilha de operações, camadas e relatório
 
-/// G12.9 — Histograma + estatísticas da imagem original.
-///
-/// `relative_path` aponta para uma imagem dentro do workspace (geralmente
-/// a `original_relative_path` da análise). O backend decodifica para
-/// RgbaImage e calcula histograma + média/desvio por canal.
+/// Histograma + média/desvio por canal de uma imagem do workspace.
 #[tauri::command]
 pub async fn compute_image_histogram(
     workspace_path: String,
@@ -607,25 +578,12 @@ pub struct ApplyOperationPreviewResult {
     pub height: u32,
 }
 
-/// W17 — Preview da PILHA inteira de operações sobre um bitmap JÁ fornecido
-/// pelo cliente (tipicamente reduzido no front para algumas centenas de px no
-/// maior lado). Ao contrário de `apply_operation_stack`, este comando **NÃO
-/// abre o arquivo original do disco**: recebe o bitmap pronto em base64,
-/// aplica os ajustes + operações em ordem e devolve PNG base64.
-///
-/// Por que existe: o original pericial pode ter dezenas de megapixels.
-/// Decodificá-lo, rodar os filtros em resolução cheia, recodificar um PNG
-/// gigante e trafegar ~dezenas de MB por base64 no IPC do Tauri a cada filtro
-/// custava minutos (até para uma operação barata como "Níveis"). Como o
-/// cliente já tem a imagem decodificada na tela, ele reduz no canvas e manda
-/// só o bitmap pequeno: decodificar/codificar/trafegar fica trivial e o
-/// preview é rápido independentemente do tamanho do original. O EXPORT
-/// continua em resolução cheia (reaplica sobre o original) — §13: o derivado
-/// exportado é o fiel; o preview é só visualização.
+/// Preview da pilha sobre um bitmap já reduzido pelo cliente (não abre o original):
+/// filtrar dezenas de megapixels e trafegar o PNG por base64 a cada filtro custava
+/// minutos. O export continua em resolução cheia sobre o original (o fiel).
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplyOperationStackPreviewInput {
-    /// PNG/JPEG em base64 (sem prefixo `data:image/`) — bitmap de origem já
-    /// reduzido no cliente.
+    /// PNG/JPEG em base64, sem prefixo `data:image/`.
     pub image_base64: String,
     #[serde(default)]
     pub adjustments: Option<BackendAdjustments>,
@@ -637,8 +595,7 @@ pub struct ApplyOperationStackPreviewInput {
 pub async fn apply_operation_stack_preview(
     input: ApplyOperationStackPreviewInput,
 ) -> Result<ApplyOperationPreviewResult> {
-    // CPU-bound → pool de tarefas bloqueantes (mesma razão de
-    // `apply_operation_stack`: não travar o runtime async nem esgotar workers).
+    // CPU-bound: pool de bloqueantes (ver `apply_operation_stack`).
     let out = tauri::async_runtime::spawn_blocking(
         move || -> Result<ApplyOperationPreviewResult> {
             let bytes = base64::engine::general_purpose::STANDARD
@@ -679,20 +636,16 @@ pub async fn apply_operation_stack_preview(
     Ok(out)
 }
 
-/// W20 (S3) — Recorta a região de uma seleção e grava como PNG (camada de
-/// pixels). `apply_processing=false` recorta do ORIGINAL fiel; `=true` recorta
-/// do RESULTADO (reaplica ajustes + operações antes — o que o perito vê). A
-/// escolha (origem) é registrada na sessão/custódia pelo frontend. Máscara em
-/// coords normalizadas `[0,1]`; fora dela o pixel fica transparente.
+/// Recorta a seleção (máscara normalizada [0,1]; fora = transparente) para um PNG.
+/// `apply_processing=false` recorta do ORIGINAL; `true`, do resultado processado.
 #[derive(Debug, Clone, Deserialize)]
 pub struct CopyRegionInput {
     /// Imagem original (relativa ao workspace).
     pub relative_path: String,
-    /// Geometria da seleção (normalizada). Reusa o tipo da S2.
+    /// Geometria da seleção (normalizada).
     pub mask: MaskSpec,
     /// Stem do arquivo de saída (uuid da camada, gerado no front).
     pub layer_id: String,
-    /// false = recorta do original; true = recorta do resultado processado.
     #[serde(default)]
     pub apply_processing: bool,
     #[serde(default)]
@@ -723,7 +676,6 @@ pub async fn copy_region_to_layer(
 ) -> Result<CopyRegionResult> {
     let ws = PathBuf::from(&workspace_path);
     let abs = resolve_workspace_relative(&ws, &input.relative_path)?;
-    // Stem seguro p/ o arquivo de saída.
     let stem: String = input
         .layer_id
         .chars()
@@ -743,8 +695,7 @@ pub async fn copy_region_to_layer(
     let rel_out = format!("{CAMADAS_DIR}/{stem}.png");
     let abs_out = resolve_workspace_relative(&ws, &rel_out)?;
 
-    // CPU-bound (decodificar + talvez aplicar a pilha + recortar + recodificar)
-    // → pool de tarefas bloqueantes, igual aos outros comandos pesados.
+    // CPU-bound: pool de bloqueantes (ver `apply_operation_stack`).
     let out = tauri::async_runtime::spawn_blocking(
         move || -> Result<CopyRegionResult> {
             let mut img = image::open(&abs)
@@ -805,9 +756,8 @@ pub async fn copy_region_to_layer(
     Ok(out)
 }
 
-/// G12 — Aplica uma pilha de operações na imagem original e retorna
-/// PNG base64 + dimensões. Sem persistir nada — quem persiste é o
-/// `export_image_derivative`.
+/// Aplica a pilha de operações na imagem original e devolve PNG/JPEG base64.
+/// Não persiste nada; quem persiste é `export_image_derivative`.
 #[derive(Debug, Clone, Deserialize)]
 pub struct ApplyOperationStackInput {
     pub relative_path: String,
@@ -815,7 +765,7 @@ pub struct ApplyOperationStackInput {
     pub adjustments: Option<BackendAdjustments>,
     #[serde(default)]
     pub operations: Vec<BackendOperation>,
-    /// Output como JPG (false = PNG, default).
+    /// true = JPEG; false (default) = PNG.
     #[serde(default)]
     pub as_jpeg: bool,
 }
@@ -836,16 +786,9 @@ pub async fn apply_operation_stack(
     let ws = PathBuf::from(&workspace_path);
     let abs = resolve_workspace_relative(&ws, &input.relative_path)?;
 
-    // O processamento é CPU-bound e pode ser PESADO (decodificar a imagem +
-    // filtros O(w·h·k²) como mediana/bilateral/canny + recodificar). Rodar isso
-    // direto neste `async fn` ocuparia um worker do runtime async do Tauri SEM
-    // ceder (não há `.await` no meio do laço): além de atrasar a entrega do
-    // IPC, com várias chamadas em sequência — cada filtro adicionado dispara
-    // uma — os workers do runtime esgotam e a chamada mais recente (a única
-    // cujo resultado interessa, pois o front descarta as anteriores) pode nunca
-    // chegar a rodar. Sintoma: o preview "trava" no "Aplicando filtros…" e
-    // nenhuma imagem volta. `spawn_blocking` joga o trabalho no pool dedicado
-    // de tarefas bloqueantes, deixando o runtime async livre para responder.
+    // CPU-bound e pesado (filtros O(w·h·k²)). Rodar direto no `async fn` ocupava
+    // um worker do runtime sem ceder; com vários filtros em sequência os workers
+    // esgotavam e o preview travava em "Aplicando filtros…". Daí o spawn_blocking.
     let out = tauri::async_runtime::spawn_blocking(
         move || -> Result<ApplyOperationStackResult> {
             let mut img = image::open(&abs)
@@ -895,14 +838,8 @@ pub async fn apply_operation_stack(
     Ok(out)
 }
 
-/// G12.21 — Gera relatório de análise pericial em HTML.
-///
-/// Inputs: análise existente. O backend coleta tudo (EXIF, hashes do
-/// arquivo original, ops do `processing_stack` no `.sicroimage`, logs
-/// do banco, thumbnail da imagem) e produz HTML auto-contido.
-///
-/// O front pode então abrir num iframe (preview) ou chamar o pipeline
-/// PDF (via Edge headless) passando esse HTML.
+/// Relatório HTML auto-contido da análise (EXIF, hashes, pilha de operações,
+/// logs, thumbnail). O front mostra num iframe ou manda para o pipeline PDF.
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct ImageAnalysisReportArtifact {
     pub html: String,
@@ -924,7 +861,6 @@ pub async fn generate_image_analysis_report(
     let analysis = image_analysis_repo::find_by_id(&conn, &analysis_uuid)?
         .ok_or_else(|| SicroError::Validation("análise não encontrada".to_string()))?;
 
-    // Lê o `.sicroimage`.
     let doc_abs =
         resolve_workspace_relative(&ws, &analysis.analysis_relative_path)?;
     let doc_bytes = std::fs::read(&doc_abs).map_err(|e| {
@@ -933,17 +869,14 @@ pub async fn generate_image_analysis_report(
     let doc_json: serde_json::Value = serde_json::from_slice(&doc_bytes)
         .map_err(|e| SicroError::Validation(format!(".sicroimage inválido: {e}")))?;
 
-    // Lê hashes do arquivo original (4 algoritmos).
     let orig_abs =
         resolve_workspace_relative(&ws, &analysis.original_relative_path)?;
     let hashes = crate::image_editor::hashes::compute_all_hashes(&orig_abs).ok();
     let hashes_json = hashes.as_ref().and_then(|h| serde_json::to_value(h).ok());
 
-    // EXIF.
     let exif_value =
         crate::image_editor::exif::read_exif_value(&orig_abs);
 
-    // Operation logs (últimos 100).
     let logs_rows =
         image_analysis_repo::list_logs_for_analysis(&conn, &analysis_uuid, 100)?;
     let logs: Vec<serde_json::Value> = logs_rows
@@ -957,7 +890,6 @@ pub async fn generate_image_analysis_report(
         })
         .collect();
 
-    // Thumbnail — lê imagem, faz resize para 800px de largura, encode PNG.
     let thumb_data_uri = match image::open(&orig_abs) {
         Ok(img) => {
             let rgba = img.to_rgba8();
@@ -1002,7 +934,6 @@ pub async fn generate_image_analysis_report(
     };
     let html = report::render_html(&report_input);
 
-    // Grava HTML em `imagens/relatorios/`.
     let stamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let rel = format!(
         "imagens/relatorios/{}_{}.html",

@@ -1,37 +1,9 @@
-//! `ffmpeg` frame export — Spike F.
-//!
-//! Implements the lab's decision (`SICRO_VIDEO_LAB_RELATORIO.md` §6):
-//! a frame is NOT a screenshot of the player. It's extracted from the
-//! source file by ffmpeg with the request timestamp, written as PNG,
-//! and accompanied by a sidecar JSON describing the technical context.
-//!
-//! Command used (fast + ACCURATE seek):
-//!     ffmpeg -hide_banner -nostdin
-//!            -ss <ts - REWIND>   ← coarse fast seek (keyframe snap, cheap)
-//!            -copyts             ← keep original timestamps
-//!            -i <video>
-//!            -ss <ts>            ← accurate seek to the EXACT instant
-//!            -frames:v 1
-//!            -update 1
-//!            -y <out.png>
-//!
-//! Why not a plain `-ss` BEFORE `-i` (fast seek alone)? It snaps to the
-//! nearest preceding keyframe, so several DISTINCT requested instants that
-//! fall inside the same GOP collapse onto ONE decoded frame. In a forensic
-//! workflow that is corrosive: the perito marks points on what are actually
-//! identical images, and — because every collapsed frame then reports the
-//! keyframe's timestamp — the speed regression sees Δt = 0 and aborts with
-//! "amplitude temporal zero". We therefore use the canonical fast+accurate
-//! recipe: a coarse input seek lands on the keyframe just before the target
-//! (so ffmpeg only decodes a short span, even deep into a long video), and
-//! `-copyts` + an ABSOLUTE output `-ss` make ffmpeg decode-and-discard until
-//! it reaches the exact frame. Distinct requests ⇒ distinct frames.
-//!
-//! ATENÇÃO — início do arquivo: o `-ss` de ENTRADA do ffmpeg conta a partir
-//! do `start_time` do arquivo, mas o pedido (e o player, e o `-ss` de saída
-//! com `-copyts`) usa o tempo absoluto. Em vídeo recortado (trecho vazio no
-//! início, ex.: 3,97 s) a busca rápida caía DEPOIS do alvo e o ffmpeg entregava
-//! um quadro atrasado. Por isso a busca rápida desconta `start_time_s`.
+//! Coleta de quadro: extraído do arquivo pelo ffmpeg (não é screenshot do
+//! player), em PNG + sidecar JSON. Busca rápida + exata:
+//!   `-ss <alvo − 2 s> -copyts -i <vídeo> -ss <alvo> -frames:v 1`
+//! Só o `-ss` de entrada cai no quadro-chave: instantes distintos do mesmo GOP
+//! viravam um só quadro (Δt = 0 na regressão). O `-ss` de entrada conta do
+//! `start_time` do arquivo e o alvo é absoluto — a busca rápida desconta isso.
 
 use std::path::{Path, PathBuf};
 
@@ -43,26 +15,19 @@ use crate::error::{Result, SicroError};
 
 use super::probe::detect_ffprobe;
 
-/// How far BEFORE the target instant the coarse fast-seek lands. It only has
-/// to be enough that the keyframe ffmpeg snaps to sits before the target, so
-/// the accurate output seek has frames to decode-and-discard up to it. This
-/// is purely a performance knob (smaller ⇒ less decoding); correctness comes
-/// from `-copyts` + the absolute output `-ss`, not from this margin.
+/// Quanto antes do alvo a busca rápida mira. Só desempenho (menos decodificação);
+/// a exatidão vem do `-copyts` + `-ss` de saída.
 const SEEK_REWIND_S: f64 = 2.0;
 
 pub struct ExtractFrameOptions<'a> {
     pub video_path: &'a Path,
     pub timestamp_s: f64,
     pub out_png: &'a Path,
-    /// Optional sidecar JSON path (next to the PNG). If None, sidecar is
-    /// not written. The orchestrator decides — we just do disk + ffmpeg.
+    /// Sidecar JSON ao lado do PNG; `None` não grava.
     pub sidecar_json: Option<&'a Path>,
-    /// Echoed verbatim into the sidecar (media_hash, event_id, etc.) so
-    /// the caller can attach domain context without us having to model it
-    /// at this layer.
+    /// Copiado como está para o sidecar (media_hash, event_id…).
     pub sidecar_extra: serde_json::Value,
-    /// `format.start_time` do arquivo (`probe::container_start_time`): a busca
-    /// rápida de entrada é medida a partir dele.
+    /// `format.start_time` do arquivo: a busca rápida de entrada desconta isto.
     pub start_time_s: f64,
 }
 
@@ -74,12 +39,12 @@ pub struct ExtractedFrame {
     pub actual_timestamp_s: Option<f64>,
     pub delta_s: Option<f64>,
     pub size_bytes: u64,
-    /// Captures the ffmpeg version line (first line of `ffmpeg -version`).
+    /// 1ª linha de `ffmpeg -version`.
     pub ffmpeg_version: Option<String>,
     pub extracted_at: DateTime<Utc>,
 }
 
-/// Detect the `ffmpeg` binary in PATH. Same strategy as ffprobe (Spike F).
+/// ffmpeg empacotado com o SICRO ou o do PATH.
 pub fn detect_ffmpeg() -> Result<PathBuf> {
     if let Some(p) = crate::tools::bundled_ffmpeg_tool("ffmpeg") {
         return Ok(p);
@@ -87,7 +52,7 @@ pub fn detect_ffmpeg() -> Result<PathBuf> {
     which("ffmpeg")
 }
 
-/// Extract a single frame from the video at the given timestamp.
+/// Coleta um quadro no instante pedido (PNG + sidecar opcional).
 pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
     if !opts.video_path.is_file() {
         return Err(SicroError::Filesystem(format!(
@@ -106,11 +71,9 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
     }
     let ffmpeg = detect_ffmpeg()?;
 
-    // O quadro a coletar é o que o PLAYER MOSTRA no instante pedido: o último
-    // que começa em ou antes dele (pts <= t). Os tempos dos pacotes dão isso
-    // exatamente; mira-se 1/4 de quadro antes dele, e a busca exata de saída
-    // (que fica com o 1º quadro >= alvo) cai nele — nem o anterior, nem o
-    // seguinte. Sem tempos de pacote (contêiner raro), volta ao pedido cru.
+    // O quadro é o que o player mostra (último com pts <= t). Mira 1/4 de quadro
+    // antes dele: a busca exata de saída fica com o 1º quadro >= alvo — ele, não
+    // o anterior nem o seguinte. Sem tempos de pacote, usa o pedido cru.
     let (target_abs, shown_pts) = match crate::video::clip::plan_clip(
         opts.video_path,
         opts.timestamp_s,
@@ -120,10 +83,7 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
         Err(_) => (opts.timestamp_s, None),
     };
 
-    // Fast + ACCURATE seek (see module docs): a coarse input seek snaps to the
-    // keyframe just before the target (cheap), `-copyts` keeps the original
-    // timestamps, and an ABSOLUTE output seek nails the exact frame — so two
-    // instants in the same GOP no longer collapse onto one keyframe.
+    // Busca rápida de entrada (descontando start_time) + exata de saída (absoluta).
     let coarse = format_seconds(
         (target_abs - SEEK_REWIND_S - opts.start_time_s.max(0.0)).max(0.0),
     );
@@ -168,9 +128,7 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
         .map(|m| m.len())
         .unwrap_or(0);
 
-    // Try to read back the precise timestamp of the produced PNG by
-    // re-running ffprobe on the SOURCE near that timestamp. ffmpeg with
-    // fast `-ss` may snap to a keyframe; we surface the delta honestly.
+    // Sem plano por pacotes, lê o tempo real do quadro decodificado.
     let actual = shown_pts.or_else(|| probe_actual_timestamp(opts.video_path, opts.timestamp_s).ok());
     let delta = actual.map(|a| a - opts.timestamp_s);
 
@@ -193,23 +151,15 @@ pub fn extract_frame(opts: ExtractFrameOptions<'_>) -> Result<ExtractedFrame> {
     Ok(extracted)
 }
 
-/// Report the TRUE presentation time of the frame our accurate seek lands on.
-///
-/// Critically, this reads decoded FRAMES, not packets. A packet probe (like
-/// any keyframe-snapping seek) returns the GOP's keyframe time, so every
-/// instant inside that GOP reports the SAME timestamp — the exact failure that
-/// made distinct collected frames share one `actual_timestamp_s` and the speed
-/// regression abort with Δt = 0. Instead we decode frames in a small window
-/// (the coarse seek may still snap its START to a keyframe, but we then scan
-/// forward) and pick the first whose presentation time reaches the request —
-/// mirroring the accurate output-seek used by `extract_frame`.
+/// Tempo de apresentação real do quadro em que a busca exata cai: lê QUADROS
+/// decodificados (pacotes devolveriam o quadro-chave do GOP para todo instante
+/// nele) e pega o 1º com tempo >= pedido.
 fn probe_actual_timestamp(video: &Path, ts_s: f64) -> Result<f64> {
     let ffprobe = detect_ffprobe()?;
     let ts = ts_s.max(0.0);
     let start = (ts - SEEK_REWIND_S).max(0.0);
-    // Fim ABSOLUTO da janela: um fim relativo (`%+n`) conta a partir de onde
-    // a busca caiu (o quadro-chave, às vezes vários segundos antes) e a janela
-    // podia acabar antes do alvo — aí o "tempo real" saía o último quadro dela.
+    // Fim absoluto: `%+n` contaria de onde a busca caiu (o quadro-chave) e a
+    // janela podia acabar antes do alvo.
     let end = ts + 4.0;
     let output = crate::tools::command(&ffprobe)
         .args([
@@ -252,8 +202,6 @@ fn probe_actual_timestamp(video: &Path, ts_s: f64) -> Result<f64> {
         ));
     }
     times.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
-    // First frame whose time reaches the request (where accurate output-seek
-    // lands); fall back to the closest frame just before the window's end.
     const EPS: f64 = 1e-6;
     let chosen = times
         .iter()
@@ -304,9 +252,7 @@ fn detect_ffmpeg_version(ffmpeg: &Path) -> Option<String> {
         .map(str::to_string)
 }
 
-/// Format seconds as `HH:MM:SS.mmm` — ffmpeg accepts both decimal seconds
-/// and HH:MM:SS notation; we use the latter for readability in process
-/// listings during debugging.
+/// `HH:MM:SS.mmm` (o ffmpeg aceita; mais legível na lista de processos).
 fn format_seconds(s: f64) -> String {
     let s = s.max(0.0);
     let total_ms = (s * 1000.0).round() as i64;
@@ -318,9 +264,7 @@ fn format_seconds(s: f64) -> String {
     format!("{hr:02}:{min:02}:{sec:02}.{ms:03}")
 }
 
-/// Estimate the frame index from `timestamp_s` and a declared FPS.
-/// Returns `None` if either input is missing/zero. The result is ALWAYS
-/// estimated — the orchestrator must mark the row accordingly.
+/// Quadro estimado = round(t × fps); `None` sem fps válido. É sempre estimativa.
 pub fn estimate_frame_index(timestamp_s: f64, fps_declared: Option<f64>) -> Option<i64> {
     let fps = fps_declared?;
     if fps <= 0.0 || !fps.is_finite() {

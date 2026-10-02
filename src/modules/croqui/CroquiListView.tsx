@@ -1,7 +1,4 @@
-/**
- * CroquiListView — landing inside the Croqui module before any croqui is open.
- * Allows creating a new croqui and opening existing ones.
- */
+/** Landing do módulo Croqui: criar, abrir e excluir croquis. */
 
 import { useEffect, useState } from "react";
 import type { MouseEvent } from "react";
@@ -28,8 +25,6 @@ import { selectActiveWorkspacePath, useWorkspaceStore } from "@stores/workspaceS
 import { useCroquiStore } from "./store/croquiStore";
 import styles from "./CroquiListView.module.css";
 
-// Linha mínima que precisamos guardar enquanto o popup está aberto.
-// Espelha os campos do store sem importar o tipo da row inteira.
 interface PendingDeleteCroqui {
   id: string;
   title: string;
@@ -82,7 +77,6 @@ export function CroquiListView() {
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Croqui aguardando confirmação. `null` = nenhum popup aberto.
   const [pendingDelete, setPendingDelete] =
     useState<PendingDeleteCroqui | null>(null);
 
@@ -97,7 +91,7 @@ export function CroquiListView() {
     try {
       const created = await createCroqui(workspacePath, title.trim(), kind);
       setTitle("");
-      // Viário já abre via store (activeDoc setado). Corporal/planta: manual.
+      // Viário já abre pelo store (activeDoc setado); corporal/planta abrem aqui.
       if (kind === "corporal") openCorpo(created.id);
       else if (kind === "planta") openPlanta(created.id);
     } catch (err) {
@@ -128,10 +122,6 @@ export function CroquiListView() {
     }
   };
 
-  // Exclui o croqui após confirmação via popup. `stopPropagation`
-  // mantém o padrão do delete do laudo (o botão fica dentro de um
-  // `row` que não é clicável hoje, mas o stopPropagation defende
-  // contra mudanças futuras).
   const handleDeleteClick = (
     e: MouseEvent<HTMLButtonElement>,
     croquiId: string,
@@ -151,7 +141,7 @@ export function CroquiListView() {
       setPendingDelete(null);
     } catch (err) {
       setError(toSicroError(err).message);
-      // Mantemos o popup aberto se o usuário quiser tentar de novo.
+      // Popup fica aberto para tentar de novo.
     } finally {
       setBusy(false);
     }

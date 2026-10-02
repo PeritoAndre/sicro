@@ -1,8 +1,4 @@
-/**
- * KindTab — lista genérica de provas filtrada por `kinds`, com título clicável
- * (abre no módulo) + ações padronizadas (EvidenceActions). Usada pelas abas
- * Áudios, Imagens e Documentoscopia da Central de Provas.
- */
+/** Lista genérica de provas filtrada por `kinds` (abas Áudios, Imagens…). */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 

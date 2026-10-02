@@ -1,8 +1,4 @@
-/**
- * FramesTab — frames extraídos por FFmpeg (Spike F). Mostra miniaturas,
- * timestamp, vídeo de origem, sidecar JSON e quantos laudos citam cada
- * frame.
- */
+/** Aba Frames: quadros extraídos por FFmpeg, com miniatura, timestamp e sidecar. */
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";

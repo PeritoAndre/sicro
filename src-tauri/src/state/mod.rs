@@ -1,8 +1,5 @@
-//! Cross-workspace state managed by the app process itself.
-//!
-//! Currently this is just the global "recents" list, stored as JSON under
-//! the user's config directory. Future cross-cutting state (user profile,
-//! per-machine settings) goes here too — workspaces stay self-contained.
+//! Estado entre workspaces mantido pelo processo do app: a lista global de
+//! recentes (JSON na pasta de config do usuário). Workspaces continuam autocontidos.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -28,7 +25,7 @@ struct RecentsFile {
     recents: Vec<RecentOccurrence>,
 }
 
-/// Global state owned by Tauri's `App::manage()`.
+/// Estado global entregue ao `App::manage()` do Tauri.
 pub struct AppState {
     config_dir: PathBuf,
     default_workspace_parent: PathBuf,
@@ -58,12 +55,9 @@ impl AppState {
             RecentsFile::default()
         };
 
-        // Pasta padrão dos casos: LOCAL e fora de sync (ex.: C:\Users\<user>\
-        // SICRO\Casos), NÃO em Documentos — que costuma estar redirecionado pro
-        // OneDrive. Um SQLite "vivo" dentro de pasta sincronizada corrompe (o
-        // sync sobe o .sqlite sem o -wal, ou no meio de uma transação). A
-        // redundância em nuvem é feita via BACKUP (.sicrobackup estático), não
-        // sincronizando o banco vivo. O perito pode trocar em Configurações.
+        // Pasta padrão dos casos LOCAL e fora de sync (não em Documentos, que costuma
+        // ir pro OneDrive): SQLite vivo em pasta sincronizada corrompe (sobe sem o
+        // -wal ou no meio de transação). Nuvem só via .sicrobackup estático.
         let default_workspace_parent = UserDirs::new()
             .map(|d| d.home_dir().join("SICRO").join("Casos"))
             .unwrap_or_else(|| config_dir.join("workspaces"));
@@ -99,8 +93,7 @@ impl AppState {
     ) -> Result<()> {
         let mut guard = self.inner.lock().expect("recents mutex poisoned");
 
-        // Drop any prior entry with the same workspace_id OR the same path
-        // (paths can move; ids are stable).
+        // Tira entrada anterior com o mesmo id OU o mesmo caminho (caminhos mudam; ids não).
         guard
             .recents
             .retain(|r| r.workspace_id != workspace_id && r.workspace_path != workspace_path);

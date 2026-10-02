@@ -1,11 +1,4 @@
-/**
- * EvidenceActions — linha de ações padrão de uma prova na Central de Provas.
- *
- * Ação primária: **Abrir no módulo** (carrega o item no módulo de origem). Em
- * seguida: Revelar na pasta, Abrir no app do sistema (externo, secundário),
- * Copiar referência técnica (JSON, p/ laudo) e Ver metadados. "Copiar caminho"
- * foi removido (redundante — o caminho aparece na linha e dá pra abrir a pasta).
- */
+/** Linha de ações padrão de uma prova; a primária é "Abrir no módulo". */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowUpRight, ExternalLink, Eye, Folder } from "lucide-react";

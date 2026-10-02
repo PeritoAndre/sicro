@@ -1,14 +1,6 @@
 /**
- * Python Parity Engine — factory functions.
- *
- * Helpers para criar `SicroRoadObject_parity` e
- * `SicroRoundaboutObject_parity` com defaults seguros + validação de
- * limites. Equivalente do `nova_spline` Python (`spline_via.py`).
- *
- * **Sem efeitos colaterais.** Cada factory retorna um objeto novo
- * pronto para inserir em `doc.objects`. Caller é responsável por
- * gerar id (geralmente via `uid()`) — factory aceita o id ou gera
- * com `crypto.randomUUID()`.
+ * Factories de via e rotatória parity: defaults seguros + clamp de limites.
+ * Sem efeitos colaterais; devolvem objeto novo pronto para `doc.objects`.
  */
 
 import {
@@ -24,17 +16,11 @@ import {
   type SicroRoadObject_parity,
   type SicroRoundaboutObject_parity,
 } from "./types";
-// Re-export tipos opcionais nos options sem precisar import duplicado:
 import type { ParityMarcacao, ParitySuperficie } from "./types";
 
-/**
- * Layer ID padrão para objetos viários (paridade com o resto do
- * SICRO 2.0 — todas as vias e rotatórias entram no layer "Objetos").
- */
 const PARITY_DEFAULT_LAYER_ID = "layer_objects";
 
-// ---------------------------------------------------------------------------
-// Helpers internos.
+// ---- Helpers ----
 
 function clamp(value: number, lo: number, hi: number): number {
   if (!Number.isFinite(value)) return lo;
@@ -44,9 +30,7 @@ function clamp(value: number, lo: number, hi: number): number {
 }
 
 function genId(prefix: string): string {
-  // Sem depender de `crypto.randomUUID` (não disponível em todos os
-  // runtimes — Tauri webview em Windows mais antigo pode não ter).
-  // Fallback simples: prefix + timestamp + random.
+  // Sem `crypto.randomUUID`: webview Tauri em Windows antigo pode não ter.
   const t = Date.now().toString(36);
   const r = Math.floor(Math.random() * 0xffffff)
     .toString(36)
@@ -54,16 +38,14 @@ function genId(prefix: string): string {
   return `${prefix}_${t}_${r}`;
 }
 
-// ---------------------------------------------------------------------------
-// Options aceitos pelas factories.
+// ---- Options ----
 
-export interface MakeParityRoadOptions {
+interface MakeParityRoadOptions {
   id?: string;
   layer_id?: string;
-  /** Controle 1 (Bezier). Quando ausente, calculado a 1/3 do segmento A→B. */
+  /** Controles Bezier; ausentes ⇒ a 1/3 e 2/3 do segmento A→B (reta). */
   cx1?: number;
   cy1?: number;
-  /** Controle 2 (Bezier). Quando ausente, calculado a 2/3 do segmento A→B. */
   cx2?: number;
   cy2?: number;
   largura_m?: number;
@@ -76,7 +58,7 @@ export interface MakeParityRoadOptions {
   locked?: boolean;
 }
 
-export interface MakeParityRoundaboutOptions {
+interface MakeParityRoundaboutOptions {
   id?: string;
   layer_id?: string;
   largura_m?: number;
@@ -89,28 +71,9 @@ export interface MakeParityRoundaboutOptions {
   locked?: boolean;
 }
 
-// ---------------------------------------------------------------------------
-// Factory: SicroRoadObject_parity.
+// ---- Via ----
 
-/**
- * Cria uma via parity entre dois pontos do mundo (metros).
- *
- * Defaults (paridade `nova_spline` Python):
- *   - largura_m = 7.0 m
- *   - superficie = asfalto
- *   - mao_dupla = true
- *   - marcacao = amarela
- *   - controles a 1/3 e 2/3 do segmento A→B (= reta visual)
- *
- * Validações:
- *   - largura_m é clamped em [0.5, 30] m.
- *   - id gerado automaticamente se ausente.
- *   - layer_id default = "layer_objects".
- *
- * @param ax,ay   âncora inicial (mundo, metros)
- * @param bx,by   âncora final (mundo, metros)
- * @param opts    overrides opcionais
- */
+/** Via entre A e B (metros). Defaults: 7 m, asfalto, mão dupla, amarela; largura clampada em [0.5, 30]. */
 export function makeParityRoad(
   ax: number,
   ay: number,
@@ -118,7 +81,6 @@ export function makeParityRoad(
   by: number,
   opts: MakeParityRoadOptions = {},
 ): SicroRoadObject_parity {
-  // Controles default: 1/3 e 2/3 do segmento A→B (reta visualmente).
   const dx = bx - ax;
   const dy = by - ay;
   const cx1 = opts.cx1 ?? ax + dx / 3;
@@ -155,10 +117,7 @@ export function makeParityRoad(
   };
 }
 
-/**
- * Cria uma via parity com Bezier explícito (4 pontos completos).
- * Útil para o adapter OSM (Hermite→Bezier) e templates.
- */
+/** Via com os 4 pontos Bezier explícitos (adapter OSM e templates). */
 export function makeParityRoadBezier(
   ax: number,
   ay: number,
@@ -179,21 +138,9 @@ export function makeParityRoadBezier(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Factory: SicroRoundaboutObject_parity.
+// ---- Rotatória ----
 
-/**
- * Cria uma rotatória parity.
- *
- * Defaults:
- *   - largura_m = 7.0 m (anel)
- *   - superficie = asfalto
- *   - inner_color = undefined (renderer aplica `#3A6535`)
- *
- * Validações:
- *   - r_m clamped em [2, 100] m.
- *   - largura_m clamped em [2, min(r_m - 1, 15)] — garante ilha visível.
- */
+/** Rotatória. `r_m` clampado em [2, 100]; `largura_m` em [2, min(r_m − 1, 15)] para a ilha ficar visível. */
 export function makeParityRoundabout(
   cx: number,
   cy: number,
@@ -201,9 +148,6 @@ export function makeParityRoundabout(
   opts: MakeParityRoundaboutOptions = {},
 ): SicroRoundaboutObject_parity {
   const r_clamped = clamp(r_m, PARITY_ROUNDABOUT_R_MIN_M, PARITY_ROUNDABOUT_R_MAX_M);
-  // Largura não pode ser >= raio (senão a ilha desaparece). Limita
-  // ao mínimo entre o constante e (raio - 1m) para garantir ilha
-  // visível.
   const largura_default = opts.largura_m ?? PARITY_ROUNDABOUT_LARGURA_PADRAO_M;
   const largura_max_real = Math.min(
     PARITY_ROUNDABOUT_LARGURA_MAX_M_FALLBACK,
@@ -232,13 +176,10 @@ export function makeParityRoundabout(
     metadata_json: opts.metadata_json ?? null,
   };
 
-  // `inner_color` opcional — só inclui no objeto se foi especificado.
-  // Quando ausente, renderer aplica `#3A6535` (default Python).
+  // Opcionais só entram no objeto se especificados (ausente ≠ undefined na serialização).
   if (opts.inner_color !== undefined) {
     out.inner_color = opts.inner_color;
   }
-  // `marcacao` opcional — quando ausente, renderer não desenha o eixo
-  // central tracejado do anel.
   if (opts.marcacao !== undefined) {
     out.marcacao = opts.marcacao;
   }

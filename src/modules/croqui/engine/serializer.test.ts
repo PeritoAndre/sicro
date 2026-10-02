@@ -1,11 +1,4 @@
-/**
- * Unit tests for the `.sicrocroqui` serializer — Spike E.
- *
- * Confirms:
- *   - the coercer hardens missing/defaulted fields;
- *   - round-trip (coerce → JSON.stringify → JSON.parse → coerce) is stable;
- *   - shape that can't possibly be a croqui throws clearly.
- */
+/** Testes do serializer: defaults do coercer, round-trip estável e rejeição de forma inválida. */
 
 import { describe, expect, it } from "vitest";
 import {
@@ -98,7 +91,6 @@ describe("coerceCroquiDoc", () => {
     expect(d.objects[0]?.kind).toBe("vehicle");
   });
 
-  // MVP 6 — backward compatibility with v0.1 envelopes.
   it("loads a v0.1 envelope without crashing and assigns categories", () => {
     const d = coerceCroquiDoc({
       schema_version: "0.1",
@@ -180,7 +172,6 @@ describe("serializeCroquiDoc", () => {
     expect(reparsed.croqui_id).toBe(VALID_MINIMUM.croqui_id);
   });
 
-  // MVP 9 Round 5 — additive background fields.
   it("defaults background.rotation to 0 when the field is missing (legacy doc)", () => {
     const d = coerceCroquiDoc({
       ...VALID_MINIMUM,
@@ -228,10 +219,7 @@ describe("serializeCroquiDoc", () => {
     expect(reparsed.background_image?.locked).toBe(false);
   });
 
-  // Fase S clean cut — Road v1/v2 (`kind: "road"`, `kind: "roundabout"`)
-  // são silenciosamente descartados pelo coercer. Croquis pré-S perdem
-  // essas primitivas; o único motor de via passa a ser Python Parity
-  // Engine (`kind: "road_parity"` / `kind: "roundabout_parity"`).
+  // Vias antigas (`kind: "road"` / `"roundabout"`) são descartadas; só o motor parity existe.
   it("silently drops legacy v1 road objects (clean cut)", () => {
     const d = coerceCroquiDoc({
       ...VALID_MINIMUM,

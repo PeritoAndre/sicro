@@ -1,65 +1,22 @@
-//! Cálculo de velocidade a partir de pontos no plano do mundo + tempos.
+//! Velocidade a partir de pontos no plano do mundo + tempos: média entre 2
+//! pontos, ou regressão por eixo (`X(t) = vx·t + bx`, `Y(t) = vy·t + by`,
+//! `v = sqrt(vx² + vy²)`) com `>= 3` pontos.
 //!
-//! Dois modos:
+//! Por que não regredir o comprimento de caminho acumulado: por Jensen,
+//! `E[|segmento ruidoso|] >= |segmento real|` — superestima a velocidade
+//! (a direção perigosa em perícia), e piora quando o movimento por quadro é
+//! pequeno frente ao ruído. A regressão por eixo herda a imparcialidade da
+//! regressão linear simples (resta só um viés de 2ª ordem em `vy²`).
 //!
-//! ### Velocidade média entre 2 pontos
-//!
-//! `distance(p1, p2) / (t2 - t1)`. Sem incerteza estatística (apenas 2
-//! amostras). Útil quando o perito tem só duas marcações confiáveis e
-//! quer um número rápido.
-//!
-//! ### Regressão por eixo (≥ 3 pontos)
-//!
-//! Ajusta **duas** retas independentes por mínimos quadrados:
-//!
-//! ```text
-//!   X(t) = vx·t + bx
-//!   Y(t) = vy·t + by
-//! ```
-//!
-//! e calcula a rapidez como `v = sqrt(vx² + vy²)`.
-//!
-//! **Por que não comprimento de caminho acumulado?** Regredir a soma de
-//! `|Pᵢ - Pᵢ₋₁|` parece natural, mas tem **viés sistemático para cima**
-//! sob ruído de marcação: por Jensen, `E[|segmento ruidoso|] ≥
-//! |segmento real|` (a norma é convexa, e perturbar os extremos infla a
-//! distância esperada). O viés cresce quando o movimento por quadro é
-//! pequeno em relação ao ruído — exatamente o regime de fiscalização.
-//! Superestimar velocidade é a direção perigosa em perícia, então o
-//! estimador foi trocado pela regressão por eixo, que herda a
-//! imparcialidade da regressão linear simples em cada componente.
-//! (O termo `vy²` ainda introduz um viés positivo de segunda ordem, mas
-//! proporcional à *variância da inclinação* — ordens de magnitude menor
-//! que o viés do comprimento de caminho.)
-//!
-//! O retorno inclui:
-//!
-//!   - rapidez `v` e componentes `vx`, `vy` (m/s + km/h)
-//!   - erro padrão da rapidez (delta method, assumindo ruído isotrópico
-//!     no plano do mundo)
-//!   - IC 95% via Student's t (tabela para df pequeno; aproximação
-//!     normal `z = 1.960` para `df ≥ 30`)
-//!   - R² conjunto do ajuste (X + Y)
-//!   - resíduo 2D por ponto (distância à trajetória ajustada — útil pra
-//!     detectar outliers / curvatura)
-//!
-//! **Premissa:** movimento aproximadamente retilíneo e uniforme na
-//! janela analisada. Trajetórias com curvatura forte violam o modelo
-//! linear (R² cai) e devem ser segmentadas pelo perito. A análise de
-//! incerteza rigorosa (propagando ruído de pixel pela homografia) vive
-//! no módulo `montecarlo`.
+//! Premissa: movimento retilíneo e uniforme na janela (R² baixo → segmentar).
 
-/// Velocidade com as duas unidades comuns disponíveis.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Velocity {
-    /// Metros por segundo (unidade base).
     pub m_per_s: f64,
-    /// Quilômetros por hora (conversão direta `* 3.6`).
     pub km_per_h: f64,
 }
 
 impl Velocity {
-    /// Constrói a partir de m/s.
     pub fn from_m_per_s(v: f64) -> Self {
         Self {
             m_per_s: v,
@@ -68,31 +25,22 @@ impl Velocity {
     }
 }
 
-/// Resultado completo da regressão linear de velocidade.
 #[derive(Debug, Clone)]
 pub struct RegressionResult {
-    /// Rapidez estimada `v = sqrt(vx² + vy²)`.
+    /// Rapidez `sqrt(vx² + vy²)`.
     pub velocity: Velocity,
-    /// Componente X da velocidade (m/s), inclinação da regressão `X(t)`.
     pub vx_m_per_s: f64,
-    /// Componente Y da velocidade (m/s), inclinação da regressão `Y(t)`.
     pub vy_m_per_s: f64,
-    /// Erro padrão da rapidez (m/s), via delta method com variância de
-    /// resíduo agrupada entre os eixos (premissa de ruído isotrópico).
+    /// Erro padrão da rapidez (delta method, ruído isotrópico).
     pub se_m_per_s: f64,
-    /// IC 95% da rapidez em m/s `(lo, hi)`. Pode conter valores
-    /// negativos em cenas extremamente ruidosas (matematicamente válido,
-    /// fisicamente improvável).
+    /// IC 95% (Student's t); pode ficar negativo em cena muito ruidosa.
     pub ci95_m_per_s: (f64, f64),
-    /// IC 95% em km/h, igual ao anterior multiplicado por 3.6.
     pub ci95_km_per_h: (f64, f64),
-    /// R² conjunto (X + Y), no intervalo [0, 1]. Valores próximos de 1
-    /// indicam trajetória bem aproximada por velocidade constante.
+    /// R² conjunto (X + Y), em [0, 1].
     pub r_squared: f64,
-    /// Graus de liberdade `2·(n - 2)` (4 parâmetros: vx, bx, vy, by).
+    /// `2·(n − 2)` (4 parâmetros).
     pub degrees_of_freedom: usize,
-    /// Resíduo 2D (em metros) de cada ponto em relação à trajetória
-    /// ajustada: `||Pᵢ - (v⃗·tᵢ + b⃗)||`.
+    /// Resíduo 2D (m) de cada ponto à trajetória ajustada.
     pub residuals: Vec<f64>,
 }
 
@@ -106,12 +54,7 @@ pub enum VelocityError {
     DimensionMismatch { pts: usize, times: usize },
 }
 
-/// Velocidade média escalar entre dois pontos do mundo (em metros) com
-/// timestamps em segundos.
-///
-/// Retorna o módulo `|d| / |Δt|` — não preserva sinal porque uma
-/// velocidade "média" entre dois instantes pode ser interpretada como
-/// rapidez, e velocidade vetorial não cabe numa interface 1D.
+/// Rapidez média `|d| / |Δt|` entre dois pontos (m, s).
 pub fn average_velocity(
     p1: (f64, f64),
     t1: f64,
@@ -128,15 +71,8 @@ pub fn average_velocity(
     Ok(Velocity::from_m_per_s(distance / dt))
 }
 
-/// Regressão por eixo de `X(t)` e `Y(t)` para 3+ pontos.
-///
-/// Os pontos devem estar na ordem cronológica (idem para `times`).
-/// Ajusta `X(t) = vx·t + bx` e `Y(t) = vy·t + by` independentemente por
-/// mínimos quadrados, e retorna a rapidez `v = sqrt(vx² + vy²)`.
-///
-/// Diferente de regredir comprimento de caminho acumulado, este
-/// estimador é (de primeira ordem) imparcial sob ruído de marcação —
-/// ver doc do módulo para a justificativa via desigualdade de Jensen.
+/// Regressão por eixo (`X(t)`, `Y(t)` por mínimos quadrados) para `>= 3`
+/// pontos em ordem cronológica.
 pub fn regression_velocity(
     points: &[(f64, f64)],
     times: &[f64],
@@ -152,7 +88,6 @@ pub fn regression_velocity(
         return Err(VelocityError::InsufficientPoints(n));
     }
 
-    // Médias.
     let n_f = n as f64;
     let t_mean: f64 = times.iter().sum::<f64>() / n_f;
     let x_mean: f64 = points.iter().map(|p| p.0).sum::<f64>() / n_f;
@@ -172,14 +107,12 @@ pub fn regression_velocity(
         return Err(VelocityError::ZeroTimeSpread);
     }
 
-    // Inclinações (componentes da velocidade) e interceptos.
     let vx = s_tx / s_tt;
     let vy = s_ty / s_tt;
     let bx = x_mean - vx * t_mean;
     let by = y_mean - vy * t_mean;
     let speed = (vx * vx + vy * vy).sqrt();
 
-    // Resíduos 2D + somas de quadrados (residual e total) por eixo.
     let mut residuals = Vec::with_capacity(n);
     let mut ss_res_x = 0.0;
     let mut ss_res_y = 0.0;
@@ -197,16 +130,13 @@ pub fn regression_velocity(
         ss_tot_y += ddy * ddy;
     }
 
-    // Variância de resíduo AGRUPADA entre os eixos (premissa de ruído
-    // isotrópico no plano do mundo). 2n observações - 4 parâmetros.
-    // Com ruído isotrópico, var(vx) = var(vy) = pooled_mse/s_tt, e o
-    // delta method colapsa elegantemente para SE_v = sqrt(pooled_mse/s_tt)
-    // — sem divisão por v (logo sem singularidade quando v → 0).
+    // Variância agrupada entre os eixos (ruído isotrópico), 2n obs − 4 parâmetros.
+    // Com var(vx) = var(vy) = mse/s_tt o delta method dá SE_v = sqrt(mse/s_tt)
+    // — sem dividir por v (sem singularidade em v → 0).
     let df = 2 * (n - 2);
     let pooled_mse = (ss_res_x + ss_res_y) / df as f64;
     let se_v = (pooled_mse / s_tt).max(0.0).sqrt();
 
-    // R² conjunto.
     let ss_tot = ss_tot_x + ss_tot_y;
     let ss_res = ss_res_x + ss_res_y;
     let r_squared = if ss_tot > 1e-12 {
@@ -233,13 +163,7 @@ pub fn regression_velocity(
     })
 }
 
-/// Valor crítico de Student's t para IC 95% bilateral (α/2 = 0.025) por
-/// graus de liberdade. Tabela explícita para `df ∈ [1, 29]` e
-/// aproximação normal `1.960` para `df ≥ 30`.
-///
-/// Fontes (tabela padrão de Student's t):
-///   - NIST Engineering Statistics Handbook §1.3.6.7.2
-///   - Tabela tabular típica de livros-texto de estatística.
+/// t de Student bilateral 95% (NIST Handbook §1.3.6.7.2); z = 1.960 para df ≥ 30.
 fn t_critical_95(df: usize) -> f64 {
     match df {
         1 => 12.706,
@@ -279,7 +203,6 @@ fn t_critical_95(df: usize) -> f64 {
 mod tests {
     use super::*;
 
-    /// Movimento unidimensional a 10 m/s ao longo do eixo X em 1 segundo.
     #[test]
     fn average_velocity_constant_motion() {
         let v = average_velocity((0.0, 0.0), 0.0, (10.0, 0.0), 1.0).unwrap();
@@ -287,7 +210,6 @@ mod tests {
         assert!((v.km_per_h - 36.0).abs() < 1e-12);
     }
 
-    /// Trio pitagórico 5-12-13: distância 13m em 1s = 13 m/s.
     #[test]
     fn average_velocity_diagonal_pythagorean() {
         let v = average_velocity((0.0, 0.0), 0.0, (5.0, 12.0), 1.0).unwrap();
@@ -300,8 +222,6 @@ mod tests {
         assert!(matches!(r, Err(VelocityError::ZeroTimeSpread)));
     }
 
-    /// Cena ideal: 5 pontos em movimento retilíneo a 10 m/s. A regressão
-    /// deve recuperar exatamente 10.0 m/s com SE_slope ≈ 0 e R² = 1.
     #[test]
     fn regression_recovers_exact_constant_velocity() {
         let points = vec![
@@ -315,23 +235,19 @@ mod tests {
         let res = regression_velocity(&points, &times).unwrap();
         assert!((res.velocity.m_per_s - 10.0).abs() < 1e-9, "v = {}", res.velocity.m_per_s);
         assert!((res.velocity.km_per_h - 36.0).abs() < 1e-9);
-        // Componentes: tudo em X.
         assert!((res.vx_m_per_s - 10.0).abs() < 1e-9, "vx = {}", res.vx_m_per_s);
         assert!(res.vy_m_per_s.abs() < 1e-9, "vy = {}", res.vy_m_per_s);
         assert!(res.r_squared > 0.9999999);
         assert!(res.se_m_per_s < 1e-9);
-        // Resíduos todos ~zero.
         for r in &res.residuals {
             assert!(r.abs() < 1e-9);
         }
     }
 
-    /// Cena ruidosa controlada: velocidade real 20 m/s + perturbação
-    /// determinística pequena. O IC 95% deve conter o valor verdadeiro.
     #[test]
     fn regression_ci_contains_true_velocity_with_small_noise() {
         let true_v = 20.0;
-        // 10 amostras, dt = 0.1s. Posição = v·t + ε(i), ε pequeno.
+        // Posição = v·t + ε(i), ε pequeno e determinístico.
         let n = 10;
         let times: Vec<f64> = (0..n).map(|i| i as f64 * 0.1).collect();
         let points: Vec<(f64, f64)> = times
@@ -348,18 +264,13 @@ mod tests {
             lo <= true_v && true_v <= hi,
             "true_v = {true_v} fora de IC ({lo}, {hi})",
         );
-        // SE > 0 porque há ruído.
         assert!(res.se_m_per_s > 0.0);
-        // R² deve ser alto mas não 1.
         assert!(res.r_squared > 0.99);
     }
 
-    /// Movimento diagonal constante: vx = 3, vy = 4 → rapidez = 5 m/s.
-    /// Confirma que a regressão por eixo recupera as componentes e a
-    /// magnitude corretamente.
     #[test]
     fn regression_diagonal_constant_velocity() {
-        // A cada 0.1s avança 0.3m em X e 0.4m em Y (5 m/s na diagonal).
+        // vx = 3, vy = 4 → 5 m/s.
         let times = vec![0.0, 0.1, 0.2, 0.3, 0.4];
         let points: Vec<(f64, f64)> = times.iter().map(|&t| (3.0 * t, 4.0 * t)).collect();
         let res = regression_velocity(&points, &times).unwrap();
@@ -369,39 +280,31 @@ mod tests {
         assert!((res.velocity.km_per_h - 18.0).abs() < 1e-9);
     }
 
-    /// Regressão por eixo mede a velocidade vetorial líquida (taxa de
-    /// deslocamento do melhor ajuste linear), NÃO o comprimento de
-    /// caminho. Numa poligonal em L, o estimador antigo (comprimento)
-    /// daria 10 m/s (2m / 0.2s); o per-axis dá a magnitude do vetor
-    /// velocidade médio. Documenta a mudança de semântica de propósito.
+    /// Poligonal em L: a regressão por eixo dá a velocidade vetorial líquida
+    /// (sqrt(50) ≈ 7.07 m/s), não o comprimento de caminho (10 m/s).
     #[test]
     fn regression_per_axis_measures_net_velocity_not_path_length() {
         let points = vec![(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)];
         let times = vec![0.0, 0.1, 0.2];
         let res = regression_velocity(&points, &times).unwrap();
-        // X(t): [0,1,1] → vx = 5; Y(t): [0,0,1] → vy = 5; v = sqrt(50) ≈ 7.07.
+        // X(t): [0,1,1] → vx = 5; Y(t): [0,0,1] → vy = 5.
         assert!(
             (res.velocity.m_per_s - 50.0_f64.sqrt()).abs() < 1e-9,
             "v = {} (esperado sqrt(50) ≈ 7.071)",
             res.velocity.m_per_s
         );
-        // R² < 1 porque a poligonal em L não é perfeitamente linear no tempo.
         assert!(res.r_squared < 1.0);
     }
 
-    /// **Teste-chave da troca de modelo**: sob ruído de marcação
-    /// simétrico, o estimador por eixo NÃO enviesa para cima como o de
-    /// comprimento de caminho acumulado. Roda muitas realizações
-    /// ruidosas (seed fixo) e compara as médias dos dois estimadores.
+    /// Sob ruído simétrico, a regressão por eixo não enviesa para cima como o
+    /// comprimento de caminho (compara as médias dos dois estimadores).
     #[test]
     fn per_axis_does_not_bias_upward_like_path_length() {
         use rand::rngs::StdRng;
         use rand::SeedableRng;
         use rand_distr::{Distribution, Normal};
 
-        // Regime que amplifica o viés do comprimento de caminho:
-        // velocidade baixa (2 m/s) → 0.2 m por quadro, e ruído σ=0.1 m
-        // por coordenada (grande relativo ao movimento por quadro).
+        // Regime que amplifica o viés: 0.2 m por quadro com σ = 0.1 m por coordenada.
         let true_v = 2.0;
         let n = 8;
         let dt = 0.1;
@@ -418,18 +321,15 @@ mod tests {
         let mut sum_path_length = 0.0;
 
         for _ in 0..trials {
-            // Perturba ambos os eixos com ruído simétrico (média 0).
             let pts: Vec<(f64, f64)> = true_x
                 .iter()
                 .map(|&x| (x + noise.sample(&mut rng), noise.sample(&mut rng)))
                 .collect();
 
-            // Estimador novo (per-axis).
             let res = regression_velocity(&pts, &times).unwrap();
             sum_per_axis += res.velocity.m_per_s;
 
-            // Estimador antigo (comprimento de caminho), inline pra
-            // comparação direta no mesmo conjunto perturbado.
+            // Comprimento de caminho acumulado, no mesmo conjunto perturbado.
             let mut dist = vec![0.0; n];
             for i in 1..n {
                 let dx = pts[i].0 - pts[i - 1].0;
@@ -451,17 +351,14 @@ mod tests {
         let mean_per_axis = sum_per_axis / trials as f64;
         let mean_path_length = sum_path_length / trials as f64;
 
-        // (a) Per-axis fica próximo do verdadeiro (viés de 2ª ordem só).
         assert!(
             (mean_per_axis - true_v).abs() < 0.2,
             "per-axis enviesado: média = {mean_per_axis}, verdadeiro = {true_v}"
         );
-        // (b) Comprimento de caminho superestima claramente o verdadeiro.
         assert!(
             mean_path_length > true_v + 0.1,
             "comprimento de caminho deveria superestimar: média = {mean_path_length}"
         );
-        // (c) E é nitidamente mais alto que o per-axis (a tese do ajuste).
         assert!(
             mean_path_length > mean_per_axis + 0.1,
             "comprimento ({mean_path_length}) deveria ser bem acima do per-axis ({mean_per_axis})"
@@ -498,7 +395,6 @@ mod tests {
         ));
     }
 
-    /// `Velocity::from_m_per_s` faz a conversão correta m/s → km/h.
     #[test]
     fn velocity_unit_conversion() {
         let v = Velocity::from_m_per_s(10.0);

@@ -1,12 +1,6 @@
-//! Persist mobile JSONs into the Dossiê tables introduced in MVP 3.
-//!
-//! Each `persist_*` function is **idempotent within a single import**:
-//! it deletes any prior rows for the (occurrence_id) and re-inserts from
-//! the JSON payload. This makes the orchestrator and the rehydrator share
-//! the same code path.
-//!
-//! The mobile contract v0.6 uses Portuguese keys; this module is the place
-//! that knows the wire shape. The repositories never see raw JSON keys.
+//! Persiste os JSONs do mobile nas tabelas do Dossiê. `persist_all` apaga as
+//! linhas da ocorrência e reinsere (idempotente); só aqui se conhecem as chaves
+//! em português do contrato mobile.
 
 use chrono::{DateTime, Utc};
 use rusqlite::Connection;
@@ -31,8 +25,7 @@ pub struct DossieLoadCounts {
     pub warnings: Vec<String>,
 }
 
-/// Run all persisters in one call. Each input is optional — None means the
-/// JSON wasn't in the package and we skip without warning.
+/// Entrada `None` = JSON ausente no pacote: pula sem aviso.
 #[allow(clippy::too_many_arguments)]
 pub fn persist_all(
     conn: &Connection,
@@ -49,8 +42,6 @@ pub fn persist_all(
 ) -> Result<DossieLoadCounts> {
     let mut counts = DossieLoadCounts::default();
 
-    // Wipe any prior dossier state for this occurrence so re-importing /
-    // rehydrating is naturally idempotent.
     dossie_repo::delete_checklist_for_occurrence(conn, &occurrence_id)?;
     dossie_repo::delete_entities_for_occurrence(conn, &occurrence_id)?;
     dossie_repo::delete_traces_for_occurrence(conn, &occurrence_id)?;
@@ -491,8 +482,7 @@ fn parse_iso(s: Option<&str>) -> Option<DateTime<Utc>> {
         .map(|d| d.with_timezone(&Utc))
 }
 
-/// Extract an array of strings (photo IDs, sketch element IDs) from any of
-/// the candidate keys, in priority order. Returns "[]" if nothing matches.
+/// Array de strings da primeira chave candidata que existir; "[]" se nenhuma.
 fn extract_photo_ids(v: &Value, keys: &[&str]) -> String {
     for k in keys {
         if let Some(arr) = v.get(*k).and_then(Value::as_array) {

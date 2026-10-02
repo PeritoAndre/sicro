@@ -1,21 +1,13 @@
-//! W12 (GIMP-parity) — **Convolução genérica NxN** (matriz editável).
-//!
-//! Inspiração: GIMP Filtros → Genérico → Matriz de convolução. Um único
-//! primitivo AUDITÁVEL: o perito informa o kernel exato (3×3 ou 5×5), o
-//! divisor e o offset — tudo registrado na pilha de processamento. Subsume
-//! sharpen, emboss, realce de bordas customizado, etc. Borda: clamp (espelha
-//! o pixel da borda). Opera por canal RGB; alpha preservado.
-//!
-//! `out(x,y) = offset + (1/divisor)·Σ K[i,j]·I(x+i−c, y+j−c)`
+//! Convolução genérica NxN com kernel, divisor e offset informados pelo perito.
+//! `out = offset + (1/divisor)·Σ K[i,j]·I(x+i−c, y+j−c)`; borda por clamp; alpha preservado.
 
 use image::{Rgba, RgbaImage};
 
-/// Aplica uma matriz de convolução. `kernel` tem `size*size` elementos
-/// (size = 3 ou 5). `divisor` &lt;= 0 → usa a soma do kernel (ou 1 se soma 0).
-/// `offset` é somado ao resultado (ex.: 128 para kernels de soma 0 como emboss).
+/// `kernel` tem `size*size` elementos (size ímpar). `divisor <= 0` → soma do
+/// kernel (ou 1 se soma 0). `offset` é somado ao resultado (ex.: 128 para emboss).
 pub fn convolve(img: &RgbaImage, kernel: &[f32], size: u32, divisor: f32, offset: f32) -> RgbaImage {
     let n = size.clamp(1, 9) as i32;
-    // Kernel inválido → identidade (não inventa nada).
+    // Kernel inválido → identidade.
     if kernel.len() != (n * n) as usize || n % 2 == 0 {
         return img.clone();
     }

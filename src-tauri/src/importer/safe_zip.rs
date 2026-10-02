@@ -1,19 +1,11 @@
-//! ZIP path safety.
-//!
-//! A malicious `.sicroapp` could include entries like `../../../etc/passwd` or
-//! absolute paths like `C:\Windows\System32\foo.exe`. Without sanitization the
-//! `zip` crate would happily extract those wherever the OS lets us write. The
-//! helpers here turn every entry name into a *strictly relative* `PathBuf`
-//! whose components are all `Normal(_)` — anything else is rejected.
+//! Sanitização de caminhos do ZIP: recusa `..`, caminhos absolutos e letras de
+//! drive; devolve só componentes `Normal`.
 
 use std::path::{Component, Path, PathBuf};
 
 use crate::error::{Result, SicroError};
 
-/// Validate that `entry_name` from a ZIP central directory describes a file
-/// that can be safely extracted into a target directory.
-///
-/// Returns the canonical relative path (forward slashes only) if accepted.
+/// Caminho relativo canônico da entrada, ou erro se não for seguro extrair.
 pub fn sanitize_zip_path(entry_name: &str) -> Result<PathBuf> {
     if entry_name.is_empty() {
         return Err(SicroError::Validation(
@@ -21,16 +13,14 @@ pub fn sanitize_zip_path(entry_name: &str) -> Result<PathBuf> {
         ));
     }
 
-    // Reject NUL and embedded control chars defensively — they can confuse
-    // Windows when the path hits NTFS APIs.
+    // Caracteres de controle confundem as APIs NTFS.
     if entry_name.chars().any(|c| c == '\u{0}' || c.is_control()) {
         return Err(SicroError::Validation(format!(
             "ZIP entry name contains control characters: {entry_name:?}"
         )));
     }
 
-    // Normalise the separator so the same path looks identical on Windows
-    // and Unix (`zip-rs` stores entries with `/`).
+    // Mesmo caminho nos dois sistemas (zip-rs guarda com `/`).
     let normalised = entry_name.replace('\\', "/");
 
     if normalised.starts_with('/') {
@@ -39,7 +29,7 @@ pub fn sanitize_zip_path(entry_name: &str) -> Result<PathBuf> {
         )));
     }
 
-    // Windows drive letters embedded in the name (rare but not impossible).
+    // Letra de drive do Windows.
     if let Some(c) = normalised.chars().next() {
         if c.is_alphabetic() && normalised[1..].starts_with(":/") {
             return Err(SicroError::Validation(format!(
@@ -58,8 +48,7 @@ pub fn sanitize_zip_path(entry_name: &str) -> Result<PathBuf> {
                 "ZIP entry uses '..' traversal: {entry_name:?}"
             )));
         }
-        // Reject anything that doesn't look like a plain segment after
-        // PathBuf parsing — this also defangs `C:` style fragments.
+        // Também neutraliza fragmentos tipo `C:`.
         let fragment = Path::new(raw);
         for comp in fragment.components() {
             match comp {

@@ -1,7 +1,6 @@
 /**
- * Relatório de autenticidade do áudio: o que a estrutura do arquivo diz e o
- * que os detectores acharam no sinal, com os instantes clicáveis (levam o
- * player) e "Copiar como texto" para o laudo. Só indícios — não conclui.
+ * Relatório de autenticidade do áudio: estrutura do arquivo e detectores no
+ * sinal, com instantes clicáveis e texto para o laudo. Só indícios — não conclui.
  */
 import { useState } from "react";
 import { ClipboardCopy, ShieldQuestion } from "lucide-react";

@@ -1,14 +1,7 @@
 /**
- * CorpoCanvas — palco Konva do croqui corporal.
- *
- * Renderiza a prancha de corpo (SVG → imagem de fundo) + os marcadores de lesão
- * numerados e tipados por cima. Zoom (scroll), pan (arrastar o palco) e:
- *   - ferramenta de lesão ativa + clique no vazio → coloca marcador (onPlace);
- *   - clique num marcador → seleciona (onSelect);
- *   - arrastar um marcador → move (onMove).
- *
- * Padrão herdado do croqui viário (CanvasStage) e do marcador numerado do
- * módulo Imagem (Group: círculo + número branco).
+ * Palco Konva do croqui corporal: prancha (PNG de fundo) + marcadores de lesão
+ * numerados. Zoom no scroll, pan arrastando o palco; clique no vazio coloca
+ * marcador, clique no marcador seleciona, arrastar move.
  */
 
 import {
@@ -43,9 +36,8 @@ import {
   type SicroCorpoDoc,
 } from "../engine";
 
-/** Numeração de REGIÃO do POP (fixa sobre a arte): só o número, em preto,
- *  com um halo branco fino pra legibilidade — sem círculo (ocupava espaço
- *  demais e poluía o modelo). */
+/** Numeração do POP sobre a arte: só o número com halo branco; o círculo
+ *  ocupava espaço demais e poluía o modelo. */
 const REGION_NUM_SIZE = 11;
 
 interface PopDot {
@@ -60,8 +52,8 @@ interface PopDot {
   bh: number;
 }
 
-/** Pontos absolutos (px da arte) da numeração POP de uma vista, já com a
- *  calibração manual do perito aplicada sobre o default (se houver). */
+/** Pontos absolutos (px da arte) da numeração POP de uma vista, com a
+ *  calibração do perito aplicada sobre o default. */
 function popDotsForView(
   view: BodyTemplateView,
   regioes: ReadonlyArray<PopRegiao>,
@@ -139,8 +131,7 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
     const stageRef = useRef<Konva.Stage | null>(null);
     const tpl = BODY_TEMPLATES[doc.template_id];
 
-    // Imagem da prancha (PNG bitmap → HTMLImageElement), recarrega ao trocar
-    // de prancha. `tpl.src` é a URL do asset (import do Vite).
+    // Imagem da prancha; recarrega ao trocar.
     const [img, setImg] = useState<HTMLImageElement | null>(null);
     useEffect(() => {
       let alive = true;
@@ -155,7 +146,7 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
       };
     }, [tpl.src]);
 
-    // Numeração POP (frente 1–28 / costas 1–21) — só nas pranchas numeradas.
+    // Numeração POP, só nas pranchas numeradas.
     const popDots = useMemo(() => {
       if (!tpl.numbered) return [];
       return tpl.views.flatMap((v) =>
@@ -168,8 +159,7 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
       );
     }, [tpl, doc.template_id, regionOverrides]);
 
-    // Fit inicial (centraliza a prancha na viewport). Recalcula quando a
-    // viewport ou a prancha mudam de tamanho.
+    // Fit inicial: centraliza a prancha na viewport.
     const fit = useMemo(() => {
       if (containerWidth <= 0 || containerHeight <= 0) {
         return { scale: 1, x: 0, y: 0 };
@@ -185,18 +175,13 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
     }, [containerWidth, containerHeight, tpl.width, tpl.height]);
 
     const [view, setView] = useState(fit);
-    // Re-fit quando a prancha troca ou a viewport muda significativamente.
     useEffect(() => {
       setView(fit);
     }, [fit]);
 
     useImperativeHandle(ref, () => ({
-      /**
-       * PNG SÓ DA PRANCHA (a "folha" branca), em resolução nativa da arte ×
-       * `scale` — INDEPENDENTE do zoom/pan e do tamanho da janela. Antes
-       * capturava o palco inteiro (viewport), o que gerava exports gigantes
-       * cheios de vazio quando a tela era grande.
-       */
+      /** PNG só da prancha (folha branca) em resolução nativa × `scale`,
+       *  independente do zoom/pan e do tamanho da janela. */
       toPng(scale = 1) {
         const stage = stageRef.current;
         if (!stage) return null;
@@ -273,7 +258,7 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
         style={{ background: "#e2e8f0", cursor: isLesionTool ? "crosshair" : "default" }}
       >
         <Layer listening={false}>
-          {/* "Folha" da prancha — delimita EXATAMENTE a área exportada. */}
+          {/* "Folha" da prancha: delimita a área exportada. */}
           <Rect
             x={0}
             y={0}
@@ -291,8 +276,7 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
               image={img}
               width={tpl.width}
               height={tpl.height}
-              // Pranchas que usam só um RECORTE da arte (ex.: perfis masc/fem
-              // dividem o mesmo PNG) — o crop seleciona a figura.
+              // Pranchas que usam só um recorte da arte (perfis masc/fem dividem o PNG).
               crop={
                 tpl.crop
                   ? { x: tpl.crop.x, y: tpl.crop.y, width: tpl.crop.w, height: tpl.crop.h }
@@ -302,14 +286,12 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
             />
           )}
         </Layer>
-        {/* Numeração de regiões do POP + título de cada vista. Camada NÃO
-            interativa entre a arte e os marcadores de lesão — entra no export
-            do palco (toDataURL) de graça. */}
+        {/* Numeração do POP + título de cada vista: camada não interativa entre
+            a arte e os marcadores, entra no export do palco de graça. */}
         <Layer listening={calibrating}>
           {popDots.map((d) =>
             calibrating ? (
-              // Modo calibração: alça âmbar arrastável. Ao soltar, devolve a
-              // posição normalizada no box da vista (clampada em 0..1).
+              // Alça arrastável; ao soltar devolve a posição normalizada no box da vista.
               <Group
                 key={d.key}
                 x={d.x}
@@ -389,10 +371,8 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
           ))}
         </Layer>
         <Layer>
-          {/* Marcações AUTOCONTIDAS por prancha: só as desta prancha aparecem
-              (lesão marcada no perfil não "vaza" pro corpo inteiro). Markers
-              antigos sem o campo (pré-campo template) pertencem à prancha
-              atual do doc. */}
+          {/* Só os marcadores desta prancha (lesão no perfil não vaza pro corpo
+              inteiro); markers antigos sem `template` pertencem à prancha atual. */}
           {doc.markers
             .filter((m) => (m.template ?? doc.template_id) === doc.template_id)
             .map((m) => {

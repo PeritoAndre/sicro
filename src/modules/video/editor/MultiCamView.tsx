@@ -1,18 +1,8 @@
 /**
- * MultiCamView — duas câmeras lado a lado.
- *
- * Cada lado é um player completo: sua linha do tempo (arrasto, zoom), quadro
- * a quadro, lupa, ajustes de tela, "Coletar frame" e a faixa do seu
- * storyboard. O lado ATIVO (o último clicado, com contorno) recebe o teclado.
- *
- * VINCULAR: pare as duas no mesmo acontecimento e clique em Vincular — o
- * SICRO guarda a diferença (tempo_B = tempo_A + deslocamento) e a partir daí
- * qualquer comando move as duas; coletar pega o PAR (um quadro de cada, no
- * storyboard de cada vídeo). "pelo relógio" vincula pelo relógio da câmera
- * quando os dois vídeos o têm. Desvincular solta para refinar.
- *
- * Tocando vinculadas, a outra é corrigida se desviar mais que ~3 quadros;
- * paradas, cada passo reposiciona a outra exatamente.
+ * Duas câmeras lado a lado, cada uma um player completo; o lado ativo recebe o
+ * teclado. Vincular guarda a diferença (tempo_B = tempo_A + deslocamento) e daí
+ * todo comando move as duas; coletar pega o par. Tocando vinculadas, a outra é
+ * corrigida se desviar mais que ~3 quadros; paradas, cada passo reposiciona exato.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -164,7 +154,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
     window.setTimeout(() => setFeedback(null), ms);
   };
 
-  // ---- storyboard/eventos de cada lado -------------------------------------
+  // storyboard/eventos de cada lado
   const storeBundle = useVideoStore((s) => s.bundle);
   const collectFrameA = useVideoStore((s) => s.collectFrame);
   const [bFrames, setBFrames] = useState<VideoStoryboardFrame[]>([]);
@@ -182,7 +172,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
   const events = (s: Side) => (s === "a" ? storeBundle?.events ?? [] : bEvents);
   const clockOf = (s: Side) => (s === "a" ? clockA : clockB);
 
-  // ---- tempo equivalente no outro lado ---------------------------------------
+  // tempo equivalente no outro lado
   const counterpart = (s: Side, t: number) => (s === "a" ? t + offsetRef.current : t - offsetRef.current);
   const syncOther = (s: Side) => {
     if (!linkedRef.current) return;
@@ -232,7 +222,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
     applyRate(RATES[Math.max(0, Math.min(RATES.length - 1, (i < 0 ? 3 : i) + dir))]!);
   };
 
-  // ---- vincular ------------------------------------------------------------------
+  // vincular
   const link = () => {
     const o = camB.time() - camA.time();
     offsetRef.current = o;
@@ -262,7 +252,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
     camB.seek(camA.time() + o);
   };
 
-  // ---- relógio fino + correção de deriva --------------------------------------
+  // relógio fino + correção de deriva
   const anyPlaying = camA.playing || camB.playing;
   useEffect(() => {
     if (!anyPlaying) return;
@@ -299,7 +289,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [anyPlaying, active]);
 
-  // ---- coletar ---------------------------------------------------------------------
+  // coletar
   const titleFor = (s: Side, t: number, pair: boolean) => {
     const c = clockOf(s);
     const cam_ = c ? ` · câmera ${formatClock(cameraClockAt(t, c), true)}` : "";
@@ -334,7 +324,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
     }
   };
 
-  // ---- tela cheia do comparador ----------------------------------------------
+  // tela cheia do comparador
   useEffect(() => {
     const onChange = () => setFullscreen(document.fullscreenElement === wrapRef.current);
     document.addEventListener("fullscreenchange", onChange);
@@ -348,7 +338,7 @@ export function MultiCamView({ workspacePath, a, b, clocks, initialTime, onClose
     else void wrapRef.current?.requestFullscreen?.().catch(() => {});
   };
 
-  // ---- teclado (vale para o lado ativo; vinculadas, para as duas) ------------
+  // teclado (lado ativo; vinculadas, as duas)
   useShortcuts({
     "video.playPause": () => void togglePlay(),
     "video.playPauseK": () => void togglePlay(),

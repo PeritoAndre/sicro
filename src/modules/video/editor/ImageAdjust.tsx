@@ -1,8 +1,6 @@
 /**
- * Ajustes de VISUALIZAÇÃO do reprodutor: brilho, contraste e gama aplicados só
- * na tela (CSS filter + filtro SVG de gama). Não alteram o vídeo, os quadros
- * coletados (ffmpeg sobre o original) nem medições — servem para enxergar
- * imagem noturna/escura. "A" liga/desliga para comparar com o original.
+ * Ajustes só de tela do reprodutor: brilho, contraste e gama (CSS filter +
+ * filtro SVG de gama). Não alteram o vídeo, os quadros coletados nem medições.
  */
 import styles from "./VideoPlayerPanel.module.css";
 

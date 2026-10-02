@@ -1,18 +1,6 @@
-//! System health report (MVP 8 — Consolidação Alpha).
-//!
-//! Reúne em uma única estrutura o que o operador precisa para decidir
-//! se o SICRO está saudável para uso clínico:
-//!
-//!   - versão do app;
-//!   - status do workspace ativo;
-//!   - contagens por módulo (laudos / croquis / vídeos / imagens /
-//!     evidências / exports);
-//!   - resumo de integridade (reaproveita o registry do MVP 5);
-//!   - presença das dependências externas (`ffmpeg`, `ffprobe`).
-//!
-//! Renderiza tanto JSON (para a UI) quanto HTML auto-suficiente
-//! (gravado em `reports/system_health_*.html` — formato adotado pelo
-//! relatório de integridade do MVP 5).
+//! Relatório de saúde do sistema: versão, dependências externas (ffmpeg/ffprobe),
+//! contagens e integridade do workspace ativo. Sai em JSON (UI) e HTML
+//! (`reports/system_health_*.html`).
 
 use std::path::{Path, PathBuf};
 
@@ -87,9 +75,7 @@ pub struct HealthReportArtifact {
     pub overall_status: String,
 }
 
-/// Build the snapshot. When `workspace_path` is `Some(...)`, drills
-/// into the workspace and adds counters + integrity. When `None`,
-/// returns only the global section (versão, deps).
+/// Com `workspace_path`, inclui contadores + integridade; sem, só a seção global.
 pub fn build_snapshot(workspace_path: Option<&Path>) -> Result<SystemHealthSnapshot> {
     let mut warnings: Vec<String> = Vec::new();
     let dependencies = probe_dependencies(&mut warnings);
@@ -124,9 +110,8 @@ pub fn build_snapshot(workspace_path: Option<&Path>) -> Result<SystemHealthSnaps
     })
 }
 
-/// Render the snapshot to a standalone HTML file under
-/// `<workspace>/reports/system_health_<TS>.html`. When no workspace
-/// is given, falls back to the system temp dir.
+/// Grava o HTML em `<workspace>/reports/system_health_<TS>.html`
+/// (sem workspace: pasta temp do sistema).
 pub fn render_and_save(
     workspace_path: Option<&Path>,
     snapshot: &SystemHealthSnapshot,
@@ -157,7 +142,7 @@ pub fn render_and_save(
 }
 
 // ---------------------------------------------------------------------------
-// Workspace inspection
+// Inspeção do workspace
 
 fn build_workspace_health(workspace_root: &Path) -> Result<WorkspaceHealth> {
     let manifest = Manifest::read(workspace_root)?;
@@ -166,7 +151,7 @@ fn build_workspace_health(workspace_root: &Path) -> Result<WorkspaceHealth> {
 
     let counters = count_entities(&conn, &manifest.occurrence_id)?;
 
-    // Integrity via the MVP 5 verifier (light pass).
+    // Verificação leve.
     let report = registry::verify_workspace(
         &conn,
         workspace_root,
@@ -190,9 +175,8 @@ fn build_workspace_health(workspace_root: &Path) -> Result<WorkspaceHealth> {
     })
 }
 
-/// Conta as entidades de uma ocorrência (laudos, croquis, fotos, vídeos…) a
-/// partir de uma conexão já aberta. Determinístico, sem varrer disco — só
-/// consulta o banco. Reutilizado pelo health snapshot e pelo índice de casos.
+/// Conta as entidades da ocorrência só pelo banco (sem varrer disco).
+/// Usado pelo health e pelo índice de casos.
 pub fn count_entities(conn: &Connection, occurrence_id: &Uuid) -> Result<WorkspaceCounters> {
     Ok(WorkspaceCounters {
         photos: media_asset_repo::list_by_occurrence(conn, occurrence_id)?.len() as u32,
@@ -228,10 +212,8 @@ pub fn count_entities(conn: &Connection, occurrence_id: &Uuid) -> Result<Workspa
     })
 }
 
-/// Versão "stand-alone" para um comando leve: abre o banco do workspace,
-/// garante migrações e devolve só as contagens (sem integridade, sem tamanho de
-/// disco, sem sondar dependências). Barato o suficiente para rodar toda vez que
-/// um caso fica ativo.
+/// Versão leve: abre o banco, garante migrações e devolve só as contagens.
+/// Barato o bastante para rodar sempre que um caso fica ativo.
 pub fn count_occurrence_entities(workspace_root: &Path) -> Result<WorkspaceCounters> {
     let manifest = Manifest::read(workspace_root)?;
     let mut conn = open_connection(&workspace_root.join(SQLITE_FILENAME))?;
@@ -253,7 +235,7 @@ fn directory_size(path: &Path) -> std::io::Result<u64> {
         let entry = entry?;
         let ty = entry.file_type()?;
         if ty.is_dir() {
-            // Skip cache/logs to keep the number meaningful (matches backup).
+            // Ignora cache/logs, como o backup.
             if let Some(name) = entry.path().file_name().and_then(|s| s.to_str()) {
                 if matches!(name, "cache" | "logs") {
                     continue;
@@ -268,7 +250,7 @@ fn directory_size(path: &Path) -> std::io::Result<u64> {
 }
 
 // ---------------------------------------------------------------------------
-// External dependencies probe
+// Dependências externas
 
 fn probe_dependencies(warnings: &mut Vec<String>) -> Vec<DependencyStatus> {
     let mut deps: Vec<DependencyStatus> = Vec::new();
@@ -299,12 +281,12 @@ fn probe_version(tool: &std::path::Path) -> Option<String> {
         return None;
     }
     let s = String::from_utf8_lossy(&out.stdout);
-    // First line is usually "ffmpeg version 6.1.1 ..." — keep ≤ 80 chars.
+    // Primeira linha: "ffmpeg version 6.1.1 …"; corta em 80 chars.
     Some(s.lines().next().unwrap_or("").chars().take(80).collect())
 }
 
 // ---------------------------------------------------------------------------
-// HTML rendering
+// Renderização HTML
 
 fn render_html(s: &SystemHealthSnapshot) -> String {
     let mut html = String::new();
@@ -368,7 +350,7 @@ fn render_html(s: &SystemHealthSnapshot) -> String {
         html.push_str("<p class=\"muted\">Nenhum workspace ativo — apenas seção global.</p>\n");
     }
 
-    // Dependencies
+    // Dependências
     html.push_str("<h2>Dependências externas</h2>\n");
     html.push_str("<table><thead><tr><th>Ferramenta</th><th>Encontrada?</th><th>Caminho</th><th>Versão</th></tr></thead><tbody>\n");
     for d in &s.dependencies {
@@ -387,7 +369,7 @@ fn render_html(s: &SystemHealthSnapshot) -> String {
     }
     html.push_str("</tbody></table>\n");
 
-    // Warnings
+    // Alertas
     if !s.warnings.is_empty() {
         html.push_str("<h2>Alertas</h2>\n<ul>\n");
         for w in &s.warnings {

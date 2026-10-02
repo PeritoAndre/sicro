@@ -1,22 +1,7 @@
 /**
- * DroneImportModal — pre-processing wizard for drone / aerial photos
- * before they're inserted as the croqui background (MVP 9 Round 4).
- *
- * Pipeline (matches the user's required order, NEVER inverted):
- *
- *   1. Pick the source file (local disk).
- *   2. Apply radial barrel-distortion correction via a 0..100% slider.
- *   3. Draw a crop rectangle over the corrected image.
- *   4. Confirm — Rust runs the same pipeline at full resolution,
- *      writes a derivative + JSON sidecar inside the workspace, and
- *      returns the relative path.
- *   5. The caller drops the derivative as the croqui background.
- *
- * The on-screen preview uses a low-resolution canvas (~600 px wide)
- * with a JavaScript implementation of the same Brown-Conrady k1/k2
- * radial distortion model the Rust backend uses, so the user picks an
- * informed intensity. The final save is always done by Rust at full
- * resolution — the preview is illustrative only.
+ * Assistente de foto de drone: correção radial de lente + crop antes de
+ * virar fundo. O preview é um port JS do modelo do Rust em baixa resolução;
+ * o derivado final (com sidecar JSON) é sempre gerado pelo Rust.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -27,7 +12,7 @@ import { toSicroError } from "@core/errors";
 import type { CropRectInput, DroneImportResult } from "@domain/croqui";
 import styles from "./CroquiEditor.module.css";
 
-export interface DroneImportModalProps {
+interface DroneImportModalProps {
   workspacePath: string;
   croquiId?: string;
   occurrenceId?: string;
@@ -39,10 +24,10 @@ interface LoadedImage {
   absolutePath: string;
   width: number;
   height: number;
-  pixels: Uint8ClampedArray; // RGBA at full resolution (we keep it for preview)
+  pixels: Uint8ClampedArray; // RGBA em resolução cheia
 }
 
-// Preview canvas max dimension — keeps the per-pixel JS loop bounded.
+// Limita o loop JS por pixel do preview.
 const PREVIEW_MAX = 600;
 
 export function DroneImportModal({
@@ -56,14 +41,11 @@ export function DroneImportModal({
   const [loaded, setLoaded] = useState<LoadedImage | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Crop rect in FULL-RESOLUTION pixels (the same units the Rust
-  // backend expects). We store it as null until the user finishes
-  // dragging one — until then "Confirmar" is disabled.
+  // Crop em pixels da resolução cheia (unidade que o Rust espera).
   const [crop, setCrop] = useState<CropRectInput | null>(null);
 
   const previewRef = useRef<HTMLCanvasElement | null>(null);
-  // Cached "lens-corrected preview" pixels at preview resolution so
-  // we don't recompute when only the crop changes.
+  // Preview corrigido em cache: mudar só o crop não recalcula.
   const correctedPreviewRef = useRef<{
     intensity: number;
     width: number;
@@ -71,7 +53,6 @@ export function DroneImportModal({
     pixels: Uint8ClampedArray;
   } | null>(null);
 
-  // ----- File pick -----
   const handlePick = useCallback(async () => {
     setError(null);
     try {
@@ -86,8 +67,7 @@ export function DroneImportModal({
         ],
       });
       if (typeof picked !== "string") return;
-      // Resolve through Tauri's asset protocol so the browser can
-      // actually load it without violating the renderer sandbox.
+      // Asset protocol do Tauri: o WebView não carrega file:// direto.
       const url = convertFileSrc(picked);
       const img = new window.Image();
       img.crossOrigin = "anonymous";
@@ -109,9 +89,8 @@ export function DroneImportModal({
         height: c.height,
         pixels: data.data,
       });
-      // Default crop = 80% from centre. A non-trivial starting rectangle
-      // gives the user something visible to grab; the previous full-image
-      // default was effectively invisible against the canvas border.
+      // Crop inicial de 80 % centralizado: imagem inteira ficava invisível
+      // contra a borda do canvas.
       const margin = 0.1;
       const cw = Math.round(c.width * (1 - 2 * margin));
       const ch = Math.round(c.height * (1 - 2 * margin));
@@ -124,14 +103,13 @@ export function DroneImportModal({
     }
   }, []);
 
-  // ----- Re-render preview whenever inputs change -----
   useEffect(() => {
     const canvas = previewRef.current;
     if (!canvas || !loaded) return;
     drawPreview(canvas, loaded, intensity, crop, correctedPreviewRef);
   }, [loaded, intensity, crop]);
 
-  // ----- Confirm — calls Rust at full resolution -----
+  // Rust refaz o pipeline em resolução cheia.
   const handleConfirm = useCallback(async () => {
     if (!loaded || !crop) return;
     setBusy(true);
@@ -335,8 +313,7 @@ export function DroneImportModal({
 }
 
 // ===========================================================================
-// Preview rendering — JavaScript port of the Rust radial correction so
-// the on-screen image matches what the backend will save.
+// Preview (port JS da correção radial do Rust)
 
 function drawPreview(
   canvas: HTMLCanvasElement,
@@ -357,7 +334,6 @@ function drawPreview(
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, W, H);
 
-  // Compute corrected preview if cache is stale.
   let cached = cache.current;
   if (
     !cached ||
@@ -369,13 +345,12 @@ function drawPreview(
     cache.current = cached;
   }
 
-  // Reconstruct an ImageData from the cached pixels. TS' DOM lib insists
-  // on a non-shared ArrayBuffer, so copy into a fresh Uint8ClampedArray.
+  // Copia para um ImageData novo: o lib DOM do TS exige ArrayBuffer não compartilhado.
   const imageData = ctx.createImageData(W, H);
   imageData.data.set(cached.pixels);
   ctx.putImageData(imageData, 0, 0);
 
-  // Dim the area outside the crop so the rectangle stands out.
+  // Escurece fora do crop.
   if (crop) {
     const scaleX = W / loaded.width;
     const scaleY = H / loaded.height;
@@ -384,12 +359,10 @@ function drawPreview(
     const cw = crop.width * scaleX;
     const ch = crop.height * scaleY;
     ctx.fillStyle = "rgba(0, 0, 0, 0.55)";
-    // top / bottom / left / right strips around the crop rect.
     ctx.fillRect(0, 0, W, cy);
     ctx.fillRect(0, cy + ch, W, H - (cy + ch));
     ctx.fillRect(0, cy, cx, ch);
     ctx.fillRect(cx + cw, cy, W - (cx + cw), ch);
-    // Outline
     ctx.strokeStyle = "#5aa9e6";
     ctx.lineWidth = 1.5;
     ctx.setLineDash([4, 4]);
@@ -399,14 +372,9 @@ function drawPreview(
 }
 
 /**
- * Sample the full-resolution `loaded` pixels into a `previewW × previewH`
- * buffer with the same radial-distortion correction the Rust backend
- * applies. Math mirrors `image_processing::lens_correction` exactly:
- *
- *   u_src = u · (1 + k1·r² + k2·r⁴)
- *
- * Normalisation uses the longer side of the *original* image — same
- * convention as Rust — so the preview corner-radius factor matches.
+ * Reamostra para o preview com a mesma correção do Rust
+ * (`image_processing::lens_correction`): u_src = u · (1 + k1·r² + k2·r⁴),
+ * normalizado pelo lado maior da imagem original.
  */
 function computeCorrectedPreview(
   loaded: LoadedImage,
@@ -424,16 +392,13 @@ function computeCorrectedPreview(
   const k2 = 0.08 * t;
   const out = new Uint8ClampedArray(previewW * previewH * 4);
 
-  // Map preview pixel → full-res pixel. We mirror the Rust algorithm:
-  // for each output pixel in preview space, compute the *output* in
-  // full-res space (so the corner factor matches), then sample with
-  // bilinear from the loaded pixels.
+  // Cada pixel do preview é levado à resolução cheia antes de aplicar o
+  // fator, para o raio nos cantos bater com o Rust.
   const halfW = loaded.width / 2;
   const halfH = loaded.height / 2;
   const norm = Math.max(halfW, halfH);
 
   for (let py = 0; py < previewH; py++) {
-    // Full-res Y where this preview pixel maps from.
     const yd = (py / previewH) * loaded.height;
     const v = (yd - halfH) / norm;
     for (let px = 0; px < previewW; px++) {
@@ -491,20 +456,7 @@ function sampleBilinear(
 }
 
 // ===========================================================================
-// Crop overlay — translates between preview pixels and full-res pixels.
-//
-// MVP 9 Round 5 rewrite — previous version had only one corner handle,
-// the user couldn't see the rectangle when the default was the whole
-// image, and the `onChange` dep churned the document listeners every
-// render. This version:
-//
-//   - Eight handles (4 corners + 4 edge midpoints) — standard pattern.
-//   - Click + drag on the empty area outside the rect = draw a brand
-//     new rect from scratch.
-//   - Stable callbacks via refs so the document listeners are bound
-//     once and stay bound.
-//   - The whole overlay div covers the preview area so clicks on the
-//     dimmed margin still register.
+// Overlay de crop (converte entre pixels do preview e da resolução cheia)
 
 type DragMode =
   | "move"
@@ -520,8 +472,7 @@ type DragMode =
 
 interface DragState {
   mode: DragMode;
-  // Anchor in IMAGE coordinates — used for `draw` so we always normalise
-  // back to a top-left rect even when the user drags up/left.
+  /** Em coordenadas da imagem. */
   anchor: { x: number; y: number };
   startCrop: CropRectInput;
   startMouseScreen: { x: number; y: number };
@@ -544,9 +495,7 @@ function CropOverlay({
 }) {
   const dragRef = useRef<DragState | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
-  // Stable refs for callbacks/values used inside the document listeners,
-  // so the effect that binds the listeners doesn't have to depend on
-  // anything that changes per render.
+  // Refs para os listeners do document serem ligados uma vez só.
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
   const cropRef = useRef(crop);
@@ -599,9 +548,7 @@ function CropOverlay({
           return;
         }
         case "draw": {
-          // The anchor stays fixed at the mouse-down point; the
-          // opposite corner follows the cursor. Normalise so width /
-          // height stay positive even when the user drags backwards.
+          // Normaliza para width/height positivos mesmo arrastando para trás.
           const x1 = Math.min(state.anchor.x, pt.x);
           const y1 = Math.min(state.anchor.y, pt.y);
           const x2 = Math.max(state.anchor.x, pt.x);
@@ -722,9 +669,7 @@ function CropOverlay({
     e.stopPropagation();
   };
 
-  // Mouse-down on the empty area starts a new rectangle from scratch.
-  // We expose this as an onMouseDown on the wrapper; clicks on the
-  // crop rect itself / its handles take precedence via stopPropagation.
+  // Mousedown na área vazia desenha um retângulo novo.
   const startDrawNew = (e: React.MouseEvent) => {
     const wrap = wrapperRef.current;
     if (!wrap) return;
@@ -748,14 +693,13 @@ function CropOverlay({
     e.preventDefault();
   };
 
-  // The wrapper always covers the whole preview — even when crop is
-  // null. That way the user can always start drawing a fresh rectangle.
+  // O wrapper cobre o preview inteiro mesmo sem crop, para poder desenhar um.
   const left = crop ? (crop.x / imageW) * previewW : 0;
   const top = crop ? (crop.y / imageH) * previewH : 0;
   const width = crop ? (crop.width / imageW) * previewW : 0;
   const height = crop ? (crop.height / imageH) * previewH : 0;
 
-  const HANDLE = 10; // px — diameter of each square handle
+  const HANDLE = 10; // px, lado de cada alça
   const handleStyle: React.CSSProperties = {
     position: "absolute",
     width: HANDLE,
@@ -775,7 +719,7 @@ function CropOverlay({
         cursor: crop ? "crosshair" : "crosshair",
       }}
       onMouseDown={(e) => {
-        if (e.target !== e.currentTarget) return; // child handled it
+        if (e.target !== e.currentTarget) return; // alça/retângulo já tratou
         startDrawNew(e);
       }}
     >
@@ -792,7 +736,7 @@ function CropOverlay({
           }}
           onMouseDown={(e) => startDrag("move", e)}
         >
-          {/* Corner handles */}
+          {/* Cantos */}
           <div
             style={{
               ...handleStyle,
@@ -829,7 +773,7 @@ function CropOverlay({
             }}
             onMouseDown={(e) => startDrag("resize_se", e)}
           />
-          {/* Edge midpoints */}
+          {/* Meios das bordas */}
           <div
             style={{
               ...handleStyle,

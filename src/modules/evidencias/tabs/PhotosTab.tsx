@@ -1,8 +1,4 @@
-/**
- * PhotosTab — aba "Fotos" da Central. Lista as fotos importadas com
- * miniatura + categoria + hash + status + inserções em laudo. Não edita
- * — só inspeciona.
- */
+/** Aba Fotos: só inspeciona (miniatura, categoria, hash, status). */
 
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";

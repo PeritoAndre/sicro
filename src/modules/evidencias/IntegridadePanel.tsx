@@ -1,17 +1,6 @@
 /**
- * IntegridadePanel — modo "Integridade" do Dossiê (ex-Central de Evidências, MVP 5).
- *
- * Segunda lente do módulo Dossiê (a primeira é a Operacional). É a camada de
- * confiança/custódia: agrega TODA a evidência do workspace (fotos, croquis,
- * vídeos, frames, análises de imagem, laudos, vínculos) e verifica integridade
- * em disco (existência, tamanho, SHA-256, links quebrados, caminhos inseguros).
- *
- * Somente leitura — NUNCA muta o estado de outro módulo. As ações se limitam a
- * abrir arquivos, revelá-los na pasta, copiar caminhos/refs e gerar o relatório
- * de integridade em HTML.
- *
- * Renderiza APENAS a faixa de abas + o conteúdo — o cabeçalho da ocorrência e o
- * seletor de modo vivem no `DossieModule`.
+ * Painel de integridade: agrega toda a evidência do workspace e confere no disco.
+ * Somente leitura — nunca muta o estado de outro módulo.
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -79,14 +68,12 @@ export function IntegridadePanel({ workspacePath }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<TabKey>("summary");
 
-  /** Reload registry + summary. The integrity tab manages its own
-   *  deep-verification life cycle. */
+  /** A aba Integridade cuida sozinha da verificação profunda. */
   const reload = useCallback(async (path: string) => {
     setLoading(true);
     setError(null);
     try {
-      // Run verify (deep=false) once — it gives us BOTH the items
-      // already enriched with integrity status AND the summary.
+      // Uma chamada dá os itens já com status de integridade E o resumo.
       const r = await commands.verifyWorkspaceIntegrity(path, { deep: false });
       setReport(r);
       setItems(r.items);

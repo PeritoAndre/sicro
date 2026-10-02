@@ -1,11 +1,7 @@
-//! Relatório de autenticidade de um arquivo de áudio: o que a ESTRUTURA do
-//! arquivo diz (contêiner, codificador, metadados, pacotes, erros de
-//! decodificação) e o que o CONTEÚDO mostra (corte de banda de codec, cliques,
-//! silêncio digital, salto no ruído de fundo).
-//!
-//! Só indícios objetivos, cada um com onde ocorre: o relatório NÃO conclui que
-//! houve ou não edição — isso é exame do perito (ouvir, comparar, ENF).
-//! Detectores escritos aqui (ideias da literatura; nenhum código copiado).
+//! Relatório de autenticidade de áudio: estrutura (contêiner, codec, pacotes,
+//! erros de decodificação) e conteúdo (corte de banda, cliques, silêncio
+//! digital, salto do ruído de fundo). Só indícios com posição; a conclusão é
+//! do perito.
 
 use std::collections::BTreeMap;
 use std::path::Path;
