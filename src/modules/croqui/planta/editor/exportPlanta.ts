@@ -1,302 +1,260 @@
 /**
- * Prancha técnica do croqui de planta (Canvas 2D): cabeçalho do caso + planta
- * capturada do Pixi + barra de escala + rosa dos ventos + legenda dos vestígios
- * + rodapé. Mesmo padrão de corpo/editor/exportCorpo.ts.
+ * PNG técnico da planta: cabeçalho (sem título do croqui), desenho da folha, coluna de legenda
+ * (vestígios com medidas, pessoas, trajetórias, cômodos e áreas, escala gráfica) e rodapé.
  */
-import { evidenceMeta, evidenceLabelFor, type EvidenceLabelKind } from "../evidence";
-import type { PlantaEvidenceMarker } from "../schema";
 
-interface PlantaStampMeta {
-  title: string;
-  occurrence: {
-    numero_bo?: string | null;
-    tipo_pericia?: string | null;
-    municipio?: string | null;
-  } | null;
+export interface PlantaStampMeta {
+  occurrence: { numero_bo?: string | null; tipo_pericia?: string | null; municipio?: string | null } | null;
+  sheetLabel: string;
   timestamp: Date;
-  compassDeg: number;
-  labelKind: EvidenceLabelKind;
+  /** px por metro no desenho exportado. */
+  pxPerM: number;
 }
 
-interface LegendRow {
-  label: string;
-  color: string;
-  tipo: string; // nome por extenso
-  descricao: string;
-}
-
-function fmtDate(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+export interface PlantaLegend {
+  evidences: { label: string; title: string; sub: string }[];
+  people: { title: string; sub: string; caido: boolean }[];
+  trajs: { title: string; sub: string; color: string }[];
+  rooms: { name: string; area: number }[];
+  usable: number;
+  built: number;
 }
 
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
+    const im = new Image();
+    im.onload = () => resolve(im);
+    im.onerror = () => reject(new Error("não foi possível montar o PNG técnico"));
+    im.src = src;
   });
 }
 
-/** Linhas da legenda; o rótulo deriva da ordem. */
-export function buildLegendRows(
-  evidences: PlantaEvidenceMarker[],
-  labelKind: EvidenceLabelKind,
-): LegendRow[] {
-  return evidences.map((ev, i) => {
-    const meta = evidenceMeta(ev.tipo);
-    return {
-      label: evidenceLabelFor(i + 1, labelKind),
-      color: ev.cor || meta.color,
-      tipo: meta.label,
-      descricao: (ev.descricao ?? "").trim(),
-    };
-  });
-}
+const fmt = (v: number, d = 2) => v.toFixed(d).replace(".", ",");
+const pad2 = (n: number) => String(n).padStart(2, "0");
+const fmtDate = (d: Date) => `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
 
-/** Escolhe um comprimento "redondo" (m) cuja barra fique entre 60–150 px. */
-function niceScaleLength(pxPerM: number): number {
-  const candidates = [0.25, 0.5, 1, 2, 5, 10, 20, 50, 100];
-  for (const m of candidates) {
-    const px = m * pxPerM;
-    if (px >= 60 && px <= 150) return m;
+function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let cur = "";
+  for (const w of words) {
+    const t = cur ? `${cur} ${w}` : w;
+    if (ctx.measureText(t).width > maxW && cur) {
+      lines.push(cur);
+      cur = w;
+    } else cur = t;
   }
-  // fallback: alvo ~100px
-  return Math.max(0.25, Math.round((100 / pxPerM) * 4) / 4);
+  if (cur) lines.push(cur);
+  return lines;
 }
 
-/** Compõe a prancha. `imgPxPerM` = px/metro na imagem capturada (escala exata,
- *  independente de dpr). Retorna data URL PNG. */
-export async function stampPlantaPng(
-  planDataUrl: string,
-  imgPxPerM: number,
-  meta: PlantaStampMeta,
-  legend: LegendRow[],
-): Promise<string> {
-  const img = await loadImage(planDataUrl);
+export async function stampPlanta(drawingPng: string, meta: PlantaStampMeta, legend: PlantaLegend): Promise<string> {
+  const img = await loadImage(drawingPng);
+  const Wd = img.width;
+  const Hd = img.height;
+  const k = Math.max(1, Wd / 1400);
+  const headerH = Math.round(64 * k);
+  const footerH = Math.round(28 * k);
+  const pad = Math.round(20 * k);
+  const colW = Math.round(430 * k);
+  const font = (px: number, weight = 400, family = "'Source Sans 3', 'Segoe UI', sans-serif") => `${weight} ${Math.round(px * k)}px ${family}`;
+  const mono = "'JetBrains Mono', monospace";
+  const display = "'Barlow Semi Condensed', 'Arial Narrow', sans-serif";
 
-  const PAD = 24;
-  const HEADER_H = 72;
-  const FOOTER_H = 30;
-  const ROW_H = 24;
-  const LEGEND_HEAD_H = 28;
-  const MIN_W = 920;
+  // Mede a coluna antes de desenhar, para saber a altura final.
+  const meas = document.createElement("canvas").getContext("2d")!;
+  const textW = colW - pad * 2 - Math.round(32 * k);
+  const block = (title: string, sub: string) => {
+    meas.font = font(13, 600);
+    const t = wrap(meas, title, textW);
+    meas.font = font(11.5);
+    const s = sub ? wrap(meas, sub, textW) : [];
+    return { t, s, h: t.length * 17 * k + s.length * 15 * k + 12 * k };
+  };
+  const evid = legend.evidences.map((e) => ({ ...e, b: block(`${e.label} · ${e.title}`, e.sub) }));
+  const ppl = legend.people.map((p) => ({ ...p, b: block(p.title, p.sub) }));
+  const trj = legend.trajs.map((t) => ({ ...t, b: block(t.title, t.sub) }));
+  const hasForensic = evid.length + ppl.length + trj.length > 0;
+  let colH = pad;
+  if (hasForensic) colH += 26 * k + [...evid, ...ppl, ...trj].reduce((a, x) => a + x.b.h, 0) + 14 * k;
+  if (legend.rooms.length) colH += 26 * k + legend.rooms.length * 19 * k + 34 * k;
+  colH += 90 * k;
 
-  // Planta desenhada com largura-alvo (mantém proporção).
-  const planDrawW = Math.min(img.width || MIN_W, 1120);
-  const drawScale = (img.width ? planDrawW / img.width : 1) || 1;
-  const planDrawH = (img.height || 600) * drawScale;
-  const platePxPerM = imgPxPerM * drawScale; // px/metro NA PRANCHA final
-
-  const contentW = Math.max(MIN_W, planDrawW + PAD * 2);
-  const legendH =
-    legend.length > 0 ? LEGEND_HEAD_H + legend.length * ROW_H + PAD : 0;
-  const totalH = HEADER_H + PAD + planDrawH + PAD + legendH + FOOTER_H;
-
+  const W = Wd + colW;
+  const H = headerH + Math.max(Hd, colH) + footerH;
   const canvas = document.createElement("canvas");
-  canvas.width = Math.round(contentW);
-  canvas.height = Math.round(totalH);
+  canvas.width = W;
+  canvas.height = H;
   const ctx = canvas.getContext("2d");
-  if (!ctx) return planDataUrl;
-
-  // Fundo branco
+  if (!ctx) throw new Error("canvas 2d indisponível");
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillRect(0, 0, W, H);
 
-  // ---- Cabeçalho ----
+  // Cabeçalho
   ctx.fillStyle = "#0f172a";
-  ctx.fillRect(0, 0, canvas.width, HEADER_H);
+  ctx.fillRect(0, 0, W, headerH);
   ctx.textBaseline = "middle";
-  ctx.fillStyle = "#f8fafc";
-  ctx.font = "bold 18px Arial, sans-serif";
-  ctx.textAlign = "left";
-  ctx.fillText(meta.title || "Croqui de planta", PAD, 26);
-
   const occ = meta.occurrence;
-  const subParts = [
-    "Planta esquemática (pericial)",
-    occ?.numero_bo ? `BO ${occ.numero_bo}` : null,
-    occ?.tipo_pericia || null,
-    occ?.municipio || null,
-  ].filter(Boolean);
-  ctx.font = "12px Arial, sans-serif";
-  ctx.fillStyle = "#cbd5e1";
-  ctx.fillText(subParts.join("  ·  "), PAD, 50);
-
+  const sub = [occ?.numero_bo ? `BO ${occ.numero_bo}` : "", occ?.tipo_pericia ?? "", occ?.municipio ?? ""].filter(Boolean).join(" · ");
+  ctx.fillStyle = "#f8fafc";
+  ctx.font = font(19, 700, display);
+  ctx.fillText("PLANTA BAIXA · CROQUI PERICIAL", pad, sub ? headerH / 2 - 9 * k : headerH / 2);
+  if (sub) {
+    ctx.font = font(12);
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText(sub, pad, headerH / 2 + 12 * k);
+  }
   ctx.textAlign = "right";
+  ctx.font = font(12);
   ctx.fillStyle = "#cbd5e1";
-  ctx.fillText(`Exportado em ${fmtDate(meta.timestamp)}`, canvas.width - PAD, 26);
-  ctx.fillText("Escala gráfica abaixo · 1 m = 100 px (projeto)", canvas.width - PAD, 50);
+  ctx.fillText(meta.sheetLabel, W - pad, headerH / 2 - 9 * k);
+  ctx.fillText(`Exportado em ${fmtDate(meta.timestamp)}`, W - pad, headerH / 2 + 12 * k);
+  ctx.textAlign = "left";
 
-  // ---- Planta ----
-  const planX = (canvas.width - planDrawW) / 2;
-  const planY = HEADER_H + PAD;
-  ctx.drawImage(img, planX, planY, planDrawW, planDrawH);
-  // moldura
-  ctx.strokeStyle = "#cbd5e1";
-  ctx.lineWidth = 1;
-  ctx.strokeRect(planX + 0.5, planY + 0.5, planDrawW - 1, planDrawH - 1);
-
-  // ---- Barra de escala (canto inferior esquerdo da planta) ----
-  const niceM = niceScaleLength(platePxPerM);
-  const barPx = niceM * platePxPerM;
-  const barX = planX + 14;
-  const barY = planY + planDrawH - 20;
-  ctx.strokeStyle = "#0f172a";
-  ctx.fillStyle = "#0f172a";
-  ctx.lineWidth = 2;
+  // Desenho
+  ctx.drawImage(img, 0, headerH);
+  ctx.strokeStyle = "#d1d5db";
+  ctx.lineWidth = Math.max(1, k);
   ctx.beginPath();
-  ctx.moveTo(barX, barY);
-  ctx.lineTo(barX + barPx, barY);
+  ctx.moveTo(Wd + 0.5, headerH);
+  ctx.lineTo(Wd + 0.5, H - footerH);
   ctx.stroke();
-  // ticks
-  ctx.beginPath();
-  ctx.moveTo(barX, barY - 5);
-  ctx.lineTo(barX, barY + 5);
-  ctx.moveTo(barX + barPx, barY - 5);
-  ctx.lineTo(barX + barPx, barY + 5);
-  ctx.stroke();
-  ctx.font = "bold 12px Arial, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "bottom";
-  // fundo claro pro texto legível sobre a planta
-  const barLabel = niceM >= 1 ? `${niceM} m` : `${niceM * 100} cm`;
-  const tw = ctx.measureText(barLabel).width;
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.fillRect(barX + barPx / 2 - tw / 2 - 3, barY - 22, tw + 6, 16);
-  ctx.fillStyle = "#0f172a";
-  ctx.fillText(barLabel, barX + barPx / 2, barY - 7);
 
-  // ---- Rosa dos ventos (canto superior direito da planta) ----
-  const compR = 26;
-  const compX = planX + planDrawW - compR - 16;
-  const compY = planY + compR + 16;
-  ctx.save();
-  ctx.translate(compX, compY);
-  ctx.rotate((-(meta.compassDeg || 0) * Math.PI) / 180);
-  // círculo de fundo
-  ctx.beginPath();
-  ctx.arc(0, 0, compR, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.fill();
-  ctx.strokeStyle = "#0f172a";
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  // seta Norte
-  ctx.beginPath();
-  ctx.moveTo(0, -compR + 4);
-  ctx.lineTo(6, 4);
-  ctx.lineTo(0, 0);
-  ctx.lineTo(-6, 4);
-  ctx.closePath();
-  ctx.fillStyle = "#b91c1c";
-  ctx.fill();
-  ctx.restore();
-  // "N" sempre legível (não rotaciona o texto)
-  ctx.fillStyle = "#0f172a";
-  ctx.font = "bold 12px Arial, sans-serif";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "middle";
-  ctx.fillText("N", compX, compY - compR - 8);
-
-  // ---- Legenda dos vestígios ----
-  if (legend.length > 0) {
-    let ly = HEADER_H + PAD + planDrawH + PAD;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillStyle = "#0f172a";
-    ctx.font = "bold 14px Arial, sans-serif";
-    ctx.fillText("Legenda — vestígios", PAD, ly + LEGEND_HEAD_H / 2);
-    ly += LEGEND_HEAD_H;
-
-    for (const row of legend) {
-      const cy = ly + ROW_H / 2;
-      // badge
-      ctx.beginPath();
-      ctx.arc(PAD + 11, cy, 11, 0, Math.PI * 2);
-      ctx.fillStyle = row.color;
-      ctx.fill();
-      ctx.lineWidth = 1.5;
-      ctx.strokeStyle = "#ffffff";
-      ctx.stroke();
-      ctx.fillStyle = "#ffffff";
-      ctx.font = "bold 11px Arial, sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText(row.label, PAD + 11, cy + 0.5);
-      // texto
-      ctx.textAlign = "left";
-      ctx.fillStyle = "#0f172a";
-      ctx.font = "13px Arial, sans-serif";
-      const txt = row.descricao ? `${row.tipo} — ${row.descricao}` : row.tipo;
-      ctx.fillText(txt, PAD + 30, cy);
-      // separador
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(PAD, ly + ROW_H - 0.5);
-      ctx.lineTo(canvas.width - PAD, ly + ROW_H - 0.5);
-      ctx.stroke();
-      ly += ROW_H;
+  // Coluna da legenda
+  const x0 = Wd + pad;
+  let y = headerH + pad;
+  const title = (t: string) => {
+    ctx.fillStyle = "#111111";
+    ctx.font = font(13, 700, display);
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(t, x0, y + 13 * k);
+    y += 26 * k;
+  };
+  const lines = (b: { t: string[]; s: string[] }, tx: number) => {
+    ctx.textBaseline = "alphabetic";
+    ctx.fillStyle = "#111111";
+    ctx.font = font(13, 600);
+    for (const l of b.t) {
+      ctx.fillText(l, tx, y + 13 * k);
+      y += 17 * k;
     }
+    ctx.fillStyle = "#4b5563";
+    ctx.font = font(11.5);
+    for (const l of b.s) {
+      ctx.fillText(l, tx, y + 11 * k);
+      y += 15 * k;
+    }
+    y += 12 * k;
+  };
+  const tx = x0 + Math.round(32 * k);
+  if (hasForensic) {
+    title("LEGENDA");
+    for (const e of evid) {
+      ctx.beginPath();
+      ctx.arc(x0 + 11 * k, y + 8 * k, 10 * k, 0, Math.PI * 2);
+      ctx.fillStyle = "#facc15";
+      ctx.fill();
+      ctx.lineWidth = 1.3 * k;
+      ctx.strokeStyle = "#111111";
+      ctx.stroke();
+      ctx.fillStyle = "#111111";
+      ctx.font = font(e.label.length > 1 ? 9.5 : 11.5, 700);
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(e.label, x0 + 11 * k, y + 8.5 * k);
+      ctx.textAlign = "left";
+      lines(e.b, tx);
+    }
+    for (const p of ppl) {
+      ctx.fillStyle = "#fde8e8";
+      ctx.strokeStyle = "#7f1d1d";
+      ctx.lineWidth = 1.2 * k;
+      ctx.beginPath();
+      if (p.caido) ctx.roundRect(x0 + 1 * k, y + 3 * k, 22 * k, 11 * k, 5 * k);
+      else ctx.arc(x0 + 11 * k, y + 8 * k, 7 * k, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      lines(p.b, tx);
+    }
+    for (const t of trj) {
+      ctx.strokeStyle = t.color;
+      ctx.lineWidth = 1.8 * k;
+      ctx.setLineDash([6 * k, 4 * k]);
+      ctx.beginPath();
+      ctx.moveTo(x0, y + 8 * k);
+      ctx.lineTo(x0 + 20 * k, y + 8 * k);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = t.color;
+      ctx.beginPath();
+      ctx.moveTo(x0 + 24 * k, y + 8 * k);
+      ctx.lineTo(x0 + 17 * k, y + 4 * k);
+      ctx.lineTo(x0 + 17 * k, y + 12 * k);
+      ctx.fill();
+      lines(t.b, tx);
+    }
+    y += 2 * k;
   }
+  if (legend.rooms.length) {
+    title("CÔMODOS");
+    const right = Wd + colW - pad;
+    ctx.textBaseline = "alphabetic";
+    for (const r of legend.rooms) {
+      ctx.fillStyle = "#111111";
+      ctx.font = font(12.5);
+      ctx.fillText(r.name, x0, y + 12 * k);
+      ctx.font = font(12, 400, mono);
+      ctx.textAlign = "right";
+      ctx.fillText(`${fmt(r.area, 1)} m²`, right, y + 12 * k);
+      ctx.textAlign = "left";
+      y += 19 * k;
+    }
+    ctx.strokeStyle = "#9ca3af";
+    ctx.lineWidth = Math.max(1, 0.8 * k);
+    ctx.beginPath();
+    ctx.moveTo(x0, y + 2 * k);
+    ctx.lineTo(right, y + 2 * k);
+    ctx.stroke();
+    y += 6 * k;
+    ctx.font = font(12.5, 700);
+    ctx.fillText("Área útil · construída", x0, y + 14 * k);
+    ctx.font = font(12, 700, mono);
+    ctx.textAlign = "right";
+    ctx.fillText(`${fmt(legend.usable, 1)} · ${fmt(legend.built, 1)} m²`, right, y + 14 * k);
+    ctx.textAlign = "left";
+    y += 28 * k;
+  }
+  // Escala gráfica: o maior passo que cabe na coluna.
+  const steps = [1, 2, 5, 10, 20, 50];
+  const avail = colW - pad * 2 - 30 * k;
+  const unit = [...steps].reverse().find((s) => s * 3 * meta.pxPerM <= avail) ?? 1;
+  const seg = unit * meta.pxPerM;
+  const by = Math.max(y + 16 * k, headerH + Math.max(Hd, colH) - 64 * k);
+  ctx.textBaseline = "alphabetic";
+  for (let i = 0; i < 3; i++) {
+    ctx.fillStyle = i % 2 === 0 ? "#111111" : "#ffffff";
+    ctx.fillRect(x0 + i * seg, by, seg, 7 * k);
+    ctx.strokeStyle = "#111111";
+    ctx.lineWidth = Math.max(1, 0.8 * k);
+    ctx.strokeRect(x0 + i * seg, by, seg, 7 * k);
+  }
+  ctx.fillStyle = "#111111";
+  ctx.font = font(11, 400, mono);
+  for (let i = 0; i <= 3; i++) {
+    ctx.textAlign = i === 0 ? "left" : "center";
+    ctx.fillText(i === 3 ? `${i * unit} m` : String(i * unit), x0 + i * seg, by + 22 * k);
+  }
+  ctx.textAlign = "left";
+  ctx.fillStyle = "#4b5563";
+  ctx.font = font(11);
+  ctx.fillText("Medidas internas, em metros.", x0, by + 42 * k);
 
-  // ---- Rodapé ----
-  const fy = canvas.height - FOOTER_H;
-  ctx.fillStyle = "#1f2937";
-  ctx.fillRect(0, fy, canvas.width, FOOTER_H);
-  ctx.fillStyle = "#94a3b8";
-  ctx.font = "10px Arial, sans-serif";
-  ctx.textAlign = "center";
+  // Rodapé
+  ctx.fillStyle = "#0f172a";
+  ctx.fillRect(0, H - footerH, W, footerH);
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = font(11);
   ctx.textBaseline = "middle";
-  ctx.fillText(
-    "SICRO Desktop — Croqui de planta · esquema técnico conforme levantamento do perito · documento sujeito a revisão.",
-    canvas.width / 2,
-    fy + FOOTER_H / 2,
-  );
-
+  ctx.fillText("SICRO · croqui pericial · documento técnico, sujeito a revisão pelo perito", pad, H - footerH / 2);
   return canvas.toDataURL("image/png");
-}
-
-/** Abre uma view de impressão A4 com a prancha e dispara o diálogo (o perito
- *  escolhe "Salvar como PDF"); print via iframe, como no editor de imagem. */
-export function openPlantaPrintView(plateDataUrl: string, title: string): void {
-  const landscape = true; // pranchas tendem a ser largas
-  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(
-    title,
-  )}</title><style>
-    @page { size: A4 ${landscape ? "landscape" : "portrait"}; margin: 10mm; }
-    html,body { margin:0; padding:0; }
-    .wrap { width:100%; text-align:center; }
-    img { max-width:100%; max-height:190mm; height:auto; }
-  </style></head><body><div class="wrap"><img src="${plateDataUrl}" /></div>
-  <script>window.onload=function(){setTimeout(function(){window.print();},250);};</script>
-  </body></html>`;
-
-  const iframe = document.createElement("iframe");
-  iframe.style.position = "fixed";
-  iframe.style.right = "0";
-  iframe.style.bottom = "0";
-  iframe.style.width = "0";
-  iframe.style.height = "0";
-  iframe.style.border = "0";
-  document.body.appendChild(iframe);
-  const doc = iframe.contentWindow?.document;
-  if (!doc) {
-    iframe.remove();
-    return;
-  }
-  doc.open();
-  doc.write(html);
-  doc.close();
-  // remove o iframe depois (a impressão já terá sido disparada)
-  window.setTimeout(() => iframe.remove(), 60000);
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(
-    /[&<>"]/g,
-    (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] ?? c,
-  );
 }

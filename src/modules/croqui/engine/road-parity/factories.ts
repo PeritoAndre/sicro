@@ -16,7 +16,7 @@ import {
   type SicroRoadObject_parity,
   type SicroRoundaboutObject_parity,
 } from "./types";
-import type { ParityMarcacao, ParitySuperficie } from "./types";
+import type { ParityEixo, ParityMarcacao, ParitySuperficie } from "./types";
 
 const PARITY_DEFAULT_LAYER_ID = "layer_objects";
 
@@ -52,6 +52,10 @@ interface MakeParityRoadOptions {
   superficie?: ParitySuperficie;
   mao_dupla?: boolean;
   marcacao?: ParityMarcacao;
+  eixo?: ParityEixo;
+  faixas?: number | null;
+  acostamento_m?: number;
+  calcada_m?: number | null;
   label?: string | null;
   metadata_json?: string | null;
   visible?: boolean;
@@ -73,7 +77,7 @@ interface MakeParityRoundaboutOptions {
 
 // ---- Via ----
 
-/** Via entre A e B (metros). Defaults: 7 m, asfalto, mão dupla, amarela; largura clampada em [0.5, 30]. */
+/** Via entre A e B (metros). Defaults: 10 m, asfalto, mão dupla, amarela; largura clampada em [0.5, 30]. */
 export function makeParityRoad(
   ax: number,
   ay: number,
@@ -88,7 +92,7 @@ export function makeParityRoad(
   const cx2 = opts.cx2 ?? ax + (2 * dx) / 3;
   const cy2 = opts.cy2 ?? ay + (2 * dy) / 3;
 
-  return {
+  const out: SicroRoadObject_parity = {
     id: opts.id ?? genId("rdp"),
     kind: "road_parity",
     engine: PARITY_ENGINE_TAG,
@@ -115,6 +119,12 @@ export function makeParityRoad(
     label: opts.label ?? null,
     metadata_json: opts.metadata_json ?? null,
   };
+  // Opcionais só entram se vieram (ausente ≠ undefined na serialização).
+  if (opts.eixo !== undefined) out.eixo = opts.eixo;
+  if (opts.faixas !== undefined) out.faixas = opts.faixas;
+  if (opts.acostamento_m !== undefined) out.acostamento_m = opts.acostamento_m;
+  if (opts.calcada_m !== undefined) out.calcada_m = opts.calcada_m;
+  return out;
 }
 
 /** Via com os 4 pontos Bezier explícitos (adapter OSM e templates). */

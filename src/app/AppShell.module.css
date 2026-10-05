@@ -1,4 +1,5 @@
 .shell {
+  position: relative;
   display: grid;
   grid-template-columns: var(--activity-rail-width) 1fr;
   grid-template-rows: var(--titlebar-height) var(--topbar-height) 1fr var(--statusbar-height);
@@ -36,4 +37,36 @@
 .status {
   grid-row: 4;
   grid-column: 2;
+}
+
+/* Fora do Início: coluna do menu zerada; o menu flutua por cima e só aparece pela borda esquerda. */
+.shellCompact {
+  grid-template-columns: 0 1fr;
+}
+.railFloating {
+  position: absolute;
+  left: 0;
+  top: var(--titlebar-height);
+  bottom: 0;
+  width: var(--activity-rail-width);
+  z-index: 31;
+  box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.railHidden {
+  transform: translateX(-100%);
+  box-shadow: none;
+}
+.railHotZone {
+  position: absolute;
+  left: 0;
+  top: var(--titlebar-height);
+  bottom: 0;
+  width: 6px;
+  z-index: 30; /* acima da paleta e de qualquer trilho dos módulos */
+}
+@media (prefers-reduced-motion: reduce) {
+  .railFloating {
+    transition: none;
+  }
 }

@@ -5,6 +5,7 @@
  * Rust reaplica os mesmos valores, registrados no sidecar `.sicroimage`.
  */
 
+import { useImmersive } from "@stores/immersiveStore";
 import {
   Fragment,
   useCallback,
@@ -13,11 +14,11 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import {
   ArrowLeft,
   ArrowUpRight,
   Check,
-  ChevronDown,
   Circle as CircleIcon,
   Crop as CropIcon,
   Eye,
@@ -29,7 +30,6 @@ import {
   Hash,
   Hexagon,
   Lasso,
-  Layers,
   ListOrdered,
   Magnet,
   MousePointer2,
@@ -43,6 +43,8 @@ import {
   X as XIcon,
   XSquare,
   type LucideIcon,
+  Columns2,
+  ListTree,
 } from "lucide-react";
 import { useShortcuts } from "@core/useShortcuts";
 import {
@@ -90,15 +92,34 @@ import {
 } from "./shared";
 import { CanvasRulers } from "./CanvasRulers";
 import {
+  processedPatch,
+  redactionOpts,
+  redactionRect,
+  redactionSpec,
+  relativePoints,
+  shapePath,
+  type RedactionBase,
+} from "./redaction";
+import { revealExported } from "@core/reveal";
+import {
   ToolOptionsBar,
   DEFAULT_TOOL_STYLE,
   type ToolStyle,
 } from "./ToolOptionsBar";
 import { HistogramPanel } from "./HistogramPanel";
 import { ExifPanel } from "./ExifPanel";
+import { MetadataViewer } from "./MetadataViewer";
 import {
-  FilterGallery,
-  LayersBar,
+  FilterGalleryOverlay,
+  FilterStackPanel,
+  SidePanelFrame,
+  SideRail,
+  SideSection,
+  useFilterThumbnails,
+  type SidePanel,
+} from "./FilterBench";
+import bench from "./FilterBench.module.css";
+import {
   FILTER_INDEX,
   makeProcessingOp,
   processingOpToBackendOperation,
@@ -124,6 +145,7 @@ import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { useNavGuard } from "@app/navGuard";
 import { FileText } from "lucide-react";
 import styles from "./ImageEditor.module.css";
+import { askText } from "@components/Dialog/ask";
 
 type Tool =
   | "select"
@@ -171,52 +193,7 @@ const NON_MASKABLE_KINDS: ReadonlySet<ProcessingOpKind> = new Set<ProcessingOpKi
   ],
 );
 
-/** Carrega uma <img> a partir de uma URL/data-uri. */
-function loadImageEl(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new window.Image();
-    img.onload = () => resolve(img);
-    img.onerror = () =>
-      reject(new Error("falha ao carregar imagem para composição"));
-    img.src = src;
-  });
-}
 
-/**
- * Compõe as camadas de pixels sobre a base full-res e devolve PNG base64 (sem
- * prefixo). No export com filtros o backend produz só a base filtrada, então
- * as camadas precisam ser compostas por cima aqui.
- */
-function compositePixelLayersToBase64(
-  base: HTMLImageElement,
-  layers: SicroImageLayer[],
-  images: Record<string, HTMLImageElement>,
-): string | null {
-  const w = base.naturalWidth || base.width;
-  const h = base.naturalHeight || base.height;
-  if (!w || !h) return null;
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-  ctx.drawImage(base, 0, 0, w, h);
-  for (const l of layers) {
-    const img = images[l.id];
-    if (!img) continue;
-    const rot = ((l.rotation ?? 0) * Math.PI) / 180;
-    ctx.save();
-    ctx.globalAlpha = l.opacity ?? 1;
-    // Pivô no canto sup-esq (offset), idêntico ao render do Konva.
-    ctx.translate(l.offset_x ?? 0, l.offset_y ?? 0);
-    if (rot) ctx.rotate(rot);
-    ctx.drawImage(img, 0, 0, l.width ?? img.width, l.height ?? img.height);
-    ctx.restore();
-  }
-  ctx.globalAlpha = 1;
-  const url = canvas.toDataURL("image/png");
-  return url.replace(/^data:image\/png;base64,/, "") || null;
-}
 
 // Teto alto (64x) para inspeção em nível de pixel.
 const ZOOM_MIN = 0.05;
@@ -231,29 +208,9 @@ interface Props {
   onClose: () => void;
 }
 
-// Painel direito organizado por intenção, cada modo com seções colapsáveis.
-type RightMode = "realcar" | "filtros" | "analisar" | "anotar";
-
-const RIGHT_MODES: Array<{ key: RightMode; label: string; hint: string }> = [
-  {
-    key: "realcar",
-    label: "Realçar",
-    hint: "Ajustes de visualização (brilho/contraste/matiz/canais) — NÃO altera a evidência (§13).",
-  },
-  {
-    key: "filtros",
-    label: "Filtros",
-    hint: "Catálogo de filtros forenses + pilha de processamento reprodutível.",
-  },
-  {
-    key: "analisar",
-    label: "Analisar",
-    hint: "Histograma, EXIF, metadados e histórico — somente leitura/medição.",
-  },
-  { key: "anotar", label: "Anotar", hint: "Objetos sobre a imagem e camadas." },
-];
 
 export function ImageEditor({ workspacePath, onClose }: Props) {
+  useImmersive();
   const analysis = useImagemStore((s) => s.activeAnalysis)!;
   const initialDoc = useImagemStore((s) => s.activeDoc)!;
   const saveActive = useImagemStore((s) => s.saveActive);
@@ -318,25 +275,22 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }
     return null;
   }, [doc.processing_stack]);
-  const [rightMode, setRightMode] = useState<RightMode>("realcar");
-  // Seções abertas do accordion (várias ao mesmo tempo).
-  const [openSections, setOpenSections] = useState<Set<string>>(
-    () => new Set(["histogram", "annotations"]),
-  );
-  const toggleSection = useCallback((key: string) => {
-    setOpenSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      return next;
-    });
-  }, []);
+  const [sidePanel, setSidePanel] = useState<SidePanel>("filtros");
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [compareOn, setCompareOn] = useState(false);
+  const [split, setSplit] = useState(0.5);
+  const [holdOriginal, setHoldOriginal] = useState(false);
+  const [metaOpen, setMetaOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [pointer, setPointer] = useState({ x: 0, y: 0 });
   const [viewport, setViewport] = useState({ scale: 1, x: 0, y: 0 });
   const [showRulers, setShowRulers] = useState(true);
+  const [pointerInside, setPointerInside] = useState(false);
+  // O laço em andamento desenha uma tarja livre (não uma seleção).
+  const redactionDraftRef = useRef(false);
+  const pixelsLayerRef = useRef<Konva.Layer | null>(null);
   const [toolStyle, setToolStyle] = useState<ToolStyle>(DEFAULT_TOOL_STYLE);
   // Trilha em grupos com flyout: grupo aberto e última ferramenta usada por grupo.
   const [openGroup, setOpenGroup] = useState<string | null>(null);
@@ -363,15 +317,19 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     label?: string;
     resolve?: (proceed: boolean) => void;
   }>(null);
-  const [pipelineCollapsed, setPipelineCollapsed] = useState(false);
   const registerNavGuard = useNavGuard((s) => s.register);
   const unregisterNavGuard = useNavGuard((s) => s.unregister);
 
-  // ----- Sincroniza doc e snapshot salvo quando o store troca de análise -----
+  // ----- Sincroniza doc e snapshot salvo só quando o store troca de ANÁLISE -----
+  // (salvar devolve um doc novo ao store; trocá-lo aqui relançava a prévia dos filtros e
+  // podia descartar o que foi editado durante o salvamento).
+  const loadedIdRef = useRef<string | null>(null);
   useEffect(() => {
+    if (loadedIdRef.current === analysis.id) return;
+    loadedIdRef.current = analysis.id;
     setDoc(initialDoc);
     setLastSavedJson(JSON.stringify(initialDoc));
-  }, [initialDoc]);
+  }, [analysis.id, initialDoc]);
 
   // ----- Resize observer da coluna do canvas -----
   useEffect(() => {
@@ -394,28 +352,41 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     [workspacePath, doc.source.original_relative_path],
   );
   const [htmlImage, setHtmlImage] = useState<HTMLImageElement | null>(null);
+  const stageSizeRef = useRef(stageSize);
+  stageSizeRef.current = stageSize;
+  // Enquadramento automático acompanha o tamanho da área até o usuário mexer no zoom/posição.
+  const autoFitRef = useRef(true);
+  const fitImage = (sw: number, sh: number, size: { width: number; height: number }) => {
+    const padding = 20;
+    const scale = Math.min((size.width - padding * 2) / sw, (size.height - padding * 2) / sh, 1);
+    setViewport({ scale, x: (size.width - sw * scale) / 2, y: (size.height - sh * scale) / 2 });
+  };
+  // A foto é decodificada uma vez por arquivo (antes recarregava a cada mudança de altura da
+  // área, refazendo a prévia dos filtros e o enquadramento).
   useEffect(() => {
     if (!imageUrl) return;
+    let alive = true;
     const img = new window.Image();
     img.crossOrigin = "anonymous";
-    img.src = imageUrl;
     img.onload = () => {
+      if (!alive) return;
+      autoFitRef.current = true;
       setHtmlImage(img);
-      // Enquadra na tela.
-      const sw = img.width;
-      const sh = img.height;
-      const padding = 20;
-      const scale = Math.min(
-        (stageSize.width - padding * 2) / sw,
-        (stageSize.height - padding * 2) / sh,
-        1,
-      );
-      const ox = (stageSize.width - sw * scale) / 2;
-      const oy = (stageSize.height - sh * scale) / 2;
-      setViewport({ scale, x: ox, y: oy });
+      fitImage(img.width, img.height, stageSizeRef.current);
     };
-    img.onerror = () => setHtmlImage(null);
-  }, [imageUrl, stageSize.width, stageSize.height]);
+    img.onerror = () => {
+      if (alive) setHtmlImage(null);
+    };
+    img.src = imageUrl;
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [imageUrl]);
+  useEffect(() => {
+    if (htmlImage && autoFitRef.current) fitImage(htmlImage.width, htmlImage.height, stageSize);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [htmlImage, stageSize.width, stageSize.height]);
 
   // ----- Preview ao vivo da pilha de filtros -----
   // O backend aplica a pilha (na ordem, incluindo crop) sobre o original e o
@@ -426,6 +397,19 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     scale: number;
   } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
+  const previewStackKey = JSON.stringify([
+    (doc.processing_stack ?? []).filter((o) => o.enabled !== false),
+    doc.view_adjustments,
+  ]);
+  const redactionBase = useMemo<RedactionBase | null>(
+    () =>
+      previewImage
+        ? { image: previewImage.image, scale: previewImage.scale, offsetX: 0, offsetY: 0 }
+        : htmlImage
+          ? { image: htmlImage, scale: 1, offsetX: cropApplied?.x ?? 0, offsetY: cropApplied?.y ?? 0 }
+          : null,
+    [previewImage, htmlImage, cropApplied],
+  );
   useEffect(() => {
     const ops = (doc.processing_stack ?? []).filter((o) => o.enabled !== false);
     const hasFilters = ops.some((o) => o.kind !== "crop");
@@ -521,6 +505,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         commands
           .applyOperationStackPreview({
             image_base64: clientBitmap,
+            adjustments: doc.view_adjustments,
             operations: buildOps(),
           })
           .then((res) => onResult(res.image_base64, "image/png"))
@@ -535,6 +520,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         commands
           .applyOperationStack(workspacePath, {
             relative_path: doc.source.original_relative_path,
+            adjustments: doc.view_adjustments,
             operations: backendOps,
             as_jpeg: false,
           })
@@ -548,7 +534,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    doc.processing_stack,
+    previewStackKey,
     workspacePath,
     doc.source.original_relative_path,
     doc.source.width,
@@ -584,12 +570,40 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
 
   // ----- Carrega o histórico quando o modo Analisar abre -----
   useEffect(() => {
-    if (rightMode !== "analisar") return;
+    if (sidePanel !== "historico") return;
     commands
       .listImageOperationLogs(workspacePath, analysis.id, 50)
       .then(setLogs)
       .catch(() => setLogs([]));
-  }, [rightMode, workspacePath, analysis.id]);
+  }, [sidePanel, workspacePath, analysis.id]);
+
+  // ----- Comparar: "\\" segurada mostra o original -----
+  useEffect(() => {
+    const typing = (t: EventTarget | null) =>
+      t instanceof HTMLElement && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable);
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "\\" && !typing(e.target)) setHoldOriginal(true);
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === "\\") setHoldOriginal(false);
+    };
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+    };
+  }, []);
+
+  const thumbs = useFilterThumbnails({
+    open: galleryOpen,
+    image: htmlImage,
+    stack: doc.processing_stack ?? [],
+    adjustments: doc.view_adjustments,
+    sourceWidth: doc.source.width || htmlImage?.naturalWidth || 0,
+    sourceHeight: doc.source.height || htmlImage?.naturalHeight || 0,
+    cacheKey: analysis.id,
+  });
 
   // ----- Transformer -----
   useEffect(() => {
@@ -603,6 +617,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }
     const node = layer.findOne(`#${selectedId}`);
     if (node) {
+      tr.rotateEnabled(doc.annotations.find((a) => a.id === selectedId)?.kind !== "redaction");
       tr.nodes([node]);
       tr.getLayer()?.batchDraw();
     } else {
@@ -651,6 +666,20 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     }));
     setSelectedId(null);
   };
+
+  const resetAdjustments = () =>
+    updateAdjustments({
+      brightness: 0,
+      contrast: 0,
+      gamma: 1,
+      saturation: 0,
+      grayscale: false,
+      invert: false,
+      hue: 0,
+      channel_r: true,
+      channel_g: true,
+      channel_b: true,
+    });
 
   const updateAdjustments = (patch: Partial<BackendAdjustments>) => {
     setDoc((d) => ({
@@ -725,12 +754,14 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       return;
     }
     if (tool === "text") {
-      const text = window.prompt("Texto:", "Anotação");
-      if (text == null || text.trim() === "") return;
-      addAnnotation(makeText(world.x, world.y, text.trim()));
-      setTool("select");
+      void askText({ title: "Texto", defaultValue: "Anotação", confirmLabel: "Inserir" }).then((text) => {
+        if (text == null || text.trim() === "") return;
+        addAnnotation(makeText(world.x, world.y, text.trim()));
+        setTool("select");
+      });
       return;
     }
+    if (tool === "redaction" && toolStyle.redactionShape === "free") return;
     // Ferramentas de dois cliques
     if (!pending) {
       setPending(world);
@@ -746,33 +777,42 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     else if (tool === "ellipse")
       addAnnotation(makeEllipse(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y));
     else if (tool === "redaction")
-      addAnnotation(makeRedaction(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y));
+      addAnnotation({
+        ...makeRedaction(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y),
+        redaction_style: toolStyle.redactionStyle,
+        redaction_shape: toolStyle.redactionShape,
+        redaction_strength: toolStyle.redactionStrength,
+      });
     else if (tool === "measurement")
       addAnnotation(makeMeasurement(p1.x, p1.y, p2.x, p2.y));
     else if (tool === "set_scale") {
       const px = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-      const declared = window.prompt(
-        `Distância real entre os dois pontos (em metros)?\nPixels medidos: ${px.toFixed(1)}`,
-        "1",
-      );
-      if (!declared) return;
-      const real = Number(declared.replace(",", "."));
-      if (!Number.isFinite(real) || real <= 0) {
-        setFeedback("Valor inválido — escala não atualizada.");
-        return;
-      }
-      const pxPerUnit = px / real;
-      setDoc((d) => ({
-        ...d,
-        scale: {
-          px_per_unit: pxPerUnit,
-          unit: "m",
-          calibrated_by: [p1, p2],
-          calibration_real_distance: real,
-          created_at: new Date().toISOString(),
-        },
-      }));
-      setFeedback(`Escala definida: ${pxPerUnit.toFixed(2)} px/m.`);
+      void askText({
+        title: "Definir escala",
+        message: `Distância real entre os dois pontos, em metros.\nMedido na imagem: ${px.toFixed(1)} px.`,
+        defaultValue: "1",
+        numeric: true,
+        confirmLabel: "Definir",
+      }).then((declared) => {
+        if (!declared) return;
+        const real = Number(declared.replace(",", "."));
+        if (!Number.isFinite(real) || real <= 0) {
+          setFeedback("Valor inválido — escala não atualizada.");
+          return;
+        }
+        const pxPerUnit = px / real;
+        setDoc((d) => ({
+          ...d,
+          scale: {
+            px_per_unit: pxPerUnit,
+            unit: "m",
+            calibrated_by: [p1, p2],
+            calibration_real_distance: real,
+            created_at: new Date().toISOString(),
+          },
+        }));
+        setFeedback(`Escala definida: ${pxPerUnit.toFixed(2)} px/m.`);
+      });
     }
     setTool("select");
   };
@@ -810,10 +850,13 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
 
   // Início do arrasto: rect/elipse/laço (poligonal/magnética usam clique).
   const handleStageMouseDown = () => {
+    const freeRedaction = tool === "redaction" && toolStyle.redactionShape === "free";
+    redactionDraftRef.current = freeRedaction;
     if (
       tool !== "select_rect" &&
       tool !== "select_ellipse" &&
-      tool !== "select_lasso"
+      tool !== "select_lasso" &&
+      !freeRedaction
     ) {
       return;
     }
@@ -825,7 +868,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       x: (pos.x - viewport.x) / viewport.scale,
       y: (pos.y - viewport.y) / viewport.scale,
     };
-    if (tool === "select_lasso") {
+    if (tool === "select_lasso" || freeRedaction) {
       setSelDraft({ mode: "lasso", points: [world] });
     } else {
       setSelDraft({
@@ -855,6 +898,24 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
           height: h,
           source_tool: selDraft.mode === "rect" ? "select_rect" : "select_ellipse",
         });
+      }
+      setSelDraft(null);
+    } else if (selDraft.mode === "lasso" && redactionDraftRef.current) {
+      redactionDraftRef.current = false;
+      const pts = simplifyPath(selDraft.points, 1.2 / viewport.scale);
+      if (pts.length >= 3) {
+        const xs = pts.map((q) => q.x);
+        const ys = pts.map((q) => q.y);
+        const x = Math.min(...xs);
+        const y = Math.min(...ys);
+        addAnnotation({
+          ...makeRedaction(x, y, Math.max(...xs) - x, Math.max(...ys) - y),
+          points: pts,
+          redaction_style: toolStyle.redactionStyle,
+          redaction_shape: "free",
+          redaction_strength: toolStyle.redactionStrength,
+        });
+        setTool("select");
       }
       setSelDraft(null);
     } else if (selDraft.mode === "lasso") {
@@ -907,6 +968,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       x: (pointerPos.x - viewport.x) / oldScale,
       y: (pointerPos.y - viewport.y) / oldScale,
     };
+    autoFitRef.current = false;
     setViewport({
       scale: newScale,
       x: pointerPos.x - mousePointTo.x * newScale,
@@ -917,6 +979,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   // ----- Vista / zoom (teclado; a roda fica em handleWheel) -----
   const fitToScreen = useCallback(() => {
     if (!htmlImage) return;
+    autoFitRef.current = true;
     const sw = htmlImage.width;
     const sh = htmlImage.height;
     const padding = 20;
@@ -934,6 +997,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
 
   const zoomAroundCenter = useCallback(
     (factor: number) => {
+      autoFitRef.current = false;
       setViewport((vp) => {
         const cx = stageSize.width / 2;
         const cy = stageSize.height / 2;
@@ -951,6 +1015,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   );
 
   const handleZoomActual = useCallback(() => {
+    autoFitRef.current = false;
     if (!htmlImage) {
       setViewport((vp) => ({ ...vp, scale: 1 }));
       return;
@@ -1481,6 +1546,51 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     resolve?.(false);
   };
 
+  /**
+   * Camada transparente com anotações e camadas de pixels, em px do resultado, sem tarjas nem nada
+   * da interface. null quando não há o que sobrepor (evita rasterizar 20 MP à toa).
+   */
+  const captureOverlayPng = (W: number, H: number): string | null => {
+    const stage = stageRef.current;
+    const notes = objectsLayerRef.current;
+    const pixels = pixelsLayerRef.current;
+    if (!stage) return null;
+    const layerOn = (id: string) => doc.layers.find((l) => l.id === id)?.visible !== false;
+    const hasNotes =
+      !!notes?.visible() &&
+      doc.annotations.some((a) => a.kind !== "redaction" && a.visible !== false && layerOn(a.layer_id));
+    const hasPixels = doc.layers.some((l) => l.kind === "pixels" && l.visible !== false && pixelImages[l.id]);
+    if (!hasNotes && !hasPixels) return null;
+    flushSync(() => {
+      setSelectedId(null);
+      setPending(null);
+    });
+    const hidden: Konva.Node[] = [];
+    const hide = (n: Konva.Node | null | undefined) => {
+      if (n && n.visible()) {
+        n.visible(false);
+        hidden.push(n);
+      }
+    };
+    for (const l of stage.getLayers()) if (l !== notes && l !== pixels) hide(l);
+    hide(transformerRef.current);
+    hide(pixelTransformerRef.current);
+    if (notes) for (const a of doc.annotations) if (a.kind === "redaction") hide(notes.findOne(`#${a.id}`));
+    const prev = { x: stage.x(), y: stage.y(), s: stage.scaleX() };
+    stage.scale({ x: 1, y: 1 });
+    stage.position({ x: 0, y: 0 });
+    try {
+      return stage
+        .toDataURL({ x: 0, y: 0, width: W, height: H, pixelRatio: 1, mimeType: "image/png" })
+        .replace(/^data:image\/png;base64,/, "");
+    } finally {
+      for (const n of hidden) n.visible(true);
+      stage.scale({ x: prev.s, y: prev.s });
+      stage.position({ x: prev.x, y: prev.y });
+      stage.batchDraw();
+    }
+  };
+
   const handleExport = async () => {
     setExporting(true);
     setFeedback(null);
@@ -1506,57 +1616,34 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             expSh,
           ) as unknown as BackendOperation,
       );
-      // Camadas de pixels visíveis com bitmap carregado.
-      const pixelLayers = doc.layers.filter(
-        (l) =>
-          l.kind === "pixels" && l.visible !== false && pixelImages[l.id],
+      // Produto final em resolução cheia, montado no backend: pilha (ajustes + filtros + corte) →
+      // camada transparente com anotações e camadas de pixels → tarjas. A foto não passa pelo navegador.
+      const needsBackend = hasFilters || cssFilter !== "";
+      const W = previewImage
+        ? Math.round(previewImage.image.width / previewImage.scale)
+        : cropApplied
+          ? cropApplied.width
+          : doc.source.width || htmlImage?.naturalWidth || 0;
+      const H = previewImage
+        ? Math.round(previewImage.image.height / previewImage.scale)
+        : cropApplied
+          ? cropApplied.height
+          : doc.source.height || htmlImage?.naturalHeight || 0;
+      const overlay = W > 0 && H > 0 ? captureOverlayPng(W, H) : null;
+      const layerVisible = (id: string) => doc.layers.find((l) => l.id === id)?.visible !== false;
+      const redactions = doc.annotations.filter(
+        (a) => a.kind === "redaction" && a.visible !== false && layerVisible(a.layer_id),
       );
-      let composedBase64: string | null = null;
-      let opsForBackend: BackendOperation[] = [];
-      let applyBackendAdj = false;
-      if (hasFilters && pixelLayers.length > 0) {
-        // Filtros + camadas: resultado full-res do backend com as camadas compostas
-        // por cima no cliente (anotações não entram no caminho com filtros).
-        const stack = await commands.applyOperationStack(workspacePath, {
-          relative_path: doc.source.original_relative_path,
-          adjustments: doc.view_adjustments,
-          operations: fullResOps,
-          as_jpeg: false,
-        });
-        const baseImg = await loadImageEl(
-          `data:${stack.mime};base64,${stack.image_base64}`,
-        );
-        composedBase64 = compositePixelLayersToBase64(
-          baseImg,
-          pixelLayers,
-          pixelImages,
-        );
-        applyBackendAdj = false;
-        opsForBackend = [];
-      } else if (hasFilters) {
-        // Só filtros: backend reaplica sobre o original (full-res).
-        composedBase64 = null;
-        applyBackendAdj = true;
-        opsForBackend = fullResOps;
-      } else {
-        // Sem filtros: o stage já compõe imagem + anotações + camadas de pixels.
-        const dataUrl =
-          stageRef.current?.toDataURL({
-            pixelRatio: 2,
-            mimeType: "image/png",
-          }) ?? null;
-        composedBase64 = dataUrl
-          ? dataUrl.replace(/^data:image\/png;base64,/, "")
-          : null;
-      }
       const exp = await commands.exportImageDerivative(
         workspacePath,
         analysis.id,
         {
-          apply_backend_adjustments: applyBackendAdj,
-          composed_png_base64: composedBase64,
+          apply_backend_adjustments: true,
+          composed_png_base64: null,
           adjustments: doc.view_adjustments,
-          operations: opsForBackend,
+          operations: fullResOps,
+          overlay_png_base64: overlay,
+          redactions: redactions.map(redactionSpec),
           format: "png",
           operation_summary_json: JSON.stringify({
             annotations: doc.annotations.length,
@@ -1568,12 +1655,14 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               kind: o.kind,
               params: o.params,
             })),
-            filters_full_res: hasFilters,
+            filters_full_res: needsBackend,
+            redactions: redactions.map((a) => ({ id: a.id, ...redactionOpts(a), ...redactionRect(a) })),
           }),
         },
       );
+      revealExported(workspacePath, exp.output_relative_path);
       setFeedback(
-        hasFilters
+        needsBackend
           ? `Imagem com filtros exportada (resolução cheia): ${exp.output_relative_path}`
           : `Imagem exportada: ${exp.output_relative_path}`,
       );
@@ -1598,8 +1687,9 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
     const native = (
       layer.getCanvas() as unknown as { _canvas?: HTMLCanvasElement }
     )._canvas;
-    if (native) native.style.filter = cssFilter || "";
-  }, [cssFilter, stageSize.width, stageSize.height, htmlImage, cropApplied]);
+    // Com filtros a prévia já vem com os ajustes do backend; o CSS vale só sem filtros.
+    if (native) native.style.filter = previewImage ? "" : cssFilter || "";
+  }, [cssFilter, previewImage, stageSize.width, stageSize.height, htmlImage, cropApplied]);
 
   // Comandos da paleta: atalhos para ações que já existem na UI.
   const paletteCommands: PaletteCommand[] = [
@@ -1615,13 +1705,19 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
         }),
       ),
     ),
-    ...RIGHT_MODES.map(
-      (m): PaletteCommand => ({
-        id: `mode:${m.key}`,
-        label: `Modo: ${m.label}`,
+    ...(
+      [
+        ["filtros", "Filtros"],
+        ["camadas", "Camadas"],
+        ["analise", "Análise"],
+        ["historico", "Histórico"],
+      ] as [SidePanel, string][]
+    ).map(
+      ([key, label]): PaletteCommand => ({
+        id: `panel:${key}`,
+        label: `Painel: ${label}`,
         group: "Painel",
-        keywords: m.hint,
-        run: () => setRightMode(m.key),
+        run: () => setSidePanel(key),
       }),
     ),
     {
@@ -1720,7 +1816,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               makeScopedOp(f.kind),
             ],
           }));
-          setRightMode("filtros");
+          setSidePanel("filtros");
           setFeedback(
             doc.selection && !NON_MASKABLE_KINDS.has(f.kind)
               ? `Filtro adicionado (na seleção): ${f.label}`
@@ -1774,6 +1870,19 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               ● não salvo
             </span>
           )}
+          <Button
+            variant="secondary"
+            leftIcon={<Columns2 size={14} />}
+            className={compareOn ? bench.toggleOn : undefined}
+            onClick={() => setCompareOn((v) => !v)}
+            aria-pressed={compareOn}
+            title="Original × filtrado com divisória (segure \\ para ver só o original)"
+          >
+            Comparar
+          </Button>
+          <Button variant="secondary" leftIcon={<ListTree size={14} />} onClick={() => setMetaOpen(true)}>
+            Metadados
+          </Button>
           <Button
             variant="secondary"
             leftIcon={<Save size={14} />}
@@ -1935,7 +2044,11 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             scaleY={viewport.scale}
             draggable={tool === "pan"}
             onClick={handleStageClick}
-            onMouseMove={handleStageMouseMove}
+            onMouseMove={() => {
+              setPointerInside(true);
+              handleStageMouseMove();
+            }}
+            onMouseLeave={() => setPointerInside(false)}
             onMouseDown={handleStageMouseDown}
             onMouseUp={handleStageMouseUp}
             onDblClick={handleStageDblClick}
@@ -1943,6 +2056,7 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             onDragEnd={(e) => {
               if (tool !== "pan") return;
               const stage = e.target;
+              autoFitRef.current = false;
               setViewport({
                 scale: stage.scaleX(),
                 x: stage.x(),
@@ -2001,8 +2115,40 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                 />
               ) : null}
             </Layer>
+            {/* Comparação: o original sem filtros nem ajustes, recortado até a divisória. */}
+            {htmlImage && (compareOn || holdOriginal) && (
+              <Layer
+                listening={false}
+                imageSmoothingEnabled={viewport.scale < PIXEL_CRISP_ZOOM}
+                clipFunc={
+                  holdOriginal
+                    ? undefined
+                    : (ctx) => {
+                        ctx.rect(
+                          -viewport.x / viewport.scale,
+                          -1e7,
+                          (split * stageSize.width) / viewport.scale,
+                          2e7,
+                        );
+                      }
+                }
+              >
+                {cropApplied ? (
+                  <KonvaImage
+                    image={htmlImage}
+                    x={0}
+                    y={0}
+                    width={cropApplied.width}
+                    height={cropApplied.height}
+                    crop={{ x: cropApplied.x, y: cropApplied.y, width: cropApplied.width, height: cropApplied.height }}
+                  />
+                ) : (
+                  <KonvaImage image={htmlImage} x={0} y={0} width={htmlImage.width} height={htmlImage.height} />
+                )}
+              </Layer>
+            )}
             {/* Camadas de pixels (recortes de seleção), em px da imagem, movíveis com "Selecionar". */}
-            <Layer>
+            <Layer ref={pixelsLayerRef}>
               {doc.layers
                 .filter((l) => l.kind === "pixels" && l.visible !== false)
                 .map((l) => {
@@ -2093,6 +2239,9 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
                 <AnnotationNode
                   key={a.id}
                   a={a}
+                  redactionBase={redactionBase}
+                  selected={selectedId === a.id}
+                  viewScale={viewport.scale}
                   draggable={tool === "select" && !a.locked}
                   onSelect={() => setSelectedId(a.id)}
                   onChange={(patch) => updateAnnotation(a.id, patch)}
@@ -2101,7 +2250,14 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               <Transformer
                 ref={transformerRef}
                 rotateEnabled
-                enabledAnchors={["top-left", "top-right", "bottom-left", "bottom-right"]}
+                // Tarja moldável: os pontos fazem o papel das alças (que ficariam por cima deles).
+                enabledAnchors={
+                  doc.annotations.some(
+                    (a) => a.id === selectedId && a.kind === "redaction" && a.redaction_shape === "free",
+                  )
+                    ? []
+                    : ["top-left", "top-right", "bottom-left", "bottom-right"]
+                }
                 boundBoxFunc={(_, next) => {
                   if (Math.abs(next.width) < 4 || Math.abs(next.height) < 4) return _;
                   return next;
@@ -2144,44 +2300,58 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </svg>
           )}
 
+          {compareOn && !holdOriginal && (
+            <>
+              <div
+                className={bench.cmpBar}
+                style={{ left: split * stageSize.width, height: stageSize.height }}
+                onPointerDown={(e) => {
+                  // Sem isto o arrasto vira seleção de texto e a área toda ganha o realce dourado.
+                  e.preventDefault();
+                  window.getSelection()?.removeAllRanges();
+                  const el = e.currentTarget;
+                  const box = el.parentElement?.getBoundingClientRect();
+                  if (!box) return;
+                  el.setPointerCapture(e.pointerId);
+                  const move = (ev: PointerEvent) =>
+                    setSplit(Math.min(1, Math.max(0, (ev.clientX - box.left) / box.width)));
+                  const up = () => {
+                    el.removeEventListener("pointermove", move);
+                    el.removeEventListener("pointerup", up);
+                  };
+                  el.addEventListener("pointermove", move);
+                  el.addEventListener("pointerup", up);
+                }}
+              />
+              <span className={bench.cmpLabel} style={{ left: split * stageSize.width - 70 }}>original</span>
+              <span className={bench.cmpLabel} style={{ left: split * stageSize.width + 10 }}>filtrado</span>
+            </>
+          )}
+          {galleryOpen && (
+            <FilterGalleryOverlay
+              thumbs={thumbs}
+              selectionActive={!!doc.selection}
+              onClose={() => setGalleryOpen(false)}
+              onAdd={(kind) => {
+                setDoc((d) => ({ ...d, processing_stack: [...(d.processing_stack ?? []), makeScopedOp(kind)] }));
+                setGalleryOpen(false);
+                setSidePanel("filtros");
+              }}
+            />
+          )}
+
           {/* Réguas que seguem o mouse. */}
           {showRulers && (
             <CanvasRulers
               imageWidth={doc.source.width}
               imageHeight={doc.source.height}
               viewport={viewport}
-              pointer={pointer}
+              pointer={pointerInside ? pointer : null}
               width={stageSize.width}
               height={stageSize.height}
               scale={doc.scale}
             />
           )}
-          {/* Toggle das réguas (flutuante, canto superior-direito). */}
-          <button
-            type="button"
-            onClick={() => setShowRulers((v) => !v)}
-            title={showRulers ? "Ocultar réguas" : "Mostrar réguas"}
-            aria-pressed={showRulers}
-            style={{
-              position: "absolute",
-              top: 6,
-              right: 6,
-              zIndex: 11,
-              display: "flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "3px 8px",
-              fontSize: 11,
-              fontFamily: "inherit",
-              color: showRulers ? "#38bdf8" : "rgba(203,213,225,0.8)",
-              background: "rgba(17,24,39,0.82)",
-              border: `1px solid ${showRulers ? "rgba(56,189,248,0.5)" : "rgba(148,163,184,0.25)"}`,
-              borderRadius: 5,
-              cursor: "pointer",
-            }}
-          >
-            <Ruler size={12} /> Réguas
-          </button>
 
           {/* Indicador da seleção ativa (tipo + área + inverter/limpar). */}
           {doc.selection &&
@@ -2482,16 +2652,6 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             </div>
           )}
 
-          {/* Pilha de filtros como barra de camadas embaixo do canvas. */}
-          <LayersBar
-            stack={doc.processing_stack ?? []}
-            onChange={(next) =>
-              setDoc((d) => ({ ...d, processing_stack: next }))
-            }
-            collapsed={pipelineCollapsed}
-            onToggleCollapsed={() => setPipelineCollapsed((v) => !v)}
-            activeSelection={doc.selection ?? null}
-          />
           <StatusBar
             tool={tool}
             pointer={pointer}
@@ -2500,174 +2660,98 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
             saving={saving}
             exporting={exporting}
             feedback={feedback}
+            showRulers={showRulers}
+            onToggleRulers={() => setShowRulers((v) => !v)}
           />
         </div>
 
-        <aside className={styles.right} aria-label="Painel direito">
-          {/* Metade de cima: as abas; a de baixo é das camadas. */}
-          <div className={styles.rightTop}>
-          <nav className={styles.rightTabs} role="tablist">
-            {RIGHT_MODES.map((m) => (
-              <button
-                key={m.key}
-                type="button"
-                role="tab"
-                aria-selected={rightMode === m.key}
-                className={`${styles.rightTab} ${rightMode === m.key ? styles.rightTabActive : ""}`}
-                onClick={() => setRightMode(m.key)}
-                title={m.hint}
-              >
-                {m.label}
-              </button>
-            ))}
-          </nav>
-          <div className={styles.rightBody}>
-            {rightMode === "realcar" && (
-              <>
-                <p className={styles.modeNote}>
-                  Auxílio de visualização — <strong>não altera a evidência
-                  original</strong>. Os ajustes só afetam o preview e os
-                  derivados exportados; nada é gravado sobre o original (§13).
-                </p>
-                <AdjustmentsPanel
-                  adjustments={doc.view_adjustments}
-                  onChange={updateAdjustments}
-                  onReset={() =>
-                    updateAdjustments({
-                      brightness: 0,
-                      contrast: 0,
-                      gamma: 1,
-                      saturation: 0,
-                      grayscale: false,
-                      invert: false,
-                      hue: 0,
-                      channel_r: true,
-                      channel_g: true,
-                      channel_b: true,
-                    })
+        <aside className={`${styles.right} ${bench.right}`} aria-label="Painel direito">
+          {sidePanel === "filtros" && (
+            <FilterStackPanel
+              stack={doc.processing_stack ?? []}
+              onChange={(next) => setDoc((d) => ({ ...d, processing_stack: next }))}
+              activeSelection={doc.selection ?? null}
+              onOpenGallery={() => setGalleryOpen(true)}
+              busy={previewBusy}
+              adjustmentsActive={cssFilter !== ""}
+              onResetAdjustments={resetAdjustments}
+              adjustmentsSlot={
+                <AdjustmentsPanel adjustments={doc.view_adjustments} onChange={updateAdjustments} onReset={resetAdjustments} />
+              }
+            />
+          )}
+          {sidePanel === "camadas" && (
+            <SidePanelFrame title="Camadas e objetos">
+              <SideSection title="Camadas">
+                <LayersPanelPro
+                  layers={doc.layers}
+                  pixelImages={pixelImages}
+                  selectedLayerId={selectedLayerId}
+                  onSelect={setSelectedLayerId}
+                  onToggleVisible={(id) =>
+                    setDoc((d) => ({
+                      ...d,
+                      layers: d.layers.map((l) => (l.id === id ? { ...l, visible: !l.visible } : l)),
+                    }))
                   }
+                  onToggleLock={(id) =>
+                    setDoc((d) => ({
+                      ...d,
+                      layers: d.layers.map((l) => (l.id === id ? { ...l, locked: !l.locked } : l)),
+                    }))
+                  }
+                  onSetOpacity={(id, opacity) => updateLayer(id, { opacity })}
+                  onRename={(id, name) => updateLayer(id, { name })}
+                  onDelete={deleteLayer}
+                  onReorder={reorderLayers}
                 />
-              </>
-            )}
-            {rightMode === "filtros" && (
-              // Só o catálogo na aba; a pilha ativa fica na LayersBar embaixo do canvas.
-              <FilterGallery
-                onAdd={(kind) => {
-                  setDoc((d) => ({
-                    ...d,
-                    processing_stack: [
-                      ...(d.processing_stack ?? []),
-                      makeScopedOp(kind),
-                    ],
-                  }));
-                  if (doc.selection && !NON_MASKABLE_KINDS.has(kind)) {
-                    setFeedback("Filtro adicionado — confinado à seleção.");
-                  }
-                }}
-              />
-            )}
-            {rightMode === "analisar" && (
-              <>
-                <AccordionSection
-                  title="Histograma e estatísticas"
-                  sectionKey="histogram"
-                  open={openSections.has("histogram")}
-                  onToggle={toggleSection}
-                >
-                  <HistogramPanel
-                    workspacePath={workspacePath}
-                    relativePath={doc.source.original_relative_path}
-                  />
-                </AccordionSection>
-                <AccordionSection
-                  title="EXIF"
-                  sectionKey="exif"
-                  open={openSections.has("exif")}
-                  onToggle={toggleSection}
-                >
-                  <ExifPanel
-                    workspacePath={workspacePath}
-                    relativePath={doc.source.original_relative_path}
-                  />
-                </AccordionSection>
-                <AccordionSection
-                  title="Metadados e custódia"
-                  sectionKey="meta"
-                  open={openSections.has("meta")}
-                  onToggle={toggleSection}
-                >
-                  <MetaPanel doc={doc} />
-                </AccordionSection>
-                <AccordionSection
-                  title="Histórico de operações"
-                  sectionKey="history"
-                  open={openSections.has("history")}
-                  onToggle={toggleSection}
-                >
-                  <HistoryPanel logs={logs} />
-                </AccordionSection>
-              </>
-            )}
-            {rightMode === "anotar" && (
-              <>
-                <AccordionSection
-                  title="Objetos (anotações e medições)"
-                  sectionKey="annotations"
-                  open={openSections.has("annotations")}
-                  onToggle={toggleSection}
-                >
-                  <AnnotationsListPanel
-                    doc={doc}
-                    selectedId={selectedId}
-                    onSelect={setSelectedId}
-                    onDelete={deleteAnnotation}
-                    onToggleVisibility={(id) => {
-                      const a = doc.annotations.find((x) => x.id === id);
-                      if (!a) return;
-                      updateAnnotation(id, { visible: a.visible === false });
-                    }}
-                  />
-                </AccordionSection>
-              </>
-            )}
-          </div>
-          </div>
-          {/* Camadas na metade de baixo do painel. */}
-          <div className={styles.rightLayers}>
-            <header className={styles.rightLayersHead}>
-              <Layers size={13} />
-              <strong>Camadas</strong>
-            </header>
-            <div className={styles.rightLayersBody}>
-              <LayersPanelPro
-                layers={doc.layers}
-                pixelImages={pixelImages}
-                selectedLayerId={selectedLayerId}
-                onSelect={setSelectedLayerId}
-                onToggleVisible={(id) =>
-                  setDoc((d) => ({
-                    ...d,
-                    layers: d.layers.map((l) =>
-                      l.id === id ? { ...l, visible: !l.visible } : l,
-                    ),
-                  }))
-                }
-                onToggleLock={(id) =>
-                  setDoc((d) => ({
-                    ...d,
-                    layers: d.layers.map((l) =>
-                      l.id === id ? { ...l, locked: !l.locked } : l,
-                    ),
-                  }))
-                }
-                onSetOpacity={(id, opacity) => updateLayer(id, { opacity })}
-                onRename={(id, name) => updateLayer(id, { name })}
-                onDelete={deleteLayer}
-                onReorder={reorderLayers}
-              />
-            </div>
-          </div>
+              </SideSection>
+              <SideSection title="Objetos (anotações e medições)">
+                <AnnotationsListPanel
+                  doc={doc}
+                  selectedId={selectedId}
+                  onSelect={setSelectedId}
+                  onDelete={deleteAnnotation}
+                  onToggleVisibility={(id) => {
+                    const a = doc.annotations.find((x) => x.id === id);
+                    if (!a) return;
+                    updateAnnotation(id, { visible: a.visible === false });
+                  }}
+                />
+              </SideSection>
+            </SidePanelFrame>
+          )}
+          {sidePanel === "analise" && (
+            <SidePanelFrame title="Análise">
+              <SideSection title="Histograma e estatísticas">
+                <HistogramPanel workspacePath={workspacePath} relativePath={doc.source.original_relative_path} />
+              </SideSection>
+              <SideSection title="Metadados">
+                <ExifPanel workspacePath={workspacePath} relativePath={doc.source.original_relative_path} />
+              </SideSection>
+              <SideSection title="Custódia">
+                <MetaPanel doc={doc} />
+              </SideSection>
+            </SidePanelFrame>
+          )}
+          {sidePanel === "historico" && (
+            <SidePanelFrame title="Histórico de operações">
+              <HistoryPanel logs={logs} />
+            </SidePanelFrame>
+          )}
+          <SideRail
+            value={sidePanel}
+            onChange={setSidePanel}
+            filterCount={(doc.processing_stack ?? []).filter((o) => o.enabled !== false).length}
+          />
         </aside>
+        {metaOpen && (
+          <MetadataViewer
+            workspacePath={workspacePath}
+            relativePath={doc.source.original_relative_path}
+            onClose={() => setMetaOpen(false)}
+          />
+        )}
       </div>
       <ReportPreviewDialog
         open={reportOpen}
@@ -2826,7 +2910,8 @@ function ToolGroupFlyout({
         aria-haspopup={multi || undefined}
         aria-expanded={multi ? open : undefined}
       >
-        <RepIcon size={15} />
+        <RepIcon size={16} />
+        <span className={styles.toolLabel}>{group.label}</span>
         {multi && <span className={styles.toolGroupMore} aria-hidden="true" />}
       </button>
       {multi && open && (
@@ -3087,13 +3172,32 @@ function AnnotationNode({
   draggable,
   onSelect,
   onChange,
+  redactionBase,
+  selected = false,
+  viewScale = 1,
 }: {
   a: SicroAnnotation;
   draggable: boolean;
   onSelect: () => void;
   onChange: (patch: Partial<SicroAnnotation>) => void;
+  redactionBase?: RedactionBase | null;
+  selected?: boolean;
+  viewScale?: number;
 }) {
   if (a.visible === false) return null;
+  if (a.kind === "redaction") {
+    return (
+      <RedactionNode
+        a={a}
+        base={redactionBase ?? null}
+        draggable={draggable}
+        selected={selected}
+        viewScale={viewScale}
+        onSelect={onSelect}
+        onChange={onChange}
+      />
+    );
+  }
   const stroke = a.stroke ?? "#ef4444";
   const fill = a.fill ?? "transparent";
   const strokeWidth = a.stroke_width ?? 2;
@@ -3106,7 +3210,7 @@ function AnnotationNode({
       onChange({ x: e.target.x(), y: e.target.y() }),
   };
 
-  if (a.kind === "rect" || a.kind === "redaction") {
+  if (a.kind === "rect") {
     return (
       <Rect
         id={a.id}
@@ -3116,8 +3220,8 @@ function AnnotationNode({
         height={a.height ?? 0}
         stroke={stroke}
         strokeWidth={strokeWidth}
-        fill={a.kind === "redaction" ? "#000000" : fill}
-        opacity={a.kind === "redaction" ? 1 : opacity}
+        fill={fill}
+        opacity={opacity}
         draggable={draggable}
         {...commonHandlers}
       />
@@ -3322,6 +3426,8 @@ function StatusBar({
   saving,
   exporting,
   feedback,
+  showRulers,
+  onToggleRulers,
 }: {
   tool: Tool;
   pointer: { x: number; y: number };
@@ -3330,9 +3436,20 @@ function StatusBar({
   saving: boolean;
   exporting: boolean;
   feedback: string | null;
+  showRulers: boolean;
+  onToggleRulers: () => void;
 }) {
   return (
     <div className={styles.statusBar}>
+      <button
+        type="button"
+        className={`${styles.statusToggle} ${showRulers ? styles.statusToggleOn : ""}`}
+        onClick={onToggleRulers}
+        aria-pressed={showRulers}
+        title={showRulers ? "Ocultar réguas" : "Mostrar réguas"}
+      >
+        <Ruler size={12} /> Réguas
+      </button>
       <span>
         Ferramenta: <code>{tool}</code>
       </span>
@@ -3340,8 +3457,9 @@ function StatusBar({
         x={pointer.x.toFixed(0)} · y={pointer.y.toFixed(0)}
       </span>
       <span>zoom {(viewport.scale * 100).toFixed(0)}%</span>
-      <span>
-        {doc.source.width}×{doc.source.height} px
+      <span title="Largura × altura = total de pixels">
+        {doc.source.width}×{doc.source.height} = {(doc.source.width * doc.source.height).toLocaleString("pt-BR")} px (
+        {((doc.source.width * doc.source.height) / 1e6).toFixed(1).replace(".", ",")} MP)
       </span>
       <span>
         {doc.scale
@@ -3359,41 +3477,7 @@ function StatusBar({
 }
 
 // ---------------------------------------------------------------------------
-// Painel direito — seção recolhível (accordion)
 
-function AccordionSection({
-  title,
-  sectionKey,
-  open,
-  onToggle,
-  children,
-}: {
-  title: string;
-  sectionKey: string;
-  open: boolean;
-  onToggle: (key: string) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className={styles.accordion}>
-      <button
-        type="button"
-        className={styles.accordionHeader}
-        onClick={() => onToggle(sectionKey)}
-        aria-expanded={open}
-      >
-        <ChevronDown
-          size={13}
-          className={`${styles.accordionChevron} ${open ? styles.accordionChevronOpen : ""}`}
-        />
-        <span className={styles.accordionTitle}>{title}</span>
-      </button>
-      {open && <div className={styles.accordionBody}>{children}</div>}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Painel direito — Ajustes
 
 function AdjustmentsPanel({
@@ -3407,7 +3491,6 @@ function AdjustmentsPanel({
 }) {
   return (
     <>
-      <h3 className={styles.sectionTitle}>Ajustes não destrutivos</h3>
       <Slider
         label="Brilho"
         min={-100}
@@ -3674,3 +3757,163 @@ function MetaPanel({ doc }: { doc: SicroImageDoc }) {
   );
 }
 
+
+/** Tarja com o efeito de verdade na tela (desfoque/pixelização dos pixels de baixo). */
+/** Tarja com o efeito de verdade na tela; na forma livre, pontos arrastáveis para moldar. */
+function RedactionNode({
+  a,
+  base,
+  draggable,
+  selected,
+  viewScale,
+  onSelect,
+  onChange,
+}: {
+  a: SicroAnnotation;
+  base: RedactionBase | null;
+  draggable: boolean;
+  selected: boolean;
+  viewScale: number;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroAnnotation>) => void;
+}) {
+  // Pontos em edição (prévia local durante o arrasto de um vértice).
+  const [live, setLive] = useState<SicroImagePoint[] | null>(null);
+  const view = live ? { ...a, points: live } : a;
+  const r = redactionRect(view);
+  const { style, shape, strength } = redactionOpts(a);
+  const free = shape === "free" && (view.points?.length ?? 0) >= 3;
+  const rel = free ? relativePoints(view, r) : undefined;
+  // A prévia é calculada sobre a forma gravada (com folga na livre) e em resolução de tela:
+  // arrastar um ponto só muda o recorte; o desfoque é refeito ao soltar.
+  const c = redactionRect(a);
+  const pad = free ? Math.max(c.w, c.h) * 0.4 : 0;
+  const area = { x: c.x - pad, y: c.y - pad, w: c.w + 2 * pad, h: c.h + 2 * pad };
+  const patch = useMemo(() => {
+    if (!base) return null;
+    const p = processedPatch(
+      base.image,
+      (area.x + base.offsetX) * base.scale,
+      (area.y + base.offsetY) * base.scale,
+      area.w * base.scale,
+      area.h * base.scale,
+      style,
+      strength,
+      { maxSide: 900, basis: { w: c.w * base.scale, h: c.h * base.scale } },
+    );
+    // Retângulo coberto, de volta em px do mundo.
+    return p
+      ? {
+          canvas: p.canvas,
+          x: p.x / base.scale - base.offsetX,
+          y: p.y / base.scale - base.offsetY,
+          w: p.w / base.scale,
+          h: p.h / base.scale,
+        }
+      : null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, area.x, area.y, area.w, area.h, c.w, c.h, style, strength]);
+  // Parada: só a interseção com a forma (a caixa de seleção fica do tamanho da tarja).
+  const still = patch
+    ? (() => {
+        const x0 = Math.max(c.x, patch.x), y0 = Math.max(c.y, patch.y);
+        const x1 = Math.min(c.x + c.w, patch.x + patch.w), y1 = Math.min(c.y + c.h, patch.y + patch.h);
+        const fx = patch.canvas.width / patch.w, fy = patch.canvas.height / patch.h;
+        return x1 > x0 && y1 > y0
+          ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0, crop: { x: (x0 - patch.x) * fx, y: (y0 - patch.y) * fy, width: (x1 - x0) * fx, height: (y1 - y0) * fy } }
+          : null;
+      })()
+    : null;
+  const movePts = (dx: number, dy: number) => (a.points ?? []).map((p) => ({ x: p.x + dx, y: p.y + dy }));
+  return (
+    <>
+      <Group
+        id={a.id}
+        x={r.x}
+        y={r.y}
+        draggable={draggable}
+        onClick={onSelect}
+        onTap={onSelect}
+        clipFunc={(ctx) => shapePath(ctx as unknown as CanvasRenderingContext2D, shape, r.w, r.h, rel)}
+        onDragEnd={(e) => {
+          const dx = e.target.x() - r.x;
+          const dy = e.target.y() - r.y;
+          onChange(
+            free
+              ? { points: movePts(dx, dy), x: r.x + dx, y: r.y + dy, width: r.w, height: r.h }
+              : { x: e.target.x(), y: e.target.y(), width: r.w, height: r.h },
+          );
+        }}
+        onTransformEnd={(e) => {
+          const n = e.target;
+          const sx = n.scaleX();
+          const sy = n.scaleY();
+          n.scaleX(1);
+          n.scaleY(1);
+          if (free) {
+            const ox = n.x();
+            const oy = n.y();
+            onChange({ points: (a.points ?? []).map((p) => ({ x: ox + (p.x - r.x) * sx, y: oy + (p.y - r.y) * sy })) });
+          } else {
+            onChange({ x: n.x(), y: n.y(), width: Math.max(4, r.w * sx), height: Math.max(4, r.h * sy) });
+          }
+        }}
+      >
+        {patch && live ? (
+          <KonvaImage image={patch.canvas} x={patch.x - r.x} y={patch.y - r.y} width={patch.w} height={patch.h} />
+        ) : patch && still ? (
+          <KonvaImage
+            image={patch.canvas}
+            x={still.x - r.x}
+            y={still.y - r.y}
+            width={still.w}
+            height={still.h}
+            crop={still.crop}
+          />
+        ) : (
+          <Rect width={r.w} height={r.h} fill="#000000" />
+        )}
+      </Group>
+      {free && selected && (
+        <Group>
+          <Line
+            points={(view.points ?? []).flatMap((p) => [p.x, p.y])}
+            closed
+            stroke="#ffffff"
+            strokeWidth={1.2 / viewScale}
+            dash={[4 / viewScale, 3 / viewScale]}
+            listening={false}
+          />
+          {(view.points ?? []).map((p, i) => (
+            <Circle
+              key={i}
+              x={p.x}
+              y={p.y}
+              radius={4.5 / viewScale}
+              fill="#ffffff"
+              stroke="#0f172a"
+              strokeWidth={1.2 / viewScale}
+              draggable
+              onMouseDown={(e) => {
+                e.cancelBubble = true;
+              }}
+              onDragMove={(e) => {
+                e.cancelBubble = true;
+                const pts = [...(live ?? a.points ?? [])];
+                pts[i] = { x: e.target.x(), y: e.target.y() };
+                setLive(pts);
+              }}
+              onDragEnd={(e) => {
+                e.cancelBubble = true;
+                const pts = [...(live ?? a.points ?? [])];
+                pts[i] = { x: e.target.x(), y: e.target.y() };
+                setLive(null);
+                onChange({ points: pts });
+              }}
+            />
+          ))}
+        </Group>
+      )}
+    </>
+  );
+}

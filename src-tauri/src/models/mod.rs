@@ -42,6 +42,7 @@ pub use image_analysis::{
     HashSet as ImageHashSet, ImageAnalysis, ImageAssetBytes, ImageExport, ImageHistogram,
     ImageMetadata, ImageOperationLog, ImageSourceKind, ImportLocalImageInput, HistogramStats,
     MaskSpec,
+    RedactionPoint, RedactionSpec,
 };
 pub use laudo::{Laudo, LaudoDoc, LaudoStatus, NewLaudoInput};
 pub use registry::{

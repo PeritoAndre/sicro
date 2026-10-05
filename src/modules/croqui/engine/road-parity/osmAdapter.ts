@@ -19,6 +19,7 @@ import type {
   ParityMarcacao,
   SicroRoadObject_parity,
   SicroRoundaboutObject_parity,
+  ParityEixo,
 } from "./types";
 
 interface Vec2M {
@@ -28,11 +29,11 @@ interface Vec2M {
 
 // ---- Tabelas por classe OSM ----
 
-/** Largura em metros por `highway=*` (tabela `_LARG_CLASSE` do SICRO 1.0). `*_link` herda a classe. */
+/** Largura em metros por `highway=*` (padrão do perito: rua comum = 10 m). `*_link` herda a classe. */
 export function parityRoadWidthMetersByHighway(
   highway: string | undefined,
 ): number {
-  if (!highway) return 7.0;
+  if (!highway) return 10;
   const h = highway.toLowerCase();
   if (
     h === "motorway" ||
@@ -42,19 +43,11 @@ export function parityRoadWidthMetersByHighway(
     h === "trunk_link" ||
     h === "primary_link"
   ) {
-    return 10.5;
+    return 14;
   }
-  if (h === "secondary" || h === "secondary_link") return 8.5;
-  if (h === "tertiary" || h === "tertiary_link") return 7.5;
-  if (
-    h === "residential" ||
-    h === "unclassified" ||
-    h === "living_street"
-  ) {
-    return 6.0;
-  }
-  if (h === "service" || h === "parking_aisle") return 4.5;
-  return 6.5;
+  if (h === "secondary" || h === "secondary_link") return 12;
+  if (h === "service" || h === "parking_aisle") return 7;
+  return 10;
 }
 
 // `track` entra porque "estrada de chão" no OSM costuma ser trilha rural, fora do croqui urbano.
@@ -303,6 +296,7 @@ function buildMetadataJson(
     ref: way.tags.ref,
     junction: way.tags.junction,
     raw_tags: way.tags,
+    ...((way as MergedOsmWay).merged_ids ? { osm_ids: (way as MergedOsmWay).merged_ids } : {}),
     ...extras,
   });
 }
@@ -424,6 +418,97 @@ function clamp(v: number, lo: number, hi: number): number {
 }
 
 /** Converte o dataset OSM em vias e rotatórias parity (mundo, metros) + stats e warnings. */
+/** Ways que vieram de vários trechos do OSM guardam os ids originais. */
+type MergedOsmWay = OsmWay & { merged_ids?: number[] };
+
+const MERGE_MAX_DEFLECTION_DEG = 35;
+
+/**
+ * O OSM parte a mesma rua em vários ways (em cruzamentos, mudança de tag). Junta os que têm
+ * mesmo nome, classe, sentido e faixas, se encontram ponta com ponta e seguem quase retos,
+ * para a rua virar um objeto só. Curva forte (rua em "L") continua separada.
+ */
+export function mergeContinuousOsmWays(
+  ways: ReadonlyArray<OsmWay>,
+  nodeIndex: ReadonlyMap<number, OsmNode>,
+): MergedOsmWay[] {
+  const keyOf = (w: OsmWay): string | null => {
+    const t = w.tags ?? {};
+    const refs = w.node_refs;
+    if (!t.highway || !t.name || t.junction === "roundabout" || t.junction === "circular") return null;
+    if (refs.length < 2 || refs[0] === refs[refs.length - 1]) return null;
+    if (t.oneway === "-1") return null;
+    const oneway = t.oneway === "yes" || t.oneway === "true" || t.oneway === "1" ? "yes" : "no";
+    return [t.name.trim(), t.highway, oneway, t.lanes ?? ""].join("|");
+  };
+  const dir = (from: number, to: number): [number, number] | null => {
+    const a = nodeIndex.get(from);
+    const b = nodeIndex.get(to);
+    if (!a || !b) return null;
+    const dx = (b.lon - a.lon) * Math.cos((a.lat * Math.PI) / 180);
+    const dy = b.lat - a.lat;
+    const len = Math.hypot(dx, dy);
+    return len > 0 ? [dx / len, dy / len] : null;
+  };
+  // Encadeia x → y no nó comum; null se o sentido não fecha ou a dobra é forte.
+  const join = (a: MergedOsmWay, b: MergedOsmWay, node: number, oneway: boolean): MergedOsmWay | null => {
+    let x = a.node_refs;
+    let y = b.node_refs;
+    const aEnd = x[x.length - 1] === node;
+    const bStart = y[0] === node;
+    if (aEnd && bStart) {
+      /* já encadeado */
+    } else if (!aEnd && !bStart) {
+      [x, y] = [y, x];
+      if (!(x[x.length - 1] === node && y[0] === node)) return null;
+    } else if (oneway) {
+      return null; // dois trechos de mão única em sentidos opostos
+    } else if (aEnd) {
+      y = [...y].reverse();
+    } else {
+      x = [...x].reverse();
+    }
+    const d1 = dir(x[x.length - 2]!, node);
+    const d2 = dir(node, y[1]!);
+    if (!d1 || !d2) return null;
+    const cos = Math.max(-1, Math.min(1, d1[0] * d2[0] + d1[1] * d2[1]));
+    if ((Math.acos(cos) * 180) / Math.PI > MERGE_MAX_DEFLECTION_DEG) return null;
+    const first = x === a.node_refs || x[0] === a.node_refs[a.node_refs.length - 1] ? a : b;
+    return {
+      ...first,
+      node_refs: [...x, ...y.slice(1)],
+      merged_ids: [...(a.merged_ids ?? [a.id]), ...(b.merged_ids ?? [b.id])],
+    };
+  };
+
+  const pool: MergedOsmWay[] = [...ways];
+  for (let changed = true; changed; ) {
+    changed = false;
+    const ends = new Map<string, MergedOsmWay[]>();
+    for (const w of pool) {
+      const k = keyOf(w);
+      if (!k) continue;
+      for (const n of [w.node_refs[0]!, w.node_refs[w.node_refs.length - 1]!]) {
+        const list = ends.get(`${k}#${n}`) ?? [];
+        if (!list.includes(w)) list.push(w);
+        ends.set(`${k}#${n}`, list);
+      }
+    }
+    for (const [ek, list] of ends) {
+      if (list.length !== 2) continue; // 3+ trechos no mesmo nó: ambíguo, não mexe
+      const [a, b] = list as [MergedOsmWay, MergedOsmWay];
+      const node = Number(ek.slice(ek.lastIndexOf("#") + 1));
+      const merged = join(a, b, node, ek.split("|")[2] === "yes");
+      if (!merged) continue;
+      pool.splice(pool.indexOf(a), 1, merged);
+      pool.splice(pool.indexOf(b), 1);
+      changed = true;
+      break;
+    }
+  }
+  return pool;
+}
+
 export function convertOsmDatasetToParityObjects(
   input: OsmParityImportInput,
 ): OsmParityAdapterResult {
@@ -432,6 +517,7 @@ export function convertOsmDatasetToParityObjects(
 
   const nodeIndex = new Map<number, OsmNode>();
   for (const n of input.nodes) nodeIndex.set(n.id, n);
+  const ways = mergeContinuousOsmWays(input.ways, nodeIndex);
 
   type WayMetric = {
     way: OsmWay;
@@ -442,7 +528,7 @@ export function convertOsmDatasetToParityObjects(
   const wayMetrics: WayMetric[] = [];
   let skipped = 0;
 
-  for (const w of input.ways) {
+  for (const w of ways) {
     if (!w.tags || !w.tags.highway) {
       skipped++;
       continue;
@@ -677,9 +763,22 @@ function buildParityRoadFromOsm(
   const c2 = recentre(fit.c2);
   const end = recentre(fit.end);
 
-  // Mão única no OSM costuma ser um par de ways (pista dupla): metade da largura
-  // em cada uma reconstrói a arterial original (mesma regra do SICRO 1.0).
-  const largura_final = is_one_way ? largura_m / 2 : largura_m;
+  // Mão única fica com a largura da classe: dividir ao meio (regra do SICRO 1.0)
+  // deixava rua de 4 m.
+  const largura_final = largura_m;
+
+  // `lanes` do OSM é o total da pista; na mão dupla vira por sentido.
+  const lanesTag = Number.parseInt(m.way.tags.lanes ?? "", 10);
+  const faixas = Number.isFinite(lanesTag) && lanesTag > 0
+    ? (is_one_way ? lanesTag : Math.max(1, Math.round(lanesTag / 2)))
+    : undefined;
+  const eixo: ParityEixo = is_one_way
+    ? "nenhuma"
+    : marcacao === "amarela"
+      ? "amarela_dupla"
+      : marcacao === "branca"
+        ? "amarela_trac" // rua residencial de mão dupla: amarela, tracejada (CONTRAN)
+        : "nenhuma";
 
   return makeParityRoadBezier(
     start.x,
@@ -695,6 +794,8 @@ function buildParityRoadFromOsm(
       superficie: "asfalto",
       mao_dupla: !is_one_way,
       marcacao,
+      eixo,
+      ...(faixas !== undefined ? { faixas } : {}),
       label,
       metadata_json: buildMetadataJson(m.way, {
         arc_length_m: fit.arcLengthM,

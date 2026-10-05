@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useImmersive } from "@stores/immersiveStore";
 import { useNavigate } from "react-router-dom";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -414,6 +415,7 @@ export function AudioModule() {
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   );
+  useImmersive(selected != null);
 
   // Aba irmã Vídeos: diz qual áudio está aberto (e o vídeo de origem dele).
   const selectedRef = useRef(selected);

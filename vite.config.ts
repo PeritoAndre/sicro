@@ -30,6 +30,9 @@ export default defineConfig(async () => ({
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
     target: ["es2022", "chrome105", "safari13"],
+    // Arte do croqui corporal vai embutida (data URL): no Linux, imagem servida pelo app
+    // contamina o canvas do WebKit e a exportação da prancha é bloqueada.
+    assetsInlineLimit: (file: string) => (/[\\/]corpo[\\/]assets[\\/]art[\\/]/.test(file) ? true : undefined),
     minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
     rollupOptions: {

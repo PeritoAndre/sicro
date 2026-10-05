@@ -1,10 +1,10 @@
-# Manual do SICRO 4.1 — Suíte Pericial
+# Manual do SICRO 5.0 — Suíte Pericial
 
 > **Para quem é este manual:** peritos criminais e equipe técnica que usam o
 > SICRO no dia a dia. Ele ensina, módulo por módulo, **o que cada parte faz
 > e como usar** — com passos, dicas e os limites honestos de cada ferramenta.
 >
-> **O que é o SICRO 4.1:** uma suíte pericial **desktop, 100% offline**, para
+> **O que é o SICRO 5.0:** uma suíte pericial **desktop, 100% offline**, para
 > Windows e Linux, enxuta e objetiva: **Croquis**, **Vídeo e Áudio** e
 > **Imagens**, com a **integridade** de todas as evidências do caso. O laudo
 > continua no Word ou no LibreOffice; o SICRO entrega as figuras e as medições.
@@ -85,7 +85,10 @@ redimensiona pelas bordas, como qualquer janela.
 
 ### 2.2 Trilho lateral (esquerda)
 
-A coluna fixa à esquerda é a navegação principal. Em **Módulos**:
+A coluna à esquerda é a navegação principal. Ela fica visível no Início e nas
+listas; com um croqui, vídeo, áudio ou imagem aberto ela se recolhe para sobrar
+tela, e volta quando o mouse encosta na borda esquerda (dá para trocar de módulo
+dali, sem voltar). Em **Módulos**:
 
 - **Início** — nome do caso e os três módulos; abre ou cria um caso e já entra
   (e, pelo menu ⋯ do caso, a **Integridade**).
@@ -223,23 +226,54 @@ Sob a umbrella **Croquis** há **três tipos**, cada um com seu editor:
 | **Planta** | Planta baixa de imóvel/cena: paredes, portas, mobília, vestígios. |
 
 Em todos: você cria pela lista de croquis (cada tipo tem seu botão e um selo de
-cor), desenha/anota, e exporta um **PNG técnico** (com título, escala, dados da
-ocorrência e data) ou um **PNG limpo** (para colar no corpo do laudo, no Word).
+cor), desenha/anota, e exporta um **PNG técnico** (com o tipo do croqui, escala, dados da
+ocorrência e data; o título do croqui não sai no PNG) ou um **PNG limpo** (para colar no corpo do laudo, no Word).
 
 ### 5.1 Croqui viário
 
-- **Ferramentas:** Selecionar, Pan, **Medida** (mede em metros pela escala),
-  **Definir escala** (2 cliques + distância real), Referenciais (R1/R2), **Via**
-  (urbana, avenida, rodovia, terra, estacionamento, **rotatória**), **Veículos**
-  (vários tipos), **Vestígios** (ponto de colisão, frenagem, arrasto, sangue…),
-  **Mobiliário** (semáforo, placas, poste, faixa de pedestres), **Pessoas**,
-  **Anotação** (texto, chamada, seta, trajetória).
+- **Trilho e prateleira:** à esquerda, um trilho com ícone e nome. Em cima, as
+  ferramentas diretas: Selecionar, Pan, **Cota**, **Escala**, **R1** (vermelho)
+  e **R2** (azul). Abaixo, os grupos: **Via** (urbana, avenida, rodovia, terra,
+  estacionamento, rotatória), **Veículos**, **Viaturas**, **Vestígios**,
+  **Mobiliário**, **Pessoas** e **Anotação**. Clicar num grupo abre a
+  **prateleira** com miniaturas reais; **arraste** uma para a cena e solte onde
+  quiser, ou **clique** nela e depois na cena. A prateleira fecha ao inserir
+  (o alfinete a mantém aberta; Esc fecha). **Imagem** e **Editar** reúnem fundo,
+  importações, desfazer/refazer, duplicar e excluir.
+- **Linhas, cota e vias** desenham-se **arrastando** na cena (aperte onde começa,
+  solte onde termina) ou com dois cliques; soltas da prateleira, nascem com
+  10 m e as pontas prontas para ajuste.
+- **Exportar:** um botão, duas opções. **PNG técnico** (com carimbo, para
+  anexar) ou **PNG limpo** (só o desenho, para o corpo do laudo). Ao terminar,
+  a pasta abre com o arquivo exportado.
 - **Fundo da cena:** importe uma foto, use uma das **Fotos do caso**, ou **importe de drone**
   (com correção de lente e recorte). Dá para bloquear, ajustar opacidade e
   centralizar o fundo.
-- **Importar OSM:** traz o traçado real das vias do OpenStreetMap por
+- **Importar OSM:** trechos da mesma rua que seguem em linha viram uma via só.
+  Traz o traçado real das vias do OpenStreetMap por
   coordenada + raio.
-- **Inspector:** camadas, propriedades do objeto selecionado e a escala.
+- **Inspector:** uma coisa por vez. Com um objeto selecionado, só as
+  propriedades dele; sem seleção, a **folha e grade**, o **estilo das vias**,
+  a escala e as camadas.
+- **Rótulos soltos:** o nome do veículo (V1), do referencial (R1), do vestígio
+  e o valor da cota são arrastáveis para onde ficar legível, com tamanho, cor e
+  rotação próprios no Inspector (**Reto** deixa na horizontal, **Na linha** faz o
+  valor da cota acompanhar a inclinação, **Voltar ao lugar** desfaz o arrasto).
+- **Folha e grade:** a folha (retângulo com a grade) é exatamente o que vai
+  para o PNG, independente do zoom. Com a escala definida, tamanho em metros
+  (presets de 25 × 18 a 200 × 141 m), grade em metros, **Folha aqui** (centraliza
+  a folha no que está na tela) e **Ajustar à cena**. A resolução do PNG (A4 a 200/300 dpi, A3, A2) fica no mesmo lugar.
+- **Estilo das vias** (Inspector): o croqui nasce em **planta técnica** —
+  asfalto claro, meio-fio preto, calçada hachurada, sinalização conforme o
+  CONTRAN (amarela separa sentidos, branca separa faixas do mesmo sentido),
+  tracejado em metros. Dá para trocar para **P&B** (impressão) ou **Escuro**
+  (o visual antigo) e ajustar cores, espessuras, calçada e cadência do traço.
+  Vale para o croqui inteiro e para o PNG exportado.
+- **Cada via** tem: largura da pista, **eixo** (amarela dupla, tracejada,
+  contínua + tracejada, branca ou sem), **faixas por sentido** (automático ≈
+  3,5 m ou fixo), **acostamento** (com linha de bordo branca) e **calçada**
+  (padrão do croqui ou própria). A rotatória ganha ilha, faixas do anel e a
+  linha de **dê a preferência** nas entradas, sozinha.
 
 > 💡 No editor o OSM aparece como **mapa de referência**; o render final do croqui
 > é a geometria técnica (vias, eixos, marcações) — o preview do mapa ≠ o desenho
@@ -260,15 +294,47 @@ ocorrência e data) ou um **PNG limpo** (para colar no corpo do laudo, no Word).
   automaticamente.
 - No inspector, preencha região anatômica, lateralidade, instrumento/meio,
   dimensões e observação.
-- A **legenda** é gerada sozinha (numerada). Exporte o PNG (corpo + legenda).
+- A **legenda** é gerada sozinha (numerada).
+- **Exportar** oferece dois PNGs, e a pasta abre com o arquivo marcado:
+  **técnico**, com cabeçalho, numeração do POP, listas de regiões e legenda; ou
+  **limpo**, só a imagem com as lesões marcadas, para o corpo do laudo.
 
 ### 5.3 Croqui de planta
 
-- Ferramentas: **Parede** (as paredes se conectam nos nós), **Porta** e
-  **Janela** (grudam na parede), **Medir**, **Remover**, mais a camada pericial:
-  **vestígios** (com rótulo A/B/C ou 1/2/3 + legenda automática), **trajetória
-  balística**, **rosa dos ventos**, **mobiliário**, **texto livre**.
-- Exporte o PNG (planta + legenda + cabeçalho).
+O editor foi refeito na 5.0, no mesmo jeito do croqui viário: paleta à
+esquerda, inspetor à direita (uma coisa por vez), a roda move a vista e
+Ctrl com a roda dá zoom no ponteiro. Tudo é medido em metros.
+
+- **Cômodo:** arraste um retângulo e nascem as quatro paredes, com nome e
+  área. A medida que aparece enquanto você arrasta já é a interna. Cômodos
+  vizinhos dividem a mesma parede. Duplo clique num espaço fechado por paredes
+  cria o cômodo; duplo clique num cômodo renomeia.
+- **Parede:** clique ponto a ponto, em cadeia. Digite a medida interna e Enter
+  para a parede sair no tamanho certo. Shift trava em 0, 45 e 90 graus; Alt
+  desliga o ímã. Duplo clique ou Esc termina. Paredes se juntam nos cantos e
+  em T sozinhas. A parede selecionada mostra a medida interna: clique nela
+  para digitar outra, e a parede vizinha anda junto.
+- **Aberturas:** porta, porta dupla, de correr, janela, basculante e vão.
+  Leve até a parede: ela encaixa, recorta a parede e mostra as distâncias até
+  os cantos. Abre para o lado em que está o ponteiro; Espaço inverte.
+- **Mobília, estrutura e externo:** símbolos de arquitetura. Perto de uma
+  parede a peça encosta e gira junto (Alt solta). R gira 90 graus.
+- **Vestígio:** marcadores A, B, C (ou 1, 2, 3) em sequência. Cada um é medido
+  até as duas paredes mais próximas, ou até dois cantos, e a medida entra na
+  legenda com o nome da parede pela rosa dos ventos (norte, sul, leste,
+  oeste).
+- **Pessoa** (em pé ou caída), **Trajetória**, **Cota** e **Texto**.
+- **Fundo:** foto do croqui feito no local ou planta do imóvel para decalcar,
+  com escala por dois pontos. Não sai no PNG.
+- **Folha:** A4 ou A3, deitada ou em pé, na escala escolhida (1:50 a 1:200),
+  ou de tamanho livre. "Folha em volta da planta" escolhe a menor escala que
+  cabe e centraliza.
+- **Exportar:** **PNG técnico** com cabeçalho (sem título), cotas externas,
+  legenda dos vestígios, tabela de áreas e escala gráfica; ou **PNG limpo**,
+  só o desenho. A pasta abre com o arquivo marcado.
+- Paredes, portas e janelas guardam altura e peitoril, para um 3D no futuro.
+- Plantas feitas antes da 5.0 não abrem no editor novo; o arquivo continua no
+  caso.
 
 > ⚠️ **§13 (todos os croquis):** o croqui é o **esquema técnico do perito**. O
 > SICRO desenha o que você marca — não infere posições, medidas, ângulos nem
@@ -291,34 +357,50 @@ original é copiado e "hasheado"; todo o trabalho fica numa pilha por cima.
 
 - **Canvas** com zoom até nível de pixel e réguas ao vivo (em px ou em unidade
   real, se você calibrar a escala).
-- **Ferramentas** (à esquerda): seleção (retângulo, elipse, laço, poligonal,
-  magnética), anotações, medições, tarja (anonimização), recorte.
-- **Painel direito** em modos: **Realçar**, **Filtros**, **Analisar**, **Anotar**
-  + **Camadas**.
+- **Ferramentas** (trilha da esquerda, com nome embaixo do ícone): navegar,
+  seleção (retângulo, elipse, laço, poligonal, magnética), anotar, medir,
+  proteger (tarja) e recortar.
+- **Painel direito** de altura inteira, com um trilho de ícones na borda:
+  **Filtros** (padrão), **Camadas** (camadas e objetos), **Análise** e
+  **Histórico**. Um painel por vez.
+- No topo: **Comparar** (original × filtrado, com divisória arrastável; segurar
+  a tecla **\\** mostra o original inteiro) e **Metadados**.
 
-### 6.3 Realçar e filtros
+### 6.3 Bancada de filtros
 
-- **Realçar:** brilho, contraste, gama, saturação, matiz, canais R/G/B, tons de
-  cinza, inverter — tudo **só na visualização** (não grava no original).
-- **Filtros (galeria buscável):** bordas (Sobel, Laplaciano, Canny), suavização
-  (Gaussian, Mediana, Bilateral, Unsharp), realce (CLAHE, equalização,
-  auto-níveis, balanço de branco, limiar), morfologia (dilatar, erodir, abrir,
-  fechar), geometria, tonal (níveis, curvas), canais, e **forenses** (ELA,
-  decorrelation stretch, gradiente de luminância). Cada filtro traz uma **nota**
-  explicando para que serve.
-- **Pilha de processamento:** os filtros entram numa lista que você liga/desliga,
-  reordena e remove, com **preview ao vivo**.
+- **Pilha de filtros:** o painel direito é a pilha, aplicada de cima para baixo.
+  O primeiro cartão é **Ajustes** (brilho, contraste, gama, saturação, matiz,
+  canais R/G/B, tons de cinza, inverter); cada filtro é um cartão com os
+  controles ali mesmo, para ligar/desligar, mudar de ordem, remover e aplicar
+  **na imagem inteira ou só na seleção**. O original nunca muda.
+- **+ Filtro** abre a galeria por cima da imagem, com **miniaturas da sua
+  imagem já filtrada** (miniaturas grandes, com a descrição inteira) por cada um dos filtros (bordas, suavização, realce,
+  morfologia, geometria, tonal, canais e **forenses**: ELA, decorrelation
+  stretch, gradiente de luminância), com busca e uma nota de para que serve.
+- **Receitas:** "Placa no escuro", "Bordas e marcas" e "Adulteração (ELA)"
+  montam pilhas prontas; **Salvar como receita** guarda a pilha atual com um
+  nome, disponível em qualquer caso.
 
-### 6.4 Analisar
+### 6.4 Análise e metadados
 
-- **Histograma** + estatísticas por canal.
-- **EXIF** (metadados da câmera, data, GPS).
-- **Hashes** (MD5, SHA-1, SHA-256, SHA-3) e metadados de custódia.
+- **Histograma** + estatísticas por canal, resumo dos metadados e custódia.
+- **Metadados** (botão no topo): todos os campos que o **exiftool** lê (numa
+  foto de drone, mais de 150), em português, por grupo, com filtro e cópia em
+  texto; cartões de resumo de captura, câmera, local, voo (DJI) e integridade
+  (MD5, SHA-1, SHA-256, SHA3-256). O exiftool vem com o SICRO no Windows e é
+  dependência do pacote no Linux.
 
 ### 6.5 Anotar e medir
 
 - Anotações: seta, linha, retângulo, elipse, texto, marcador numerado, polígono,
-  ângulo, mão livre, tarja.
+  ângulo, mão livre.
+- **Proteger (tarja):** desfoque, pixelização ou tarja preta, em elipse,
+  retângulo ou **forma livre** (arraste para desenhar o contorno). Com a tarja
+  selecionada, **Tornar moldável** transforma elipse/retângulo em dezenas de
+  pontos, e cada ponto branco pode ser puxado para ajustar o contorno. A tarja
+  moldável não tem alças de canto: arraste pelo meio para mudar de lugar e pelos
+  pontos para mudar a forma. A prévia na tela é aproximada; o arquivo exportado
+  aplica o efeito em resolução cheia.
 - **Definir escala** (2 pontos + distância real) habilita medições em unidade
   real: distância, **área e perímetro** (polígono), **ângulo**.
 
@@ -679,7 +761,7 @@ ilusões:
 
 ---
 
-*Manual do SICRO 4.1 (outubro de 2026), conferido com o código-fonte desta
+*Manual do SICRO 5.0 (outubro de 2026), conferido com o código-fonte desta
 versão. Algumas telas e rótulos evoluem entre versões; se algo divergir do que
 você vê no app, vale o app — e avise (botão **Feedback**, no rodapé do índice
 desta Ajuda) para atualizar este manual.*

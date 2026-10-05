@@ -7,6 +7,7 @@ import {
   isOsmRoundaboutForParity,
   parityRoadMarkingByHighway,
   parityRoadWidthMetersByHighway,
+  mergeContinuousOsmWays,
   polylineToParityBezier,
   projectLatLonToLocalMeters,
 } from "../osmAdapter";
@@ -15,35 +16,30 @@ import type { OsmNode, OsmWay } from "../../osm";
 // ---------------------------------------------------------------------------
 // Largura por classe.
 
-describe("road-parity / parityRoadWidthMetersByHighway — tabela _LARG_CLASSE", () => {
-  it("primary e trunk = 10.5 m", () => {
-    expect(parityRoadWidthMetersByHighway("primary")).toBe(10.5);
-    expect(parityRoadWidthMetersByHighway("trunk")).toBe(10.5);
-    expect(parityRoadWidthMetersByHighway("primary_link")).toBe(10.5);
-    expect(parityRoadWidthMetersByHighway("motorway")).toBe(10.5);
+describe("road-parity / parityRoadWidthMetersByHighway — larguras padrão", () => {
+  it("arteriais (primary/trunk/motorway) = 14 m", () => {
+    expect(parityRoadWidthMetersByHighway("primary")).toBe(14);
+    expect(parityRoadWidthMetersByHighway("trunk")).toBe(14);
+    expect(parityRoadWidthMetersByHighway("primary_link")).toBe(14);
+    expect(parityRoadWidthMetersByHighway("motorway")).toBe(14);
   });
-  it("secondary = 8.5 m", () => {
-    expect(parityRoadWidthMetersByHighway("secondary")).toBe(8.5);
-    expect(parityRoadWidthMetersByHighway("secondary_link")).toBe(8.5);
+  it("secondary = 12 m", () => {
+    expect(parityRoadWidthMetersByHighway("secondary")).toBe(12);
+    expect(parityRoadWidthMetersByHighway("secondary_link")).toBe(12);
   });
-  it("tertiary = 7.5 m", () => {
-    expect(parityRoadWidthMetersByHighway("tertiary")).toBe(7.5);
-    expect(parityRoadWidthMetersByHighway("tertiary_link")).toBe(7.5);
+  it("tertiary e ruas comuns = 10 m", () => {
+    expect(parityRoadWidthMetersByHighway("tertiary")).toBe(10);
+    expect(parityRoadWidthMetersByHighway("residential")).toBe(10);
+    expect(parityRoadWidthMetersByHighway("unclassified")).toBe(10);
+    expect(parityRoadWidthMetersByHighway("living_street")).toBe(10);
   });
-  it("residential / unclassified / living_street = 6.0 m", () => {
-    expect(parityRoadWidthMetersByHighway("residential")).toBe(6.0);
-    expect(parityRoadWidthMetersByHighway("unclassified")).toBe(6.0);
-    expect(parityRoadWidthMetersByHighway("living_street")).toBe(6.0);
+  it("service / parking_aisle = 7 m", () => {
+    expect(parityRoadWidthMetersByHighway("service")).toBe(7);
+    expect(parityRoadWidthMetersByHighway("parking_aisle")).toBe(7);
   });
-  it("service / parking_aisle = 4.5 m", () => {
-    expect(parityRoadWidthMetersByHighway("service")).toBe(4.5);
-    expect(parityRoadWidthMetersByHighway("parking_aisle")).toBe(4.5);
-  });
-  it("classe desconhecida cai em fallback 6.5 m", () => {
-    expect(parityRoadWidthMetersByHighway("xpto")).toBe(6.5);
-  });
-  it("highway ausente cai em 7.0 m (default Python LARGURA_PADRAO)", () => {
-    expect(parityRoadWidthMetersByHighway(undefined)).toBe(7.0);
+  it("classe desconhecida ou ausente = 10 m", () => {
+    expect(parityRoadWidthMetersByHighway("xpto")).toBe(10);
+    expect(parityRoadWidthMetersByHighway(undefined)).toBe(10);
   });
 });
 
@@ -247,7 +243,7 @@ function buildSimpleWayDataset(
 }
 
 describe("road-parity / convertOsmDatasetToParityObjects — way → road_parity", () => {
-  it("primary mão dupla → kind road_parity, largura_m=10.5, marcacao=amarela", () => {
+  it("primary mão dupla → kind road_parity, largura_m=14, marcacao=amarela", () => {
     const { ways, nodes, center } = buildSimpleWayDataset("primary");
     const out = convertOsmDatasetToParityObjects({
       ways,
@@ -260,12 +256,12 @@ describe("road-parity / convertOsmDatasetToParityObjects — way → road_parity
     const road = out.roads[0]!;
     expect(road.kind).toBe("road_parity");
     expect(road.engine).toBe("parity");
-    expect(road.largura_m).toBe(10.5);
+    expect(road.largura_m).toBe(14);
     expect(road.marcacao).toBe("amarela");
     expect(road.mao_dupla).toBe(true);
     expect(road.superficie).toBe("asfalto");
   });
-  it("residential mão dupla → largura_m=6.0, marcacao=branca", () => {
+  it("residential mão dupla → largura_m=10, marcacao=branca", () => {
     const { ways, nodes, center } = buildSimpleWayDataset("residential");
     const out = convertOsmDatasetToParityObjects({
       ways,
@@ -275,7 +271,7 @@ describe("road-parity / convertOsmDatasetToParityObjects — way → road_parity
       canvas: { width: 1600, height: 1000 },
     });
     expect(out.roads.length).toBe(1);
-    expect(out.roads[0]!.largura_m).toBe(6.0);
+    expect(out.roads[0]!.largura_m).toBe(10);
     expect(out.roads[0]!.marcacao).toBe("branca");
   });
   it("oneway → mao_dupla=false, marcacao=nenhuma, largura dividida ao meio", () => {
@@ -291,8 +287,8 @@ describe("road-parity / convertOsmDatasetToParityObjects — way → road_parity
     const road = out.roads[0]!;
     expect(road.mao_dupla).toBe(false);
     expect(road.marcacao).toBe("nenhuma");
-    // Largura: primary é 10.5 m. Oneway divide ao meio → 5.25 m.
-    expect(road.largura_m).toBeCloseTo(5.25, 2);
+    // Largura: primary é 14 m; mão única fica com a largura inteira.
+    expect(road.largura_m).toBeCloseTo(14, 2);
   });
   it("label vem de tags.name quando presente", () => {
     const { ways, nodes, center } = buildSimpleWayDataset(
@@ -504,5 +500,55 @@ describe("road-parity / convertOsmDatasetToParityObjects — stats", () => {
     expect(out.roads.length).toBe(0);
     expect(out.stats.skipped_count).toBeGreaterThanOrEqual(1);
     expect(out.warnings.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("road-parity / mergeContinuousOsmWays", () => {
+  // Cruz: rua A (oeste→centro, centro→leste) partida em dois ways; rua B cruza no nó 2.
+  const d = 50 / 111000;
+  const c = { lat: 0.0345, lon: -51.0694 };
+  const nodes: OsmNode[] = [
+    { id: 1, lat: c.lat, lon: c.lon - d },
+    { id: 2, lat: c.lat, lon: c.lon },
+    { id: 3, lat: c.lat, lon: c.lon + d },
+    { id: 4, lat: c.lat + d, lon: c.lon },
+    { id: 5, lat: c.lat - d, lon: c.lon },
+  ];
+  const idx = new Map(nodes.map((n) => [n.id, n] as const));
+  const A = { highway: "residential", name: "Rua A" };
+
+  it("junta os dois trechos da mesma rua e deixa a transversal", () => {
+    const out = mergeContinuousOsmWays(
+      [
+        { id: 10, node_refs: [1, 2], tags: A },
+        { id: 11, node_refs: [3, 2], tags: A },
+        { id: 20, node_refs: [4, 2, 5], tags: { highway: "residential", name: "Rua B" } },
+      ],
+      idx,
+    );
+    expect(out).toHaveLength(2);
+    const a = out.find((w) => w.tags.name === "Rua A")!;
+    expect(a.node_refs).toEqual([1, 2, 3]);
+    expect(a.merged_ids).toEqual([10, 11]);
+  });
+
+  it("não junta rua que dobra em L nem mão única em sentidos opostos", () => {
+    const l = mergeContinuousOsmWays(
+      [
+        { id: 10, node_refs: [1, 2], tags: A },
+        { id: 11, node_refs: [2, 4], tags: A },
+      ],
+      idx,
+    );
+    expect(l).toHaveLength(2);
+    const ow = { ...A, oneway: "yes" };
+    const opp = mergeContinuousOsmWays(
+      [
+        { id: 10, node_refs: [1, 2], tags: ow },
+        { id: 11, node_refs: [3, 2], tags: ow },
+      ],
+      idx,
+    );
+    expect(opp).toHaveLength(2);
   });
 });

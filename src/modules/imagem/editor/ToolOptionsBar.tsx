@@ -5,17 +5,24 @@
  */
 
 import type { SicroAnnotation, SicroImageScale } from "../engine/schema";
+import { toMoldablePoints } from "./redaction";
 
 export interface ToolStyle {
   stroke: string;
   strokeWidth: number;
   fill: string; // "transparent" = sem preenchimento
+  redactionStyle: "blur" | "pixelate" | "solid";
+  redactionShape: "rect" | "ellipse" | "free";
+  redactionStrength: number;
 }
 
 export const DEFAULT_TOOL_STYLE: ToolStyle = {
   stroke: "#ef4444",
   strokeWidth: 2,
   fill: "transparent",
+  redactionStyle: "blur",
+  redactionShape: "ellipse",
+  redactionStrength: 60,
 };
 
 /** Ferramentas cujo estilo (cor/espessura/fill) faz sentido editar. */
@@ -90,8 +97,26 @@ export function ToolOptionsBar({
   const setFill = (v: string) =>
     editingSelected ? onSelectedPatch({ fill: v }) : onToolStyle({ fill: v });
 
-  const showStyle =
-    editingSelected || STYLEABLE_TOOLS.has(tool);
+  const isRedaction = target ? target.kind === "redaction" : tool === "redaction";
+  const showStyle = (editingSelected || STYLEABLE_TOOLS.has(tool)) && !isRedaction;
+  const rStyle = target?.redaction_style ?? (target ? "solid" : toolStyle.redactionStyle);
+  const rShape = target?.redaction_shape ?? (target ? "rect" : toolStyle.redactionShape);
+  const rStrength = target?.redaction_strength ?? toolStyle.redactionStrength;
+  const setRedaction = (patch: { style?: ToolStyle["redactionStyle"]; shape?: ToolStyle["redactionShape"]; strength?: number }) => {
+    if (editingSelected) {
+      onSelectedPatch({
+        ...(patch.style ? { redaction_style: patch.style } : {}),
+        ...(patch.shape ? { redaction_shape: patch.shape } : {}),
+        ...(patch.strength !== undefined ? { redaction_strength: patch.strength } : {}),
+      });
+    } else {
+      onToolStyle({
+        ...(patch.style ? { redactionStyle: patch.style } : {}),
+        ...(patch.shape ? { redactionShape: patch.shape } : {}),
+        ...(patch.strength !== undefined ? { redactionStrength: patch.strength } : {}),
+      });
+    }
+  };
   const showFill =
     (target && FILLABLE_KINDS.has(target.kind)) ||
     (!target && (tool === "rect" || tool === "ellipse"));
@@ -104,8 +129,13 @@ export function ToolOptionsBar({
         display: "flex",
         alignItems: "center",
         gap: 14,
-        padding: "5px 12px",
-        minHeight: 34,
+        padding: "0 12px",
+        // Altura fixa: se a barra crescer, a área da imagem encolhe e tudo é reenquadrado.
+        height: 40,
+        flexShrink: 0,
+        flexWrap: "nowrap",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
         background: "var(--sicro-bg-elev, rgba(17,24,39,0.6))",
         borderBottom: "1px solid var(--sicro-border, rgba(148,163,184,0.18))",
         fontSize: 12,
@@ -114,7 +144,7 @@ export function ToolOptionsBar({
       role="toolbar"
       aria-label="Opções da ferramenta"
     >
-      <span style={{ fontWeight: 600, minWidth: 130, color: "var(--sicro-fg, #e2e8f0)" }}>
+      <span style={{ fontWeight: 600, minWidth: 130, flexShrink: 0, color: "var(--sicro-fg, #e2e8f0)" }}>
         {editingSelected ? "Objeto selecionado" : (TOOL_LABEL[tool] ?? tool)}
         {editingSelected && (
           <span style={{ color: "var(--sicro-fg-dim, #94a3b8)", fontWeight: 400 }}>
@@ -123,6 +153,63 @@ export function ToolOptionsBar({
         )}
       </span>
 
+      {isRedaction && (
+        <>
+          <Field label="Efeito">
+            <select value={rStyle} onChange={(e) => setRedaction({ style: e.target.value as ToolStyle["redactionStyle"] })}>
+              <option value="blur">Desfoque</option>
+              <option value="pixelate">Pixelização</option>
+              <option value="solid">Tarja preta</option>
+            </select>
+          </Field>
+          <Field label="Forma">
+            <select value={rShape} onChange={(e) => setRedaction({ shape: e.target.value as ToolStyle["redactionShape"] })}>
+              <option value="ellipse">Elipse</option>
+              <option value="rect">Retângulo</option>
+              <option value="free">Livre (desenhar)</option>
+            </select>
+          </Field>
+          {editingSelected && target && rShape !== "free" && (
+            <button
+              type="button"
+              onClick={() => onSelectedPatch({ redaction_shape: "free", points: toMoldablePoints(target) })}
+              title="Vira um contorno com muitos pontos para puxar um a um"
+              style={{
+                flexShrink: 0,
+                padding: "3px 10px",
+                font: "inherit",
+                fontSize: 12,
+                color: "var(--sicro-fg, #e2e8f0)",
+                background: "transparent",
+                border: "1px solid var(--sicro-border, rgba(148,163,184,0.3))",
+                borderRadius: 5,
+                cursor: "pointer",
+              }}
+            >
+              Tornar moldável
+            </button>
+          )}
+          {rStyle !== "solid" && (
+            <Field label="Intensidade">
+              <input
+                type="range"
+                min={10}
+                max={100}
+                step={5}
+                value={rStrength}
+                onChange={(e) => setRedaction({ strength: Number(e.target.value) })}
+              />
+            </Field>
+          )}
+          <span style={hint}>
+            {rShape === "free"
+              ? editingSelected
+                ? "Puxe os pontos brancos para moldar o contorno."
+                : "Arraste na imagem para desenhar o contorno."
+              : "Sai na exportação em resolução cheia."}
+          </span>
+        </>
+      )}
       {showStyle ? (
         <>
           <Field label={isText ? "Cor do texto" : "Cor"}>
@@ -192,7 +279,7 @@ function ContextHint({
 }) {
   if (tool === "set_scale" || tool === "measurement") {
     return (
-      <span style={{ color: "var(--sicro-fg-dim, #94a3b8)" }}>
+      <span style={hint}>
         {scale
           ? `Escala calibrada: ${scale.px_per_unit.toFixed(2)} px/${scale.unit}`
           : "Escala não calibrada — use 'Definir escala' (clique 2 pontos de distância conhecida)."}
@@ -202,29 +289,37 @@ function ContextHint({
   }
   if (tool === "crop") {
     return (
-      <span style={{ color: "var(--sicro-fg-dim, #94a3b8)" }}>
+      <span style={hint}>
         Arraste o retângulo ou as alças; depois <strong>Aplicar</strong>.
       </span>
     );
   }
   if (tool === "pan") {
     return (
-      <span style={{ color: "var(--sicro-fg-dim, #94a3b8)" }}>
+      <span style={hint}>
         Arraste para mover a imagem; roda do mouse = zoom.
       </span>
     );
   }
   return (
-    <span style={{ color: "var(--sicro-fg-dim, #94a3b8)" }}>
+    <span style={hint}>
       Selecione um objeto para editar, ou escolha uma ferramenta na barra
       lateral.
     </span>
   );
 }
 
+/** Dica de contexto: uma linha só, cortada com reticências se faltar espaço. */
+const hint: React.CSSProperties = {
+  color: "var(--sicro-fg-dim, #94a3b8)",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+};
+
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+    <span style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
       <span style={{ color: "var(--sicro-fg-dim, #94a3b8)" }}>{label}</span>
       {children}
     </span>

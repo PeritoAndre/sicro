@@ -5,13 +5,16 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Save, ImageDown, MousePointer2, Trash2, Crosshair } from "lucide-react";
+import { flushSync } from "react-dom";
+import { ArrowLeft, Save, ImageDown, MousePointer2, Trash2, Crosshair, ChevronDown } from "lucide-react";
+import { useContextMenu } from "@components/ContextMenu/ContextMenu";
 import {
   selectActiveOccurrence,
   selectActiveWorkspacePath,
   useWorkspaceStore,
 } from "@stores/workspaceStore";
 import { commands } from "@core/commands";
+import { revealExported } from "@core/reveal";
 import { toSicroError } from "@core/errors";
 import { useCroquiStore } from "../../store/croquiStore";
 import {
@@ -39,7 +42,7 @@ import {
   type SicroLesaoMarker,
 } from "../engine";
 import { CorpoCanvas, type CorpoCanvasHandle, type CorpoTool } from "./CorpoCanvas";
-import { stampCorpoPng } from "./exportCorpo";
+import { cropCorpoPng, stampCorpoPng } from "./exportCorpo";
 
 export function CorpoEditor() {
   const workspacePath = useWorkspaceStore(selectActiveWorkspacePath);
@@ -60,6 +63,7 @@ export function CorpoEditor() {
   const [calibrating, setCalibrating] = useState(false);
 
   const canvasRef = useRef<CorpoCanvasHandle>(null);
+  const exportMenu = useContextMenu();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ w: 600, h: 700 });
 
@@ -246,7 +250,7 @@ export function CorpoEditor() {
     }
   }, [workspacePath, activeCroqui, doc, loadList]);
 
-  const handleExport = useCallback(async () => {
+  const handleExport = useCallback(async (variant: "tecnico" | "limpo") => {
     if (!workspacePath || !activeCroqui || !doc) return;
     if (dirty) {
       const ok = await handleSave();
@@ -254,41 +258,41 @@ export function CorpoEditor() {
     }
     setBusy(true);
     try {
-      // Só a prancha, em resolução nativa (independe do zoom e da janela).
-      const bodyPng = canvasRef.current?.toPng(1);
+      // Produto final: sem a marca de seleção. Só a prancha, em resolução nativa.
+      flushSync(() => setSelectedId(null));
+      const bodyPng = canvasRef.current?.toPng(1, { clean: variant === "limpo" });
       if (!bodyPng) throw new Error("não foi possível capturar a prancha");
       const tpl = BODY_TEMPLATES[doc.template_id];
-      const png = await stampCorpoPng(bodyPng, buildLegend(doc, doc.template_id), {
-        title: doc.title,
-        occurrence: occurrence
-          ? {
-              numero_bo: occurrence.numero_bo,
-              tipo_pericia: occurrence.tipo_pericia,
-              municipio: occurrence.municipio,
-            }
-          : null,
-        templateLabel: tpl.label,
-        timestamp: new Date(),
-        // Listas de regiões do POP no PNG (só pranchas numeradas).
-        regionLists: tpl.numbered
-          ? [
-              { title: "FRENTE (vista anterior)", items: popListaLinhas("frente") },
-              { title: "COSTAS (vista posterior)", items: popListaLinhas("costas") },
-            ]
-          : undefined,
-      });
+      // Limpo: só a imagem, para o corpo do laudo.
+      const png =
+        variant === "limpo"
+          ? await cropCorpoPng(bodyPng)
+          : await stampCorpoPng(bodyPng, buildLegend(doc, doc.template_id), {
+              occurrence: occurrence
+                ? {
+                    numero_bo: occurrence.numero_bo,
+                    tipo_pericia: occurrence.tipo_pericia,
+                    municipio: occurrence.municipio,
+                  }
+                : null,
+              templateLabel: tpl.label,
+              timestamp: new Date(),
+              // Listas de regiões do POP no PNG (só pranchas numeradas).
+              regionLists: tpl.numbered
+                ? [
+                    { title: "FRENTE (vista anterior)", items: popListaLinhas("frente") },
+                    { title: "COSTAS (vista posterior)", items: popListaLinhas("costas") },
+                  ]
+                : undefined,
+            });
       const relPath = await commands.exportCroquiPng(workspacePath, activeCroqui.id, {
         png_base64: png.split(",")[1] ?? png,
       });
       await loadList(workspacePath);
-      // Abre a pasta do export com o PNG selecionado (mesmo padrão do laudo).
-      try {
-        const abs = `${workspacePath}\\${String(relPath).replace(/\//g, "\\")}`;
-        await commands.revealPathInExplorer(abs);
-      } catch {
-        // reveal é cortesia — não falha o export
-      }
-      setFeedback("PNG técnico exportado (prancha + legenda).");
+      revealExported(workspacePath, String(relPath));
+      setFeedback(
+        variant === "limpo" ? "PNG limpo exportado (só a imagem)." : "PNG técnico exportado (prancha + legenda).",
+      );
     } catch (err) {
       setFeedback(`Falha ao exportar: ${toSicroError(err).message}`);
     } finally {
@@ -368,12 +372,36 @@ export function CorpoEditor() {
           </button>
           <button
             type="button"
-            onClick={() => void handleExport()}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              exportMenu.open(
+                {
+                  clientX: r.left,
+                  clientY: r.bottom + 4,
+                  preventDefault: () => e.preventDefault(),
+                  stopPropagation: () => e.stopPropagation(),
+                },
+                [
+                  {
+                    label: "PNG técnico · numeração, regiões e legenda",
+                    icon: <ImageDown size={13} />,
+                    onSelect: () => void handleExport("tecnico"),
+                  },
+                  {
+                    label: "PNG limpo · só a imagem com as lesões",
+                    icon: <ImageDown size={13} />,
+                    onSelect: () => void handleExport("limpo"),
+                  },
+                ],
+              );
+            }}
             disabled={busy}
+            aria-haspopup="menu"
             style={btnStyle(false, "#2563eb")}
           >
-            <ImageDown size={14} /> Exportar PNG
+            <ImageDown size={14} /> Exportar <ChevronDown size={13} />
           </button>
+          {exportMenu.element}
         </div>
       </div>
 

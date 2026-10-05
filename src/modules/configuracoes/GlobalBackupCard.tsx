@@ -33,6 +33,7 @@ import type {
 import type { CaseIndexEntry } from "@domain/case_index";
 import cfg from "./ConfiguracoesModule.module.css";
 import styles from "./GlobalBackupCard.module.css";
+import { askConfirm } from "@components/Dialog/ask";
 
 const DEST_KEY = "sicro.globalBackup.destination";
 
@@ -133,13 +134,15 @@ export function GlobalBackupCard() {
         title: "Escolha a pasta de backup para restaurar (HD, pendrive, nuvem…)",
       });
       if (typeof sel !== "string") return;
-      const ok = window.confirm(
-        "Restaurar deste backup?\n\n" +
+      const ok = await askConfirm({
+        title: "Restaurar deste backup?",
+        message:
           "• Os casos serão recriados na pasta local padrão do SICRO.\n" +
           "• Casos que já existem NÃO são sobrescritos.\n" +
           "• Seu perfil e cabeçalhos (config) serão restaurados.\n\n" +
           "A pasta de backup de origem não é alterada.",
-      );
+        confirmLabel: "Restaurar",
+      });
       if (!ok) return;
       restoringRef.current = true;
       setRestoring(true);

@@ -7,6 +7,8 @@ pub mod filters;
 pub mod hashes;
 pub mod mask;
 pub mod metadata;
+pub mod full_metadata;
 pub mod pipeline;
 pub mod processor;
+pub mod redact;
 pub mod report;

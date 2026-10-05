@@ -16,6 +16,7 @@ import {
   type SicroCroquiBackgroundImage,
   type SicroCroquiStampMetadata,
   type SicroCroquiViewSettings,
+  type SicroCroquiStyle,
   type SicroObject,
 } from "./schema";
 
@@ -135,7 +136,20 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
     ...(Array.isArray(o.osm_imports)
       ? { osm_imports: coerceOsmImports(o.osm_imports) }
       : {}),
+    ...(o.style && typeof o.style === "object" ? { style: coerceStyle(o.style) } : {}),
   };
+}
+
+/** Mantém só chaves conhecidas do estilo, com o tipo certo. */
+function coerceStyle(raw: unknown): SicroCroquiStyle {
+  const o = (raw ?? {}) as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  const strings = ["tema", "asfalto", "borda", "amarela", "branca", "calcada"];
+  const numbers = ["borda_px", "marcacao_px", "calcada_m", "traco_m", "espaco_m"];
+  for (const k of strings) if (typeof o[k] === "string") out[k] = o[k];
+  for (const k of numbers) if (typeof o[k] === "number" && Number.isFinite(o[k])) out[k] = o[k];
+  if (typeof o.faixas_auto === "boolean") out.faixas_auto = o.faixas_auto;
+  return out as SicroCroquiStyle;
 }
 
 function coerceOsmImports(raw: unknown[]): SicroCroquiDoc["osm_imports"] {
@@ -190,12 +204,14 @@ function coerceViewSettings(raw: unknown): SicroCroquiViewSettings {
 function coerceExportSettings(raw: unknown): SicroCroquiExportSettings {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_EXPORT_SETTINGS };
   const o = raw as Record<string, unknown>;
+  const pngWidth = numberField(o, "png_width_px");
   return {
     with_stamp: o.with_stamp !== false,
     with_background: o.with_background !== false,
     with_legend: o.with_legend === true,
     default_kind:
       stringField(o, "default_kind") ?? DEFAULT_EXPORT_SETTINGS.default_kind,
+    ...(typeof pngWidth === "number" && pngWidth > 0 ? { png_width_px: pngWidth } : {}),
   };
 }
 
@@ -223,21 +239,24 @@ function coerceStampMetadata(raw: unknown): SicroCroquiStampMetadata {
 function coerceCanvas(raw: unknown): SicroCroquiCanvas {
   if (!raw || typeof raw !== "object") return { ...DEFAULT_CANVAS };
   const o = raw as Record<string, unknown>;
+  const g = o.grid && typeof o.grid === "object" ? (o.grid as Record<string, unknown>) : null;
+  const gridSizeM = g ? numberField(g, "size_m") : undefined;
+  const originX = numberField(o, "origin_x");
+  const originY = numberField(o, "origin_y");
   return {
     width_px: numberField(o, "width_px") ?? DEFAULT_CANVAS.width_px,
     height_px: numberField(o, "height_px") ?? DEFAULT_CANVAS.height_px,
+    ...(typeof originX === "number" ? { origin_x: originX } : {}),
+    ...(typeof originY === "number" ? { origin_y: originY } : {}),
     background_color:
       stringField(o, "background_color") ?? DEFAULT_CANVAS.background_color,
-    grid:
-      o.grid && typeof o.grid === "object"
-        ? {
-            enabled:
-              (o.grid as Record<string, unknown>).enabled !== false,
-            size_px:
-              numberField(o.grid as Record<string, unknown>, "size_px") ??
-              50,
-          }
-        : DEFAULT_CANVAS.grid,
+    grid: g
+      ? {
+          enabled: g.enabled !== false,
+          size_px: numberField(g, "size_px") ?? 50,
+          ...(typeof gridSizeM === "number" && gridSizeM > 0 ? { size_m: gridSizeM } : {}),
+        }
+      : DEFAULT_CANVAS.grid,
   };
 }
 

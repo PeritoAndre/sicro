@@ -84,8 +84,8 @@ function popDotsForView(
 }
 
 export interface CorpoCanvasHandle {
-  /** PNG data URL da prancha + marcadores (sem chrome). */
-  toPng(pixelRatio?: number): string | null;
+  /** PNG data URL da prancha + marcadores (sem chrome). `clean`: sem numeração do POP e títulos das vistas. */
+  toPng(pixelRatio?: number, opts?: { clean?: boolean }): string | null;
 }
 
 export type CorpoTool = LesaoTipo | "select";
@@ -129,6 +129,7 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
     ref,
   ) {
     const stageRef = useRef<Konva.Stage | null>(null);
+    const overlayRef = useRef<Konva.Layer | null>(null);
     const tpl = BODY_TEMPLATES[doc.template_id];
 
     // Imagem da prancha; recarrega ao trocar.
@@ -182,9 +183,12 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
     useImperativeHandle(ref, () => ({
       /** PNG só da prancha (folha branca) em resolução nativa × `scale`,
        *  independente do zoom/pan e do tamanho da janela. */
-      toPng(scale = 1) {
+      toPng(scale = 1, opts) {
         const stage = stageRef.current;
         if (!stage) return null;
+        const overlay = overlayRef.current;
+        const hide = !!opts?.clean && !!overlay?.visible();
+        if (hide) overlay!.visible(false);
         try {
           const sc = stage.scaleX() || 1;
           return stage.toDataURL({
@@ -196,6 +200,8 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
           });
         } catch {
           return null;
+        } finally {
+          if (hide) overlay!.visible(true);
         }
       },
     }));
@@ -287,8 +293,8 @@ export const CorpoCanvas = forwardRef<CorpoCanvasHandle, Props>(
           )}
         </Layer>
         {/* Numeração do POP + título de cada vista: camada não interativa entre
-            a arte e os marcadores, entra no export do palco de graça. */}
-        <Layer listening={calibrating}>
+            a arte e os marcadores; fica fora do PNG limpo. */}
+        <Layer ref={overlayRef} listening={calibrating}>
           {popDots.map((d) =>
             calibrating ? (
               // Alça arrastável; ao soltar devolve a posição normalizada no box da vista.

@@ -86,6 +86,25 @@ pub fn run_export(
         img = apply_operation(img, op);
     }
 
+    // Anotações e camadas de pixels por cima (camada transparente do tamanho do resultado).
+    if let Some(b64) = input.overlay_png_base64.as_deref() {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(b64)
+            .map_err(|e| SicroError::Validation(format!("base64 inválido: {e}")))?;
+        let mut over = image::load_from_memory(&bytes)
+            .map_err(|e| SicroError::Validation(format!("camada de anotações inválida: {e}")))?
+            .to_rgba8();
+        if over.dimensions() != img.dimensions() {
+            over = image::imageops::resize(&over, img.width(), img.height(), image::imageops::FilterType::Triangle);
+        }
+        image::imageops::overlay(&mut img, &over, 0, 0);
+    }
+
+    // Tarjas por último: desfocam/pixelizam o que ficou embaixo, inclusive anotações.
+    for r in &input.redactions {
+        super::redact::apply(&mut img, r);
+    }
+
     let (width, height) = (img.width(), img.height());
 
     let mut buf: Vec<u8> = Vec::new();

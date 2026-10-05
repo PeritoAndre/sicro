@@ -15,8 +15,8 @@ interface Props {
   imageHeight: number;
   /** Transform do Konva: scale + translate (x, y) em px de tela. */
   viewport: { scale: number; x: number; y: number };
-  /** Posição do cursor em coordenadas-mundo (px da imagem). */
-  pointer: { x: number; y: number };
+  /** Posição do cursor em coordenadas-mundo (px da imagem); null = mouse fora da tela. */
+  pointer: { x: number; y: number } | null;
   /** Tamanho da área de canvas (px de tela). */
   width: number;
   height: number;
@@ -105,15 +105,17 @@ export function CanvasRulers({
 
   if (!visible) return null;
 
-  const mx = screenX(pointer.x);
-  const my = screenY(pointer.y);
+  const pt = pointer ?? { x: NaN, y: NaN };
+  const mx = screenX(pt.x);
+  const my = screenY(pt.y);
   const overImage =
-    pointer.x >= 0 &&
-    pointer.x <= imageWidth &&
-    pointer.y >= 0 &&
-    pointer.y <= imageHeight;
-  const markerXOn = mx >= RULER_SIZE && mx <= width;
-  const markerYOn = my >= RULER_SIZE && my <= height;
+    pointer !== null &&
+    pt.x >= 0 &&
+    pt.x <= imageWidth &&
+    pt.y >= 0 &&
+    pt.y <= imageHeight;
+  const markerXOn = pointer !== null && mx >= RULER_SIZE && mx <= width;
+  const markerYOn = pointer !== null && my >= RULER_SIZE && my <= height;
 
   return (
     <svg
@@ -203,7 +205,7 @@ export function CanvasRulers({
         <g>
           <rect x={RULER_SIZE + 2} y={RULER_SIZE + 2} width={118} height={16} rx={3} fill="rgba(17,24,39,0.85)" />
           <text x={RULER_SIZE + 8} y={RULER_SIZE + 13} fontSize={9.5} fill={MARKER} fontFamily="var(--font-mono, monospace)">
-            {fmt(pointer.x)} , {fmt(pointer.y)} {calibrated && scale ? scale.unit : "px"}
+            {fmt(pt.x)} , {fmt(pt.y)} {calibrated && scale ? scale.unit : "px"}
           </text>
         </g>
       )}

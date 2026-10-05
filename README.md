@@ -32,7 +32,7 @@ Limitações conhecidas: [`KNOWN_LIMITATIONS.md`](./KNOWN_LIMITATIONS.md).
 
 | Sistema | Arquivo | Como |
 |---|---|---|
-| **Windows 10/11** | `SICRO-<versão>-windows-x64-setup.exe` | Execute. O FFmpeg vem junto. |
+| **Windows 10/11** | `SICRO-<versão>-windows-x64-setup.exe` | Execute. O FFmpeg e o ExifTool vêm junto. |
 | **Ubuntu 22.04+ / Debian 12+** | `sicro_<versão>_amd64.deb` | `sudo apt install ./sicro_<versão>_amd64.deb` |
 
 Confira o download com o `SHA256SUMS.txt` da release.
@@ -57,7 +57,7 @@ O manual completo fica na **Ajuda**: [`docs/MANUAL_SICRO.md`](./docs/MANUAL_SICR
 ## Desenvolvimento
 
 Tauri 2 (Rust) + React 18 + TypeScript + SQLite. Node 22, pnpm 9, Rust stable,
-FFmpeg no PATH.
+FFmpeg e ExifTool no PATH.
 
 ```bash
 pnpm install
@@ -68,8 +68,8 @@ cd src-tauri && cargo test --lib   # backend
 ```
 
 Windows: VS Build Tools (C++) e WebView2; antes do primeiro build,
-`pwsh scripts/fetch-ffmpeg-windows.ps1`. Linux (Arch):
-`sudo pacman -S --needed webkit2gtk-4.1 gtk3 librsvg patchelf base-devel ffmpeg gst-plugins-good gst-libav`.
+`pwsh scripts/fetch-ffmpeg-windows.ps1` e `pwsh scripts/fetch-exiftool-windows.ps1`. Linux (Arch):
+`sudo pacman -S --needed webkit2gtk-4.1 gtk3 librsvg patchelf base-devel ffmpeg perl-image-exiftool gst-plugins-good gst-libav`.
 
 ### Publicar
 
@@ -87,12 +87,13 @@ Não mude `.github/workflows/` enquanto o Actions compila.
 | `src/` | Front em React: `app/` (janela e trilho), `modules/` (croqui, video, audio, imagem, home, integridade, configuracoes, ajuda), `core/` (comandos, atalhos), `components/`, `stores/`, `types/` |
 | `src-tauri/` | Backend em Rust: `commands/` (API para o front), `database/` (SQLite e migrações), `workspace/` (pasta `.sicro`, backup), `video/`, `audio/`, `image_editor/`, `importer/` |
 | `docs/` | Manual (exibido na Ajuda) e notas de cada versão |
-| `scripts/` | Release e FFmpeg do instalador do Windows |
+| `scripts/` | Release; FFmpeg e ExifTool do instalador do Windows |
 | `public/` | Logo |
 | `.github/workflows/` | Compilação e release |
 
 ## Licença
 
 Apache 2.0 — [`LICENSE`](./LICENSE). © 2026 André Ricardo Barroso.
-O instalador do Windows inclui o FFmpeg (GPLv3) como programa separado;
-licença e origem em `ffmpeg\LEIA-ME-FFMPEG.txt`.
+O instalador do Windows inclui o FFmpeg (GPLv3) e o ExifTool (termos do Perl)
+como programas separados; licença e origem em `ffmpeg\LEIA-ME-FFMPEG.txt` e
+`exiftool\LEIA-ME-EXIFTOOL.txt`.

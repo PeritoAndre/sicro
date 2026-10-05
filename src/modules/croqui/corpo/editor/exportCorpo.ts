@@ -7,7 +7,6 @@
 import type { LegendRow } from "../engine";
 
 interface CorpoStampMeta {
-  title: string;
   occurrence: {
     numero_bo?: string | null;
     tipo_pericia?: string | null;
@@ -99,6 +98,21 @@ const BODY_MARGIN = 18;
 /** Largura-alvo da prancha recortada, pra figura preencher a página. */
 const BODY_TARGET_W = 820;
 
+/** PNG limpo: só a prancha recortada ao conteúdo, em resolução nativa. */
+export async function cropCorpoPng(bodyPng: string): Promise<string> {
+  const body = await loadImage(bodyPng);
+  const bb = contentBBox(body, BODY_MARGIN);
+  const canvas = document.createElement("canvas");
+  canvas.width = bb.w;
+  canvas.height = bb.h;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("canvas 2d indisponível");
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, bb.w, bb.h);
+  ctx.drawImage(body, bb.x, bb.y, bb.w, bb.h, 0, 0, bb.w, bb.h);
+  return canvas.toDataURL("image/png");
+}
+
 /**
  * @param bodyPng data URL da prancha (CorpoCanvas.toPng)
  * @param legend  linhas já numeradas/ordenadas (buildLegend)
@@ -148,16 +162,21 @@ export async function stampCorpoPng(
   ctx.fillStyle = "#0f172a";
   ctx.fillRect(0, 0, canvasW, HEADER_H);
   ctx.fillStyle = "#f8fafc";
-  ctx.font = "bold 17px Inter, system-ui, sans-serif";
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
-  ctx.fillText(meta.title, PAD, HEADER_H / 2 - 8);
-  ctx.font = "12px Inter, system-ui, sans-serif";
-  ctx.fillStyle = "#cbd5e1";
-  const sub: string[] = [`Carta de lesões — ${meta.templateLabel}`];
+  // Sem o título do croqui (o padrão leva um código aleatório): só o tipo e a prancha.
+  const sub: string[] = [];
   if (meta.occurrence?.numero_bo) sub.push(`BO ${meta.occurrence.numero_bo}`);
   if (meta.occurrence?.municipio) sub.push(meta.occurrence.municipio);
-  ctx.fillText(sub.join(" · "), PAD, HEADER_H / 2 + 12);
+  ctx.font = "bold 17px Inter, system-ui, sans-serif";
+  ctx.fillText(`Carta de lesões — ${meta.templateLabel}`, PAD, sub.length > 0 ? HEADER_H / 2 - 8 : HEADER_H / 2);
+  if (sub.length > 0) {
+    ctx.font = "12px Inter, system-ui, sans-serif";
+    ctx.fillStyle = "#cbd5e1";
+    ctx.fillText(sub.join(" · "), PAD, HEADER_H / 2 + 12);
+  }
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "12px Inter, system-ui, sans-serif";
   ctx.textAlign = "right";
   ctx.fillText(`Exportado em ${fmtDate(meta.timestamp)}`, canvasW - PAD, HEADER_H / 2);
 

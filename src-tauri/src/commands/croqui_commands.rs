@@ -518,20 +518,16 @@ fn empty_corpo_envelope(c: &Croqui) -> serde_json::Value {
     })
 }
 
-/// Envelope `.sicroplanta` vazio: campos mínimos de `coercePlantaDoc`;
-/// `floorplan` e marcadores são preenchidos no frontend.
+/// Envelope `.sicroplanta` vazio no schema 2 (planta 5.0); folha, paredes e
+/// opções são completadas pelo `coercePlanta` do frontend.
 fn empty_planta_envelope(c: &Croqui) -> serde_json::Value {
     serde_json::json!({
-        "schema_version": c.schema_version,
+        "schema_version": "2.0.0",
         "planta_id": c.id.to_string(),
         "occurrence_id": c.occurrence_id.to_string(),
         "title": c.title,
         "created_at": c.created_at.to_rfc3339(),
-        "updated_at": c.updated_at.to_rfc3339(),
-        "px_per_m": 100,
-        "floorplan": { "floors": [], "furnitureId": 0, "wallNodeId": 0 },
-        "evidences": [],
-        "compass_deg": 0
+        "updated_at": c.updated_at.to_rfc3339()
     })
 }
 

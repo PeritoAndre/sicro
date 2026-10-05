@@ -15,6 +15,7 @@ import {
   Unlock,
 } from "lucide-react";
 import {
+  angleDeg,
   distancePx,
   formatMeasurement,
   inferCategory,
@@ -40,7 +41,18 @@ import {
   type ParitySuperficie,
   type SicroRoadObject_parity,
   type SicroRoundaboutObject_parity,
+  PARITY_ACOSTAMENTO_MAX_M,
+  PARITY_TEMAS,
+  marcacaoFromEixo,
+  resolveParityEixo,
+  resolveParityStyle,
+  type ParityCalcadaEstilo,
+  type ParityEixo,
+  type ParityStyle,
+  type ParityTema,
 } from "../engine/road-parity";
+import { CROQUI_EXPORT_WIDTH_PX_DEFAULT, type SicroCroquiCanvas, type SicroCroquiExportSettings, type SicroCroquiStyle } from "../engine/schema";
+import { labelDefaults, type LabelFields } from "./labels";
 import styles from "./InspectorPanel.module.css";
 
 interface Props {
@@ -53,6 +65,16 @@ interface Props {
   onUpdateObject: (id: string, patch: Partial<SicroObject>) => void;
   onDeleteObject: (id: string) => void;
   onMoveObject: (id: string, direction: "up" | "down") => void;
+  /** `doc.style` (parcial) e o patch que o editor aplica nele. */
+  style?: SicroCroquiStyle;
+  onUpdateStyle?: (patch: Partial<ParityStyle>) => void;
+  /** Folha, grade e PNG. */
+  canvas?: SicroCroquiCanvas;
+  exportSettings?: SicroCroquiExportSettings;
+  onUpdateCanvas?: (patch: Partial<SicroCroquiCanvas>) => void;
+  onUpdateExportSettings?: (patch: Partial<SicroCroquiExportSettings>) => void;
+  onFitSheet?: () => void;
+  onCenterSheet?: () => void;
 }
 
 const CATEGORY_ORDER: ObjectCategory[] = [
@@ -87,6 +109,14 @@ export function InspectorPanel({
   onUpdateObject,
   onDeleteObject,
   onMoveObject,
+  style,
+  onUpdateStyle,
+  canvas,
+  exportSettings,
+  onUpdateCanvas,
+  onUpdateExportSettings,
+  onFitSheet,
+  onCenterSheet,
 }: Props) {
   const selected = selectedId
     ? objects.find((o) => o.id === selectedId) ?? null
@@ -105,62 +135,71 @@ export function InspectorPanel({
     );
   }, [objects]);
 
-  return (
-    <aside className={styles.panel} aria-label="Painel de camadas e propriedades">
-      <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Camadas globais</h3>
-        <ul className={styles.layerList}>
-          {layers.map((l) => (
-            <li key={l.id} className={styles.layer}>
-              <button
-                type="button"
-                className={styles.layerToggleBtn}
-                onClick={() => onToggleLayerVisibility(l.id)}
-                title={l.visible ? "Esconder camada" : "Mostrar camada"}
-              >
-                {l.visible ? <Eye size={12} /> : <EyeOff size={12} />}
-              </button>
-              <span className={styles.layerName}>{l.name}</span>
-              <span className={styles.layerKind}>{l.kind}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
+  const objectsSection = (
+    <section className={styles.section}>
+      <h3 className={styles.sectionTitle}>Objetos</h3>
+      {grouped.length === 0 && (
+        <p className={styles.empty}>
+          O canvas está vazio. Use a barra à esquerda para inserir um objeto.
+        </p>
+      )}
+      {grouped.map(({ category, items }) => (
+        <CategoryBlock
+          key={category}
+          category={category}
+          items={items}
+          selectedId={selectedId}
+          onSelectObject={onSelectObject}
+          onUpdateObject={onUpdateObject}
+          onDeleteObject={onDeleteObject}
+          onMoveObject={onMoveObject}
+        />
+      ))}
+    </section>
+  );
 
-      <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Objetos</h3>
-        {grouped.length === 0 && (
-          <p className={styles.empty}>
-            O canvas está vazio. Use a barra à esquerda para inserir um
-            objeto.
-          </p>
-        )}
-        {grouped.map(({ category, items }) => (
-          <CategoryBlock
-            key={category}
-            category={category}
-            items={items}
-            selectedId={selectedId}
-            onSelectObject={onSelectObject}
-            onUpdateObject={onUpdateObject}
-            onDeleteObject={onDeleteObject}
-            onMoveObject={onMoveObject}
-          />
-        ))}
-      </section>
-
-      <section className={styles.section}>
-        <h3 className={styles.sectionTitle}>Propriedades</h3>
-        {!selected ? (
-          <p className={styles.empty}>Selecione um objeto no canvas.</p>
-        ) : (
+  // Uma coisa por vez: com seleção, só o objeto; sem seleção, o croqui.
+  if (selected) {
+    return (
+      <aside className={styles.panel} aria-label="Painel de camadas e propriedades">
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Propriedades · {summariseObject(selected)}</h3>
           <ObjectProperties
             object={selected}
             scale={scale}
             onChange={(patch) => onUpdateObject(selected.id, patch)}
           />
-        )}
-      </section>
+        </section>
+        {objectsSection}
+      </aside>
+    );
+  }
+
+  return (
+    <aside className={styles.panel} aria-label="Painel de camadas e propriedades">
+      {objectsSection}
+
+      {canvas && onUpdateCanvas && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Folha e grade</h3>
+          <SheetProps
+            canvas={canvas}
+            scale={scale}
+            exportSettings={exportSettings}
+            onChange={onUpdateCanvas}
+            onChangeExport={onUpdateExportSettings}
+            onFit={onFitSheet}
+            onCenter={onCenterSheet}
+          />
+        </section>
+      )}
+
+      {onUpdateStyle && (
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Estilo das vias</h3>
+          <StyleProps style={style} onChange={onUpdateStyle} />
+        </section>
+      )}
 
       <section className={styles.section}>
         <h3 className={styles.sectionTitle}>Escala</h3>
@@ -184,6 +223,26 @@ export function InspectorPanel({
             em pixels.
           </p>
         )}
+      </section>
+
+      <section className={styles.section}>
+        <h3 className={styles.sectionTitle}>Camadas globais</h3>
+        <ul className={styles.layerList}>
+          {layers.map((l) => (
+            <li key={l.id} className={styles.layer}>
+              <button
+                type="button"
+                className={styles.layerToggleBtn}
+                onClick={() => onToggleLayerVisibility(l.id)}
+                title={l.visible ? "Esconder camada" : "Mostrar camada"}
+              >
+                {l.visible ? <Eye size={12} /> : <EyeOff size={12} />}
+              </button>
+              <span className={styles.layerName}>{l.name}</span>
+              <span className={styles.layerKind}>{l.kind}</span>
+            </li>
+          ))}
+        </ul>
       </section>
     </aside>
   );
@@ -404,9 +463,9 @@ function summariseObject(o: SicroObject): string {
     case "measurement":
       return "Medição";
     case "road_parity":
-      return "Via (parity)";
+      return "Via";
     case "roundabout_parity":
-      return "Rotatória (parity)";
+      return "Rotatória";
     default:
       return "Objeto";
   }
@@ -426,19 +485,22 @@ function ObjectProperties({
   // `color`/`notes` não existem nos kinds parity.
   const colorish = object as { color?: string | null; notes?: string | null };
 
+  const freeLabel =
+    object.kind === "vehicle" ||
+    object.kind === "marker" ||
+    object.kind === "line" ||
+    object.kind === "measurement";
+
   return (
     <div className={styles.props}>
-      <Field label="ID" value={object.id} mono readOnly />
-      <Field
-        label="Rótulo"
-        value={object.label ?? ""}
-        onChange={(v) => onChange({ label: v } as Partial<SicroObject>)}
-      />
-      <Field
-        label="Categoria"
-        value={object.category ?? inferCategory(object)}
-        readOnly
-      />
+      {object.kind !== "measurement" && (
+        <Field
+          label="Rótulo"
+          value={object.label ?? ""}
+          onChange={(v) => onChange({ label: v } as Partial<SicroObject>)}
+        />
+      )}
+      {freeLabel && <LabelProps object={object} onChange={onChange} />}
 
       {object.kind === "vehicle" && (
         <VehicleProps object={object} onChange={onChange} />
@@ -488,6 +550,76 @@ function ObjectProperties({
         onChange={(v) => onChange({ locked: v } as Partial<SicroObject>)}
       />
     </div>
+  );
+}
+
+/** Tamanho e cor do rótulo solto; "voltar" apaga o deslocamento que o arrasto gravou. */
+function LabelProps({
+  object,
+  onChange,
+}: {
+  object: SicroObject;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const d = labelDefaults(object);
+  const lf = object as LabelFields;
+  const moved = lf.label_dx !== undefined || lf.label_dy !== undefined;
+  const isMeasurement = object.kind === "measurement";
+  // Na cota o padrão acompanha a linha (como o canvas desenha); nos demais é 0°.
+  const lineAngle = isMeasurement ? angleDeg(object.p1, object.p2) : 0;
+  const defaultRot = lineAngle > 90 ? lineAngle - 180 : lineAngle < -90 ? lineAngle + 180 : lineAngle;
+  const rot = lf.label_rotation ?? defaultRot;
+  return (
+    <>
+      <NumberField
+        label="Rótulo: tamanho"
+        value={lf.label_size ?? d.size}
+        onChange={(n) => onChange({ label_size: Math.max(6, n) } as Partial<SicroObject>)}
+      />
+      <Field
+        label="Rótulo: cor"
+        type="color"
+        value={lf.label_color ?? d.color}
+        onChange={(v) => onChange({ label_color: v } as Partial<SicroObject>)}
+      />
+      <NumberField
+        label="Rótulo: rotação (°)"
+        value={Math.round(rot * 10) / 10}
+        onChange={(n) => onChange({ label_rotation: n } as Partial<SicroObject>)}
+      />
+      <div className={styles.temaRow}>
+        <button
+          type="button"
+          className={styles.temaBtn}
+          onClick={() => onChange({ label_rotation: 0 } as Partial<SicroObject>)}
+          title="Rótulo na horizontal"
+        >
+          Reto
+        </button>
+        {isMeasurement && (
+          <button
+            type="button"
+            className={styles.temaBtn}
+            onClick={() => onChange({ label_rotation: undefined } as Partial<SicroObject>)}
+            title="Rótulo acompanha a inclinação da cota"
+          >
+            Na linha
+          </button>
+        )}
+        {moved && (
+          <button
+            type="button"
+            className={styles.temaBtn}
+            onClick={() =>
+              onChange({ label_dx: undefined, label_dy: undefined } as Partial<SicroObject>)
+            }
+            title="Desfaz o arrasto do rótulo"
+          >
+            Voltar ao lugar
+          </button>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -631,10 +763,9 @@ function MeasurementProps({
   const label = formatMeasurement(px, scale?.px_per_m);
   return (
     <>
-      <Field label="Distância (pixels)" value={px.toFixed(1)} readOnly mono />
-      <Field label="Distância real" value={label} readOnly mono />
+      <Field label="Distância" value={label} readOnly mono />
       <Field
-        label="Rótulo (override)"
+        label="Texto no lugar da medida"
         value={object.label_override ?? ""}
         onChange={(v) =>
           onChange({
@@ -656,49 +787,23 @@ function ParityRoadProps({
   object: SicroRoadObject_parity;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  // `marcacao` + `mao_dupla` num select só: separados, o usuário escolhia
-  // "branca" e nada aparecia porque a via era mão única (comum em OSM oneway).
-  const eixoStyle = !object.mao_dupla
-    ? "mao_unica"
-    : object.marcacao === "amarela"
-      ? "dupla_amarela"
-      : object.marcacao === "branca"
-        ? "dupla_branca"
-        : "dupla_sem_eixo";
-
-  const applyEixoStyle = (style: string) => {
-    switch (style) {
-      case "dupla_amarela":
-        onChange({
-          mao_dupla: true,
-          marcacao: "amarela" as ParityMarcacao,
-        } as Partial<SicroObject>);
-        break;
-      case "dupla_branca":
-        onChange({
-          mao_dupla: true,
-          marcacao: "branca" as ParityMarcacao,
-        } as Partial<SicroObject>);
-        break;
-      case "dupla_sem_eixo":
-        onChange({
-          mao_dupla: true,
-          marcacao: "nenhuma" as ParityMarcacao,
-        } as Partial<SicroObject>);
-        break;
-      case "mao_unica":
-        onChange({
-          mao_dupla: false,
-          marcacao: "nenhuma" as ParityMarcacao,
-        } as Partial<SicroObject>);
-        break;
+  // Mão + eixo num select só; `marcacao` acompanha para croqui antigo continuar legível.
+  const eixoValue = object.mao_dupla ? resolveParityEixo(object) : "mao_unica";
+  const applyEixo = (v: string) => {
+    if (v === "mao_unica") {
+      onChange({ mao_dupla: false, eixo: "nenhuma", marcacao: "nenhuma" } as Partial<SicroObject>);
+      return;
     }
+    const eixo = v as ParityEixo;
+    onChange({ mao_dupla: true, eixo, marcacao: marcacaoFromEixo(eixo) } as Partial<SicroObject>);
   };
+  const faixasValue = object.faixas == null ? "auto" : String(object.faixas);
+  const calcadaValue = object.calcada_m == null ? "padrao" : String(object.calcada_m);
 
   return (
     <>
       <NumberField
-        label="Largura (m)"
+        label="Largura da pista (m)"
         value={object.largura_m}
         step={0.5}
         onChange={(n) => {
@@ -711,14 +816,55 @@ function ParityRoadProps({
       />
       <SelectField
         label="Eixo central"
-        value={eixoStyle}
+        value={eixoValue}
         options={[
-          { v: "dupla_amarela", l: "Mão dupla — amarela" },
-          { v: "dupla_branca", l: "Mão dupla — branca" },
-          { v: "dupla_sem_eixo", l: "Mão dupla — sem eixo" },
+          { v: "amarela_dupla", l: "Mão dupla — amarela dupla contínua" },
+          { v: "amarela_trac", l: "Mão dupla — amarela tracejada" },
+          { v: "amarela_mista", l: "Mão dupla — contínua + tracejada" },
+          { v: "branca_trac", l: "Mão dupla — branca tracejada" },
+          { v: "nenhuma", l: "Mão dupla — sem eixo" },
           { v: "mao_unica", l: "Mão única (sem eixo)" },
         ]}
-        onChange={applyEixoStyle}
+        onChange={applyEixo}
+      />
+      <SelectField
+        label={object.mao_dupla ? "Faixas por sentido" : "Faixas"}
+        value={faixasValue}
+        options={[
+          { v: "auto", l: "Automático (≈ 3,5 m)" },
+          { v: "1", l: "1" },
+          { v: "2", l: "2" },
+          { v: "3", l: "3" },
+          { v: "4", l: "4" },
+        ]}
+        onChange={(v) =>
+          onChange({ faixas: v === "auto" ? null : Number(v) } as Partial<SicroObject>)
+        }
+      />
+      <NumberField
+        label="Acostamento (m, cada lado)"
+        value={object.acostamento_m ?? 0}
+        step={0.5}
+        onChange={(n) =>
+          onChange({
+            acostamento_m: Math.min(Math.max(n, 0), PARITY_ACOSTAMENTO_MAX_M),
+          } as Partial<SicroObject>)
+        }
+      />
+      <SelectField
+        label="Calçada"
+        value={calcadaValue}
+        options={[
+          { v: "padrao", l: "Padrão do croqui" },
+          { v: "0", l: "Sem calçada" },
+          { v: "1.5", l: "1,5 m" },
+          { v: "2", l: "2 m" },
+          { v: "3", l: "3 m" },
+          { v: "4", l: "4 m" },
+        ]}
+        onChange={(v) =>
+          onChange({ calcada_m: v === "padrao" ? null : Number(v) } as Partial<SicroObject>)
+        }
       />
       <SelectField
         label="Superfície"
@@ -793,16 +939,16 @@ function ParityRoundaboutProps({
       <Field
         label="Cor da ilha"
         type="color"
-        value={object.inner_color ?? "#3A6535"}
+        value={object.inner_color ?? "#d9e8cf"}
         onChange={(v) =>
           onChange({ inner_color: v } as Partial<SicroObject>)
         }
       />
       <SelectField
-        label="Eixo central do anel"
+        label="Eixo do anel (sem faixas automáticas)"
         value={object.marcacao ?? "nenhuma"}
         options={[
-          { v: "nenhuma", l: "Sem eixo (default)" },
+          { v: "nenhuma", l: "Sem eixo" },
           { v: "amarela", l: "Tracejado amarelo" },
           { v: "branca", l: "Tracejado branco" },
         ]}
@@ -918,5 +1064,198 @@ function NumberField({
         className={`${styles.fieldInput} ${styles.mono}`}
       />
     </label>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Estilo das vias (doc.style)
+
+function StyleProps({
+  style,
+  onChange,
+}: {
+  style: SicroCroquiStyle | undefined;
+  onChange: (patch: Partial<ParityStyle>) => void;
+}) {
+  const st = resolveParityStyle(style);
+  const temas: { v: ParityTema; l: string }[] = [
+    { v: "tecnico", l: "Planta técnica" },
+    { v: "pb", l: "P&B" },
+    { v: "escuro", l: "Escuro" },
+  ];
+  return (
+    <>
+      <div className={styles.temaRow} role="radiogroup" aria-label="Tema">
+        {temas.map((t) => (
+          <button
+            key={t.v}
+            type="button"
+            role="radio"
+            aria-checked={st.tema === t.v}
+            className={`${styles.temaBtn} ${st.tema === t.v ? styles.temaBtnActive : ""}`}
+            // Trocar o tema zera os ajustes: os valores do tema entram inteiros.
+            onClick={() => onChange({ ...PARITY_TEMAS[t.v] })}
+          >
+            {t.l}
+          </button>
+        ))}
+      </div>
+      <Field label="Asfalto" type="color" value={st.asfalto} onChange={(v) => onChange({ asfalto: v })} />
+      <Field label="Meio-fio" type="color" value={st.borda} onChange={(v) => onChange({ borda: v })} />
+      <NumberField label="Meio-fio (px)" value={st.borda_px} step={0.5} onChange={(n) => onChange({ borda_px: Math.min(Math.max(n, 0.5), 6) })} />
+      <NumberField label="Sinalização (px)" value={st.marcacao_px} step={0.5} onChange={(n) => onChange({ marcacao_px: Math.min(Math.max(n, 0.5), 6) })} />
+      <Field label="Amarela" type="color" value={st.amarela} onChange={(v) => onChange({ amarela: v })} />
+      <Field label="Branca" type="color" value={st.branca} onChange={(v) => onChange({ branca: v })} />
+      <SelectField
+        label="Calçada"
+        value={st.calcada}
+        options={[
+          { v: "hachura", l: "Hachura" },
+          { v: "cinza", l: "Cinza" },
+          { v: "linha", l: "Só a linha externa" },
+          { v: "nenhuma", l: "Nenhuma" },
+        ]}
+        onChange={(v) => onChange({ calcada: v as ParityCalcadaEstilo })}
+      />
+      <NumberField label="Calçada (m)" value={st.calcada_m} step={0.5} onChange={(n) => onChange({ calcada_m: Math.min(Math.max(n, 0), 6) })} />
+      <NumberField label="Traço (m)" value={st.traco_m} step={0.5} onChange={(n) => onChange({ traco_m: Math.min(Math.max(n, 0.5), 12) })} />
+      <NumberField label="Espaço (m)" value={st.espaco_m} step={0.5} onChange={(n) => onChange({ espaco_m: Math.min(Math.max(n, 0.5), 12) })} />
+      <CheckboxRow
+        label="Dividir faixas (≈ 3,5 m)"
+        checked={st.faixas_auto}
+        onChange={(v) => onChange({ faixas_auto: v })}
+      />
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Folha (o que vai para o PNG), grade e resolução
+
+const SHEET_PRESETS_M: [number, number][] = [
+  [25, 18],
+  [50, 35],
+  [100, 71],
+  [200, 141],
+];
+
+function SheetProps({
+  canvas,
+  scale,
+  exportSettings,
+  onChange,
+  onChangeExport,
+  onFit,
+  onCenter,
+}: {
+  canvas: SicroCroquiCanvas;
+  scale: SicroCroquiScale | null;
+  exportSettings?: SicroCroquiExportSettings;
+  onChange: (patch: Partial<SicroCroquiCanvas>) => void;
+  onChangeExport?: (patch: Partial<SicroCroquiExportSettings>) => void;
+  onFit?: () => void;
+  onCenter?: () => void;
+}) {
+  const ppm = scale?.px_per_m ?? null;
+  const grid = canvas.grid ?? { enabled: true, size_px: 50 };
+  const gridM = grid.size_m ?? (ppm ? grid.size_px / ppm : null);
+  const wM = ppm ? canvas.width_px / ppm : null;
+  const hM = ppm ? canvas.height_px / ppm : null;
+  const presetValue =
+    wM != null && hM != null
+      ? (SHEET_PRESETS_M.find(([w, h]) => Math.abs(w - wM) < 0.5 && Math.abs(h - hM) < 0.5)?.join("x") ?? "custom")
+      : "custom";
+  const setSizeM = (w: number, h: number) => {
+    if (!ppm) return;
+    onChange({ width_px: Math.round(w * ppm), height_px: Math.round(h * ppm) });
+  };
+  const pngWidth = exportSettings?.png_width_px ?? CROQUI_EXPORT_WIDTH_PX_DEFAULT;
+
+  return (
+    <>
+      {ppm ? (
+        <>
+          <SelectField
+            label="Tamanho da folha"
+            value={presetValue}
+            options={[
+              ...SHEET_PRESETS_M.map(([w, h]) => ({ v: `${w}x${h}`, l: `${w} × ${h} m` })),
+              { v: "custom", l: "Personalizado" },
+            ]}
+            onChange={(v) => {
+              const p = SHEET_PRESETS_M.find(([w, h]) => `${w}x${h}` === v);
+              if (p) setSizeM(p[0], p[1]);
+            }}
+          />
+          <NumberField
+            label="Largura (m)"
+            value={Number((wM ?? 0).toFixed(1))}
+            step={1}
+            onChange={(n) => setSizeM(Math.max(5, n), hM ?? 10)}
+          />
+          <NumberField
+            label="Altura (m)"
+            value={Number((hM ?? 0).toFixed(1))}
+            step={1}
+            onChange={(n) => setSizeM(wM ?? 10, Math.max(5, n))}
+          />
+          <SelectField
+            label="Grade"
+            value={gridM != null ? String(gridM) : "1"}
+            options={[
+              // Grade herdada em px que não bate com os presets aparece como está.
+              ...(gridM != null && ![0.5, 1, 2, 5, 10].includes(gridM)
+                ? [{ v: String(gridM), l: `≈ ${gridM.toFixed(1).replace(".", ",")} m (atual)` }]
+                : []),
+              { v: "0.5", l: "0,5 m" },
+              { v: "1", l: "1 m" },
+              { v: "2", l: "2 m" },
+              { v: "5", l: "5 m" },
+              { v: "10", l: "10 m" },
+            ]}
+            onChange={(v) =>
+              onChange({ grid: { ...grid, size_m: Number(v), size_px: Math.round(Number(v) * ppm) } })
+            }
+          />
+        </>
+      ) : (
+        <>
+          <NumberField label="Largura (px)" value={canvas.width_px} step={100} onChange={(n) => onChange({ width_px: Math.max(200, Math.round(n)) })} />
+          <NumberField label="Altura (px)" value={canvas.height_px} step={100} onChange={(n) => onChange({ height_px: Math.max(200, Math.round(n)) })} />
+          <p className={styles.empty}>Defina a escala para trabalhar em metros.</p>
+        </>
+      )}
+      <CheckboxRow
+        label="Mostrar grade"
+        checked={grid.enabled !== false}
+        onChange={(v) => onChange({ grid: { ...grid, enabled: v } })}
+      />
+      <div className={styles.temaRow}>
+        {onCenter && (
+          <button type="button" className={styles.temaBtn} onClick={onCenter} title="Centraliza a folha no que está na tela">
+            Folha aqui
+          </button>
+        )}
+        {onFit && (
+          <button type="button" className={styles.temaBtn} onClick={onFit} title="Folha em volta de tudo que foi desenhado">
+            Ajustar à cena
+          </button>
+        )}
+      </div>
+      {onChangeExport && (
+        <SelectField
+          label="PNG exportado"
+          value={String(pngWidth)}
+          options={[
+            { v: "2480", l: "2480 px (A4 a 200 dpi)" },
+            { v: "3508", l: "3508 px (A4 a 300 dpi)" },
+            { v: "4961", l: "4961 px (A3 a 300 dpi)" },
+            { v: "7016", l: "7016 px (A2 a 300 dpi)" },
+          ]}
+          onChange={(v) => onChangeExport({ png_width_px: Number(v) })}
+        />
+      )}
+      <p className={styles.empty}>O PNG é a folha inteira, independente do zoom da tela.</p>
+    </>
   );
 }

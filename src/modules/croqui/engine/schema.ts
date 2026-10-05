@@ -6,14 +6,22 @@
 
 export const CURRENT_SCHEMA_VERSION = "0.3";
 
+/**
+ * A folha do croqui: o retângulo que vai para o PNG, em px de mundo. Com
+ * escala definida, a UI mostra e edita em metros. `origin_*` permite ajustar a
+ * folha à cena sem mover os objetos (ausente ⇒ 0).
+ */
 export interface SicroCroquiCanvas {
-  /** Tamanho lógico em px CSS — é o tamanho do Stage Konva. */
   width_px: number;
   height_px: number;
+  origin_x?: number;
+  origin_y?: number;
   background_color: string;
   grid?: {
     enabled: boolean;
     size_px: number;
+    /** Grade em metros (vale quando há escala); `size_px` fica como fallback. */
+    size_m?: number;
   };
 }
 
@@ -174,6 +182,13 @@ interface SicroObjectBase {
   layer_id: string;
   kind: SicroObjectKind;
   label?: string | null;
+  /** Rótulo solto: deslocamento (px de mundo) a partir da âncora do objeto, tamanho e cor. Ausente = padrão. */
+  label_dx?: number;
+  label_dy?: number;
+  label_size?: number;
+  label_color?: string | null;
+  /** Graus absolutos; ausente = padrão (0°, ou ao longo da linha na cota). */
+  label_rotation?: number | null;
   color?: string | null;
   z?: number;
   /** Independente da visibilidade da camada. */
@@ -234,6 +249,7 @@ export interface SicroMeasurementObject extends SicroObjectBase {
 // são descartados pelo `coerceCroquiDoc`.
 
 import type { SicroParityObject } from "./road-parity/types";
+import type { ParityStyle } from "./road-parity/style";
 
 export type SicroObject =
   | SicroVehicleObject
@@ -261,7 +277,11 @@ export interface SicroCroquiExportSettings {
   with_legend: boolean;
   /** "tecnico" (default) | "limpo". */
   default_kind: string;
+  /** Largura do PNG em px (a folha inteira, independente do zoom). Ausente ⇒ 3508 (A4 a 300 dpi). */
+  png_width_px?: number;
 }
+
+export const CROQUI_EXPORT_WIDTH_PX_DEFAULT = 3508;
 
 /** Cabeçalho técnico do PNG; o renderer usa o que estiver presente. */
 export interface SicroCroquiStampMetadata {
@@ -295,6 +315,9 @@ export interface SicroOsmImportSession {
 
 // ---- Envelope ----
 
+/** Estilo das vias (parcial; ausente ⇒ planta técnica). Ver `road-parity/style.ts`. */
+export type SicroCroquiStyle = Partial<ParityStyle>;
+
 export interface SicroCroquiDoc {
   schema_version: string;
   croqui_id: string;
@@ -311,4 +334,5 @@ export interface SicroCroquiDoc {
   export_settings?: SicroCroquiExportSettings;
   stamp_metadata?: SicroCroquiStampMetadata;
   osm_imports?: SicroOsmImportSession[];
+  style?: SicroCroquiStyle;
 }

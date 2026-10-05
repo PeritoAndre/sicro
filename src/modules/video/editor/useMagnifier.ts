@@ -4,7 +4,9 @@
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const MAGNIFIER_MAX = 8;
+/** Teto da lupa: 8× ou até cada pixel do vídeo ocupar 40 px de tela (4K vê o pixel). */
+const MAGNIFIER_MIN_MAX = 8;
+const MAX_SCREEN_PX_PER_VIDEO_PX = 40;
 
 interface View {
   s: number;
@@ -49,7 +51,9 @@ export function useMagnifier(resetKey: unknown) {
     (factor: number, cx?: number, cy?: number) => {
       if (!el) return;
       const v = viewRef.current;
-      const s2 = Math.min(MAGNIFIER_MAX, Math.max(1, v.s * factor));
+      const g = containGeom(el);
+      const max = g ? Math.max(MAGNIFIER_MIN_MAX, (MAX_SCREEN_PX_PER_VIDEO_PX * g.vw) / g.cw) : MAGNIFIER_MIN_MAX;
+      const s2 = Math.min(max, Math.max(1, v.s * factor));
       if (s2 <= 1.001) {
         setView(IDENTITY);
         return;
@@ -102,6 +106,8 @@ export function useMagnifier(resetKey: unknown) {
 
   return {
     wrapRef: setEl,
+    el,
+    view,
     scale: view.s,
     transform:
       view.s > 1 ? `translate(${view.tx}px, ${view.ty}px) scale(${view.s})` : undefined,
@@ -115,4 +121,18 @@ export function useMagnifier(resetKey: unknown) {
       onPointerCancel: onPointerUp,
     },
   };
+}
+
+/** Retângulo da imagem do vídeo dentro da caixa ("contain"), sem zoom, e o tamanho nativo. */
+export function containGeom(el: HTMLElement | null) {
+  const vid = el?.querySelector("video");
+  if (!el || !vid || !vid.videoWidth || !vid.videoHeight) return null;
+  const W = el.clientWidth;
+  const H = el.clientHeight;
+  const vw = vid.videoWidth;
+  const vh = vid.videoHeight;
+  const ar = vw / vh;
+  const cw = W / H > ar ? H * ar : W;
+  const ch = W / H > ar ? H : W / ar;
+  return { W, H, vw, vh, cw, ch, cx: (W - cw) / 2, cy: (H - ch) / 2, video: vid };
 }

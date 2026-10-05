@@ -423,6 +423,21 @@ pub async fn read_image_asset(
 }
 
 #[tauri::command]
+pub async fn read_all_image_metadata(
+    workspace_path: String,
+    relative_path: String,
+) -> Result<crate::image_editor::full_metadata::FullMetadata> {
+    let ws = PathBuf::from(&workspace_path);
+    let _ = Manifest::read(&ws)?;
+    let abs = resolve_workspace_relative(&ws, &relative_path)?;
+    if !abs.is_file() {
+        return Err(SicroError::Filesystem(format!("asset não encontrado em {}", abs.display())));
+    }
+    Ok(crate::image_editor::full_metadata::read_all(&abs))
+}
+
+/// Metadados resumidos (dimensões, formato, hashes, EXIF principal).
+#[tauri::command]
 pub async fn get_image_metadata(
     workspace_path: String,
     relative_path: String,
@@ -589,6 +604,73 @@ pub struct ApplyOperationStackPreviewInput {
     pub adjustments: Option<BackendAdjustments>,
     #[serde(default)]
     pub operations: Vec<BackendOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FilterThumbnailsInput {
+    /// Imagem pequena (PNG/JPEG em base64): o original reduzido.
+    pub image_base64: String,
+    #[serde(default)]
+    pub adjustments: Option<BackendAdjustments>,
+    /// Pilha atual, aplicada uma vez antes dos candidatos.
+    #[serde(default)]
+    pub operations: Vec<BackendOperation>,
+    /// Um filtro por miniatura, na ordem da galeria.
+    pub candidates: Vec<BackendOperation>,
+}
+
+/// Miniaturas da galeria: a pilha atual + cada candidato, em JPEG base64 (vazio se o filtro falhar).
+#[tauri::command]
+pub async fn filter_thumbnails(input: FilterThumbnailsInput) -> Result<Vec<String>> {
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<String>> {
+        let bytes = base64::engine::general_purpose::STANDARD
+            .decode(&input.image_base64)
+            .map_err(|e| SicroError::Validation(format!("base64 inválido: {e}")))?;
+        let mut base = image::load_from_memory(&bytes)
+            .map_err(|e| SicroError::Validation(format!("imagem inválida: {e}")))?
+            .to_rgba8();
+        if let Some(adj) = input.adjustments.as_ref() {
+            processor::apply_adjustments(&mut base, adj);
+        }
+        for op in &input.operations {
+            base = processor::apply_operation(base, op);
+        }
+        let encode = |img: image::RgbaImage| -> String {
+            let rgb = image::DynamicImage::ImageRgba8(img).to_rgb8();
+            let mut buf = Vec::new();
+            let mut enc = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buf, 80);
+            if enc.encode_image(&rgb).is_err() {
+                return String::new();
+            }
+            base64::engine::general_purpose::STANDARD.encode(&buf)
+        };
+        // Filtros independentes: em paralelo, um pedaço por núcleo; pânico vira miniatura vazia.
+        let n = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4).clamp(1, 8);
+        let chunk = input.candidates.len().div_ceil(n).max(1);
+        let base = &base;
+        let out: Vec<String> = std::thread::scope(|sc| {
+            let handles: Vec<_> = input
+                .candidates
+                .chunks(chunk)
+                .map(|ops| {
+                    sc.spawn(move || {
+                        ops.iter()
+                            .map(|op| {
+                                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                                    encode(processor::apply_operation(base.clone(), op))
+                                }))
+                                .unwrap_or_default()
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            handles.into_iter().flat_map(|h| h.join().unwrap_or_default()).collect()
+        });
+        Ok(out)
+    })
+    .await
+    .map_err(|e| SicroError::Workspace(format!("falha nas miniaturas: {e}")))?
 }
 
 #[tauri::command]

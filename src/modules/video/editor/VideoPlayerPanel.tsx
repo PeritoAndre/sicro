@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { mediaSrc } from "@core/mediaSrc";
 import { formatDuration } from "./format";
 import { loadPosition, savePosition } from "./resume";
-import { useMagnifier } from "./useMagnifier";
+import { containGeom, useMagnifier } from "./useMagnifier";
 import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMenu";
 import {
   ADJUST_DEFAULT,
@@ -798,6 +798,9 @@ export function VideoPlayerPanel({
           />
         )}
         {adjust.gamma !== 1 && <GammaFilterDefs gamma={adjust.gamma} />}
+        {src && magnifier.scale > 1 && (
+          <PixelLoupe wrap={magnifier.el} view={magnifier.view} filter={adjustFilter(adjust)} />
+        )}
         {src ? (
           <video
             ref={videoRef}
@@ -987,5 +990,82 @@ export function VideoPlayerPanel({
       </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Com o pixel do vídeo a ≥ 3 px de tela, desenha a área visível do quadro sem interpolação
+ * (vizinho mais próximo) por cima do <video>, para enxergar o pixel real. Só redesenha
+ * quando muda o quadro, a lupa ou o tamanho.
+ */
+function PixelLoupe({
+  wrap,
+  view,
+  filter,
+}: {
+  wrap: HTMLElement | null;
+  view: { s: number; tx: number; ty: number };
+  filter?: string;
+}) {
+  const ref = useRef<HTMLCanvasElement | null>(null);
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    let raf = 0;
+    let last = "";
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const c = ref.current;
+      const g = containGeom(wrap);
+      if (!c || !g) return;
+      const k = (view.s * g.cw) / g.vw; // px de tela por pixel do vídeo
+      const active = k >= 3;
+      setOn(active);
+      if (!active) return;
+      const key = `${g.video.currentTime}|${view.s}|${view.tx}|${view.ty}|${g.W}|${g.H}`;
+      if (key === last) return;
+      last = key;
+      const dpr = window.devicePixelRatio || 1;
+      if (c.width !== Math.round(g.W * dpr) || c.height !== Math.round(g.H * dpr)) {
+        c.width = Math.round(g.W * dpr);
+        c.height = Math.round(g.H * dpr);
+      }
+      const ctx = c.getContext("2d");
+      if (!ctx) return;
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, g.W, g.H);
+      const toU = (X: number) => ((X - view.tx) / view.s - g.cx) * (g.vw / g.cw);
+      const toV = (Y: number) => ((Y - view.ty) / view.s - g.cy) * (g.vh / g.ch);
+      const u0 = Math.max(0, Math.floor(toU(0)));
+      const v0 = Math.max(0, Math.floor(toV(0)));
+      const u1 = Math.min(g.vw, Math.ceil(toU(g.W)));
+      const v1 = Math.min(g.vh, Math.ceil(toV(g.H)));
+      if (u1 <= u0 || v1 <= v0) return;
+      const dx = (u0 * (g.cw / g.vw) + g.cx) * view.s + view.tx;
+      const dy = (v0 * (g.ch / g.vh) + g.cy) * view.s + view.ty;
+      try {
+        ctx.drawImage(g.video, u0, v0, u1 - u0, v1 - v0, dx, dy, (u1 - u0) * k, (v1 - v0) * k);
+      } catch {
+        /* quadro ainda não decodificado */
+      }
+    };
+    raf = requestAnimationFrame(draw);
+    return () => cancelAnimationFrame(raf);
+  }, [wrap, view]);
+  return (
+    <canvas
+      ref={ref}
+      aria-hidden
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        pointerEvents: "none",
+        zIndex: 1,
+        visibility: on ? "visible" : "hidden",
+        filter,
+      }}
+    />
   );
 }

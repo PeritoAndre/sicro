@@ -49,6 +49,11 @@ jobs:
         shell: pwsh
         run: scripts/fetch-ffmpeg-windows.ps1
 
+      - name: ExifTool que vai dentro do instalador (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: scripts/fetch-exiftool-windows.ps1
+
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

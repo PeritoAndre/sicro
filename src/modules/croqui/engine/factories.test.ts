@@ -34,14 +34,15 @@ describe("makeVehicle", () => {
 });
 
 describe("makeLine", () => {
-  it("uses dashed style for R1/R2", () => {
+  it("R1/R2 contínuas: R1 vermelha, R2 azul", () => {
     const r1 = makeLine({ x: 0, y: 0 }, { x: 100, y: 0 }, "r1");
     const r2 = makeLine({ x: 0, y: 0 }, { x: 100, y: 0 }, "r2");
-    expect(r1.dashed).toBe(true);
-    expect(r2.dashed).toBe(true);
+    expect(r1.dashed).toBe(false);
+    expect(r2.dashed).toBe(false);
     expect(r1.label).toBe("R1");
     expect(r2.label).toBe("R2");
-    expect(r1.color).not.toBe(r2.color);
+    expect(r1.color).toBe("#dc2626");
+    expect(r2.color).toBe("#2563eb");
     expect(r1.category).toBe("referenciais");
     expect(r2.category).toBe("referenciais");
   });

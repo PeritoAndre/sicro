@@ -102,8 +102,8 @@ const LINE_STYLES: Record<
   { color: string; width: number; dashed: boolean }
 > = {
   road: { color: "#1f2937", width: 6, dashed: false },
-  r1: { color: "#d97706", width: 4, dashed: true },
-  r2: { color: "#0ea5e9", width: 4, dashed: true },
+  r1: { color: "#dc2626", width: 4, dashed: false },
+  r2: { color: "#2563eb", width: 4, dashed: false },
   lane: { color: "#9ca3af", width: 2, dashed: false },
   lane_separator: { color: "#9ca3af", width: 2, dashed: true },
   sidewalk: { color: "#52525b", width: 3, dashed: false },

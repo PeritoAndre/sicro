@@ -62,7 +62,7 @@
 
 /* ----- Toolbar lateral ----- */
 .toolbar {
-  width: 56px;
+  width: 64px;
   background: var(--sicro-surface-1);
   border-right: 1px solid var(--sicro-divider);
   display: flex;
@@ -183,6 +183,9 @@
 .canvasArea {
   flex: 1;
   position: relative;
+  /* Arrastos na imagem nunca selecionam texto (o realce pintava tudo de dourado). */
+  user-select: none;
+  -webkit-user-select: none;
   background: #0f1419;
   min-width: 0;
   display: flex;
@@ -292,92 +295,14 @@
 }
 /* W19.1 — metade de cima: as 4 abas (tabs + corpo). A coluna direita é
    dividida ~50/50 com a metade de baixo dedicada às Camadas. */
-.rightTop {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-}
-.rightTabs {
-  display: flex;
-  border-bottom: 1px solid var(--sicro-divider);
-  background: var(--sicro-surface-2);
-  flex-shrink: 0;
-}
-.rightTab {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: var(--sicro-fg-muted);
-  font-size: 11px;
-  padding: 6px 4px;
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  font-family: inherit;
-}
-.rightTab:hover {
-  color: var(--sicro-fg);
-}
-.rightTabActive {
-  color: var(--sicro-accent);
-  border-bottom-color: var(--sicro-accent);
-}
-.rightBody {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-2);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
+
 /* W18 — dock da pilha ATIVA, fixo no rodapé do painel direito (sempre
    visível). Não rola junto com o corpo da aba; a lista interna do dock rola
    quando há muitos filtros. Teto de ~46% para não engolir o corpo da aba. */
-.pipelineDock {
-  flex-shrink: 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
-  max-height: 46%;
-  border-top: 1px solid var(--sicro-divider);
-  background: var(--sicro-surface-2);
-}
+
 /* W19.1 — metade de baixo do painel direito: Camadas (estilo Photoshop),
    separadas das 4 abas. ~50% da altura; rola internamente. */
-.rightLayers {
-  flex: 1 1 0;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  border-top: 2px solid var(--sicro-divider);
-  background: var(--sicro-surface-1);
-}
-.rightLayersHead {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--sicro-divider);
-  background: var(--sicro-surface-2);
-}
-.rightLayersHead strong {
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--sicro-accent);
-}
-.rightLayersHead svg {
-  color: var(--sicro-accent);
-  flex-shrink: 0;
-}
-.rightLayersBody {
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
-  padding: var(--space-2);
-}
+
 .sectionTitle {
   font-size: 10px;
   text-transform: uppercase;
@@ -388,64 +313,8 @@
 }
 
 /* W13.3 — nota §13 no topo de um modo */
-.modeNote {
-  margin: 0;
-  padding: 7px 9px;
-  font-size: 10.5px;
-  line-height: 1.45;
-  color: var(--sicro-fg-muted);
-  background: color-mix(in srgb, var(--sicro-accent) 8%, transparent);
-  border: 1px solid color-mix(in srgb, var(--sicro-accent) 22%, transparent);
-  border-radius: var(--radius-sm, 6px);
-}
-.modeNote strong {
-  color: var(--sicro-fg);
-  font-weight: 600;
-}
 
 /* W13.3 — accordion (seções recolhíveis no painel direito) */
-.accordion {
-  border: 1px solid var(--sicro-divider);
-  border-radius: var(--radius-sm, 6px);
-  overflow: hidden;
-  background: var(--sicro-surface-2);
-}
-.accordionHeader {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  background: transparent;
-  border: none;
-  color: var(--sicro-fg);
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  text-align: left;
-  padding: 7px 9px;
-  cursor: pointer;
-}
-.accordionHeader:hover {
-  background: var(--sicro-surface-3, rgba(148, 163, 184, 0.08));
-}
-.accordionChevron {
-  transition: transform 0.15s ease;
-  color: var(--sicro-fg-dim);
-  flex-shrink: 0;
-}
-.accordionChevronOpen {
-  transform: rotate(180deg);
-}
-.accordionTitle {
-  flex: 1;
-}
-.accordionBody {
-  padding: var(--space-2);
-  border-top: 1px solid var(--sicro-divider);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
 
 /* sliders */
 .slider {
@@ -528,18 +397,6 @@
 .channelOn {
   opacity: 1;
   color: #fff;
-}
-.channel_r.channelOn {
-  background: #e5484d;
-  border-color: #e5484d;
-}
-.channel_g.channelOn {
-  background: #30a46c;
-  border-color: #30a46c;
-}
-.channel_b.channelOn {
-  background: #3b82f6;
-  border-color: #3b82f6;
 }
 
 /* Camadas / Anotações */
@@ -626,6 +483,8 @@
 
 /* ----- Status bar ----- */
 .statusBar {
+  position: relative;
+  z-index: 20; /* acima da divisória da comparação e das réguas */
   background: var(--sicro-surface-2);
   border-top: 1px solid var(--sicro-divider);
   padding: 4px var(--space-3);
@@ -683,4 +542,51 @@
   border: 1px solid var(--sicro-border);
   border-radius: 3px;
   padding: 1px 4px;
+}
+
+/* Alternância da barra de status (réguas): parte da barra, não um botão solto. */
+.statusToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  font: inherit;
+  font-size: inherit;
+  color: var(--sicro-fg-dim);
+  background: transparent;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.statusToggle:hover {
+  color: var(--sicro-fg);
+}
+.statusToggleOn {
+  color: var(--sicro-accent);
+  border-color: rgba(215, 168, 79, 0.45);
+  background: var(--sicro-accent-soft);
+}
+
+/* Nome do grupo embaixo do ícone (como no croqui). */
+.toolBtn {
+  flex-direction: column;
+  gap: 2px;
+}
+.toolLabel {
+  font-size: 9.5px;
+  line-height: 1.1;
+}
+
+/* Canais R/G/B ligados (classe montada em tempo de execução: styles[`channel_${ch}`]). */
+.channel_r.channelOn {
+  background: #e5484d;
+  border-color: #e5484d;
+}
+.channel_g.channelOn {
+  background: #30a46c;
+  border-color: #30a46c;
+}
+.channel_b.channelOn {
+  background: #3b82f6;
+  border-color: #3b82f6;
 }

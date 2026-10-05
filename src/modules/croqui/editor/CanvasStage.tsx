@@ -45,6 +45,7 @@ import {
   RoadParityRenderer,
   isParityObject,
   type SicroParityObject,
+  resolvePxPerM,
 } from "../engine/road-parity";
 import {
   getCachedPessoaArtImage,
@@ -53,6 +54,7 @@ import {
   loadPessoaArtImage,
   loadVehicleArtImage,
 } from "../engine/vehicleArt";
+import { labelDefaults, textWidthPx, type LabelFields } from "./labels";
 import {
   getObjectBoundsStagePx,
   rectFromPoints,
@@ -62,9 +64,14 @@ import {
 import type { EditorState, Tool } from "./useEditorState";
 
 export interface CanvasStageHandle {
-  /** PNG data URL da cena (com fundo e grid). */
-  toPng(pixelRatio?: number): string | null;
+  /**
+   * PNG da FOLHA (`rect` em px de mundo), independente do zoom/pan da tela,
+   * com `targetWidthPx` de largura.
+   */
+  toPng(rect: { x: number; y: number; width: number; height: number }, targetWidthPx: number): string | null;
   getStageSize(): { width: number; height: number };
+  /** Ponto de viewport → mundo; null fora da tela do croqui. */
+  clientToWorld(clientX: number, clientY: number): SicroPoint | null;
 }
 
 // Zoom de 5 % a 100×: o perito precisa chegar perto de vestígios pequenos
@@ -118,22 +125,57 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
   const stageRef = useRef<Konva.Stage | null>(null);
   const transformerRef = useRef<Konva.Transformer | null>(null);
   const objectsLayerRef = useRef<Konva.Layer | null>(null);
+  // Camada de interface (prévias, rascunho, laço): nunca vai para o PNG.
+  const uiLayerRef = useRef<Konva.Layer | null>(null);
   // O browser emite `click` depois do mouseup do marquee (cancelBubble não
   // impede); a flag evita que esse click limpe a seleção recém-criada.
   const justFinishedMarqueeRef = useRef(false);
-  // Drag em grupo: posições iniciais dos outros selecionados.
+  // Ferramenta de dois pontos: pressionar marca o primeiro; arrastar e soltar fecha o segundo.
+  const dragDrawRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
+  const suppressClickRef = useRef(false);
+  // Arrasto em grupo: deslocamento lido no dragmove (no dragend a via/linha já zerou a própria
+  // posição) e partes "obj_<id>" das vias movidas junto na prévia.
   const dragSessionRef = useRef<{
-    draggedId: string;
+    node: Konva.Node;
     startX: number;
     startY: number;
-    others: Array<{ id: string; startX: number; startY: number }>;
+    dx: number;
+    dy: number;
+    parts: Array<{ node: Konva.Node; x: number; y: number }>;
+    others: string[];
   } | null>(null);
 
   useImperativeHandle(ref, () => ({
-    toPng(pixelRatio = 2) {
+    toPng(rect, targetWidthPx) {
+      const stage = stageRef.current;
+      if (!stage || rect.width <= 0 || rect.height <= 0) return null;
+      // Zera a transformação da tela só durante a captura: mundo = px.
+      const prev = { x: stage.x(), y: stage.y(), scale: stage.scaleX() };
+      const tr = transformerRef.current;
+      const ui = uiLayerRef.current;
+      const trVisible = tr?.visible() ?? false;
+      const uiVisible = ui?.visible() ?? false;
+      stage.scale({ x: 1, y: 1 });
+      stage.position({ x: 0, y: 0 });
+      tr?.visible(false);
+      ui?.visible(false);
+      try {
+        const pixelRatio = Math.min(targetWidthPx, 8000) / rect.width;
+        return stage.toDataURL({ ...rect, pixelRatio, mimeType: "image/png" });
+      } finally {
+        tr?.visible(trVisible);
+        ui?.visible(uiVisible);
+        stage.scale({ x: prev.scale, y: prev.scale });
+        stage.position({ x: prev.x, y: prev.y });
+        stage.batchDraw();
+      }
+    },
+    clientToWorld(clientX, clientY) {
       const stage = stageRef.current;
       if (!stage) return null;
-      return stage.toDataURL({ pixelRatio, mimeType: "image/png" });
+      const r = stage.container().getBoundingClientRect();
+      if (clientX < r.left || clientX > r.right || clientY < r.top || clientY > r.bottom) return null;
+      return toWorld(stage, { x: clientX - r.left, y: clientY - r.top });
     },
     getStageSize() {
       return {
@@ -143,83 +185,67 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     },
   }));
 
-  // Drag em grupo via listeners no stage (eventos do Konva sobem): os outros
-  // selecionados são movidos direto no Konva durante o drag e commitados no fim.
+  // Listeners no stage (eventos do Konva sobem). As partes de uma via (calçada, meio-fio,
+  // sinalização, alças) ficam espalhadas pelas passadas do renderer, por isso o nome obj_<id>.
   useEffect(() => {
     const stage = stageRef.current;
     if (!stage) return;
+    const partsOf = (layer: Konva.Layer, id: string, except?: Konva.Node) =>
+      [...layer.find(`.obj_${id}`), layer.findOne(`#${id}`)]
+        .filter((n): n is Konva.Node => !!n && n !== except)
+        .map((n) => ({ node: n, x: n.x(), y: n.y() }));
 
     const dragStart = (e: Konva.KonvaEventObject<DragEvent>) => {
       const node = e.target;
-      const id = typeof node.id === "function" ? node.id() : undefined;
-      if (!id) return;
-      if (!editor.selectedIds.includes(id)) return;
-      if (editor.selectedIds.length <= 1) return; // single = drag normal
-
+      const id = typeof node.id === "function" ? node.id() : "";
       const layer = objectsLayerRef.current;
-      if (!layer) return;
-      const others: Array<{ id: string; startX: number; startY: number }> = [];
-      for (const sid of editor.selectedIds) {
-        if (sid === id) continue;
-        const other = layer.findOne(`#${sid}`);
-        if (other) {
-          others.push({ id: sid, startX: other.x(), startY: other.y() });
-        }
-      }
+      if (!id || !layer || !doc.objects.some((o) => o.id === id)) return;
+      const others = editor.selectedIds.includes(id)
+        ? editor.selectedIds.filter((s) => s !== id)
+        : [];
       dragSessionRef.current = {
-        draggedId: id,
+        node,
         startX: node.x(),
         startY: node.y(),
+        dx: 0,
+        dy: 0,
+        parts: [...partsOf(layer, id, node), ...others.flatMap((oid) => partsOf(layer, oid))],
         others,
       };
     };
 
     const dragMove = (e: Konva.KonvaEventObject<DragEvent>) => {
-      const session = dragSessionRef.current;
-      if (!session) return;
-      const node = e.target;
-      const id = typeof node.id === "function" ? node.id() : undefined;
-      if (id !== session.draggedId) return;
-      const dx = node.x() - session.startX;
-      const dy = node.y() - session.startY;
-      const layer = objectsLayerRef.current;
-      if (!layer) return;
-      for (const o of session.others) {
-        const other = layer.findOne(`#${o.id}`);
-        if (other) {
-          other.position({ x: o.startX + dx, y: o.startY + dy });
-        }
-      }
-      layer.batchDraw();
+      const s = dragSessionRef.current;
+      if (!s || e.target !== s.node) return;
+      s.dx = s.node.x() - s.startX;
+      s.dy = s.node.y() - s.startY;
+      for (const p of s.parts) p.node.position({ x: p.x + s.dx, y: p.y + s.dy });
+      objectsLayerRef.current?.batchDraw();
     };
 
     const dragEnd = (e: Konva.KonvaEventObject<DragEvent>) => {
-      const session = dragSessionRef.current;
-      if (!session) return;
-      const node = e.target;
-      const id = typeof node.id === "function" ? node.id() : undefined;
-      if (id !== session.draggedId) return;
-      const dx = node.x() - session.startX;
-      const dy = node.y() - session.startY;
+      const s = dragSessionRef.current;
+      if (!s || e.target !== s.node) return;
       dragSessionRef.current = null;
-      if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return;
-
-      // O arrastado é commitado pelo próprio renderer; aqui só os outros.
-      const pxPerM = doc.scale?.px_per_m ?? 1;
-      for (const o of session.others) {
-        const obj = doc.objects.find((x) => x.id === o.id);
+      // Devolve as partes ao lugar: quem desenha em coordenadas absolutas não tem x/y como prop
+      // e o patch já leva o deslocamento.
+      for (const p of s.parts) p.node.position({ x: p.x, y: p.y });
+      if (Math.abs(s.dx) < 0.001 && Math.abs(s.dy) < 0.001) return;
+      // O arrastado é commitado pelo próprio nó; aqui só os outros.
+      const pxPerM = resolvePxPerM(doc.scale?.px_per_m);
+      for (const oid of s.others) {
+        const obj = doc.objects.find((x) => x.id === oid);
         if (!obj) continue;
-        const patch = translateObjectPatch(obj, dx, dy, pxPerM);
+        const patch = translateObjectPatch(obj, s.dx, s.dy, pxPerM);
         if (!patch) continue;
         if (isParityObject(obj)) {
-          onParityObjectChange?.(o.id, patch as Partial<SicroParityObject>);
+          onParityObjectChange?.(oid, patch as Partial<SicroParityObject>);
         } else {
-          onObjectChange(o.id, patch);
+          onObjectChange(oid, patch);
         }
       }
     };
 
-    // Namespace `.group`: o cleanup remove só estes handlers.
     stage.on("dragstart.group", dragStart);
     stage.on("dragmove.group", dragMove);
     stage.on("dragend.group", dragEnd);
@@ -240,8 +266,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       transformer.getLayer()?.batchDraw();
       return;
     }
+    const kinds = new Map(doc.objects.map((o) => [o.id, o.kind] as const));
     const nodes: Konva.Node[] = [];
     for (const id of editor.selectedIds) {
+      // Linhas e cotas editam-se pelas pontas, não por caixa de escala.
+      const k = kinds.get(id);
+      if (k === "line" || k === "measurement" || k === "road_parity" || k === "roundabout_parity") continue;
       const node = layer.findOne(`#${id}`);
       if (node) nodes.push(node);
     }
@@ -256,6 +286,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     if (!pos) return;
     const world = toWorld(stage, pos);
     editor.setPointerWorld(world);
+    const dd = dragDrawRef.current;
+    if (dd && !dd.moved && Math.hypot(world.x - dd.x, world.y - dd.y) * editor.viewport.scale > 4) {
+      dd.moved = true;
+    }
     if (editor.marquee) {
       editor.setMarquee({
         ...editor.marquee,
@@ -269,6 +303,15 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
   // quem intersecta o retângulo.
   const handleStageMouseDown = (e: Konva.KonvaEventObject<MouseEvent>) => {
     justFinishedMarqueeRef.current = false;
+    if (isTwoPointTool(editor.tool) && e.evt.button === 0 && !editor.pending) {
+      const stage = stageRef.current;
+      const pos = stage?.getPointerPosition();
+      if (!stage || !pos) return;
+      const world = toWorld(stage, pos);
+      editor.setPending({ tool: editor.tool, first: world });
+      dragDrawRef.current = { x: world.x, y: world.y, moved: false };
+      return;
+    }
     if (editor.tool !== "select") return;
     // Só no fundo, não sobre um objeto.
     if (e.target !== e.target.getStage()) return;
@@ -287,6 +330,21 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
   };
 
   const handleStageMouseUp = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    const dd = dragDrawRef.current;
+    if (dd) {
+      dragDrawRef.current = null;
+      // O click que vem em seguida não pode virar um segundo ponto.
+      suppressClickRef.current = true;
+      setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+      if (dd.moved) {
+        const stage = stageRef.current;
+        const pos = stage?.getPointerPosition();
+        if (stage && pos) onCanvasClick(toWorld(stage, pos));
+      }
+      return;
+    }
     if (!editor.marquee) return;
     const m = editor.marquee;
     editor.setMarquee(null);
@@ -316,6 +374,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
   };
 
   const handleStageClick = (e: Konva.KonvaEventObject<MouseEvent>) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
     // Click espúrio logo após o mouseup do marquee.
     if (justFinishedMarqueeRef.current) {
       justFinishedMarqueeRef.current = false;
@@ -448,7 +510,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
         <RoadParityRenderer
           objects={parityObjects}
           pxPerM={doc.scale?.px_per_m ?? null}
+          style={doc.style ?? null}
           selectedId={editor.selectedId}
+          selectedIds={editor.selectedIds}
           onSelect={(id) => onSelect(id ?? null)}
           onObjectChange={
             onParityObjectChange
@@ -463,6 +527,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
             doc={doc}
             tool={editor.tool}
             selected={editor.selectedIds.includes(obj.id)}
+            solo={editor.selectedIds.length === 1 && editor.selectedIds[0] === obj.id}
             onSelect={() => onSelect(obj.id)}
             onChange={(patch) => onObjectChange(obj.id, patch)}
           />
@@ -509,7 +574,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
         })()}
       </Layer>
 
-      <Layer listening={false}>
+      <Layer listening={false} ref={uiLayerRef}>
         <PendingTwoClickPreview editor={editor} />
         <RoadDraftPreview editor={editor} />
       </Layer>
@@ -522,7 +587,13 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
 
 function CanvasBackground({ doc }: { doc: SicroCroquiDoc }) {
   const { width_px, height_px, background_color, grid } = doc.canvas;
-  const gridSize = grid?.size_px ?? 50;
+  const ox = doc.canvas.origin_x ?? 0;
+  const oy = doc.canvas.origin_y ?? 0;
+  const ppm = doc.scale?.px_per_m;
+  let gridSize =
+    grid?.size_m && ppm ? Math.max(4, grid.size_m * ppm) : (grid?.size_px ?? 50);
+  // Folha enorme com grade fina: dobra o passo até caber em ~2000 linhas.
+  while ((width_px + height_px) / gridSize > 2000) gridSize *= 2;
   const gridEnabled = grid?.enabled ?? true;
 
   // Branco puro cansa a vista; só o branco é trocado por off-white.
@@ -535,19 +606,19 @@ function CanvasBackground({ doc }: { doc: SicroCroquiDoc }) {
     if (!gridEnabled) return [] as number[][];
     const out: number[][] = [];
     for (let x = 0; x <= width_px; x += gridSize) {
-      out.push([x, 0, x, height_px]);
+      out.push([ox + x, oy, ox + x, oy + height_px]);
     }
     for (let y = 0; y <= height_px; y += gridSize) {
-      out.push([0, y, width_px, y]);
+      out.push([ox, oy + y, ox + width_px, oy + y]);
     }
     return out;
-  }, [width_px, height_px, gridSize, gridEnabled]);
+  }, [width_px, height_px, gridSize, gridEnabled, ox, oy]);
 
   return (
     <>
       <Rect
-        x={0}
-        y={0}
+        x={ox}
+        y={oy}
         width={width_px}
         height={height_px}
         fill={effectiveBg}
@@ -712,6 +783,7 @@ function ObjectNode({
   doc,
   tool,
   selected,
+  solo,
   onSelect,
   onChange,
 }: {
@@ -719,41 +791,57 @@ function ObjectNode({
   doc: SicroCroquiDoc;
   tool: Tool;
   selected: boolean;
+  /** Único selecionado: só então o rótulo se arrasta separado do corpo. */
+  solo: boolean;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const draggable = tool === "select";
+  const labelProps = { draggable: draggable && !obj.locked && solo, onSelect, onChange };
 
   switch (obj.kind) {
     case "vehicle":
       return (
-        <VehicleNode
-          obj={obj}
-          draggable={draggable}
-          selected={selected}
-          onSelect={onSelect}
-          onChange={onChange}
-        />
+        <>
+          <VehicleNode
+            obj={obj}
+            draggable={draggable}
+            selected={selected}
+            onSelect={onSelect}
+            onChange={onChange}
+          />
+          <ObjectLabel obj={obj} anchor={{ x: obj.x, y: obj.y }} {...labelProps} />
+        </>
       );
     case "line":
       return (
-        <LineNode
-          obj={obj}
-          draggable={draggable}
-          selected={selected}
-          onSelect={onSelect}
-          onChange={onChange}
-        />
+        <>
+          <LineNode
+            obj={obj}
+            draggable={draggable}
+            selected={selected}
+            onSelect={onSelect}
+            onChange={onChange}
+          />
+          <ObjectLabel
+            obj={obj}
+            anchor={{ x: obj.points[0] ?? 0, y: obj.points[1] ?? 0 }}
+            {...labelProps}
+          />
+        </>
       );
     case "marker":
       return (
-        <MarkerNode
-          obj={obj}
-          draggable={draggable}
-          selected={selected}
-          onSelect={onSelect}
-          onChange={onChange}
-        />
+        <>
+          <MarkerNode
+            obj={obj}
+            draggable={draggable}
+            selected={selected}
+            onSelect={onSelect}
+            onChange={onChange}
+          />
+          <ObjectLabel obj={obj} anchor={{ x: obj.x, y: obj.y }} {...labelProps} />
+        </>
       );
     case "text":
       return (
@@ -772,6 +860,7 @@ function ObjectNode({
           doc={doc}
           draggable={draggable}
           selected={selected}
+          solo={solo}
           onSelect={onSelect}
           onChange={onChange}
         />
@@ -911,19 +1000,6 @@ function VehicleNode({
           closed
           fill={obj.color ?? "#3b82f6"}
           opacity={0.5}
-          listening={false}
-        />
-      )}
-      {obj.label && (
-        <KonvaText
-          text={obj.label}
-          fontSize={isTwoWheel ? 10 : 12}
-          fontStyle="bold"
-          fill="#ffffff"
-          width={obj.width}
-          align="center"
-          y={-6}
-          offsetX={obj.width / 2}
           listening={false}
         />
       )}
@@ -1218,8 +1294,16 @@ function LineNode({
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  const isR = obj.subtype === "r1" || obj.subtype === "r2";
-  const labelFontSize = isR ? 14 : 12;
+  // Pontas arrastáveis: prévia local durante o drag, commit no fim.
+  const [live, setLive] = useState<number[] | null>(null);
+  const pts = live ?? obj.points;
+  const canEdit = draggable && selected && !obj.locked;
+  const movePoint = (i: number, x: number, y: number) => {
+    const next = [...pts];
+    next[i * 2] = x;
+    next[i * 2 + 1] = y;
+    return next;
+  };
   return (
     <Group
       id={obj.id}
@@ -1227,6 +1311,7 @@ function LineNode({
       onClick={onSelect}
       onTap={onSelect}
       onDragEnd={(e) => {
+        if (e.target !== e.currentTarget) return;
         const dx = e.target.x();
         const dy = e.target.y();
         const next = obj.points.map((v, i) => v + (i % 2 === 0 ? dx : dy));
@@ -1235,7 +1320,7 @@ function LineNode({
       }}
     >
       <Line
-        points={obj.points}
+        points={pts}
         stroke={obj.color ?? "#1f2937"}
         strokeWidth={obj.stroke_width}
         dash={obj.dashed ? [12, 6] : undefined}
@@ -1243,30 +1328,140 @@ function LineNode({
         opacity={selected ? 1 : 0.95}
         hitStrokeWidth={Math.max(obj.stroke_width, 12)}
       />
-      {obj.subtype === "arrow" && obj.points.length >= 4 && (
+      {obj.subtype === "arrow" && pts.length >= 4 && (
         <ArrowHead
-          x1={obj.points[obj.points.length - 4]!}
-          y1={obj.points[obj.points.length - 3]!}
-          x2={obj.points[obj.points.length - 2]!}
-          y2={obj.points[obj.points.length - 1]!}
+          x1={pts[pts.length - 4]!}
+          y1={pts[pts.length - 3]!}
+          x2={pts[pts.length - 2]!}
+          y2={pts[pts.length - 1]!}
           color={obj.color ?? "#111827"}
           size={Math.max(obj.stroke_width * 4, 12)}
         />
       )}
-      {obj.label && (
-        <KonvaText
-          text={obj.label}
-          fontSize={labelFontSize}
-          fontStyle="bold"
-          fill={obj.color ?? "#1f2937"}
-          x={obj.points[0] ?? 0}
-          y={(obj.points[1] ?? 0) - 18}
-          listening={false}
-        />
-      )}
+      {canEdit &&
+        Array.from({ length: Math.floor(pts.length / 2) }, (_, i) => (
+          <PointHandle
+            key={i}
+            x={pts[i * 2]!}
+            y={pts[i * 2 + 1]!}
+            color={obj.color ?? "#1f2937"}
+            onMove={(x, y) => setLive(movePoint(i, x, y))}
+            onEnd={(x, y) => {
+              setLive(null);
+              onChange({ points: movePoint(i, x, y) } as Partial<SicroObject>);
+            }}
+          />
+        ))}
     </Group>
   );
 }
+
+function setCursor(e: Konva.KonvaEventObject<MouseEvent>, cursor: string) {
+  const c = e.target.getStage()?.container();
+  if (c) c.style.cursor = cursor;
+}
+
+/** Alça de ponto (px de mundo, raio fixo como nas vias). Eventos não sobem ao grupo. */
+function PointHandle({
+  x,
+  y,
+  color,
+  onMove,
+  onEnd,
+}: {
+  x: number;
+  y: number;
+  color: string;
+  onMove: (x: number, y: number) => void;
+  onEnd: (x: number, y: number) => void;
+}) {
+  return (
+    <Circle
+      x={x}
+      y={y}
+      radius={7}
+      fill="#ffffff"
+      stroke={color}
+      strokeWidth={2}
+      draggable
+      onMouseEnter={(e) => setCursor(e, "crosshair")}
+      onMouseLeave={(e) => setCursor(e, "default")}
+      onClick={(e) => {
+        e.cancelBubble = true;
+      }}
+      onDragStart={(e) => {
+        e.cancelBubble = true;
+      }}
+      onDragMove={(e) => {
+        e.cancelBubble = true;
+        onMove(e.target.x(), e.target.y());
+      }}
+      onDragEnd={(e) => {
+        e.cancelBubble = true;
+        onEnd(e.target.x(), e.target.y());
+      }}
+    />
+  );
+}
+
+/** Rótulo solto: arrastável, com deslocamento/tamanho/cor próprios (`label_*`). */
+function ObjectLabel({
+  obj,
+  text,
+  anchor,
+  rotation = 0,
+  draggable,
+  onSelect,
+  onChange,
+}: {
+  obj: SicroObject;
+  text?: string | null;
+  anchor: SicroPoint;
+  rotation?: number;
+  draggable: boolean;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const t = text ?? obj.label;
+  if (!t) return null;
+  const d = labelDefaults(obj);
+  const lf = obj as LabelFields;
+  const size = lf.label_size ?? d.size;
+  return (
+    <KonvaText
+      text={t}
+      x={anchor.x + (lf.label_dx ?? d.dx)}
+      y={anchor.y + (lf.label_dy ?? d.dy)}
+      rotation={lf.label_rotation ?? rotation}
+      offsetX={d.center ? textWidthPx(t, size) / 2 : 0}
+      offsetY={d.center ? size / 2 : 0}
+      fontSize={size}
+      fontStyle="bold"
+      fill={lf.label_color ?? d.color}
+      draggable={draggable}
+      listening={draggable}
+      onClick={onSelect}
+      onTap={onSelect}
+      onMouseEnter={(e) => setCursor(e, "move")}
+      onMouseLeave={(e) => setCursor(e, "default")}
+      onDragStart={(e) => {
+        e.cancelBubble = true;
+        onSelect();
+      }}
+      onDragMove={(e) => {
+        e.cancelBubble = true;
+      }}
+      onDragEnd={(e) => {
+        e.cancelBubble = true;
+        onChange({
+          label_dx: e.target.x() - anchor.x,
+          label_dy: e.target.y() - anchor.y,
+        } as Partial<SicroObject>);
+      }}
+    />
+  );
+}
+
 function ArrowHead({
   x1,
   y1,
@@ -1385,17 +1580,6 @@ function MarkerNode({
       ) : (
         <MarkerGlyph obj={obj} selected={selected} />
       )}
-      {obj.label && (
-        <KonvaText
-          text={obj.label}
-          fontSize={11}
-          fontStyle="bold"
-          fill={obj.color ?? "#1f2937"}
-          x={obj.size / 2 + 6}
-          y={-obj.size / 2}
-          listening={false}
-        />
-      )}
       {selected && (
         <Rect
           x={-obj.size / 2 - 4}
@@ -1413,7 +1597,7 @@ function MarkerNode({
 }
 
 /** Glifo por subtype de `marker`, centrado em (0,0); o Group pai posiciona. */
-function MarkerGlyph({
+export function MarkerGlyph({
   obj,
   selected,
 }: {
@@ -1821,6 +2005,7 @@ function MeasurementNode({
   doc,
   draggable,
   selected,
+  solo,
   onSelect,
   onChange,
 }: {
@@ -1828,51 +2013,90 @@ function MeasurementNode({
   doc: SicroCroquiDoc;
   draggable: boolean;
   selected: boolean;
+  solo: boolean;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  const px = distancePx(obj.p1, obj.p2);
-  const mid = midpoint(obj.p1, obj.p2);
-  const angle = angleDeg(obj.p1, obj.p2);
-  const label =
-    obj.label_override ?? formatMeasurement(px, doc.scale?.px_per_m);
+  const [live, setLive] = useState<{ p1: SicroPoint; p2: SicroPoint } | null>(null);
+  const p1 = live?.p1 ?? obj.p1;
+  const p2 = live?.p2 ?? obj.p2;
+  const px = distancePx(p1, p2);
+  const mid = midpoint(p1, p2);
+  const a = angleDeg(p1, p2);
+  // Texto sempre legível: nunca de cabeça para baixo.
+  const rot = a > 90 ? a - 180 : a < -90 ? a + 180 : a;
+  const text = obj.label_override ?? formatMeasurement(px, doc.scale?.px_per_m);
+  const color = obj.color ?? "#dc2626";
+  const size = obj.label_size ?? labelDefaults(obj).size;
+  const rad = (rot * Math.PI) / 180;
+  const gap = size * 0.9;
+  // Rótulo do lado de cima da linha, no sentido de leitura.
+  const anchor = { x: mid.x + Math.sin(rad) * gap, y: mid.y - Math.cos(rad) * gap };
+  // Traços de extremidade perpendiculares.
+  const tick = 6;
+  const nx = -Math.sin((a * Math.PI) / 180) * tick;
+  const ny = Math.cos((a * Math.PI) / 180) * tick;
+  const canEdit = draggable && selected && !obj.locked;
+  const commit = (n1: SicroPoint, n2: SicroPoint) => {
+    setLive(null);
+    onChange({ p1: n1, p2: n2 } as Partial<SicroObject>);
+  };
 
   return (
-    <Group
-      id={obj.id}
-      draggable={draggable && !obj.locked}
-      onClick={onSelect}
-      onTap={onSelect}
-      onDragEnd={(e) => {
-        const dx = e.target.x();
-        const dy = e.target.y();
-        e.target.position({ x: 0, y: 0 });
-        onChange({
-          p1: { x: obj.p1.x + dx, y: obj.p1.y + dy },
-          p2: { x: obj.p2.x + dx, y: obj.p2.y + dy },
-        } as Partial<SicroObject>);
-      }}
-    >
-      <Line
-        points={[obj.p1.x, obj.p1.y, obj.p2.x, obj.p2.y]}
-        stroke={obj.color ?? "#dc2626"}
-        strokeWidth={selected ? 2.5 : 1.5}
-        dash={[8, 4]}
-        hitStrokeWidth={12}
+    <>
+      <Group
+        id={obj.id}
+        draggable={draggable && !obj.locked}
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          if (e.target !== e.currentTarget) return;
+          const dx = e.target.x();
+          const dy = e.target.y();
+          e.target.position({ x: 0, y: 0 });
+          onChange({
+            p1: { x: obj.p1.x + dx, y: obj.p1.y + dy },
+            p2: { x: obj.p2.x + dx, y: obj.p2.y + dy },
+          } as Partial<SicroObject>);
+        }}
+      >
+        <Line
+          points={[p1.x, p1.y, p2.x, p2.y]}
+          stroke={color}
+          strokeWidth={selected ? 2 : 1.5}
+          hitStrokeWidth={12}
+        />
+        <Line points={[p1.x - nx, p1.y - ny, p1.x + nx, p1.y + ny]} stroke={color} strokeWidth={1.5} listening={false} />
+        <Line points={[p2.x - nx, p2.y - ny, p2.x + nx, p2.y + ny]} stroke={color} strokeWidth={1.5} listening={false} />
+        {canEdit && (
+          <>
+            <PointHandle
+              x={p1.x}
+              y={p1.y}
+              color={color}
+              onMove={(x, y) => setLive({ p1: { x, y }, p2 })}
+              onEnd={(x, y) => commit({ x, y }, p2)}
+            />
+            <PointHandle
+              x={p2.x}
+              y={p2.y}
+              color={color}
+              onMove={(x, y) => setLive({ p1, p2: { x, y } })}
+              onEnd={(x, y) => commit(p1, { x, y })}
+            />
+          </>
+        )}
+      </Group>
+      <ObjectLabel
+        obj={obj}
+        text={text}
+        anchor={anchor}
+        rotation={rot}
+        draggable={draggable && !obj.locked && solo}
+        onSelect={onSelect}
+        onChange={onChange}
       />
-      <KonvaText
-        text={label}
-        x={mid.x}
-        y={mid.y}
-        offsetX={0}
-        offsetY={14}
-        rotation={angle}
-        fontSize={11}
-        fontStyle="bold"
-        fill={obj.color ?? "#dc2626"}
-        listening={false}
-      />
-    </Group>
+    </>
   );
 }
 
@@ -1951,6 +2175,11 @@ function toWorld(stage: Konva.Stage, screen: SicroPoint): SicroPoint {
   const x = (screen.x - stage.x()) / scale;
   const y = (screen.y - stage.y()) / scale;
   return { x, y };
+}
+
+/** Linhas, cota, escala e vias: dois pontos (clique-clique ou arrastar). */
+function isTwoPointTool(tool: Tool): boolean {
+  return tool.startsWith("line_") || tool.startsWith("road_") || tool === "measurement" || tool === "set_scale";
 }
 
 function isAddTool(tool: Tool): boolean {

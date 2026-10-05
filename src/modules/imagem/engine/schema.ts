@@ -146,6 +146,11 @@ export interface SicroAnnotation {
   created_at: string;
   /** polygon (3+ pontos), angle (exatamente 3, vértice no meio), freehand (N). Px da imagem original. */
   points?: SicroImagePoint[];
+  /** redaction: efeito, forma e intensidade (10–100). Ausente = tarja preta retangular (docs antigos). */
+  redaction_style?: "blur" | "pixelate" | "solid";
+  /** "free": contorno em `points` (px da imagem). */
+  redaction_shape?: "rect" | "ellipse" | "free";
+  redaction_strength?: number;
   /** Pré-computado pelo frontend quando há `scale` calibrada, para não recalcular a cada render. */
   measured_value?: {
     /** "distance_m" / "area_m2" / "angle_deg" / "perimeter_m" */

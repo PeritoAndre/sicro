@@ -5,6 +5,7 @@
  */
 
 import { registerOpenVideo } from "@modules/midia/midiaLink";
+import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -50,8 +51,13 @@ import {
   probeStartTime,
 } from "./format";
 import styles from "./VideoAnalysisView.module.css";
+import { askConfirm } from "@components/Dialog/ask";
+
+/** Avisos fechados nesta sessão (vídeo + texto): não voltam ao trocar de aba. */
+const DISMISSED_WARNINGS = new Set<string>();
 
 export function VideoAnalysisView() {
+  useImmersive();
   const workspacePath = useWorkspaceStore(selectActiveWorkspacePath);
   const occurrence = useWorkspaceStore(selectActiveOccurrence);
   const bundle = useVideoStore((s) => s.bundle);
@@ -234,6 +240,8 @@ export function VideoAnalysisView() {
 
   const media0 = bundle?.media ?? null;
   const fpsDeclared = media0?.fps_declared ?? null;
+  const [, bumpWarnings] = useState(0);
+  const warnKey = [media0?.id ?? "", ...probeWarnings, ...warningsFromLastAction].join("\n");
   const startTime = useMemo(
     () => probeStartTime(media0?.raw_probe_json),
     [media0?.raw_probe_json],
@@ -615,7 +623,7 @@ export function VideoAnalysisView() {
 
   const handleDeleteEvent = async (eventId: string) => {
     if (!workspacePath) return;
-    if (!window.confirm("Apagar este evento? A ação é permanente.")) return;
+    if (!(await askConfirm({ title: "Apagar evento", message: "A ação é permanente.", confirmLabel: "Apagar", danger: true }))) return;
     try {
       await deleteEvent(workspacePath, eventId);
       if (selectedEventId === eventId) setSelectedEventId(null);
@@ -667,7 +675,12 @@ export function VideoAnalysisView() {
     if (!workspacePath) return;
     if (
       deletePng &&
-      !window.confirm("Apagar PNG do disco também? A ação não pode ser desfeita.")
+      !(await askConfirm({
+        title: "Apagar o PNG do disco também?",
+        message: "A ação não pode ser desfeita.",
+        confirmLabel: "Apagar",
+        danger: true,
+      }))
     ) {
       return;
     }
@@ -770,7 +783,8 @@ export function VideoAnalysisView() {
         </div>
       )}
 
-      {(probeWarnings.length > 0 || warningsFromLastAction.length > 0) && (
+      {(probeWarnings.length > 0 || warningsFromLastAction.length > 0) &&
+        !DISMISSED_WARNINGS.has(warnKey) && (
         <div className={styles.warningBanner}>
           <AlertTriangle size={14} />
           <div>
@@ -781,6 +795,18 @@ export function VideoAnalysisView() {
               <div key={`a-${i}`}>{w}</div>
             ))}
           </div>
+          <button
+            type="button"
+            className={styles.warningClose}
+            onClick={() => {
+              DISMISSED_WARNINGS.add(warnKey);
+              bumpWarnings((n) => n + 1);
+            }}
+            title="Fechar aviso (volta se aparecer outro)"
+            aria-label="Fechar aviso"
+          >
+            <X size={14} />
+          </button>
         </div>
       )}
 

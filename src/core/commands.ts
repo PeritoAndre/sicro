@@ -652,6 +652,13 @@ export const commands = {
     });
   },
 
+  /** Todos os metadados (exiftool quando instalado; senão EXIF + XMP internos). */
+  readAllImageMetadata(
+    workspacePath: string,
+    relativePath: string,
+  ): Promise<{ source: string; entries: { group: string; tag: string; value: string }[] }> {
+    return safeInvoke("read_all_image_metadata", { workspacePath, relativePath });
+  },
   getImageMetadata(
     workspacePath: string,
     relativePath: string,
@@ -698,6 +705,15 @@ export const commands = {
   },
 
   /** Preview sobre um bitmap já reduzido no cliente (base64): não abre o original, por isso é rápido. */
+  /** Miniaturas da galeria de filtros: pilha atual + cada candidato (JPEG base64; "" se falhar). */
+  filterThumbnails(input: {
+    image_base64: string;
+    operations: ApplyOperationStackInput["operations"];
+    adjustments?: ApplyOperationStackInput["adjustments"];
+    candidates: ApplyOperationStackInput["operations"];
+  }): Promise<string[]> {
+    return safeInvoke<string[]>("filter_thumbnails", { input });
+  },
   applyOperationStackPreview(input: {
     image_base64: string;
     operations: ApplyOperationStackInput["operations"];

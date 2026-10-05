@@ -130,6 +130,37 @@ pub struct ExportImageInput {
     /// JSON livre — vai para o sidecar como "summary".
     #[serde(default)]
     pub operation_summary_json: Option<String>,
+    /// Camada transparente (anotações + camadas de pixels) sobreposta depois da pilha.
+    #[serde(default)]
+    pub overlay_png_base64: Option<String>,
+    /// Tarjas aplicadas por último, sobre os pixels finais.
+    #[serde(default)]
+    pub redactions: Vec<RedactionSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RedactionPoint {
+    pub x: f64,
+    pub y: f64,
+}
+
+/// Tarja em px do resultado: "blur" | "pixelate" | "solid"; "rect" | "ellipse" | "free" (em `points`).
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct RedactionSpec {
+    pub style: String,
+    pub shape: String,
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+    #[serde(default)]
+    pub points: Vec<RedactionPoint>,
+    #[serde(default = "default_strength")]
+    pub strength: f64,
+}
+
+fn default_strength() -> f64 {
+    60.0
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

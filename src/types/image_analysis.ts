@@ -127,6 +127,21 @@ export interface ExportImageInput {
   operations?: BackendOperation[];
   format?: "png" | "jpg";
   operation_summary_json?: string | null;
+  /** Anotações + camadas de pixels, transparente, do tamanho do resultado. */
+  overlay_png_base64?: string | null;
+  /** Tarjas aplicadas por último no backend, em px do resultado. */
+  redactions?: RedactionSpec[];
+}
+
+export interface RedactionSpec {
+  style: "blur" | "pixelate" | "solid";
+  shape: "rect" | "ellipse" | "free";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  points?: { x: number; y: number }[];
+  strength: number;
 }
 
 export interface SaveImageAnalysisInput {

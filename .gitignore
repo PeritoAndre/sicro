@@ -109,6 +109,8 @@ sicro.sqlite-shm
 
 # FFmpeg do instalador do Windows — baixado no build (scripts/fetch-ffmpeg-windows.ps1)
 src-tauri/ffmpeg-win/
+# ExifTool do instalador do Windows — baixado no build (scripts/fetch-exiftool-windows.ps1)
+src-tauri/exiftool-win/
 
 # Env
 .env

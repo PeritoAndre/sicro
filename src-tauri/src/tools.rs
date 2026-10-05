@@ -31,3 +31,12 @@ pub fn bundled_ffmpeg_tool(name: &str) -> Option<PathBuf> {
 pub fn find_ffmpeg_tool(name: &str) -> Option<PathBuf> {
     bundled_ffmpeg_tool(name).or_else(|| which::which(name).ok())
 }
+
+/// `exiftool`: o que vem com o SICRO (`<pasta do executável>/exiftool/`, Windows), depois o PATH.
+pub fn find_exiftool() -> Option<PathBuf> {
+    let bundled = std::env::current_exe()
+        .ok()
+        .and_then(|e| e.parent().map(|d| d.join("exiftool").join(if cfg!(windows) { "exiftool.exe" } else { "exiftool" })))
+        .filter(|p| p.is_file());
+    bundled.or_else(|| which::which("exiftool").ok())
+}

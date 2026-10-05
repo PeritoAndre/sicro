@@ -177,6 +177,8 @@ pub fn run() {
             commands::image_commands::export_image_derivative,
             commands::image_commands::read_image_asset,
             commands::image_commands::get_image_metadata,
+            commands::image_commands::read_all_image_metadata,
+            commands::image_commands::filter_thumbnails,
             commands::image_commands::list_image_operation_logs,
             commands::image_commands::compute_image_histogram,
             commands::image_commands::apply_operation_stack,

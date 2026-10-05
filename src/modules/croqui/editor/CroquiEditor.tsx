@@ -4,6 +4,8 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
@@ -13,6 +15,7 @@ import {
 } from "@stores/workspaceStore";
 import { toSicroError } from "@core/errors";
 import { commands } from "@core/commands";
+import { revealExported } from "@core/reveal";
 import type { MediaAsset } from "@domain/import";
 import { useCroquiStore } from "../store/croquiStore";
 import {
@@ -40,11 +43,15 @@ import {
   makeParityRoundabout,
   type ParityMarcacao,
   type ParitySuperficie,
+  type ParityEixo,
+  type ParityStyle,
 } from "../engine/road-parity";
 import { useNavGuard } from "@app/navGuard";
 import { useShortcuts } from "@core/useShortcuts";
-import { Toolbar } from "./Toolbar";
+import { Palette } from "./palette/Palette";
 import { InspectorPanel } from "./InspectorPanel";
+import { CROQUI_EXPORT_WIDTH_PX_DEFAULT, type SicroCroquiCanvas, type SicroCroquiExportSettings } from "../engine/schema";
+import { getObjectBoundsStagePx } from "./bounds";
 import {
   BACKGROUND_SELECTION_ID,
   CanvasStage,
@@ -57,8 +64,10 @@ import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { DroneImportModal } from "./DroneImportModal";
 import { OsmImportModal, type OsmImportResult } from "./OsmImportModal";
 import styles from "./CroquiEditor.module.css";
+import { askText } from "@components/Dialog/ask";
 
 export function CroquiEditor() {
+  useImmersive();
   const workspacePath = useWorkspaceStore(selectActiveWorkspacePath);
   const occurrence = useWorkspaceStore(selectActiveOccurrence);
   const activeCroqui = useCroquiStore((s) => s.activeCroqui);
@@ -138,6 +147,88 @@ export function CroquiEditor() {
   const addObject = (obj: SicroObject) => {
     mutateObjects((objs) => [...objs, obj]);
     editor.setSelectedId(obj.id);
+  };
+
+  /** Folha (tamanho, origem, grade) — `doc.canvas`. */
+  const handleCanvasChange = (patch: Partial<SicroCroquiCanvas>) => {
+    setDoc((prev) => (prev ? { ...prev, canvas: { ...prev.canvas, ...patch } } : prev));
+  };
+
+  const handleExportSettingsChange = (patch: Partial<SicroCroquiExportSettings>) => {
+    setDoc((prev) =>
+      prev
+        ? {
+            ...prev,
+            export_settings: {
+              with_stamp: true,
+              with_background: true,
+              with_legend: false,
+              default_kind: "tecnico",
+              ...(prev.export_settings ?? {}),
+              ...patch,
+            },
+          }
+        : prev,
+    );
+  };
+
+  /** Passo da grade em px de mundo. */
+  const sheetGridPx = (d: SicroCroquiDoc) =>
+    d.canvas.grid?.size_m && d.scale
+      ? d.canvas.grid.size_m * d.scale.px_per_m
+      : (d.canvas.grid?.size_px ?? 50);
+
+  /** Leva a folha (tamanho mantido) para o centro do que está na tela. */
+  const handleCenterSheet = () => {
+    if (!doc) return;
+    const vp = editor.viewport;
+    const cx = (canvasSize.width / 2 - vp.x) / vp.scale;
+    const cy = (canvasSize.height / 2 - vp.y) / vp.scale;
+    const grid = sheetGridPx(doc);
+    handleCanvasChange({
+      origin_x: Math.round((cx - doc.canvas.width_px / 2) / grid) * grid,
+      origin_y: Math.round((cy - doc.canvas.height_px / 2) / grid) * grid,
+    });
+  };
+
+  /** Folha em volta de tudo que há na cena, com folga e alinhada à grade. */
+  const handleFitSheet = () => {
+    if (!doc) return;
+    const ppm = doc.scale?.px_per_m ?? 10;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    const take = (b: { x: number; y: number; width: number; height: number }) => {
+      if (b.width <= 0 && b.height <= 0) return;
+      minX = Math.min(minX, b.x);
+      minY = Math.min(minY, b.y);
+      maxX = Math.max(maxX, b.x + b.width);
+      maxY = Math.max(maxY, b.y + b.height);
+    };
+    for (const o of doc.objects) take(getObjectBoundsStagePx(o, ppm));
+    if (doc.background_image) {
+      const bg = doc.background_image;
+      take({ x: bg.x, y: bg.y, width: bg.width, height: bg.height });
+    }
+    if (!Number.isFinite(minX)) return;
+    const grid = sheetGridPx(doc);
+    const margin = Math.max(2 * ppm, 0.08 * Math.max(maxX - minX, maxY - minY));
+    const snapDown = (v: number) => Math.floor(v / grid) * grid;
+    const snapUp = (v: number) => Math.ceil(v / grid) * grid;
+    const x0 = snapDown(minX - margin);
+    const y0 = snapDown(minY - margin);
+    handleCanvasChange({
+      origin_x: x0,
+      origin_y: y0,
+      width_px: Math.max(grid, snapUp(maxX + margin) - x0),
+      height_px: Math.max(grid, snapUp(maxY + margin) - y0),
+    });
+  };
+
+  /** Estilo das vias do croqui (tema, cores, cadência); vira `doc.style`. */
+  const handleStyleChange = (patch: Partial<ParityStyle>) => {
+    setDoc((prev) => (prev ? { ...prev, style: { ...(prev.style ?? {}), ...patch } } : prev));
   };
 
   const handleObjectChange = (id: string, patch: Partial<SicroObject>) => {
@@ -265,21 +356,37 @@ export function CroquiEditor() {
     editor.setViewport(DEFAULT_VIEWPORT);
   }, [editor]);
 
-  const handleFitView = useCallback(() => {
-    if (!doc) return;
-    const margin = 0.92; // deixa uma folga de ~8% nas bordas
+  /** Folha inteira centralizada com ~8 % de folga. */
+  const fitViewport = useCallback((): typeof DEFAULT_VIEWPORT | null => {
+    if (!doc) return null;
+    const margin = 0.92;
     const sx = (canvasSize.width / doc.canvas.width_px) * margin;
     const sy = (canvasSize.height / doc.canvas.height_px) * margin;
-    const scale = Math.max(
-      CROQUI_ZOOM_MIN,
-      Math.min(CROQUI_ZOOM_MAX, Math.min(sx, sy)),
-    );
-    editor.setViewport({
+    const scale = Math.max(CROQUI_ZOOM_MIN, Math.min(CROQUI_ZOOM_MAX, Math.min(sx, sy)));
+    return {
       scale,
-      x: (canvasSize.width - doc.canvas.width_px * scale) / 2,
-      y: (canvasSize.height - doc.canvas.height_px * scale) / 2,
-    });
-  }, [doc, editor, canvasSize.width, canvasSize.height]);
+      x: (canvasSize.width - doc.canvas.width_px * scale) / 2 - (doc.canvas.origin_x ?? 0) * scale,
+      y: (canvasSize.height - doc.canvas.height_px * scale) / 2 - (doc.canvas.origin_y ?? 0) * scale,
+    };
+  }, [doc, canvasSize.width, canvasSize.height]);
+
+  const handleFitView = useCallback(() => {
+    const vp = fitViewport();
+    if (vp) editor.setViewport(vp);
+  }, [fitViewport, editor]);
+
+  // Ao abrir, a folha vem enquadrada; refaz enquanto o usuário não mexeu no zoom/pan
+  // (a área do canvas só é medida depois do primeiro render).
+  const autoFitRef = useRef<typeof DEFAULT_VIEWPORT | null>(null);
+  useEffect(() => {
+    if (!doc || canvasSize.width <= 0 || canvasSize.height <= 0) return;
+    const vp = editor.viewport;
+    if (vp !== DEFAULT_VIEWPORT && vp !== autoFitRef.current) return;
+    const next = fitViewport();
+    if (!next || (next.scale === vp.scale && next.x === vp.x && next.y === vp.y)) return;
+    autoFitRef.current = next;
+    editor.setViewport(next);
+  }, [doc, editor, canvasSize.width, canvasSize.height, fitViewport]);
 
   const handleToggleGrid = useCallback(() => {
     setDoc((prev) => {
@@ -339,8 +446,8 @@ export function CroquiEditor() {
                 ...prev,
                 background_image: {
                   source_path: sourcePath,
-                  x: rect.x,
-                  y: rect.y,
+                  x: rect.x + (prev.canvas.origin_x ?? 0),
+                  y: rect.y + (prev.canvas.origin_y ?? 0),
                   width: rect.width,
                   height: rect.height,
                   opacity: extra?.opacity ?? 0.6,
@@ -401,8 +508,8 @@ export function CroquiEditor() {
     if (!doc?.background_image) return;
     const bg = doc.background_image;
     handleBackgroundChange({
-      x: (doc.canvas.width_px - bg.width) / 2,
-      y: (doc.canvas.height_px - bg.height) / 2,
+      x: (doc.canvas.origin_x ?? 0) + (doc.canvas.width_px - bg.width) / 2,
+      y: (doc.canvas.origin_y ?? 0) + (doc.canvas.height_px - bg.height) / 2,
     });
     setFeedback("Fundo centralizado.");
   }, [doc, handleBackgroundChange]);
@@ -417,7 +524,11 @@ export function CroquiEditor() {
       doc.canvas.height_px,
       0.1,
     );
-    handleBackgroundChange(rect);
+    handleBackgroundChange({
+      ...rect,
+      x: rect.x + (doc.canvas.origin_x ?? 0),
+      y: rect.y + (doc.canvas.origin_y ?? 0),
+    });
     setFeedback("Fundo ajustado à área útil.");
   }, [doc, handleBackgroundChange]);
 
@@ -551,9 +662,22 @@ export function CroquiEditor() {
     // No-op por ora.
   }, []);
 
-  const handleCanvasClick = (p: SicroPoint) => {
+  /** Insere com `tool` em `p`. `dropped` = veio da prateleira: dois pontos viram 10 m na horizontal. */
+  const placeTool = (tool: Tool, p: SicroPoint, dropped = false) => {
     if (!doc) return;
-    const tool = editor.tool;
+    const twoPoints = (): [SicroPoint, SicroPoint] | null => {
+      if (dropped) {
+        const half = 5 * (doc.scale?.px_per_m ?? 10);
+        return [{ x: p.x - half, y: p.y }, { x: p.x + half, y: p.y }];
+      }
+      if (!editor.pending) {
+        editor.setPending({ tool, first: p });
+        return null;
+      }
+      const first = editor.pending.first;
+      editor.setPending(null);
+      return [first, p];
+    };
 
     // Parity guarda metros; o renderer multiplica por pxPerM.
     const pxToM = (pt: SicroPoint): SicroPoint => {
@@ -575,13 +699,10 @@ export function CroquiEditor() {
     // Via em dois cliques; o preset da ferramenta é ajustado depois no Inspector.
     const roadPreset = roadToolToParityPreset(tool);
     if (roadPreset) {
-      if (!editor.pending) {
-        editor.setPending({ tool, first: p });
-        return;
-      }
-      const p1 = pxToM(editor.pending.first);
-      const p2 = pxToM(p);
-      editor.setPending(null);
+      const pts = twoPoints();
+      if (!pts) return;
+      const p1 = pxToM(pts[0]);
+      const p2 = pxToM(pts[1]);
       const road = makeParityRoad(p1.x, p1.y, p2.x, p2.y, roadPreset);
       addObject(road);
       editor.setTool("select");
@@ -609,33 +730,26 @@ export function CroquiEditor() {
       return;
     }
     if (tool === "text") {
-      const text = window.prompt("Texto:", "Anotação");
-      if (text == null || text.trim() === "") return;
-      addObject(makeText(p, text.trim()));
-      editor.setTool("select");
+      void askText({ title: "Texto", defaultValue: "Anotação", confirmLabel: "Inserir" }).then((text) => {
+        if (text == null || text.trim() === "") return;
+        addObject(makeText(p, text.trim()));
+        editor.setTool("select");
+      });
       return;
     }
     const lineSubtype = toolToLineSubtype(tool);
     if (lineSubtype) {
-      if (!editor.pending) {
-        editor.setPending({ tool, first: p });
-        return;
-      }
-      const p1 = editor.pending.first;
-      const p2 = p;
-      editor.setPending(null);
+      const pts = twoPoints();
+      if (!pts) return;
+      const [p1, p2] = pts;
       addObject(makeLine(p1, p2, lineSubtype));
       editor.setTool("select");
       return;
     }
     if (tool === "measurement") {
-      if (!editor.pending) {
-        editor.setPending({ tool, first: p });
-        return;
-      }
-      const p1 = editor.pending.first;
-      const p2 = p;
-      editor.setPending(null);
+      const pts = twoPoints();
+      if (!pts) return;
+      const [p1, p2] = pts;
       addObject(makeMeasurement(p1, p2));
       editor.setTool("select");
       const label = formatMeasurement(distancePx(p1, p2), doc.scale?.px_per_m);
@@ -647,18 +761,17 @@ export function CroquiEditor() {
       return;
     }
     if (tool === "set_scale") {
-      if (!editor.pending) {
-        editor.setPending({ tool, first: p });
-        return;
-      }
-      const p1 = editor.pending.first;
-      const p2 = p;
-      editor.setPending(null);
+      const pts = twoPoints();
+      if (!pts) return;
+      const [p1, p2] = pts;
       const px = distancePx(p1, p2);
-      const declared = window.prompt(
-        `Distância real entre os dois pontos (em metros)?\n\nPixels medidos: ${px.toFixed(1)}`,
-        "10",
-      );
+      void askText({
+        title: "Definir escala",
+        message: `Distância real entre os dois pontos, em metros.\nMedido na tela: ${px.toFixed(1)} px.`,
+        defaultValue: "10",
+        numeric: true,
+        confirmLabel: "Definir",
+      }).then((declared) => {
       if (!declared) return;
       const real = Number(declared.replace(",", "."));
       if (!Number.isFinite(real) || real <= 0) {
@@ -683,7 +796,24 @@ export function CroquiEditor() {
       } catch (e) {
         setFeedback(`Falha ao calibrar: ${(e as Error).message}`);
       }
+      });
     }
+  };
+
+  const handleCanvasClick = (p: SicroPoint) => placeTool(editor.tool, p);
+
+  /** Miniatura solta sobre a cena. */
+  const handleDropTool = (tool: Tool, clientX: number, clientY: number) => {
+    const p = stageRef.current?.clientToWorld(clientX, clientY);
+    if (!p) {
+      setFeedback("Solte sobre a cena para inserir.");
+      return;
+    }
+    if (tool === "set_scale") {
+      handleSelectTool(tool);
+      return;
+    }
+    placeTool(tool, p, true);
   };
 
   // ----- Atalhos (escopo `croqui`) -----
@@ -806,21 +936,42 @@ export function CroquiEditor() {
     setFeedback(null);
     try {
       await saveCurrent(workspacePath, doc);
-      const rawDataUrl = stageRef.current.toPng(2);
+      // O PNG é o produto final: sem seleção, alças, gesto pendente nem laço. flushSync aplica
+      // tudo no Konva antes da captura; os dois frames são folga para a pintura.
+      flushSync(() => {
+        editor.setSelectedId(null);
+        editor.setPending(null);
+        editor.setRoadDraft(null);
+        editor.setMarquee(null);
+      });
+      await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
+      const targetWidth = doc.export_settings?.png_width_px ?? CROQUI_EXPORT_WIDTH_PX_DEFAULT;
+      const sheet = {
+        x: doc.canvas.origin_x ?? 0,
+        y: doc.canvas.origin_y ?? 0,
+        width: doc.canvas.width_px,
+        height: doc.canvas.height_px,
+      };
+      const rawDataUrl = stageRef.current.toPng(sheet, targetWidth);
       if (!rawDataUrl) throw new Error("toDataURL retornou null");
+      const ratio = Math.min(targetWidth, 8000) / sheet.width;
+      const ppm = doc.scale?.px_per_m ?? null;
+      const sheetLabel = ppm
+        ? `Folha ${(sheet.width / ppm).toFixed(0)} × ${(sheet.height / ppm).toFixed(0)} m`
+        : "Escala não definida";
       // "limpo" = sem carimbo, para o corpo do laudo onde o cabeçalho já existe.
       const final =
         variant === "limpo"
           ? rawDataUrl
           : await stampPng(rawDataUrl, {
-              title: activeCroqui.title,
               occurrence,
-              scaleLabel: doc.scale
-                ? `Escala 1 m = ${doc.scale.px_per_m.toFixed(2)} px`
-                : "Escala não definida",
+              scaleLabel: sheetLabel,
+              // 10 m em px do PNG, para a barra de escala gráfica.
+              scaleBarPx: ppm ? 10 * ppm * ratio : null,
               timestamp: new Date(),
             });
       const path = await exportPng(workspacePath, final);
+      revealExported(workspacePath, path);
       setFeedback(
         variant === "limpo"
           ? `PNG limpo salvo em ${path}`
@@ -900,9 +1051,10 @@ export function CroquiEditor() {
 
   return (
     <div className={styles.wrap}>
-      <Toolbar
+      <Palette
         activeTool={editor.tool}
         onSelectTool={handleSelectTool}
+        onDropTool={handleDropTool}
         canDelete={editor.selectedIds.length > 0}
         onDelete={handleDelete}
         canUndo={editor.history.length > 0}
@@ -980,6 +1132,14 @@ export function CroquiEditor() {
           handleDelete();
         }}
         onMoveObject={handleMoveObject}
+        style={doc.style}
+        onUpdateStyle={handleStyleChange}
+        canvas={doc.canvas}
+        exportSettings={doc.export_settings}
+        onUpdateCanvas={handleCanvasChange}
+        onUpdateExportSettings={handleExportSettingsChange}
+        onFitSheet={handleFitSheet}
+        onCenterSheet={handleCenterSheet}
       />
 
       {showPhotoPicker && (
@@ -1242,15 +1402,19 @@ function roadToolToParityPreset(
       superficie: ParitySuperficie;
       mao_dupla: boolean;
       marcacao: ParityMarcacao;
+      eixo?: ParityEixo;
+      faixas?: number | null;
+      acostamento_m?: number;
     }
   | null {
   switch (tool) {
     case "road_urban":
       return {
-        largura_m: 7,
+        largura_m: 10,
         superficie: "asfalto",
         mao_dupla: true,
         marcacao: "amarela",
+        eixo: "amarela_trac",
       };
     case "road_avenue":
       return {
@@ -1258,13 +1422,17 @@ function roadToolToParityPreset(
         superficie: "asfalto",
         mao_dupla: true,
         marcacao: "amarela",
+        eixo: "amarela_dupla",
+        faixas: 2,
       };
     case "road_highway":
       return {
-        largura_m: 12,
+        largura_m: 7,
         superficie: "asfalto",
         mao_dupla: true,
         marcacao: "amarela",
+        eixo: "amarela_dupla",
+        acostamento_m: 2.5,
       };
     case "road_dirt":
       return {
@@ -1372,21 +1540,6 @@ function StatusBar({
         ● {exportLabel}
       </span>
       {/* Indicador estático do motor de via; não é clicável. */}
-      <span
-        title="Road Engine — motor de via compatível com o estilo visual do SICRO 1.0"
-        style={{
-          marginLeft: "auto",
-          padding: "2px 8px",
-          fontSize: "11px",
-          border: "1px solid #7c3aed",
-          background: "#ede9fe",
-          color: "#6d28d9",
-          borderRadius: "4px",
-          fontWeight: 600,
-        }}
-      >
-        Road Parity
-      </span>
       <span className={styles.statusFeedback}>{feedback}</span>
     </div>
   );
@@ -1470,21 +1623,25 @@ function DossiePhotoPicker({
 // ---------------------------------------------------------------------------
 // Carimbo técnico do PNG
 
-/** Cabeçalho (título · escala · data · BO) e rodapé em canvas 2D off-screen. */
+/** Cabeçalho (tipo · BO · escala · data, sem título do croqui) e rodapé em canvas 2D off-screen. */
 async function stampPng(
   rawDataUrl: string,
   meta: {
-    title: string;
     occurrence:
       | { numero_bo?: string | null; tipo_pericia?: string | null; municipio?: string | null }
       | null;
     scaleLabel: string;
+    /** Comprimento de 10 m em px da imagem; null sem escala. */
+    scaleBarPx?: number | null;
     timestamp: Date;
   },
 ): Promise<string> {
   const img = await loadImage(rawDataUrl);
-  const headerH = 64;
-  const footerH = 28;
+  // Carimbo proporcional à largura (3508 px = A4 a 300 dpi ⇒ k ≈ 2,5).
+  const k = Math.max(1, img.width / 1400);
+  const headerH = Math.round(64 * k);
+  const footerH = Math.round(28 * k);
+  const pad = Math.round(18 * k);
   const canvas = document.createElement("canvas");
   canvas.width = img.width;
   canvas.height = img.height + headerH + footerH;
@@ -1499,37 +1656,61 @@ async function stampPng(
   ctx.fillRect(0, 0, canvas.width, headerH);
   ctx.fillStyle = "#f8fafc";
   ctx.textBaseline = "middle";
-  ctx.font = "bold 18px Inter, system-ui, sans-serif";
-  ctx.fillText(meta.title, 18, headerH / 2 - 8);
-  ctx.font = "12px Inter, system-ui, sans-serif";
   const subtitleParts: string[] = [];
   const occ = meta.occurrence;
   if (occ?.numero_bo) subtitleParts.push(`BO ${occ.numero_bo}`);
   if (occ?.tipo_pericia) subtitleParts.push(occ.tipo_pericia);
   if (occ?.municipio) subtitleParts.push(occ.municipio);
+  // Sem o título do croqui (o padrão leva um código aleatório): só o tipo do documento.
+  ctx.font = `bold ${Math.round(18 * k)}px Inter, system-ui, sans-serif`;
+  ctx.fillText("Croqui viário", pad, subtitleParts.length > 0 ? headerH / 2 - 8 * k : headerH / 2);
+  ctx.font = `${Math.round(12 * k)}px Inter, system-ui, sans-serif`;
   if (subtitleParts.length > 0) {
-    ctx.fillText(subtitleParts.join(" · "), 18, headerH / 2 + 12);
+    ctx.fillText(subtitleParts.join(" · "), pad, headerH / 2 + 12 * k);
   }
   ctx.textAlign = "right";
-  ctx.fillText(meta.scaleLabel, canvas.width - 18, headerH / 2 - 8);
+  ctx.fillText(meta.scaleLabel, canvas.width - pad, headerH / 2 - 8 * k);
   ctx.fillText(
     `Exportado em ${formatStampDate(meta.timestamp)}`,
-    canvas.width - 18,
-    headerH / 2 + 12,
+    canvas.width - pad,
+    headerH / 2 + 12 * k,
   );
   ctx.textAlign = "left";
 
   ctx.drawImage(img, 0, headerH);
 
+  // Barra de escala gráfica (10 m) no canto inferior direito do desenho.
+  if (meta.scaleBarPx && meta.scaleBarPx > 8) {
+    const bar = meta.scaleBarPx;
+    const h = Math.max(6, Math.round(img.width / 400));
+    const pad = Math.round(h * 1.5);
+    const font = Math.max(11, Math.round(img.width / 110));
+    const x1 = img.width - bar - pad * 3;
+    const y1 = headerH + img.height - pad * 3 - h;
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillRect(x1 - pad, y1 - font - pad, bar + pad * 2, h + font + pad * 2);
+    ctx.fillStyle = "#111111";
+    ctx.strokeStyle = "#111111";
+    ctx.lineWidth = Math.max(1, h / 6);
+    ctx.fillRect(x1, y1, bar / 2, h);
+    ctx.strokeRect(x1, y1, bar, h);
+    ctx.font = `${font}px Inter, system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("10 m", x1 + bar / 2, y1 - Math.round(font * 0.35));
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+  }
+
   // Rodapé
   ctx.fillStyle = "#1f2937";
   ctx.fillRect(0, headerH + img.height, canvas.width, footerH);
   ctx.fillStyle = "#94a3b8";
-  ctx.font = "11px Inter, system-ui, sans-serif";
+  ctx.font = `${Math.round(11 * k)}px Inter, system-ui, sans-serif`;
   ctx.textBaseline = "middle";
   ctx.fillText(
-    "SICRO Desktop — Croqui Pericial · documento técnico, sujeito a revisão pelo perito.",
-    18,
+    "SICRO — croqui pericial · documento técnico, sujeito a revisão pelo perito.",
+    pad,
     headerH + img.height + footerH / 2,
   );
 

@@ -4,10 +4,11 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import { ChevronDown, Copy, Loader2, MapPin } from "lucide-react";
+import { ListTree, Loader2, MapPin } from "lucide-react";
 import { commands } from "@core/commands";
 import type { ImageMetadata } from "@domain/image_analysis";
 import styles from "./ExifPanel.module.css";
+import { MetadataViewer } from "./MetadataViewer";
 
 interface Props {
   workspacePath: string;
@@ -36,8 +37,7 @@ export function ExifPanel({ workspacePath, relativePath }: Props) {
   const [meta, setMeta] = useState<ImageMetadata | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [viewerOpen, setViewerOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -68,14 +68,24 @@ export function ExifPanel({ workspacePath, relativePath }: Props) {
     }
   }, [meta?.exif_json]);
 
-  const handleCopy = () => {
-    if (!parsed) return;
-    void navigator.clipboard.writeText(
-      JSON.stringify(parsed, null, 2),
-    );
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
+
+
+  const viewer = (
+    <>
+      <button type="button" className={styles.openAll} onClick={() => setViewerOpen(true)}>
+        <ListTree size={14} /> Ver todos os metadados
+      </button>
+      {viewerOpen && (
+        <MetadataViewer
+          workspacePath={workspacePath}
+          relativePath={relativePath}
+          hashSet={meta?.hash_set}
+          sizeBytes={meta?.size_bytes}
+          onClose={() => setViewerOpen(false)}
+        />
+      )}
+    </>
+  );
 
   if (loading) {
     return (
@@ -93,27 +103,18 @@ export function ExifPanel({ workspacePath, relativePath }: Props) {
         <p className={styles.empty}>
           Esta imagem não possui metadados EXIF (ou são ilegíveis).
         </p>
+        {viewer}
       </div>
     );
   }
 
   const s = parsed.summary;
   const gps = s.gps;
-  const tags = parsed.tags ?? {};
 
   return (
     <div className={styles.panel}>
       <header className={styles.head}>
-        <strong>EXIF</strong>
-        <button
-          type="button"
-          onClick={handleCopy}
-          className={styles.copyBtn}
-          aria-label="Copiar EXIF como JSON"
-          title="Copiar JSON"
-        >
-          <Copy size={11} /> {copied ? "Copiado!" : "Copiar"}
-        </button>
+        <strong>Metadados</strong>
       </header>
 
       <dl className={styles.summary}>
@@ -183,51 +184,7 @@ export function ExifPanel({ workspacePath, relativePath }: Props) {
         )}
       </dl>
 
-      <button
-        type="button"
-        className={styles.expandBtn}
-        onClick={() => setExpanded((v) => !v)}
-      >
-        <ChevronDown
-          size={12}
-          style={{
-            transform: expanded ? "rotate(180deg)" : "none",
-            transition: "transform 0.15s",
-          }}
-        />
-        {expanded ? "Esconder" : "Ver"} todas as tags ({Object.keys(tags).length})
-      </button>
-
-      {expanded && (
-        <div className={styles.tagsBox}>
-          <table className={styles.tags}>
-            <tbody>
-              {Object.entries(tags).map(([k, v]) => (
-                <tr key={k}>
-                  <th>{k}</th>
-                  <td>{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {meta?.hash_set && (
-        <div className={styles.hashes}>
-          <strong>Hashes do arquivo</strong>
-          <dl>
-            <dt>MD5</dt>
-            <dd><code>{meta.hash_set.md5}</code></dd>
-            <dt>SHA-1</dt>
-            <dd><code>{meta.hash_set.sha1}</code></dd>
-            <dt>SHA-256</dt>
-            <dd><code>{meta.hash_set.sha256}</code></dd>
-            <dt>SHA-3-256</dt>
-            <dd><code>{meta.hash_set.sha3_256}</code></dd>
-          </dl>
-        </div>
-      )}
+      {viewer}
     </div>
   );
 }

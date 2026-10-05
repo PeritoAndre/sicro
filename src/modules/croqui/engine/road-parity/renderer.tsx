@@ -1,6 +1,7 @@
 /**
- * Renderer Konva do motor parity, em 4 passes (como o SICRO 1.0 Python):
- * calçadas → asfalto → marcações clipadas → handles do objeto selecionado.
+ * Renderer Konva do motor parity (planta técnica). Passes: calçadas →
+ * asfalto → meio-fio e sinalização (clipados nos cruzamentos) → rotatória
+ * por cima → handles. Geometria em metros; `pxPerM` só na projeção.
  */
 
 import { Fragment, useMemo } from "react";
@@ -8,9 +9,7 @@ import { Circle, Group, Line } from "react-konva";
 import {
   buildRoadEdges,
   buildRoadRibbon,
-  buildRoadSidewalk,
   buildRoundaboutDiskPolygon,
-  buildRoundaboutRings,
   discretizeCircle,
   flattenVec2,
   projectWorldPoints,
@@ -20,81 +19,160 @@ import {
 } from "./geometry";
 import { clipPolylineAgainstPolygons } from "./clipping";
 import {
+  PARITY_FAIXA_LARGURA_M,
+  resolveParityEixo,
   type SicroParityObject,
   type SicroRoadObject_parity,
   type SicroRoundaboutObject_parity,
 } from "./types";
+import { parityTemaColors, resolveParityStyle, type ParityStyle } from "./style";
 import { isParityRoad, isParityRoundabout } from "./guards";
 
-// Cores fixas, copiadas do SICRO 1.0 Python.
-const PARITY_COLORS = {
-  asphalt: "#1C1C1C",
-  sidewalk: "#7C7460",
-  earth: "#9C7A4E",
-  islandDefault: "#3A6535",
-  edge: "#FFFFFF",
-  yellow: "#F5C518",
-  white: "#FFFFFF",
-  selection: "#4A80FF",
-  selectionGuide: "#6080C0",
-} as const;
+const SELECTION = "#4A80FF";
+const SELECTION_GUIDE = "#6080C0";
+/** Metade do vão entre as duas linhas do eixo duplo (m). */
+const EIXO_GAP_M = 0.15;
+/** Dê a preferência (LDP): traço = espaço = 0,5 m. */
+const LDP_DASH_M = 0.5;
 
-/** Espessuras em px de tela. */
-const PARITY_STROKE_WIDTHS = {
-  edgeLine: 2,
-  centerLine: 2,
-} as const;
+// ---- Hachura da calçada (canvas 16×16 desenhado a 0,5 ⇒ 8 px na tela) ----
 
-/** Dash do eixo central (px de tela). */
-const PARITY_CENTER_LINE_DASH: readonly [number, number] = [12, 8];
+const hatchCache = new Map<string, HTMLCanvasElement>();
 
-/** Tensão do Konva.Line fechado — equivale ao `smooth=True` do Tkinter. */
-const PARITY_LINE_TENSION = 0.5;
-
-// ---- Helpers ----
-
-function surfaceFillForRoad(road: SicroRoadObject_parity): string {
-  switch (road.superficie) {
-    case "asfalto":
-      return PARITY_COLORS.asphalt;
-    case "calcada":
-      return PARITY_COLORS.sidewalk;
-    case "terra":
-      return PARITY_COLORS.earth;
-    default:
-      return PARITY_COLORS.asphalt;
-  }
+function hatchCanvas(line: string, bg: string): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const key = `${line}|${bg}`;
+  const hit = hatchCache.get(key);
+  if (hit) return hit;
+  const c = document.createElement("canvas");
+  c.width = 16;
+  c.height = 16;
+  const g = c.getContext("2d");
+  if (!g) return null;
+  g.fillStyle = bg;
+  g.fillRect(0, 0, 16, 16);
+  g.strokeStyle = line;
+  g.lineWidth = 1.6;
+  g.beginPath();
+  g.moveTo(-4, 20);
+  g.lineTo(20, -4);
+  g.moveTo(-4, 4);
+  g.lineTo(4, -4);
+  g.moveTo(12, 20);
+  g.lineTo(20, 12);
+  g.stroke();
+  hatchCache.set(key, c);
+  return c;
 }
 
-function centerLineColorForRoad(road: SicroRoadObject_parity): string {
-  switch (road.marcacao) {
-    case "amarela":
-      return PARITY_COLORS.yellow;
-    case "branca":
-      return PARITY_COLORS.white;
-    default:
-      return PARITY_COLORS.edge;
+type FillProps = Record<string, unknown>;
+
+function sidewalkFill(st: ParityStyle, colors: ReturnType<typeof parityTemaColors>): FillProps {
+  if (st.calcada === "hachura") {
+    const img = hatchCanvas(colors.hachuraLinha, colors.hachuraFundo);
+    if (img) {
+      return {
+        fillPatternImage: img,
+        fillPatternRepeat: "repeat",
+        fillPatternScaleX: 0.5,
+        fillPatternScaleY: 0.5,
+        fillPriority: "pattern",
+      };
+    }
   }
+  return { fill: colors.calcada };
 }
 
-/** Geometria pré-computada por via (metros), compartilhada pelos 4 passes. */
+function surfaceFill(
+  superficie: SicroRoadObject_parity["superficie"],
+  st: ParityStyle,
+  colors: ReturnType<typeof parityTemaColors>,
+): string {
+  if (superficie === "calcada") return colors.calcada;
+  if (superficie === "terra") return colors.terra;
+  return st.asfalto;
+}
+
+// ---- Malha por via ----
+
 interface RoadMesh {
   road: SicroRoadObject_parity;
   samplesWorld: Vec2World[];
+  /** Meia-largura da pista de rolamento (m). */
+  hw: number;
+  /** Meia-largura pavimentada: pista + acostamento (m). */
+  pavedHalf: number;
+  sidewalkM: number;
   /** Também serve de obstáculo no clipping das outras vias. */
-  asphaltPolyWorld: Vec2World[];
-  sidewalkPolyWorld: Vec2World[];
+  pavedPoly: Vec2World[];
+  sidewalkPoly: Vec2World[] | null;
 }
 
-function buildRoadMesh(road: SicroRoadObject_parity): RoadMesh {
+function buildRoadMesh(road: SicroRoadObject_parity, st: ParityStyle): RoadMesh {
   const samples = sampleCubicBezier(road, 32);
-  const halfWidth = road.largura_m / 2;
+  const hw = road.largura_m / 2;
+  const pavedHalf = hw + Math.max(0, road.acostamento_m ?? 0);
+  const sidewalkM =
+    st.calcada === "nenhuma" ? 0 : Math.max(0, road.calcada_m ?? st.calcada_m);
   return {
     road,
     samplesWorld: samples,
-    asphaltPolyWorld: buildRoadRibbon(samples, halfWidth),
-    sidewalkPolyWorld: buildRoadSidewalk(samples, halfWidth),
+    hw,
+    pavedHalf,
+    sidewalkM,
+    pavedPoly: buildRoadRibbon(samples, pavedHalf),
+    sidewalkPoly:
+      sidewalkM > 0 && road.superficie === "asfalto"
+        ? buildRoadRibbon(samples, pavedHalf + sidewalkM)
+        : null,
   };
+}
+
+/** Polilinha deslocada `d` m da linha central (d > 0 = lado +normal). */
+function offsetLine(samples: Vec2World[], d: number): Vec2World[] {
+  if (Math.abs(d) < 1e-6) return samples;
+  const { left, right } = buildRoadEdges(samples, Math.abs(d));
+  return d > 0 ? left : right;
+}
+
+/** Faixas por sentido (mão dupla) ou no total (mão única); 0 = não dividir. */
+function laneCount(road: SicroRoadObject_parity, st: ParityStyle): number {
+  if (road.faixas != null) return Math.max(0, Math.floor(road.faixas));
+  if (!st.faixas_auto) return 0;
+  const base = road.mao_dupla ? road.largura_m / 2 : road.largura_m;
+  return Math.max(1, Math.round(base / PARITY_FAIXA_LARGURA_M));
+}
+
+/** Linha "dê a preferência" na boca de uma via que chega à rotatória; null se a via não é aproximação. */
+function giveWaySegment(
+  m: RoadMesh,
+  rb: SicroRoundaboutObject_parity,
+): Vec2World[] | null {
+  const outerR = rb.r_m + rb.largura_m / 2;
+  const dist = (p: Vec2World) => Math.hypot(p.x - rb.cx, p.y - rb.cy);
+  const pts = m.samplesWorld;
+  if (pts.length < 2) return null;
+  const aIn = dist(pts[0]!) <= outerR + 1;
+  const bIn = dist(pts[pts.length - 1]!) <= outerR + 1;
+  if (aIn === bIn) return null;
+  const seq = bIn ? pts : pts.slice().reverse();
+  const idx = seq.findIndex((p) => dist(p) <= outerR + 0.6);
+  if (idx <= 0) return null;
+  const p0 = seq[idx - 1]!;
+  const p1 = seq[idx]!;
+  let tx = p1.x - p0.x;
+  let ty = p1.y - p0.y;
+  const len = Math.hypot(tx, ty) || 1;
+  tx /= len;
+  ty /= len;
+  // Direita de quem chega (eixo y para baixo): só a metade de entrada na mão dupla.
+  const nx = -ty;
+  const ny = tx;
+  const from = m.road.mao_dupla
+    ? p0
+    : { x: p0.x - nx * m.hw, y: p0.y - ny * m.hw };
+  const to = { x: p0.x + nx * m.hw, y: p0.y + ny * m.hw };
+  return [from, to];
 }
 
 // ---- Componente ----
@@ -106,447 +184,368 @@ interface RoadParityRendererProps {
   /** Translação mundo → canvas (px). */
   offsetX?: number;
   offsetY?: number;
+  /** Estilo do croqui (`doc.style`); ausente ⇒ planta técnica. */
+  style?: Partial<ParityStyle> | null;
   selectedId?: string | null;
   onSelect?: (id: string | null) => void;
-  /**
-   * Chamado ao arrastar handles (via: ax/ay/bx/by/cx1/cy1/cx2/cy2; rotatória: cx/cy).
-   * Ausente ⇒ handles estáticos (modo visualização).
-   */
-  onObjectChange?: (
-    id: string,
-    patch: Partial<SicroParityObject>,
-  ) => void;
+  /** Seleção múltipla: corpos arrastáveis (o drag em grupo do CanvasStage acha os nós pelo id). */
+  selectedIds?: string[];
+  /** Ausente ⇒ handles estáticos (modo visualização). */
+  onObjectChange?: (id: string, patch: Partial<SicroParityObject>) => void;
 }
 
-/** Componente puro, sem estado próprio. */
 export function RoadParityRenderer({
   objects,
   pxPerM,
   offsetX = 0,
   offsetY = 0,
+  style,
   selectedId = null,
   onSelect,
+  selectedIds,
   onObjectChange,
 }: RoadParityRendererProps) {
-  const effectivePxPerM = resolvePxPerM(pxPerM);
+  const ppm = resolvePxPerM(pxPerM);
+  const st = useMemo(() => resolveParityStyle(style), [style]);
+  const colors = useMemo(() => parityTemaColors(st), [st]);
 
-  // Inverso de `projectWorldPoints`.
-  const canvasToWorldX = (px: number): number =>
-    (px - offsetX) / Math.max(effectivePxPerM, 0.0001);
-  const canvasToWorldY = (px: number): number =>
-    (px - offsetY) / Math.max(effectivePxPerM, 0.0001);
+  const isSel = (id: string) => selectedId === id || (selectedIds?.includes(id) ?? false);
+  const canvasToWorldX = (px: number): number => (px - offsetX) / Math.max(ppm, 0.0001);
+  const canvasToWorldY = (px: number): number => (px - offsetY) / Math.max(ppm, 0.0001);
+  const P = (pts: ReadonlyArray<Vec2World>) => flattenVec2(projectWorldPoints(pts, ppm, offsetX, offsetY));
+  const dash = [st.traco_m * ppm, st.espaco_m * ppm];
+  const ldpDash = [LDP_DASH_M * ppm, LDP_DASH_M * ppm];
 
   const roads = useMemo(
-    () =>
-      objects.filter(
-        (o): o is SicroRoadObject_parity => isParityRoad(o),
-      ),
+    () => objects.filter((o): o is SicroRoadObject_parity => isParityRoad(o) && o.visible !== false),
     [objects],
   );
   const roundabouts = useMemo(
-    () =>
-      objects.filter(
-        (o): o is SicroRoundaboutObject_parity => isParityRoundabout(o),
-      ),
+    () => objects.filter((o): o is SicroRoundaboutObject_parity => isParityRoundabout(o) && o.visible !== false),
     [objects],
   );
-
-  const meshes = useMemo<RoadMesh[]>(
-    () => roads.map(buildRoadMesh),
-    [roads],
-  );
-
-  const allRoadAsphaltPolys = useMemo(
-    () => meshes.map((m) => m.asphaltPolyWorld),
-    [meshes],
-  );
-  // Sem padding: as bordas das vias devem parar exatamente no raio externo do
-  // anel; qualquer sobra é coberta pelo overlay do pass 3b.
-  const allRoundaboutDisks = useMemo(
-    () =>
-      roundabouts.map((rb) => buildRoundaboutDiskPolygon(rb, 96, 0)),
+  const meshes = useMemo<RoadMesh[]>(() => roads.map((r) => buildRoadMesh(r, st)), [roads, st]);
+  const pavedPolys = useMemo(() => meshes.map((m) => m.pavedPoly), [meshes]);
+  const roundaboutDisks = useMemo(
+    () => roundabouts.map((rb) => buildRoundaboutDiskPolygon(rb, 96, 0)),
     [roundabouts],
   );
+  const sidewalkPolys = useMemo(
+    () => meshes.map((m) => m.sidewalkPoly).filter((p): p is Vec2World[] => p !== null),
+    [meshes],
+  );
+  const rbSidewalkDisks = useMemo(
+    () =>
+      st.calcada === "nenhuma"
+        ? []
+        : roundabouts.map((rb) => buildRoundaboutDiskPolygon(rb, 96, st.calcada_m)),
+    [roundabouts, st],
+  );
+
+  const strokeSegs = (
+    key: string,
+    segs: ReadonlyArray<ReadonlyArray<Vec2World>>,
+    stroke: string,
+    width: number,
+    dashArr?: number[],
+  ) =>
+    segs
+      .filter((seg) => seg.length >= 2)
+      .map((seg, i) => (
+        <Line
+          key={`${key}_${i}`}
+          points={P(seg)}
+          stroke={stroke}
+          strokeWidth={width}
+          dash={dashArr}
+          lineCap="butt"
+          lineJoin="round"
+          listening={false}
+        />
+      ));
+
+  const showSidewalkEdge =
+    st.calcada === "hachura" || st.calcada === "linha" || (st.calcada === "cinza" && st.tema !== "escuro");
+  const sidewalkEdgeW = Math.max(0.5, st.borda_px * 0.5);
+  const swFill = sidewalkFill(st, colors);
 
   return (
     <Fragment>
-      {/* ---------- PASS 1: Calçadas ---------- */}
+      {/* ---------- 1. Calçadas ---------- */}
       <Group listening={false}>
-        {meshes
-          .filter((m) => m.road.superficie === "asfalto" && m.road.visible !== false)
-          .map((m) => {
-            const projected = projectWorldPoints(
-              m.sidewalkPolyWorld,
-              effectivePxPerM,
-              offsetX,
-              offsetY,
-            );
-            return (
-              <Line
-                key={`pp1_sw_${m.road.id}`}
-                points={flattenVec2(projected)}
-                closed
-                tension={PARITY_LINE_TENSION}
-                fill={PARITY_COLORS.sidewalk}
-              />
-            );
-          })}
-        {roundabouts
-          .filter((rb) => rb.visible !== false)
-          .map((rb) => {
-            const rings = buildRoundaboutRings(rb, effectivePxPerM);
-            return (
+        {st.calcada !== "nenhuma" && st.calcada !== "linha" && (
+          <>
+            {roundabouts.map((rb) => (
               <Circle
-                key={`pp1_rb_sw_${rb.id}`}
-                x={rings.cx_px + offsetX}
-                y={rings.cy_px + offsetY}
-                radius={rings.sidewalk_r_px}
-                fill={PARITY_COLORS.sidewalk}
+                key={`sw_rb_${rb.id}`} name={`obj_${rb.id}`}
+                x={rb.cx * ppm + offsetX}
+                y={rb.cy * ppm + offsetY}
+                radius={(rb.r_m + rb.largura_m / 2 + st.calcada_m) * ppm}
+                {...swFill}
               />
-            );
-          })}
-      </Group>
-
-      {/* ---------- PASS 2: Asfalto ---------- */}
-      <Group>
-        {meshes
-          .filter((m) => m.road.visible !== false)
-          .map((m) => {
-            const projected = projectWorldPoints(
-              m.asphaltPolyWorld,
-              effectivePxPerM,
-              offsetX,
-              offsetY,
-            );
+            ))}
+            {meshes.map((m) =>
+              m.sidewalkPoly ? (
+                <Line key={`sw_${m.road.id}`} name={`obj_${m.road.id}`} points={P(m.sidewalkPoly)} closed {...swFill} />
+              ) : null,
+            )}
+          </>
+        )}
+        {showSidewalkEdge &&
+          meshes.map((m) => {
+            if (!m.sidewalkPoly) return null;
+            const obstacles = [
+              ...sidewalkPolys.filter((p) => p !== m.sidewalkPoly),
+              ...rbSidewalkDisks,
+            ];
+            const d = m.pavedHalf + m.sidewalkM;
             return (
-              <Line
-                key={`pp2_as_${m.road.id}`}
-                points={flattenVec2(projected)}
-                closed
-                tension={PARITY_LINE_TENSION}
-                fill={surfaceFillForRoad(m.road)}
-                onClick={() => onSelect?.(m.road.id)}
-                onTap={() => onSelect?.(m.road.id)}
-              />
-            );
-          })}
-        {roundabouts
-          .filter((rb) => rb.visible !== false)
-          .map((rb) => {
-            const rings = buildRoundaboutRings(rb, effectivePxPerM);
-            const islandColor = rb.inner_color ?? PARITY_COLORS.islandDefault;
-            return (
-              <Group key={`pp2_rb_${rb.id}`}>
-                <Circle
-                  x={rings.cx_px + offsetX}
-                  y={rings.cy_px + offsetY}
-                  radius={rings.outer_r_px}
-                  fill={PARITY_COLORS.asphalt}
-                  onClick={() => onSelect?.(rb.id)}
-                  onTap={() => onSelect?.(rb.id)}
-                />
-                {rings.inner_r_px >= 1 && (
-                  <Circle
-                    x={rings.cx_px + offsetX}
-                    y={rings.cy_px + offsetY}
-                    radius={rings.inner_r_px}
-                    fill={islandColor}
-                    listening={false}
-                  />
+              <Group key={`swe_${m.road.id}`} name={`obj_${m.road.id}`}>
+                {strokeSegs(
+                  `swe_l_${m.road.id}`,
+                  clipPolylineAgainstPolygons(offsetLine(m.samplesWorld, d), obstacles).segments,
+                  st.borda,
+                  sidewalkEdgeW,
+                )}
+                {strokeSegs(
+                  `swe_r_${m.road.id}`,
+                  clipPolylineAgainstPolygons(offsetLine(m.samplesWorld, -d), obstacles).segments,
+                  st.borda,
+                  sidewalkEdgeW,
                 )}
               </Group>
             );
           })}
+        {showSidewalkEdge &&
+          roundabouts.map((rb) => (
+            <Group key={`swe_rb_${rb.id}`} name={`obj_${rb.id}`}>
+              {strokeSegs(
+                `swe_rb_${rb.id}`,
+                clipPolylineAgainstPolygons(
+                  discretizeCircle(rb.cx, rb.cy, rb.r_m + rb.largura_m / 2 + st.calcada_m, 0, Math.PI * 2, 180),
+                  sidewalkPolys,
+                ).segments,
+                st.borda,
+                sidewalkEdgeW,
+              )}
+            </Group>
+          ))}
       </Group>
 
-      {/* ---------- PASS 3: Marcações (bordas + eixo central) ---------- */}
+      {/* ---------- 2. Asfalto ---------- */}
+      <Group>
+        {meshes.map((m) => (
+          <Line
+            key={`as_${m.road.id}`}
+            id={m.road.id}
+            points={P(m.pavedPoly)}
+            closed
+            fill={surfaceFill(m.road.superficie, st, colors)}
+            onClick={() => onSelect?.(m.road.id)}
+            onTap={() => onSelect?.(m.road.id)}
+            draggable={!!onObjectChange && isSel(m.road.id)}
+            onDragEnd={(e) => {
+              // Arrasto pelo corpo: translada os quatro pontos (metros).
+              const dx = e.target.x() / Math.max(ppm, 0.0001);
+              const dy = e.target.y() / Math.max(ppm, 0.0001);
+              e.target.position({ x: 0, y: 0 });
+              if (!onObjectChange || (dx === 0 && dy === 0)) return;
+              const r = m.road;
+              onObjectChange(r.id, {
+                ax: r.ax + dx, ay: r.ay + dy, bx: r.bx + dx, by: r.by + dy,
+                cx1: r.cx1 + dx, cy1: r.cy1 + dy, cx2: r.cx2 + dx, cy2: r.cy2 + dy,
+              });
+            }}
+          />
+        ))}
+        {roundabouts.map((rb) => (
+          <Circle
+            key={`as_rb_${rb.id}`}
+            id={rb.id}
+            x={rb.cx * ppm + offsetX}
+            y={rb.cy * ppm + offsetY}
+            radius={(rb.r_m + rb.largura_m / 2) * ppm}
+            fill={surfaceFill(rb.superficie, st, colors)}
+            onClick={() => onSelect?.(rb.id)}
+            onTap={() => onSelect?.(rb.id)}
+            draggable={!!onObjectChange && isSel(rb.id)}
+            onDragEnd={(e) => {
+              onObjectChange?.(rb.id, { cx: canvasToWorldX(e.target.x()), cy: canvasToWorldY(e.target.y()) });
+            }}
+          />
+        ))}
+      </Group>
+
+      {/* ---------- 3. Meio-fio e sinalização ---------- */}
       <Group listening={false}>
-        {meshes
-          .filter((m) => m.road.visible !== false)
-          .map((m) => {
-            const obstacles: Vec2World[][] = [
-              ...allRoadAsphaltPolys.filter(
-                (_, idx) => meshes[idx]?.road.id !== m.road.id,
+        {meshes.map((m) => {
+          const obstacles: Vec2World[][] = [
+            ...pavedPolys.filter((p) => p !== m.pavedPoly),
+            ...roundaboutDisks,
+          ];
+          const clipped = (line: Vec2World[]) => clipPolylineAgainstPolygons(line, obstacles).segments;
+          const els: JSX.Element[] = [];
+
+          // meio-fio
+          els.push(
+            ...strokeSegs(`e_l_${m.road.id}`, clipped(offsetLine(m.samplesWorld, m.pavedHalf)), st.borda, st.borda_px),
+            ...strokeSegs(`e_r_${m.road.id}`, clipped(offsetLine(m.samplesWorld, -m.pavedHalf)), st.borda, st.borda_px),
+          );
+          if (m.road.superficie !== "asfalto") return <Group key={`mk_${m.road.id}`} name={`obj_${m.road.id}`}>{els}</Group>;
+
+          // eixo
+          const eixo = resolveParityEixo(m.road);
+          if (eixo === "amarela_dupla" || eixo === "amarela_mista") {
+            els.push(
+              ...strokeSegs(`c1_${m.road.id}`, clipped(offsetLine(m.samplesWorld, EIXO_GAP_M)), st.amarela, st.marcacao_px),
+              ...strokeSegs(
+                `c2_${m.road.id}`,
+                clipped(offsetLine(m.samplesWorld, -EIXO_GAP_M)),
+                st.amarela,
+                st.marcacao_px,
+                eixo === "amarela_mista" ? dash : undefined,
               ),
-              ...allRoundaboutDisks,
-            ];
-            const halfWidthM = m.road.largura_m / 2;
-            const { left, right } = buildRoadEdges(m.samplesWorld, halfWidthM);
+            );
+          } else if (eixo === "amarela_trac" || eixo === "branca_trac") {
+            els.push(
+              ...strokeSegs(
+                `c_${m.road.id}`,
+                clipped(m.samplesWorld),
+                eixo === "amarela_trac" ? st.amarela : st.branca,
+                st.marcacao_px,
+                dash,
+              ),
+            );
+          }
 
-            const leftClip = clipPolylineAgainstPolygons(left, obstacles);
-            const rightClip = clipPolylineAgainstPolygons(right, obstacles);
-
-            const elements: JSX.Element[] = [];
-
-            for (let i = 0; i < leftClip.segments.length; i++) {
-              const seg = leftClip.segments[i] as Vec2World[];
-              const proj = projectWorldPoints(seg, effectivePxPerM, offsetX, offsetY);
-              if (proj.length < 2) continue;
-              elements.push(
-                <Line
-                  key={`pp3_el_${m.road.id}_${i}`}
-                  points={flattenVec2(proj)}
-                  stroke={PARITY_COLORS.edge}
-                  strokeWidth={PARITY_STROKE_WIDTHS.edgeLine}
-                  lineCap="butt"
-                  lineJoin="round"
-                  listening={false}
-                />,
-              );
-            }
-            for (let i = 0; i < rightClip.segments.length; i++) {
-              const seg = rightClip.segments[i] as Vec2World[];
-              const proj = projectWorldPoints(seg, effectivePxPerM, offsetX, offsetY);
-              if (proj.length < 2) continue;
-              elements.push(
-                <Line
-                  key={`pp3_er_${m.road.id}_${i}`}
-                  points={flattenVec2(proj)}
-                  stroke={PARITY_COLORS.edge}
-                  strokeWidth={PARITY_STROKE_WIDTHS.edgeLine}
-                  lineCap="butt"
-                  lineJoin="round"
-                  listening={false}
-                />,
-              );
-            }
-
-            if (m.road.mao_dupla && m.road.marcacao !== "nenhuma") {
-              const centerClip = clipPolylineAgainstPolygons(
-                m.samplesWorld,
-                obstacles,
-              );
-              for (let i = 0; i < centerClip.segments.length; i++) {
-                const seg = centerClip.segments[i] as Vec2World[];
-                const proj = projectWorldPoints(
-                  seg,
-                  effectivePxPerM,
-                  offsetX,
-                  offsetY,
+          // faixas
+          const lanes = laneCount(m.road, st);
+          if (lanes > 1) {
+            if (m.road.mao_dupla) {
+              for (let k = 1; k < lanes; k++) {
+                const d = k * (m.hw / lanes);
+                els.push(
+                  ...strokeSegs(`f_l${k}_${m.road.id}`, clipped(offsetLine(m.samplesWorld, d)), st.branca, st.marcacao_px, dash),
+                  ...strokeSegs(`f_r${k}_${m.road.id}`, clipped(offsetLine(m.samplesWorld, -d)), st.branca, st.marcacao_px, dash),
                 );
-                if (proj.length < 2) continue;
-                elements.push(
-                  <Line
-                    key={`pp3_cc_${m.road.id}_${i}`}
-                    points={flattenVec2(proj)}
-                    stroke={centerLineColorForRoad(m.road)}
-                    strokeWidth={PARITY_STROKE_WIDTHS.centerLine}
-                    dash={[PARITY_CENTER_LINE_DASH[0], PARITY_CENTER_LINE_DASH[1]]}
-                    lineCap="butt"
-                    listening={false}
-                  />,
+              }
+            } else {
+              for (let k = 1; k < lanes; k++) {
+                const d = -m.hw + k * (m.road.largura_m / lanes);
+                els.push(
+                  ...strokeSegs(`f_${k}_${m.road.id}`, clipped(offsetLine(m.samplesWorld, d)), st.branca, st.marcacao_px, dash),
                 );
               }
             }
+          }
 
-            return <Group key={`pp3_${m.road.id}`}>{elements}</Group>;
-          })}
-
-        {/* Pass 3b — repinta anel + ilha por cima das marcações das vias que
-            cruzam o disco. Dois <Circle> em vez de donut: o z-order resolve. */}
-        {roundabouts
-          .filter((rb) => rb.visible !== false)
-          .map((rb) => {
-            const rings = buildRoundaboutRings(rb, effectivePxPerM);
-            const cxPx = rings.cx_px + offsetX;
-            const cyPx = rings.cy_px + offsetY;
-            const islandColor = rb.inner_color ?? PARITY_COLORS.islandDefault;
-            return (
-              <Group key={`pp3_rb_overlay_${rb.id}`} listening={false}>
-                <Circle
-                  x={cxPx}
-                  y={cyPx}
-                  radius={rings.outer_r_px + 0.5}
-                  fill={PARITY_COLORS.asphalt}
-                />
-                {rings.inner_r_px >= 1 && (
-                  <Circle
-                    x={cxPx}
-                    y={cyPx}
-                    radius={rings.inner_r_px}
-                    fill={islandColor}
-                  />
-                )}
-              </Group>
+          // linha de bordo (só com acostamento)
+          if (m.pavedHalf > m.hw + 1e-6) {
+            els.push(
+              ...strokeSegs(`b_l_${m.road.id}`, clipped(offsetLine(m.samplesWorld, m.hw)), st.branca, st.marcacao_px),
+              ...strokeSegs(`b_r_${m.road.id}`, clipped(offsetLine(m.samplesWorld, -m.hw)), st.branca, st.marcacao_px),
             );
-          })}
+          }
+          return <Group key={`mk_${m.road.id}`} name={`obj_${m.road.id}`}>{els}</Group>;
+        })}
 
-        {/* Bordas + eixo das rotatórias, clipados geometricamente contra o
-            asfalto das vias — junção sem heurística angular. */}
-        {roundabouts
-          .filter((rb) => rb.visible !== false)
-          .map((rb) => {
-            const marcacao = rb.marcacao ?? "nenhuma";
-            const showCentralLine = marcacao !== "nenhuma";
-            const centralColor =
-              marcacao === "amarela"
-                ? PARITY_COLORS.yellow
-                : marcacao === "branca"
-                  ? PARITY_COLORS.white
-                  : PARITY_COLORS.edge;
-
-            const halfLargM = rb.largura_m / 2;
-            const outerRm = rb.r_m + halfLargM;
-            const innerRm = Math.max(0, rb.r_m - halfLargM);
-            const midRm = (outerRm + innerRm) / 2;
-
-            const outerLoop = discretizeCircle(rb.cx, rb.cy, outerRm);
-            const innerLoop = discretizeCircle(rb.cx, rb.cy, innerRm);
-            const midLoop = discretizeCircle(rb.cx, rb.cy, midRm);
-
-            const outerClipped = clipPolylineAgainstPolygons(
-              outerLoop,
-              allRoadAsphaltPolys,
+        {/* Rotatória por cima do que as vias deixaram no disco: anel, ilha,
+            meio-fio externo só fora das entradas, ilha contínua, faixas do anel,
+            dê a preferência nas bocas. */}
+        {roundabouts.map((rb) => {
+          const cx = rb.cx * ppm + offsetX;
+          const cy = rb.cy * ppm + offsetY;
+          const outerR = rb.r_m + rb.largura_m / 2;
+          const innerR = Math.max(0, rb.r_m - rb.largura_m / 2);
+          const els: JSX.Element[] = [];
+          els.push(
+            <Circle key="ring" x={cx} y={cy} radius={outerR * ppm + 0.5} fill={surfaceFill(rb.superficie, st, colors)} />,
+          );
+          if (innerR >= 0.5) {
+            els.push(
+              <Circle key="island" x={cx} y={cy} radius={innerR * ppm} fill={rb.inner_color ?? colors.ilha} />,
             );
-            const innerClipped = clipPolylineAgainstPolygons(
-              innerLoop,
-              allRoadAsphaltPolys,
+          }
+          els.push(
+            ...strokeSegs(
+              `rb_o_${rb.id}`,
+              clipPolylineAgainstPolygons(discretizeCircle(rb.cx, rb.cy, outerR, 0, Math.PI * 2, 180), pavedPolys).segments,
+              st.borda,
+              st.borda_px,
+            ),
+          );
+          if (innerR >= 0.5) {
+            els.push(
+              <Circle key="island_edge" x={cx} y={cy} radius={innerR * ppm} stroke={st.borda} strokeWidth={st.borda_px} fillEnabled={false} />,
             );
-            const midClipped = showCentralLine
-              ? clipPolylineAgainstPolygons(midLoop, allRoadAsphaltPolys)
-              : { segments: [] as Vec2World[][] };
-
-            return (
-              <Group key={`pp3_rb_${rb.id}`}>
-                {outerClipped.segments.map((seg, i) => {
-                  const proj = projectWorldPoints(
-                    seg,
-                    effectivePxPerM,
-                    offsetX,
-                    offsetY,
-                  );
-                  if (proj.length < 2) return null;
-                  return (
-                    <Line
-                      key={`pp3_rb_${rb.id}_outer_${i}`}
-                      points={flattenVec2(proj)}
-                      stroke={PARITY_COLORS.edge}
-                      strokeWidth={PARITY_STROKE_WIDTHS.edgeLine}
-                      lineCap="butt"
-                      lineJoin="round"
-                      listening={false}
-                    />
-                  );
-                })}
-                {innerRm >= 0.5 &&
-                  innerClipped.segments.map((seg, i) => {
-                    const proj = projectWorldPoints(
-                      seg,
-                      effectivePxPerM,
-                      offsetX,
-                      offsetY,
-                    );
-                    if (proj.length < 2) return null;
-                    return (
-                      <Line
-                        key={`pp3_rb_${rb.id}_inner_${i}`}
-                        points={flattenVec2(proj)}
-                        stroke={PARITY_COLORS.edge}
-                        strokeWidth={PARITY_STROKE_WIDTHS.edgeLine}
-                        lineCap="butt"
-                        lineJoin="round"
-                        listening={false}
-                      />
-                    );
-                  })}
-                {showCentralLine &&
-                  midRm >= 0.5 &&
-                  midClipped.segments.map((seg, i) => {
-                    const proj = projectWorldPoints(
-                      seg,
-                      effectivePxPerM,
-                      offsetX,
-                      offsetY,
-                    );
-                    if (proj.length < 2) return null;
-                    return (
-                      <Line
-                        key={`pp3_rb_${rb.id}_center_${i}`}
-                        points={flattenVec2(proj)}
-                        stroke={centralColor}
-                        strokeWidth={PARITY_STROKE_WIDTHS.centerLine}
-                        dash={[
-                          PARITY_CENTER_LINE_DASH[0],
-                          PARITY_CENTER_LINE_DASH[1],
-                        ]}
-                        lineCap="butt"
-                        listening={false}
-                      />
-                    );
-                  })}
-              </Group>
+          }
+          // faixas do anel (contínuas em volta) ou o eixo antigo do anel
+          if (st.faixas_auto && rb.superficie === "asfalto") {
+            const n = Math.max(1, Math.round(rb.largura_m / PARITY_FAIXA_LARGURA_M));
+            for (let k = 1; k < n; k++) {
+              const r = innerR + k * (rb.largura_m / n);
+              els.push(
+                <Circle key={`lane_${k}`} x={cx} y={cy} radius={r * ppm} stroke={st.branca} strokeWidth={st.marcacao_px} dash={dash} fillEnabled={false} />,
+              );
+            }
+          } else if (rb.marcacao && rb.marcacao !== "nenhuma") {
+            els.push(
+              <Circle
+                key="mid"
+                x={cx}
+                y={cy}
+                radius={((outerR + innerR) / 2) * ppm}
+                stroke={rb.marcacao === "amarela" ? st.amarela : st.branca}
+                strokeWidth={st.marcacao_px}
+                dash={dash}
+                fillEnabled={false}
+              />,
             );
-          })}
+          }
+          for (const m of meshes) {
+            if (m.road.superficie !== "asfalto") continue;
+            const seg = giveWaySegment(m, rb);
+            if (seg) els.push(...strokeSegs(`ldp_${rb.id}_${m.road.id}`, [seg], st.branca, st.marcacao_px * 1.5, ldpDash));
+          }
+          return <Group key={`rb_${rb.id}`} name={`obj_${rb.id}`}>{els}</Group>;
+        })}
       </Group>
 
-      {/* ---------- PASS 4: Handles ---------- */}
+      {/* ---------- 4. Handles ---------- */}
       {selectedId && (
         <Group>
           {meshes
             .filter((m) => m.road.id === selectedId)
             .map((m) => {
-              const a = projectWorldPoints(
-                [{ x: m.road.ax, y: m.road.ay }],
-                effectivePxPerM,
-                offsetX,
-                offsetY,
-              )[0]!;
-              const b = projectWorldPoints(
-                [{ x: m.road.bx, y: m.road.by }],
-                effectivePxPerM,
-                offsetX,
-                offsetY,
-              )[0]!;
-              const c1 = projectWorldPoints(
-                [{ x: m.road.cx1, y: m.road.cy1 }],
-                effectivePxPerM,
-                offsetX,
-                offsetY,
-              )[0]!;
-              const c2 = projectWorldPoints(
-                [{ x: m.road.cx2, y: m.road.cy2 }],
-                effectivePxPerM,
-                offsetX,
-                offsetY,
-              )[0]!;
+              const pt = (x: number, y: number) => projectWorldPoints([{ x, y }], ppm, offsetX, offsetY)[0]!;
+              const a = pt(m.road.ax, m.road.ay);
+              const b = pt(m.road.bx, m.road.by);
+              const c1 = pt(m.road.cx1, m.road.cy1);
+              const c2 = pt(m.road.cx2, m.road.cy2);
               const canDrag = onObjectChange !== undefined;
               const roadId = m.road.id;
               return (
-                <Group key={`pp4_${roadId}`}>
-                  <Line
-                    points={[a.x, a.y, c1.x, c1.y]}
-                    stroke={PARITY_COLORS.selectionGuide}
-                    strokeWidth={1}
-                    dash={[3, 3]}
-                    listening={false}
-                  />
-                  <Line
-                    points={[b.x, b.y, c2.x, c2.y]}
-                    stroke={PARITY_COLORS.selectionGuide}
-                    strokeWidth={1}
-                    dash={[3, 3]}
-                    listening={false}
-                  />
+                <Group key={`h_${roadId}`} name={`obj_${roadId}`}>
+                  <Line points={[a.x, a.y, c1.x, c1.y]} stroke={SELECTION_GUIDE} strokeWidth={1} dash={[3, 3]} listening={false} />
+                  <Line points={[b.x, b.y, c2.x, c2.y]} stroke={SELECTION_GUIDE} strokeWidth={1} dash={[3, 3]} listening={false} />
                   {/* Âncoras arrastam o controle junto (preserva a curvatura). */}
                   <Circle
                     x={a.x}
                     y={a.y}
                     radius={7}
-                    fill={PARITY_COLORS.selection}
+                    fill={SELECTION}
                     stroke="#1a1a1a"
                     strokeWidth={2}
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
-                      const newAx = canvasToWorldX(e.target.x());
-                      const newAy = canvasToWorldY(e.target.y());
-                      const dx = newAx - m.road.ax;
-                      const dy = newAy - m.road.ay;
+                      const nx = canvasToWorldX(e.target.x());
+                      const ny = canvasToWorldY(e.target.y());
                       onObjectChange(roadId, {
-                        ax: newAx,
-                        ay: newAy,
-                        cx1: m.road.cx1 + dx,
-                        cy1: m.road.cy1 + dy,
+                        ax: nx,
+                        ay: ny,
+                        cx1: m.road.cx1 + (nx - m.road.ax),
+                        cy1: m.road.cy1 + (ny - m.road.ay),
                       });
                     }}
                   />
@@ -554,21 +553,19 @@ export function RoadParityRenderer({
                     x={b.x}
                     y={b.y}
                     radius={7}
-                    fill={PARITY_COLORS.selection}
+                    fill={SELECTION}
                     stroke="#1a1a1a"
                     strokeWidth={2}
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
-                      const newBx = canvasToWorldX(e.target.x());
-                      const newBy = canvasToWorldY(e.target.y());
-                      const dx = newBx - m.road.bx;
-                      const dy = newBy - m.road.by;
+                      const nx = canvasToWorldX(e.target.x());
+                      const ny = canvasToWorldY(e.target.y());
                       onObjectChange(roadId, {
-                        bx: newBx,
-                        by: newBy,
-                        cx2: m.road.cx2 + dx,
-                        cy2: m.road.cy2 + dy,
+                        bx: nx,
+                        by: ny,
+                        cx2: m.road.cx2 + (nx - m.road.bx),
+                        cy2: m.road.cy2 + (ny - m.road.by),
                       });
                     }}
                   />
@@ -580,10 +577,7 @@ export function RoadParityRenderer({
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
-                      onObjectChange(roadId, {
-                        cx1: canvasToWorldX(e.target.x()),
-                        cy1: canvasToWorldY(e.target.y()),
-                      });
+                      onObjectChange(roadId, { cx1: canvasToWorldX(e.target.x()), cy1: canvasToWorldY(e.target.y()) });
                     }}
                   />
                   <Circle
@@ -594,10 +588,7 @@ export function RoadParityRenderer({
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
-                      onObjectChange(roadId, {
-                        cx2: canvasToWorldX(e.target.x()),
-                        cy2: canvasToWorldY(e.target.y()),
-                      });
+                      onObjectChange(roadId, { cx2: canvasToWorldX(e.target.x()), cy2: canvasToWorldY(e.target.y()) });
                     }}
                   />
                 </Group>
@@ -606,32 +597,30 @@ export function RoadParityRenderer({
           {roundabouts
             .filter((rb) => rb.id === selectedId)
             .map((rb) => {
-              const rings = buildRoundaboutRings(rb, effectivePxPerM);
               const canDrag = onObjectChange !== undefined;
               const rbId = rb.id;
+              const cx = rb.cx * ppm + offsetX;
+              const cy = rb.cy * ppm + offsetY;
               return (
-                <Group key={`pp4_rb_${rbId}`}>
+                <Group key={`h_rb_${rbId}`} name={`obj_${rbId}`}>
                   <Circle
-                    x={rings.cx_px + offsetX}
-                    y={rings.cy_px + offsetY}
+                    x={cx}
+                    y={cy}
                     radius={7}
-                    fill={PARITY_COLORS.selection}
+                    fill={SELECTION}
                     stroke="#1a1a1a"
                     strokeWidth={2}
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
-                      onObjectChange(rbId, {
-                        cx: canvasToWorldX(e.target.x()),
-                        cy: canvasToWorldY(e.target.y()),
-                      });
+                      onObjectChange(rbId, { cx: canvasToWorldX(e.target.x()), cy: canvasToWorldY(e.target.y()) });
                     }}
                   />
                   <Circle
-                    x={rings.cx_px + offsetX}
-                    y={rings.cy_px + offsetY}
-                    radius={rings.outer_r_px}
-                    stroke={PARITY_COLORS.selection}
+                    x={cx}
+                    y={cy}
+                    radius={(rb.r_m + rb.largura_m / 2) * ppm}
+                    stroke={SELECTION}
                     strokeWidth={1}
                     dash={[4, 4]}
                     fillEnabled={false}

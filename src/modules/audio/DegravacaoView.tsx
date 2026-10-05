@@ -4,6 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useImmersive } from "@stores/immersiveStore";
 import { useNavigate, useParams } from "react-router-dom";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { mediaSrc } from "@core/mediaSrc";
@@ -64,6 +65,7 @@ const LISTEN_PREROLL_S = 0.7;
 type SaveState = "idle" | "saving" | "saved" | "error";
 
 export function DegravacaoView() {
+  useImmersive();
   const ws = useWorkspaceStore(selectActiveWorkspacePath);
   const { audioId } = useParams<{ audioId: string }>();
   const navigate = useNavigate();

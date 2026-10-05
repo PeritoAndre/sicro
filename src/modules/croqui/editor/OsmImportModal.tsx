@@ -63,7 +63,7 @@ interface OsmImportModalProps {
 type Phase = "idle" | "loading" | "results" | "empty" | "error";
 
 const RADIUS_PRESETS = [25, 50, 100, 200];
-const DEFAULT_RADIUS = 100;
+const DEFAULT_RADIUS = 25;
 
 export function OsmImportModal({
   canvasWidth,

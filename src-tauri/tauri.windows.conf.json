@@ -2,7 +2,8 @@
   "$schema": "https://schema.tauri.app/config/2.0.0",
   "bundle": {
     "resources": {
-      "ffmpeg-win/*": "ffmpeg/"
+      "ffmpeg-win/*": "ffmpeg/",
+      "exiftool-win": "exiftool"
     }
   }
 }

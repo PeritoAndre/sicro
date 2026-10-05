@@ -79,6 +79,21 @@
   flex-shrink: 0;
   margin-top: 1px;
 }
+.warningBanner > div {
+  flex: 1;
+}
+.warningClose {
+  flex-shrink: 0;
+  background: transparent;
+  border: 0;
+  padding: 0 2px;
+  color: inherit;
+  opacity: 0.75;
+  cursor: pointer;
+}
+.warningClose:hover {
+  opacity: 1;
+}
 .warningBanner div div {
   margin-bottom: 2px;
 }

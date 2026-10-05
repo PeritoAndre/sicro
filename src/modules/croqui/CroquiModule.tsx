@@ -1,6 +1,6 @@
 /**
  * Shell do módulo Croquis: lista ou o editor conforme o `kind`
- * (viario → Konva, corporal → Konva, planta → Pixi).
+ * (viário, corporal e planta, todos em Konva).
  */
 
 import { Component, lazy, Suspense, useEffect } from "react";
@@ -18,7 +18,7 @@ import { CorpoEditor } from "./corpo/editor/CorpoEditor";
 import { useCroquiStore } from "./store/croquiStore";
 import styles from "./CroquiModule.module.css";
 
-// Lazy: o Pixi (pesado) fica em chunk separado e só carrega ao abrir uma planta.
+// Lazy: o editor de planta fica em chunk separado e só carrega ao abrir uma planta.
 const PlantaEditor = lazy(() =>
   import("./planta/editor/PlantaEditor").then((m) => ({
     default: m.PlantaEditor,
@@ -33,7 +33,7 @@ interface PlantaBoundaryState {
   error: Error | null;
 }
 
-/** Isola falhas do Pixi/chunk da planta para não derrubar o módulo inteiro. */
+/** Isola falhas do editor de planta para não derrubar o módulo inteiro. */
 class PlantaBoundary extends Component<PlantaBoundaryProps, PlantaBoundaryState> {
   state: PlantaBoundaryState = { error: null };
 
@@ -68,8 +68,8 @@ class PlantaBoundary extends Component<PlantaBoundaryProps, PlantaBoundaryState>
           O editor de planta encontrou um problema
         </h2>
         <p style={{ maxWidth: 520, color: "#475569", fontSize: 13 }}>
-          O motor de planta (Pixi) não pôde ser carregado/renderizado. Isso não
-          afeta os croquis viário e corporal.
+          O editor de planta não pôde ser carregado. Isso não afeta os croquis
+          viário e corporal.
         </p>
         <pre
           style={{
