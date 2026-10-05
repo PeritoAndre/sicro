@@ -439,7 +439,7 @@ function LeftPanel({
           value={coordInput}
           onChange={(e) => onCoordInputChange(e.target.value)}
           onBlur={() => coordInput && onApplyCoordString(coordInput)}
-          placeholder="-0.0345, -51.0694"
+          placeholder="0.0345, -51.0694"
           style={inputStyle}
         />
       </label>

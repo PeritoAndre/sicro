@@ -238,6 +238,14 @@ export const commands = {
   },
 
   // ----- Croqui -----
+  /** Consulta Overpass QL pelo Rust (do WebView o fetch falha no Linux). Devolve o JSON cru. */
+  fetchOverpass(query: string): Promise<string> {
+    return safeInvoke<string>("fetch_overpass", { query });
+  },
+  /** Tile do mapa de referência do OSM, PNG em base64 (pelo Rust, idem). */
+  fetchOsmTile(z: number, x: number, y: number): Promise<string> {
+    return safeInvoke<string>("fetch_osm_tile", { z, x, y });
+  },
 
   createCroqui(
     workspacePath: string,

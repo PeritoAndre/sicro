@@ -13,11 +13,11 @@ import {
   Marker,
   Polyline,
   Popup,
-  TileLayer,
   useMap,
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
+import { commands } from "@core/commands";
 import type { LatLon, OsmDataset } from "../engine";
 
 // Pino em divIcon: os sprites PNG do Leaflet dão 404 em build Vite/Tauri.
@@ -32,7 +32,7 @@ const SITE_PIN_ICON = L.divIcon({
   iconAnchor: [8, 8],
 });
 
-const DEFAULT_CENTRE: LatLon = { lat: -0.0345, lon: -51.0694 }; // Macapá
+const DEFAULT_CENTRE: LatLon = { lat: 0.0345, lon: -51.0694 }; // Macapá (hemisfério norte)
 
 interface Props {
   centre: LatLon | null;
@@ -97,10 +97,7 @@ export function OsmMapPanel({
         style={{ width: "100%", height: "100%" }}
         attributionControl
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        <RustTileLayer />
         <MapInvalidator
           key={refreshNonce}
           onReady={() => setMapReady(true)}
@@ -329,5 +326,40 @@ function MapClickHandler({
       onClickRef.current(e.latlng);
     },
   });
+  return null;
+}
+
+// Tiles vêm pelo Rust (a página não pode carregar imagem de outra origem no
+// Linux); cada tile vira uma data URL.
+const RustTiles = L.TileLayer.extend({
+  createTile(coords: L.Coords, done: L.DoneCallback) {
+    const img = document.createElement("img");
+    img.alt = "";
+    commands
+      .fetchOsmTile(coords.z, coords.x, coords.y)
+      .then((b64) => {
+        img.src = `data:image/png;base64,${b64}`;
+        done(undefined, img);
+      })
+      .catch((e: unknown) => {
+        console.error("[OSM] tile", coords, e);
+        done(e as Error, img);
+      });
+    return img;
+  },
+}) as unknown as new (url: string, options?: L.TileLayerOptions) => L.TileLayer;
+
+function RustTileLayer() {
+  const map = useMap();
+  useEffect(() => {
+    const layer = new RustTiles("", {
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxZoom: 19,
+    });
+    layer.addTo(map);
+    return () => {
+      layer.remove();
+    };
+  }, [map]);
   return null;
 }

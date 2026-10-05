@@ -534,3 +534,91 @@ fn empty_planta_envelope(c: &Croqui) -> serde_json::Value {
         "compass_deg": 0
     })
 }
+
+/// Agente HTTP para o que o croqui busca na internet (Overpass, tiles do OSM):
+/// TLS nativo e User-Agent que a política do OSM exige.
+fn osm_agent() -> Result<ureq::Agent> {
+    let connector = native_tls::TlsConnector::new()
+        .map_err(|e| SicroError::Validation(format!("TLS indisponível: {e}")))?;
+    Ok(ureq::AgentBuilder::new()
+        .timeout(std::time::Duration::from_secs(40))
+        .tls_connector(std::sync::Arc::new(connector))
+        .user_agent(concat!(
+            "SICRO/",
+            env!("CARGO_PKG_VERSION"),
+            " (+https://github.com/PeritoAndre/sicro)"
+        ))
+        .build())
+}
+
+/// Consulta o Overpass pelo Rust. Do WebView não dá: no Linux o esquema do app
+/// é "local" no WebKit (para o vídeo tocar via file://) e página local não pode
+/// carregar nada de outra origem ("Load failed"). Só a bbox sai do app.
+/// O servidor público vive sobrecarregado (504): tenta os três nós oficiais.
+#[tauri::command]
+pub async fn fetch_overpass(query: String) -> Result<String> {
+    const ENDPOINTS: [&str; 3] = [
+        "https://overpass-api.de/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://z.overpass-api.de/api/interpreter",
+    ];
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = osm_agent()?;
+        let mut last = String::new();
+        for url in ENDPOINTS {
+            match agent
+                .post(url)
+                .set("Accept", "application/json")
+                .send_form(&[("data", query.as_str())])
+            {
+                Ok(r) => {
+                    let mut body = String::new();
+                    std::io::Read::read_to_string(&mut r.into_reader(), &mut body).map_err(
+                        |e| SicroError::Validation(format!("resposta do Overpass ilegível: {e}")),
+                    )?;
+                    return Ok(body);
+                }
+                // 429/503/504 = nó cheio; o próximo costuma responder.
+                Err(ureq::Error::Status(code @ (429 | 503 | 504), _)) => {
+                    last = format!("Overpass respondeu com status {code}");
+                }
+                Err(ureq::Error::Status(code, _)) => {
+                    return Err(SicroError::Validation(format!(
+                        "Overpass respondeu com status {code}. Tente novamente em alguns segundos."
+                    )));
+                }
+                Err(ureq::Error::Transport(t)) => {
+                    last = format!("falha de rede ao consultar o Overpass: {t}");
+                }
+            }
+        }
+        Err(SicroError::Validation(format!(
+            "{last}. Os servidores do Overpass estão ocupados; tente de novo em alguns segundos."
+        )))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("consulta interrompida: {e}")))?
+}
+
+/// Tile do mapa de referência (OSM) pelo Rust, em PNG base64 — mesmo motivo do
+/// `fetch_overpass`: a página não pode carregar imagem de outra origem.
+#[tauri::command]
+pub async fn fetch_osm_tile(z: u32, x: u32, y: u32) -> Result<String> {
+    if z > 19 {
+        return Err(SicroError::Validation(format!("zoom de tile inválido: {z}")));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = osm_agent()?;
+        let url = format!("https://tile.openstreetmap.org/{z}/{x}/{y}.png");
+        let resp = agent.get(&url).call().map_err(|e| {
+            tracing::warn!("tile {z}/{x}/{y}: {e}");
+            SicroError::Validation(format!("tile do mapa indisponível: {e}"))
+        })?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut resp.into_reader(), &mut bytes)
+            .map_err(|e| SicroError::Validation(format!("tile do mapa ilegível: {e}")))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("consulta interrompida: {e}")))?
+}

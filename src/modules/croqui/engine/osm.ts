@@ -1,7 +1,9 @@
 /**
  * OpenStreetMap: tipos compartilhados, hints de tags, Douglas-Peucker e o
- * fetch do Overpass com cache em memória. Tudo puro — sem DOM nem Tauri.
+ * consulta ao Overpass (via Rust) com cache em memória.
  */
+
+import { commands } from "@core/commands";
 
 type OsmDirection = "one_way" | "two_way" | "unknown";
 
@@ -132,11 +134,6 @@ export function simplifyPolylineDP<T extends Vec2Like>(
 // ---- Overpass ----
 // Só a bbox geográfica sai do app — nenhum dado pericial é enviado.
 
-const OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter";
-
-/** Overpass costuma responder em < 5 s para bboxes pequenas. */
-const OVERPASS_TIMEOUT_MS = 25_000;
-
 const overpassCache = new Map<string, OsmDataset>();
 
 function bboxCacheKey(bbox: {
@@ -187,33 +184,11 @@ export async function fetchOverpassBBox(bbox: {
   }
 
   const query = buildOverpassQuery(bbox);
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), OVERPASS_TIMEOUT_MS);
-
-  let resp: Response;
+  let text: string;
   try {
-    resp = await fetch(OVERPASS_ENDPOINT, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/x-www-form-urlencoded",
-        Accept: "application/json",
-      },
-      body: `data=${encodeURIComponent(query)}`,
-      signal: ctrl.signal,
-    });
+    text = await commands.fetchOverpass(query);
   } catch (e) {
-    clearTimeout(timer);
-    const msg = (e as Error).name === "AbortError"
-      ? "Tempo esgotado consultando o Overpass (verifique a conexão)."
-      : `Falha de rede ao consultar o Overpass: ${(e as Error).message}`;
-    throw new Error(msg);
-  }
-  clearTimeout(timer);
-
-  if (!resp.ok) {
-    throw new Error(
-      `Overpass respondeu com status ${resp.status}. Tente novamente em alguns segundos.`,
-    );
+    throw new Error((e as Error).message);
   }
 
   let json: {
@@ -227,7 +202,7 @@ export async function fetchOverpassBBox(bbox: {
     }>;
   };
   try {
-    json = await resp.json();
+    json = JSON.parse(text);
   } catch (e) {
     throw new Error(`Resposta inválida do Overpass: ${(e as Error).message}`);
   }

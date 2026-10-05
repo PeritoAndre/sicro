@@ -22,17 +22,25 @@ use tracing_subscriber::EnvFilter;
 /// Linux: o player do WebKitGTK (GStreamer) não lê o asset protocol do Tauri, então
 /// o front passa mídia por file://, o que exige o esquema `tauri` registrado como
 /// local. Tem de rodar ANTES de a página carregar (o WebKit decide no nascimento).
+/// Efeito colateral: página local não carrega nada de outra origem — por isso todo
+/// acesso à internet (Overpass, tiles do mapa) sai pelo Rust. Não ligar
+/// `allow_universal_access_from_file_urls`: quebra o IPC do Tauri ("missing Origin header").
 #[cfg(target_os = "linux")]
 fn allow_local_media(app: &tauri::App) {
     use tauri::Manager;
-    use webkit2gtk::{SecurityManagerExt, WebContextExt, WebViewExt};
+    use webkit2gtk::{SecurityManagerExt, SettingsExt, WebContextExt, WebViewExt};
 
     let Some(main) = app.get_webview_window("main") else {
         return;
     };
     let result = main.with_webview(|webview| {
-        if let Some(security) = webview.inner().context().and_then(|c| c.security_manager()) {
+        let inner = webview.inner();
+        if let Some(security) = inner.context().and_then(|c| c.security_manager()) {
             security.register_uri_scheme_as_local("tauri");
+        }
+        // console.* da página no stdout: é como se depura o release (sem devtools).
+        if let Some(settings) = WebViewExt::settings(&inner) {
+            settings.set_enable_write_console_messages_to_stdout(true);
         }
     });
     if let Err(e) = result {
@@ -88,6 +96,8 @@ pub fn run() {
             commands::croqui_commands::delete_croqui,
             commands::croqui_commands::export_croqui_png,
             commands::croqui_commands::import_drone_image,
+            commands::croqui_commands::fetch_overpass,
+            commands::croqui_commands::fetch_osm_tile,
             // vídeo
             commands::video_commands::register_video_media,
             commands::video_commands::list_video_media,
