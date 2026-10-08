@@ -137,6 +137,13 @@
   background: var(--sicro-surface-2);
   border-color: var(--sicro-border);
 }
+.dialogItem {
+  align-items: center;
+  gap: 10px;
+}
+.dialogItem span {
+  flex: 1;
+}
 .dialogItem code {
   font-family: var(--font-mono);
   font-size: 10px;

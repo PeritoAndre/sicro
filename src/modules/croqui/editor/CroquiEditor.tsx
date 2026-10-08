@@ -14,22 +14,27 @@ import {
   useWorkspaceStore,
 } from "@stores/workspaceStore";
 import { toSicroError } from "@core/errors";
-import { commands } from "@core/commands";
 import { revealExported } from "@core/reveal";
-import type { MediaAsset } from "@domain/import";
 import { useCroquiStore } from "../store/croquiStore";
 import {
   cloneObject,
   computePxPerMeter,
   distancePx,
-  fitImageToCanvas,
   formatMeasurement,
   inferCategory,
   makeLine,
   makeMarker,
   makeMeasurement,
   makeText,
+  makeTrace,
+  makeFixture,
+  makePerson,
+  PERSON_POSICOES,
   makeVehicle,
+  isTraceSubtype,
+  isFixtureSubtype,
+  TRACE_SPECS,
+  FIXTURE_SPECS,
   type LineSubtype,
   type MarkerSubtype,
   type SicroCroquiBackgroundImage,
@@ -85,7 +90,6 @@ export function CroquiEditor() {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [showPhotoPicker, setShowPhotoPicker] = useState(false);
   const [showDroneImport, setShowDroneImport] = useState(false);
   const [showOsmImport, setShowOsmImport] = useState(false);
   const editor = useEditorState();
@@ -357,18 +361,24 @@ export function CroquiEditor() {
   }, [editor]);
 
   /** Folha inteira centralizada com ~8 % de folga. */
-  const fitViewport = useCallback((): typeof DEFAULT_VIEWPORT | null => {
-    if (!doc) return null;
-    const margin = 0.92;
-    const sx = (canvasSize.width / doc.canvas.width_px) * margin;
-    const sy = (canvasSize.height / doc.canvas.height_px) * margin;
-    const scale = Math.max(CROQUI_ZOOM_MIN, Math.min(CROQUI_ZOOM_MAX, Math.min(sx, sy)));
-    return {
-      scale,
-      x: (canvasSize.width - doc.canvas.width_px * scale) / 2 - (doc.canvas.origin_x ?? 0) * scale,
-      y: (canvasSize.height - doc.canvas.height_px * scale) / 2 - (doc.canvas.origin_y ?? 0) * scale,
-    };
-  }, [doc, canvasSize.width, canvasSize.height]);
+  const fitViewportFor = useCallback(
+    (c: SicroCroquiDoc["canvas"]): typeof DEFAULT_VIEWPORT => {
+      const margin = 0.92;
+      const sx = (canvasSize.width / c.width_px) * margin;
+      const sy = (canvasSize.height / c.height_px) * margin;
+      const scale = Math.max(CROQUI_ZOOM_MIN, Math.min(CROQUI_ZOOM_MAX, Math.min(sx, sy)));
+      return {
+        scale,
+        x: (canvasSize.width - c.width_px * scale) / 2 - (c.origin_x ?? 0) * scale,
+        y: (canvasSize.height - c.height_px * scale) / 2 - (c.origin_y ?? 0) * scale,
+      };
+    },
+    [canvasSize.width, canvasSize.height],
+  );
+  const fitViewport = useCallback(
+    (): typeof DEFAULT_VIEWPORT | null => (doc ? fitViewportFor(doc.canvas) : null),
+    [doc, fitViewportFor],
+  );
 
   const handleFitView = useCallback(() => {
     const vp = fitViewport();
@@ -418,8 +428,9 @@ export function CroquiEditor() {
   );
 
   /**
-   * Define o fundo: mede a imagem, encaixa na área útil (10 % de margem) e
-   * deixa destravado para ajuste. `preMeasured` (drone) pula a medição.
+   * Define o fundo em tamanho original (1 px da imagem = 1 px do croqui, senão as
+   * medidas em px encolhem), centrado na folha; a folha cresce até cobrir a imagem.
+   * `preMeasured` (drone) pula a medição.
    */
   const setBackgroundFromPath = useCallback(
     (
@@ -433,23 +444,32 @@ export function CroquiEditor() {
     ) => {
       if (!doc) return;
       const apply = (imgW: number, imgH: number) => {
-        const rect = fitImageToCanvas(
-          imgW,
-          imgH,
-          doc.canvas.width_px,
-          doc.canvas.height_px,
-          0.1,
-        );
+        const c = doc.canvas;
+        const ox = c.origin_x ?? 0;
+        const oy = c.origin_y ?? 0;
+        const x = ox + (c.width_px - imgW) / 2;
+        const y = oy + (c.height_px - imgH) / 2;
+        const grid = sheetGridPx(doc);
+        const x0 = Math.min(ox, Math.floor(x / grid) * grid);
+        const y0 = Math.min(oy, Math.floor(y / grid) * grid);
+        const canvas = {
+          ...c,
+          origin_x: x0,
+          origin_y: y0,
+          width_px: Math.max(ox + c.width_px, Math.ceil((x + imgW) / grid) * grid) - x0,
+          height_px: Math.max(oy + c.height_px, Math.ceil((y + imgH) / grid) * grid) - y0,
+        };
         setDoc((prev) =>
           prev
             ? {
                 ...prev,
+                canvas: { ...prev.canvas, ...canvas },
                 background_image: {
                   source_path: sourcePath,
-                  x: rect.x + (prev.canvas.origin_x ?? 0),
-                  y: rect.y + (prev.canvas.origin_y ?? 0),
-                  width: rect.width,
-                  height: rect.height,
+                  x,
+                  y,
+                  width: imgW,
+                  height: imgH,
                   opacity: extra?.opacity ?? 0.6,
                   locked: false,
                   rotation: 0,
@@ -463,10 +483,11 @@ export function CroquiEditor() {
               }
             : prev,
         );
+        editor.setViewport(fitViewportFor(canvas));
         // Já seleciona para os handles do Transformer aparecerem.
         editor.setSelectedId(BACKGROUND_SELECTION_ID);
         setFeedback(
-          `Fundo aplicado (${Math.round(rect.width)}×${Math.round(rect.height)}px), centralizado e desbloqueado para ajuste.`,
+          `Fundo aplicado em tamanho original (${Math.round(imgW)}×${Math.round(imgH)} px).`,
         );
       };
       if (extra?.preMeasured) {
@@ -487,7 +508,7 @@ export function CroquiEditor() {
         apply(doc.canvas.width_px, doc.canvas.height_px);
       };
     },
-    [doc, resolveBackgroundUrl],
+    [doc, resolveBackgroundUrl, fitViewportFor],
   );
 
   const handleBackgroundChange = useCallback(
@@ -514,23 +535,26 @@ export function CroquiEditor() {
     setFeedback("Fundo centralizado.");
   }, [doc, handleBackgroundChange]);
 
+  /** Volta o fundo ao tamanho original da imagem, mantendo o centro. */
   const handleFitBackground = useCallback(() => {
-    if (!doc?.background_image) return;
-    const bg = doc.background_image;
-    const rect = fitImageToCanvas(
-      bg.width || 1,
-      bg.height || 1,
-      doc.canvas.width_px,
-      doc.canvas.height_px,
-      0.1,
-    );
-    handleBackgroundChange({
-      ...rect,
-      x: rect.x + (doc.canvas.origin_x ?? 0),
-      y: rect.y + (doc.canvas.origin_y ?? 0),
-    });
-    setFeedback("Fundo ajustado à área útil.");
-  }, [doc, handleBackgroundChange]);
+    const bg = doc?.background_image;
+    if (!bg) return;
+    const probe = new window.Image();
+    probe.crossOrigin = "anonymous";
+    probe.onload = () => {
+      const w = probe.naturalWidth;
+      const h = probe.naturalHeight;
+      if (!w || !h) return;
+      handleBackgroundChange({
+        x: bg.x + (bg.width - w) / 2,
+        y: bg.y + (bg.height - h) / 2,
+        width: w,
+        height: h,
+      });
+      setFeedback(`Fundo em tamanho original (${w}×${h} px).`);
+    };
+    probe.src = resolveBackgroundUrl(bg.source_path);
+  }, [doc, handleBackgroundChange, resolveBackgroundUrl]);
 
   const handleResetBackgroundRotation = useCallback(() => {
     handleBackgroundChange({ rotation: 0 });
@@ -709,6 +733,49 @@ export function CroquiEditor() {
       return;
     }
 
+    if (tool.startsWith("trace_")) {
+      const sub = tool.slice("trace_".length);
+      if (!isTraceSubtype(sub)) return;
+      const ppm = doc.scale?.px_per_m && doc.scale.px_per_m > 0 ? doc.scale.px_per_m : 10;
+      const lenPx = TRACE_SPECS[sub].len_m * ppm;
+      let pts: [SicroPoint, SicroPoint] | null;
+      if (sub === "colisao") pts = [p, p];
+      else if (dropped) pts = [{ x: p.x - lenPx / 2, y: p.y }, { x: p.x + lenPx / 2, y: p.y }];
+      else pts = twoPoints();
+      if (!pts) return;
+      const [a, b0] = pts;
+      // Dois cliques no mesmo lugar: comprimento padrão do tipo.
+      const b = sub !== "colisao" && Math.hypot(b0.x - a.x, b0.y - a.y) < 0.3 * ppm ? { x: a.x + lenPx, y: a.y } : b0;
+      addObject(makeTrace(sub, a, b, ppm));
+      editor.setTool("select");
+      return;
+    }
+
+    if (tool.startsWith("person_")) {
+      const pos = PERSON_POSICOES.find(([k]) => `person_${k}` === tool)?.[0];
+      if (!pos) return;
+      addObject(makePerson(pos, p));
+      editor.setTool("select");
+      return;
+    }
+
+    if (tool.startsWith("fixture_")) {
+      const sub = tool.slice("fixture_".length);
+      if (!isFixtureSubtype(sub)) return;
+      const ppm = doc.scale?.px_per_m && doc.scale.px_per_m > 0 ? doc.scale.px_per_m : 10;
+      const spec = FIXTURE_SPECS[sub];
+      if (spec.forma === "linha") {
+        const lenPx = spec.len_m * ppm;
+        const pts = dropped ? ([{ x: p.x - lenPx / 2, y: p.y }, { x: p.x + lenPx / 2, y: p.y }] as [SicroPoint, SicroPoint]) : twoPoints();
+        if (!pts) return;
+        addObject(makeFixture(sub, pts[0], pts[1], ppm));
+      } else {
+        addObject(makeFixture(sub, p, null, ppm));
+      }
+      editor.setTool("select");
+      return;
+    }
+
     const vehicleType = toolToVehicleBody(tool);
     if (vehicleType) {
       const nextLabel = nextVehicleLabel(doc.objects);
@@ -841,9 +908,9 @@ export function CroquiEditor() {
     "croqui.tool.roadParking": () => handleSelectTool("road_parking"),
     "croqui.tool.roundabout": () => handleSelectTool("roundabout"),
     "croqui.tool.vehicle": () => handleSelectTool("vehicle_sedan"),
-    "croqui.tool.vestigio": () => handleSelectTool("marker_x"),
-    "croqui.tool.mobiliario": () => handleSelectTool("marker_semaforo"),
-    "croqui.tool.pessoa": () => handleSelectTool("marker_pedestre_m_dorsal"),
+    "croqui.tool.vestigio": () => handleSelectTool("trace_colisao"),
+    "croqui.tool.mobiliario": () => handleSelectTool("fixture_placa"),
+    "croqui.tool.pessoa": () => handleSelectTool("person_dorsal"),
     "croqui.tool.arrow": () => handleSelectTool("line_arrow"),
     "croqui.tool.callout": () => handleSelectTool("line_callout"),
     "croqui.tool.trajectory": () => handleSelectTool("line_trajetoria"),
@@ -1064,7 +1131,6 @@ export function CroquiEditor() {
         canDuplicate={!!editor.selectedId}
         onDuplicate={handleDuplicate}
         onImportBackground={() => void handleImportBackground()}
-        onPickFromDossie={() => setShowPhotoPicker(true)}
         onImportDrone={() => setShowDroneImport(true)}
         onImportOsm={() => setShowOsmImport(true)}
         onCenterBackground={handleCenterBackground}
@@ -1142,16 +1208,6 @@ export function CroquiEditor() {
         onCenterSheet={handleCenterSheet}
       />
 
-      {showPhotoPicker && (
-        <DossiePhotoPicker
-          workspacePath={workspacePath}
-          onPick={(rel) => {
-            setBackgroundFromPath(rel);
-            setShowPhotoPicker(false);
-          }}
-          onClose={() => setShowPhotoPicker(false)}
-        />
-      )}
 
       {showDroneImport && (
         <DroneImportModal
@@ -1183,7 +1239,7 @@ export function CroquiEditor() {
         <OsmImportModal
           canvasWidth={doc.canvas.width_px}
           canvasHeight={doc.canvas.height_px}
-          dossieCoords={
+          ocorrenciaCoords={
             occurrence?.latitude != null && occurrence?.longitude != null
               ? { lat: occurrence.latitude, lon: occurrence.longitude }
               : null
@@ -1541,81 +1597,6 @@ function StatusBar({
       </span>
       {/* Indicador estático do motor de via; não é clicável. */}
       <span className={styles.statusFeedback}>{feedback}</span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Picker para usar foto do Dossiê como fundo
-
-function DossiePhotoPicker({
-  workspacePath,
-  onPick,
-  onClose,
-}: {
-  workspacePath: string;
-  onPick: (relativePath: string) => void;
-  onClose: () => void;
-}) {
-  const [photos, setPhotos] = useState<MediaAsset[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    commands
-      .listDossiePhotos(workspacePath)
-      .then((data) => {
-        if (!cancelled) setPhotos(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setError(toSicroError(err).message);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspacePath]);
-
-  return (
-    <div
-      className={styles.overlay}
-      role="dialog"
-      aria-modal="true"
-      aria-label="Selecionar foto do Dossiê como fundo"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
-      }}
-    >
-      <div className={styles.dialog}>
-        <header className={styles.dialogHeader}>
-          <strong>Foto do Dossiê como fundo</strong>
-          <button type="button" onClick={onClose} className={styles.dialogClose}>
-            Fechar
-          </button>
-        </header>
-        {photos === null && !error && (
-          <p className={styles.dim}>Carregando fotos…</p>
-        )}
-        {error && <p className={styles.danger}>{error}</p>}
-        {photos && photos.length === 0 && (
-          <p className={styles.dim}>Nenhuma foto importada no Dossiê.</p>
-        )}
-        {photos && photos.length > 0 && (
-          <ul className={styles.dialogList}>
-            {photos.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  className={styles.dialogItem}
-                  onClick={() => onPick(p.relative_path)}
-                >
-                  <span>{p.original_id ?? p.id.slice(0, 8)}</span>
-                  <code>{p.relative_path}</code>
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
     </div>
   );
 }

@@ -11,6 +11,9 @@ import type {
   SicroMeasurementObject,
   SicroPoint,
   SicroTextObject,
+  SicroTraceObject,
+  SicroFixtureObject,
+  SicroPersonObject,
   SicroVehicleObject,
   VehicleBodyType,
 } from "./schema";
@@ -143,7 +146,7 @@ export function makeLine(
   };
 }
 
-const MARKER_STYLES: Record<
+export const MARKER_STYLES: Record<
   MarkerSubtype,
   { color: string; defaultLabel: string; defaultSize: number }
 > = {
@@ -178,6 +181,21 @@ const MARKER_STYLES: Record<
   faixa_pedestre: { color: "#1e293b", defaultLabel: "Faixa pedestre", defaultSize: 40 },
 };
 
+/** Vestígios entram sem rótulo; o nome padrão fica só na lista de objetos. */
+const VESTIGIOS_SEM_ROTULO = new Set<MarkerSubtype>([
+  "collision_x",
+  "rest_position",
+  "brake_mark",
+  "drag_mark",
+  "skid_curve",
+  "sulcagem",
+  "ranhura",
+  "debris",
+  "fluid",
+  "blood",
+  "impact_area",
+]);
+
 export function makeMarker(
   p: SicroPoint,
   subtype: MarkerSubtype = "collision_x",
@@ -208,7 +226,7 @@ export function makeMarker(
     y: p.y,
     size,
     color: style.color,
-    label: labelOverride ?? style.defaultLabel,
+    label: labelOverride ?? (VESTIGIOS_SEM_ROTULO.has(subtype) ? "" : style.defaultLabel),
     visible: true,
     locked: false,
     category: isMobiliario ? "mobiliario_urbano" : "vestigios",
@@ -257,6 +275,9 @@ export function cloneObject<T extends SicroVehicleObject
   | SicroMarkerObject
   | SicroTextObject
   | SicroMeasurementObject
+  | SicroTraceObject
+  | SicroFixtureObject
+  | SicroPersonObject
   | SicroParityObject>(source: T): T {
   const cloned = { ...source } as T;
   cloned.id = uid(source.kind);
@@ -276,6 +297,14 @@ export function cloneObject<T extends SicroVehicleObject
       cloned.p1 = { x: source.p1.x + 16, y: source.p1.y + 16 };
       cloned.p2 = { x: source.p2.x + 16, y: source.p2.y + 16 };
     }
+  }
+  if ((cloned.kind === "trace" && source.kind === "trace") || (cloned.kind === "fixture" && source.kind === "fixture")) {
+    cloned.p0 = { x: source.p0.x + 16, y: source.p0.y + 16 };
+    cloned.p1 = { x: source.p1.x + 16, y: source.p1.y + 16 };
+    cloned.params = { ...source.params };
+  }
+  if (cloned.kind === "person" && source.kind === "person") {
+    cloned.pose = JSON.parse(JSON.stringify(source.pose)) as typeof source.pose;
   }
   if (cloned.kind === "road_parity" && source.kind === "road_parity") {
     cloned.ax = source.ax + 1;

@@ -10,6 +10,7 @@ import type { VehicleBodyType } from "./schema";
 import svgSedan from "../assets/transito/carro_sedan.svg?raw";
 import svgHatch from "../assets/transito/carro_hatch.svg?raw";
 import svgSuv from "../assets/transito/carro_suv.svg?raw";
+import svgPickup from "../assets/transito/pickup_cabine_dupla.svg?raw";
 import svgCaminhaoLeve from "../assets/transito/caminhao_leve.svg?raw";
 import svgCaminhaoPesado from "../assets/transito/caminhao_pesado.svg?raw";
 import svgCarreta from "../assets/transito/carreta_longa.svg?raw";
@@ -58,13 +59,14 @@ interface VehicleArtEntry {
   recolorable: boolean;
 }
 
-/** Tipos sem arte (pickup, other) caem na silhueta vetorial antiga do CanvasStage. */
+/** Tipos sem arte (other) caem na silhueta vetorial antiga do CanvasStage. */
 export const VEHICLE_ART: Partial<Record<VehicleBodyType, VehicleArtEntry>> = {
   // -- civis recoloríveis --
   car: { svg: svgSedan, widthM: 2.21, lengthM: 4.6, recolorable: true },
   sedan: { svg: svgSedan, widthM: 2.21, lengthM: 4.6, recolorable: true },
   hatch: { svg: svgHatch, widthM: 2.12, lengthM: 4.0, recolorable: true },
   suv: { svg: svgSuv, widthM: 2.43, lengthM: 4.7, recolorable: true },
+  pickup: { svg: svgPickup, widthM: 2.4, lengthM: 5.3, recolorable: true },
   truck: { svg: svgCaminhaoLeve, widthM: 3.19, lengthM: 6.54, recolorable: true },
   caminhao: { svg: svgCaminhaoLeve, widthM: 3.19, lengthM: 6.54, recolorable: true },
   caminhao_pesado: { svg: svgCaminhaoPesado, widthM: 3.45, lengthM: 9.6, recolorable: true },

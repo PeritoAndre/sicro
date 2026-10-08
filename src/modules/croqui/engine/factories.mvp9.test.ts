@@ -47,7 +47,7 @@ describe("MVP 9 — new marker subtypes", () => {
     const m = makeMarker({ x: 0, y: 0 }, kind);
     expect(m.subtype).toBe(kind);
     expect(m.category).toBe("vestigios");
-    expect(m.label).toBeTruthy();
+    expect(m.label).toBe("");
     expect(m.size).toBeGreaterThan(0);
   });
 

@@ -5,6 +5,7 @@
  * `JSON.stringify(doc)` — é tudo dado plano.
  */
 
+import { fixtureCategory } from "./fixtures";
 import {
   CURRENT_SCHEMA_VERSION,
   type ObjectCategory,
@@ -69,6 +70,9 @@ const SUPPORTED_KINDS = new Set<string>([
   "marker",
   "text",
   "measurement",
+  "trace",
+  "fixture",
+  "person",
   "road_parity",
   "roundabout_parity",
 ]);
@@ -303,6 +307,12 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
       return "medidas";
     case "text":
       return "anotacoes";
+    case "trace":
+      return "vestigios";
+    case "fixture":
+      return fixtureCategory(obj.subtype);
+    case "person":
+      return "pessoas";
     case "road_parity":
     case "roundabout_parity":
       return "vias";

@@ -7,6 +7,11 @@ export type ParityTema = "tecnico" | "pb" | "escuro";
 
 export type ParityCalcadaEstilo = "hachura" | "cinza" | "linha" | "nenhuma";
 
+/** Vestígios: textura (banda de rodagem, sombra, estrias) ou traço limpo de planta. */
+export type ParityVestigiosEstilo = "textura" | "traco";
+/** Veículos: contorno em traço ou a arte colorida. */
+export type ParityVeiculosEstilo = "traco" | "arte";
+
 export interface ParityStyle {
   tema: ParityTema;
   /** Cor do asfalto. */
@@ -27,6 +32,8 @@ export interface ParityStyle {
   espaco_m: number;
   /** Divide a pista em faixas de ~3,5 m com branca tracejada. */
   faixas_auto: boolean;
+  vestigios: ParityVestigiosEstilo;
+  veiculos: ParityVeiculosEstilo;
 }
 
 export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
@@ -43,6 +50,8 @@ export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
     traco_m: 2,
     espaco_m: 4,
     faixas_auto: true,
+    vestigios: "textura",
+    veiculos: "arte",
   },
   pb: {
     tema: "pb",
@@ -57,6 +66,8 @@ export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
     traco_m: 2,
     espaco_m: 4,
     faixas_auto: true,
+    vestigios: "traco",
+    veiculos: "traco",
   },
   // A pele do SICRO 1.0–4.1.
   escuro: {
@@ -72,6 +83,8 @@ export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
     traco_m: 1.2,
     espaco_m: 0.8,
     faixas_auto: false,
+    vestigios: "textura",
+    veiculos: "arte",
   },
 };
 

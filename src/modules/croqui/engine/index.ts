@@ -10,3 +10,6 @@ export * from "./factories";
 export * from "./templates";
 export * from "./coordinates";
 export * from "./osm";
+export * from "./traces";
+export * from "./fixtures";
+export * from "./people";

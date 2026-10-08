@@ -3,7 +3,7 @@
  * Ignora rotação dos veículos; quem precisa de precisão usa clique direto.
  */
 
-import type { SicroObject } from "../engine";
+import { fixtureBoundsPx, personBoundsPx, traceBoundsPx, type SicroObject } from "../engine";
 
 interface BoundsPx {
   x: number;
@@ -78,6 +78,12 @@ export function getObjectBoundsStagePx(
       const maxY = Math.max(obj.p1.y, obj.p2.y);
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
+    case "trace":
+      return traceBoundsPx(obj, pxPerM);
+    case "fixture":
+      return fixtureBoundsPx(obj, pxPerM);
+    case "person":
+      return personBoundsPx(obj, pxPerM);
     case "road_parity": {
       // Pontos de controle em metros. O AABB dos 4 pontos engloba a Bézier
       // (convex hull), com folga de meia largura da via.
@@ -149,11 +155,18 @@ export function translateObjectPatch(
     case "vehicle":
     case "marker":
     case "text":
+    case "person":
       return { x: obj.x + dx, y: obj.y + dy };
     case "measurement":
       return {
         p1: { x: obj.p1.x + dx, y: obj.p1.y + dy },
         p2: { x: obj.p2.x + dx, y: obj.p2.y + dy },
+      };
+    case "trace":
+    case "fixture":
+      return {
+        p0: { x: obj.p0.x + dx, y: obj.p0.y + dy },
+        p1: { x: obj.p1.x + dx, y: obj.p1.y + dy },
       };
     case "line":
       return {

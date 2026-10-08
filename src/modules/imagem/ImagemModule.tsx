@@ -9,7 +9,6 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import {
   AlertTriangle,
   BoxSelect,
-  Camera,
   Contrast,
   FolderOpen,
   ImageIcon,
@@ -33,14 +32,13 @@ import {
   selectActiveWorkspacePath,
   useWorkspaceStore,
 } from "@stores/workspaceStore";
-import type { MediaAsset } from "@domain/import";
 import type { VideoStoryboardFrame } from "@domain/video";
 import { useImagemStore } from "./store/imagemStore";
 import { ImageEditor } from "./editor/ImageEditor";
 import { assetUrl, formatDateTime } from "./editor/shared";
 import styles from "./ImagemModule.module.css";
 
-type PickerTab = "dossie" | "frames" | "file";
+type PickerTab = "frames" | "file";
 
 const IMAGEM_FEATURES: ModuleLandingFeature[] = [
   {
@@ -71,7 +69,7 @@ const IMAGEM_FEATURES: ModuleLandingFeature[] = [
   {
     icon: <Share2 size={18} />,
     title: "Integra à suíte",
-    desc: "Analise fotos do caso e quadros coletados dos vídeos; o derivado tratado sai com proveniência.",
+    desc: "Analise imagens e quadros coletados dos vídeos; o derivado tratado sai com proveniência.",
   },
 ];
 
@@ -107,23 +105,6 @@ export function ImagemModule() {
     },
     [workspacePath, openAnalysis],
   );
-
-  const handlePickPhoto = async (asset: MediaAsset) => {
-    if (!workspacePath) return;
-    try {
-      const row = await createFromEvidence(workspacePath, {
-        title: asset.caption?.trim() || asset.original_filename || `Foto ${asset.original_id ?? asset.id.slice(0, 6)}`,
-        source_kind: "photo",
-        source_id: asset.id,
-        original_relative_path: asset.relative_path,
-        original_hash_sha256: asset.sha256,
-      });
-      setShowPicker(false);
-      await openAnalysis(workspacePath, row.id);
-    } catch (err) {
-      setError(toSicroError(err).message);
-    }
-  };
 
   const handlePickFrame = async (frame: VideoStoryboardFrame) => {
     if (!workspacePath) return;
@@ -252,7 +233,6 @@ export function ImagemModule() {
       {showPicker && (
         <SourcePicker
           workspacePath={workspacePath}
-          onPickPhoto={handlePickPhoto}
           onPickFrame={handlePickFrame}
           onPickFile={() => void handlePickFile()}
           onClose={() => setShowPicker(false)}
@@ -289,33 +269,20 @@ function AnalysisCard({
 
 function SourcePicker({
   workspacePath,
-  onPickPhoto,
   onPickFrame,
   onPickFile,
   onClose,
 }: {
   workspacePath: string;
-  onPickPhoto: (a: MediaAsset) => void;
   onPickFrame: (f: VideoStoryboardFrame) => void;
   onPickFile: () => void;
   onClose: () => void;
 }) {
-  const [tab, setTab] = useState<PickerTab>("dossie");
-  const [photos, setPhotos] = useState<MediaAsset[] | null>(null);
+  const [tab, setTab] = useState<PickerTab>("frames");
   const [frames, setFrames] = useState<VideoStoryboardFrame[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    if (tab === "dossie" && photos === null) {
-      void commands
-        .listDossiePhotos(workspacePath)
-        .then((data) => {
-          if (!cancelled) setPhotos(data);
-        })
-        .catch(() => {
-          if (!cancelled) setPhotos([]);
-        });
-    }
     if (tab === "frames" && frames === null) {
       void commands
         .listVideoMedia(workspacePath)
@@ -338,7 +305,7 @@ function SourcePicker({
     return () => {
       cancelled = true;
     };
-  }, [tab, workspacePath, photos, frames]);
+  }, [tab, workspacePath, frames]);
 
   return (
     <div
@@ -368,13 +335,6 @@ function SourcePicker({
         <nav className={styles.dialogTabs}>
           <button
             type="button"
-            className={`${styles.dialogTab} ${tab === "dossie" ? styles.dialogTabActive : ""}`}
-            onClick={() => setTab("dossie")}
-          >
-            <Camera size={12} /> Fotos do caso
-          </button>
-          <button
-            type="button"
             className={`${styles.dialogTab} ${tab === "frames" ? styles.dialogTabActive : ""}`}
             onClick={() => setTab("frames")}
           >
@@ -389,34 +349,6 @@ function SourcePicker({
           </button>
         </nav>
         <div className={styles.dialogBody}>
-          {tab === "dossie" && (
-            <>
-              {photos === null && <p className={styles.dim}>Carregando…</p>}
-              {photos?.length === 0 && (
-                <p className={styles.dim}>Nenhuma foto no caso (vêm do pacote .sicroapp importado no Início).</p>
-              )}
-              {photos?.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className={styles.pickerItem}
-                  onClick={() => onPickPhoto(p)}
-                >
-                  {p.relative_path && (
-                    <img
-                      src={assetUrl(workspacePath, p.relative_path) ?? ""}
-                      alt=""
-                      className={styles.pickerThumb}
-                    />
-                  )}
-                  <div className={styles.pickerInfo}>
-                    <strong>{p.original_id ?? p.id.slice(0, 8)}</strong>
-                    <code>{p.relative_path}</code>
-                  </div>
-                </button>
-              ))}
-            </>
-          )}
           {tab === "frames" && (
             <>
               {frames === null && <p className={styles.dim}>Carregando…</p>}

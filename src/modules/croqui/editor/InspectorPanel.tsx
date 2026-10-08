@@ -19,6 +19,20 @@ import {
   distancePx,
   formatMeasurement,
   inferCategory,
+  MARKER_STYLES,
+  TRACE_SPECS,
+  FIXTURE_SPECS,
+  PERSON_POSES,
+  PERSON_POSICOES,
+  personApplyPose,
+  personChangePosicao,
+  personReadouts,
+  type SicroPersonObject,
+  fixtureReadouts,
+  traceReadouts,
+  type SicroFixtureObject,
+  type SicroTraceObject,
+  type TraceParamSpec,
   type ObjectCategory,
   type SicroCroquiLayer,
   type SicroCroquiScale,
@@ -50,6 +64,8 @@ import {
   type ParityEixo,
   type ParityStyle,
   type ParityTema,
+  type ParityVeiculosEstilo,
+  type ParityVestigiosEstilo,
 } from "../engine/road-parity";
 import { CROQUI_EXPORT_WIDTH_PX_DEFAULT, type SicroCroquiCanvas, type SicroCroquiExportSettings, type SicroCroquiStyle } from "../engine/schema";
 import { labelDefaults, type LabelFields } from "./labels";
@@ -82,6 +98,9 @@ const CATEGORY_ORDER: ObjectCategory[] = [
   "veiculos",
   "referenciais",
   "vestigios",
+  "pessoas",
+  "sinalizacao",
+  "entorno",
   "mobiliario_urbano",
   "medidas",
   "anotacoes",
@@ -93,7 +112,10 @@ const CATEGORY_LABEL: Record<ObjectCategory, string> = {
   veiculos: "Veículos",
   referenciais: "Referenciais (R1/R2)",
   vestigios: "Vestígios e pessoas",
-  mobiliario_urbano: "Mobiliário urbano",
+  pessoas: "Pessoas",
+  sinalizacao: "Sinalização",
+  entorno: "Entorno",
+  mobiliario_urbano: "Sinalização e entorno (antigos)",
   medidas: "Medidas",
   anotacoes: "Anotações",
   outros: "Outros",
@@ -167,6 +189,7 @@ export function InspectorPanel({
           <ObjectProperties
             object={selected}
             scale={scale}
+            style={style}
             onChange={(patch) => onUpdateObject(selected.id, patch)}
           />
         </section>
@@ -440,6 +463,12 @@ function shortKind(o: SicroObject): string {
       return "T";
     case "measurement":
       return "↔";
+    case "trace":
+      return TRACE_SPECS[o.subtype]?.sigla ?? "·";
+    case "fixture":
+      return FIXTURE_SPECS[o.subtype]?.sigla ?? "·";
+    case "person":
+      return "P";
     case "road_parity":
       return "R";
     case "roundabout_parity":
@@ -457,11 +486,17 @@ function summariseObject(o: SicroObject): string {
     case "line":
       return `Linha ${o.subtype}`;
     case "marker":
-      return o.subtype;
+      return MARKER_STYLES[o.subtype]?.defaultLabel ?? o.subtype;
     case "text":
       return o.text.slice(0, 32);
     case "measurement":
       return "Medição";
+    case "trace":
+      return TRACE_SPECS[o.subtype]?.nome ?? "Vestígio";
+    case "fixture":
+      return FIXTURE_SPECS[o.subtype]?.nome ?? "Elemento";
+    case "person":
+      return `Pessoa (${PERSON_POSICOES.find(([k]) => k === o.posicao)?.[1].toLowerCase() ?? o.posicao})`;
     case "road_parity":
       return "Via";
     case "roundabout_parity":
@@ -474,12 +509,15 @@ function summariseObject(o: SicroObject): string {
 function ObjectProperties({
   object,
   scale,
+  style,
   onChange,
 }: {
   object: SicroObject;
   scale: SicroCroquiScale | null;
+  style: SicroCroquiStyle | undefined;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
+  const st = resolveParityStyle(style);
   const isParity =
     object.kind === "road_parity" || object.kind === "roundabout_parity";
   // `color`/`notes` não existem nos kinds parity.
@@ -489,7 +527,10 @@ function ObjectProperties({
     object.kind === "vehicle" ||
     object.kind === "marker" ||
     object.kind === "line" ||
-    object.kind === "measurement";
+    object.kind === "measurement" ||
+    object.kind === "trace" ||
+    object.kind === "fixture" ||
+    object.kind === "person";
 
   return (
     <div className={styles.props}>
@@ -500,11 +541,20 @@ function ObjectProperties({
           onChange={(v) => onChange({ label: v } as Partial<SicroObject>)}
         />
       )}
-      {freeLabel && <LabelProps object={object} onChange={onChange} />}
+      {freeLabel && (
+        <LabelProps object={object} outlineTema={st.veiculos === "traco" ? st.tema : undefined} onChange={onChange} />
+      )}
 
       {object.kind === "vehicle" && (
-        <VehicleProps object={object} onChange={onChange} />
+        <VehicleProps object={object} outline={st.veiculos === "traco"} onChange={onChange} />
       )}
+      {object.kind === "trace" && (
+        <TraceProps object={object} scale={scale} onChange={onChange} />
+      )}
+      {object.kind === "fixture" && (
+        <FixtureProps object={object} scale={scale} onChange={onChange} />
+      )}
+      {object.kind === "person" && <PersonProps object={object} onChange={onChange} />}
       {object.kind === "marker" && (
         <MarkerProps object={object} onChange={onChange} />
       )}
@@ -526,12 +576,14 @@ function ObjectProperties({
 
       {!isParity && (
         <>
+          {object.kind !== "trace" && object.kind !== "fixture" && object.kind !== "person" && (
           <Field
             label="Cor"
             type="color"
             value={colorish.color ?? "#000000"}
             onChange={(v) => onChange({ color: v } as Partial<SicroObject>)}
           />
+          )}
           <Field
             label="Observação"
             value={colorish.notes ?? ""}
@@ -556,19 +608,21 @@ function ObjectProperties({
 /** Tamanho e cor do rótulo solto; "voltar" apaga o deslocamento que o arrasto gravou. */
 function LabelProps({
   object,
+  outlineTema,
   onChange,
 }: {
   object: SicroObject;
+  outlineTema?: ParityTema;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  const d = labelDefaults(object);
+  const d = labelDefaults(object, outlineTema);
   const lf = object as LabelFields;
   const moved = lf.label_dx !== undefined || lf.label_dy !== undefined;
   const isMeasurement = object.kind === "measurement";
-  // Na cota o padrão acompanha a linha (como o canvas desenha); nos demais é 0°.
+  // Padrão reto; na cota, null = acompanha a linha.
   const lineAngle = isMeasurement ? angleDeg(object.p1, object.p2) : 0;
-  const defaultRot = lineAngle > 90 ? lineAngle - 180 : lineAngle < -90 ? lineAngle + 180 : lineAngle;
-  const rot = lf.label_rotation ?? defaultRot;
+  const alongRot = lineAngle > 90 ? lineAngle - 180 : lineAngle < -90 ? lineAngle + 180 : lineAngle;
+  const rot = lf.label_rotation === null ? alongRot : (lf.label_rotation ?? 0);
   return (
     <>
       <NumberField
@@ -600,7 +654,7 @@ function LabelProps({
           <button
             type="button"
             className={styles.temaBtn}
-            onClick={() => onChange({ label_rotation: undefined } as Partial<SicroObject>)}
+            onClick={() => onChange({ label_rotation: null } as Partial<SicroObject>)}
             title="Rótulo acompanha a inclinação da cota"
           >
             Na linha
@@ -625,13 +679,22 @@ function LabelProps({
 
 function VehicleProps({
   object,
+  outline,
   onChange,
 }: {
   object: SicroVehicleObject;
+  outline: boolean;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   return (
     <>
+      {outline && (
+        <CheckboxRow
+          label="Contorno tracejado (posição no impacto)"
+          checked={object.tracejado === true}
+          onChange={(v) => onChange({ tracejado: v } as Partial<SicroObject>)}
+        />
+      )}
       <SelectField
         label="Tipo"
         value={object.body_type ?? "car"}
@@ -960,6 +1023,332 @@ function ParityRoundaboutProps({
   );
 }
 
+const pct = (v: number) => `${Math.round(v * 100)}%`;
+function traceValueText(p: Extract<TraceParamSpec, { t: "range" }>, v: number): string {
+  if (p.u === "%") return pct(v);
+  if (p.u === "°") return `${Math.round(v)}°`;
+  if (p.u === "m") return `${v.toFixed(2).replace(".", ",")} m`;
+  if (p.u === "") return p.step < 1 ? v.toFixed(2).replace(".", ",") : String(Math.round(v));
+  return `${Math.round(v)} ${p.u}`;
+}
+
+/** Parâmetros de vestígio/sinalização/entorno + medidas e contas de referência (não vão para o PNG). */
+function ParamProps({
+  object,
+  params,
+  defaults,
+  readouts,
+  scale,
+  cotaLabel,
+  onChange,
+}: {
+  object: SicroTraceObject | SicroFixtureObject;
+  params: TraceParamSpec[];
+  defaults: Record<string, number | string | boolean>;
+  readouts: { rows: [string, string][]; formula?: string };
+  scale: SicroCroquiScale | null;
+  /** Só nos vestígios: liga a cota. */
+  cotaLabel?: string;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : 10;
+  // "bend" (flecha) e "rot" (ângulo do eixo p0 → p1) vivem na geometria, não em `params`.
+  const axisDeg = () => ((((Math.atan2(object.p1.y - object.p0.y, object.p1.x - object.p0.x) * 180) / Math.PI) % 360) + 360) % 360;
+  const value = (k: string) =>
+    k === "bend" ? (object.bend ?? 0) / ppm : k === "rot" ? Math.round(axisDeg()) : (object.params?.[k] ?? defaults[k]);
+  const set = (k: string, v: number | string | boolean) => {
+    if (k === "rot") {
+      const c = { x: (object.p0.x + object.p1.x) / 2, y: (object.p0.y + object.p1.y) / 2 };
+      const half = Math.hypot(object.p1.x - object.p0.x, object.p1.y - object.p0.y) / 2;
+      const a = (Number(v) * Math.PI) / 180;
+      const d = { x: Math.cos(a) * half, y: Math.sin(a) * half };
+      onChange({ p0: { x: c.x - d.x, y: c.y - d.y }, p1: { x: c.x + d.x, y: c.y + d.y } } as Partial<SicroObject>);
+      return;
+    }
+    onChange(
+      (k === "bend" ? { bend: Number(v) * ppm } : { params: { ...object.params, [k]: v } }) as Partial<SicroObject>,
+    );
+  };
+  const visible = params.filter((p) => !p.when || p.when[1].includes(value(p.when[0]) as number | string | boolean));
+  return (
+    <>
+      {visible.map((p) => {
+        if (p.t === "seg") {
+          return (
+            <div key={p.k} className={styles.field}>
+              <span className={styles.fieldLabel}>{p.label}</span>
+              <div className={`${styles.temaRow} ${styles.segWrap}`} role="radiogroup" aria-label={p.label}>
+                {p.opts.map(([v, l]) => (
+                  <button
+                    key={String(v)}
+                    type="button"
+                    role="radio"
+                    aria-checked={value(p.k) === v}
+                    className={`${styles.temaBtn} ${value(p.k) === v ? styles.temaBtnActive : ""}`}
+                    onClick={() => set(p.k, v)}
+                  >
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        }
+        if (p.t === "chk") {
+          return <CheckboxRow key={p.k} label={p.label} checked={!!value(p.k)} onChange={(v) => set(p.k, v)} />;
+        }
+        if (p.t === "txt") {
+          return (
+            <Field
+              key={p.k}
+              label={p.label}
+              value={String(value(p.k) ?? "")}
+              onChange={(v) => set(p.k, p.max ? v.slice(0, p.max) : v)}
+            />
+          );
+        }
+        const v = Number(value(p.k)) || 0;
+        return (
+          <label key={p.k} className={styles.range}>
+            <span className={styles.rangeTop}>
+              <span className={styles.fieldLabel}>{p.label}</span>
+              <span className={styles.rangeValue}>{traceValueText(p, v)}</span>
+            </span>
+            <input
+              type="range"
+              min={p.min}
+              max={p.max}
+              step={p.step}
+              value={Math.min(p.max, Math.max(p.min, v))}
+              onChange={(e) => set(p.k, Number(e.target.value))}
+            />
+          </label>
+        );
+      })}
+      {cotaLabel && object.kind === "trace" && (
+        <CheckboxRow
+          label={cotaLabel}
+          checked={object.show_measure === true}
+          onChange={(v) => onChange({ show_measure: v } as Partial<SicroObject>)}
+        />
+      )}
+      {readouts.rows.length > 0 && (
+        <dl className={styles.readouts}>
+          {readouts.rows.map(([k, val]) => (
+            <div key={k}>
+              <dt>{k}</dt>
+              <dd>{val}</dd>
+            </div>
+          ))}
+          {readouts.formula && <p>{readouts.formula}</p>}
+          {!scale && <p>Sem escala definida: contas com 10 px/m.</p>}
+        </dl>
+      )}
+    </>
+  );
+}
+
+function TraceProps({
+  object,
+  scale,
+  onChange,
+}: {
+  object: SicroTraceObject;
+  scale: SicroCroquiScale | null;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : 10;
+  const spec = TRACE_SPECS[object.subtype];
+  const cotaLabel =
+    object.subtype === "colisao" || object.subtype === "fluido"
+      ? undefined
+      : object.subtype === "derrapagem"
+        ? "Mostrar corda e flecha"
+        : object.subtype === "fragmentos"
+          ? "Mostrar cota do alcance"
+          : "Mostrar cota do comprimento";
+  return (
+    <ParamProps
+      object={object}
+      params={spec.params}
+      defaults={spec.def}
+      readouts={traceReadouts(object, ppm)}
+      scale={scale}
+      cotaLabel={cotaLabel}
+      onChange={onChange}
+    />
+  );
+}
+
+function FixtureProps({
+  object,
+  scale,
+  onChange,
+}: {
+  object: SicroFixtureObject;
+  scale: SicroCroquiScale | null;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : 10;
+  const spec = FIXTURE_SPECS[object.subtype];
+  return (
+    <ParamProps
+      object={object}
+      params={spec.params}
+      defaults={spec.def}
+      readouts={fixtureReadouts(object, ppm)}
+      scale={scale}
+      onChange={onChange}
+    />
+  );
+}
+
+/** Botões de escolha única no estilo dos temas. */
+function SegRow<V extends string>({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: V;
+  options: [V, string][];
+  onChange: (v: V) => void;
+}) {
+  return (
+    <div className={styles.field}>
+      <span className={styles.fieldLabel}>{label}</span>
+      <div className={`${styles.temaRow} ${styles.segWrap}`} role="radiogroup" aria-label={label}>
+        {options.map(([v, l]) => (
+          <button
+            key={v}
+            type="button"
+            role="radio"
+            aria-checked={value === v}
+            className={`${styles.temaBtn} ${value === v ? styles.temaBtnActive : ""}`}
+            onClick={() => onChange(v)}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RangeRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  text,
+  onChange,
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  text: string;
+  onChange: (v: number) => void;
+}) {
+  return (
+    <label className={styles.range}>
+      <span className={styles.rangeTop}>
+        <span className={styles.fieldLabel}>{label}</span>
+        <span className={styles.rangeValue}>{text}</span>
+      </span>
+      <input type="range" min={min} max={max} step={step} value={value} onChange={(e) => onChange(Number(e.target.value))} />
+    </label>
+  );
+}
+
+/** Pessoa articulada: posição, pose pronta, corpo e acabamento; a pose fina é pelas alças no canvas. */
+function PersonProps({
+  object,
+  onChange,
+}: {
+  object: SicroPersonObject;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const set = (patch: Partial<SicroPersonObject>) => onChange(patch as Partial<SicroObject>);
+  const deitada = object.posicao !== "empe";
+  return (
+    <>
+      <SegRow label="Posição" value={object.posicao} options={PERSON_POSICOES} onChange={(v) => set(personChangePosicao(object, v))} />
+      {deitada && (
+        <div className={styles.field}>
+          <span className={styles.fieldLabel}>Pose pronta</span>
+          <div className={`${styles.temaRow} ${styles.segWrap}`}>
+            {Object.entries(PERSON_POSES).map(([k, p]) => (
+              <button key={k} type="button" className={styles.temaBtn} onClick={() => set(personApplyPose(object, k))}>
+                {p.nome}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      <RangeRow
+        label="Altura"
+        value={object.altura_m}
+        min={1}
+        max={2.05}
+        step={0.01}
+        text={`${object.altura_m.toFixed(2).replace(".", ",")} m`}
+        onChange={(v) => set({ altura_m: v })}
+      />
+      <SegRow label="Compleição" value={object.comp} options={[["magro", "Magra"], ["medio", "Média"], ["robusto", "Robusta"]]} onChange={(v) => set({ comp: v })} />
+      <SegRow label="Perfil" value={object.perfil} options={[["M", "Masculino"], ["F", "Feminino"]]} onChange={(v) => set({ perfil: v })} />
+      {deitada && (
+        <>
+          <RangeRow label="Curvatura do tronco" value={object.curva} min={-40} max={40} step={1} text={`${Math.round(object.curva)}°`} onChange={(v) => set({ curva: v })} />
+          <RangeRow label="Giro da cabeça" value={object.cabeca} min={-75} max={75} step={1} text={`${Math.round(object.cabeca)}°`} onChange={(v) => set({ cabeca: v })} />
+        </>
+      )}
+      <RangeRow
+        label="Rotação"
+        value={((object.rotation % 360) + 360) % 360}
+        min={0}
+        max={359}
+        step={1}
+        text={`${Math.round(((object.rotation % 360) + 360) % 360)}°`}
+        onChange={(v) => set({ rotation: v })}
+      />
+      <SegRow
+        label="Acabamento"
+        value={object.acab}
+        options={[["normal", "Normal"], ["giz", "Giz"]]}
+        // Giz nasce transparente (só o contorno); o preenchimento continua opcional.
+        onChange={(v) => set(v === "giz" ? { acab: v, cor: "transparente" } : { acab: v, cor: object.cor === "transparente" ? "branco" : object.cor })}
+      />
+      <SegRow
+        label="Preenchimento"
+        value={object.cor}
+        options={[["transparente", "Transparente"], ["branco", "Branco"], ["cinza", "Cinza"]]}
+        onChange={(v) => set({ cor: v })}
+      />
+      <RangeRow
+        label="Espessura do contorno"
+        value={object.traco ?? 1}
+        min={0.25}
+        max={3}
+        step={0.05}
+        text={`${Math.round((object.traco ?? 1) * 100)}%`}
+        onChange={(v) => set({ traco: v })}
+      />
+      <dl className={styles.readouts}>
+        {personReadouts(object).map(([k, v]) => (
+          <div key={k}>
+            <dt>{k}</dt>
+            <dd>{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </>
+  );
+}
+
 function CheckboxRow({
   label,
   checked,
@@ -1124,6 +1513,24 @@ function StyleProps({
         label="Dividir faixas (≈ 3,5 m)"
         checked={st.faixas_auto}
         onChange={(v) => onChange({ faixas_auto: v })}
+      />
+      <SelectField
+        label="Vestígios"
+        value={st.vestigios}
+        options={[
+          { v: "textura", l: "Textura (banda de rodagem, sombra, estrias)" },
+          { v: "traco", l: "Traço limpo" },
+        ]}
+        onChange={(v) => onChange({ vestigios: v as ParityVestigiosEstilo })}
+      />
+      <SelectField
+        label="Veículos"
+        value={st.veiculos}
+        options={[
+          { v: "traco", l: "Em traço" },
+          { v: "arte", l: "Arte colorida" },
+        ]}
+        onChange={(v) => onChange({ veiculos: v as ParityVeiculosEstilo })}
       />
     </>
   );

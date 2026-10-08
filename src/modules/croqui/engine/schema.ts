@@ -84,7 +84,10 @@ type SicroObjectKind =
   | "text"
   | "measurement"
   | "road"
-  | "roundabout";
+  | "roundabout"
+  | "trace"
+  | "fixture"
+  | "person";
 
 export type LineSubtype =
   | "road"
@@ -175,6 +178,9 @@ export type ObjectCategory =
   | "medidas"
   | "referenciais"
   | "mobiliario_urbano"
+  | "sinalizacao"
+  | "entorno"
+  | "pessoas"
   | "outros";
 
 interface SicroObjectBase {
@@ -207,6 +213,8 @@ export interface SicroVehicleObject extends SicroObjectBase {
   height: number;
   rotation: number;
   body_type?: VehicleBodyType;
+  /** Contorno tracejado (posição no impacto); só no desenho em traço. */
+  tracejado?: boolean;
 }
 
 export interface SicroLineObject extends SicroObjectBase {
@@ -244,6 +252,97 @@ export interface SicroMeasurementObject extends SicroObjectBase {
   label_override?: string | null;
 }
 
+export type TraceSubtype =
+  | "frenagem"
+  | "derrapagem"
+  | "arrasto"
+  | "sulcagem"
+  | "ranhura"
+  | "fluido"
+  | "fragmentos"
+  | "colisao";
+
+/** Vestígio paramétrico (ver `traces.ts`): traçado p0 → p1 com flecha, em px de mundo. */
+export interface SicroTraceObject extends SicroObjectBase {
+  kind: "trace";
+  subtype: TraceSubtype;
+  p0: SicroPoint;
+  /** Fim do traçado; no fluido é o centro da poça, nos fragmentos o alcance do leque. */
+  p1: SicroPoint;
+  /** Flecha (px de mundo) do meio do traçado em relação à corda; + = normal (−dy, dx). */
+  bend: number;
+  /** Semente do desenho irregular (bordas, riscos, peças). */
+  seed: number;
+  /** Larguras/raios em metros, frações e graus; ausente = padrão do tipo. */
+  params: Record<string, number | string | boolean>;
+  /** Cota do comprimento (ou corda e flecha na derrapagem). */
+  show_measure?: boolean;
+}
+
+export type FixtureSubtype =
+  // Sinalização
+  | "placa"
+  | "semaforo"
+  | "faixa_pedestre"
+  | "retencao"
+  | "lombada"
+  | "area_conflito"
+  | "seta"
+  // Entorno
+  | "poste"
+  | "arvore"
+  | "hidrante"
+  | "abrigo"
+  | "barreira"
+  | "obstaculo"
+  | "camera";
+
+/**
+ * Sinalização e entorno paramétricos (ver `fixtures.ts`). Em px de mundo:
+ * elemento de ponto = `p0` posição e `p1` direção/alcance; elemento de linha = traçado p0 → p1.
+ */
+export interface SicroFixtureObject extends SicroObjectBase {
+  kind: "fixture";
+  subtype: FixtureSubtype;
+  p0: SicroPoint;
+  p1: SicroPoint;
+  /** Flecha (px de mundo), só nos elementos de linha que curvam. */
+  bend: number;
+  seed: number;
+  params: Record<string, number | string | boolean>;
+}
+
+export type PersonPosicao = "dorsal" | "ventral" | "lat_e" | "lat_d" | "empe";
+
+/** Pessoa articulada (ver `people.ts`): posição em px, corpo em metros, pose em fração da altura. */
+export interface SicroPersonObject extends SicroObjectBase {
+  kind: "person";
+  posicao: PersonPosicao;
+  x: number;
+  y: number;
+  /** Graus; 0 = cabeça (ou frente, em pé) para o topo da folha. */
+  rotation: number;
+  altura_m: number;
+  comp: "magro" | "medio" | "robusto";
+  perfil: "M" | "F";
+  /** Curvatura do tronco e giro da cabeça, em graus. */
+  curva: number;
+  cabeca: number;
+  /** "giz": só o contorno, como a marcação no local. */
+  acab: "normal" | "giz";
+  /** "transparente": só o contorno (padrão no giz). */
+  cor: "branco" | "cinza" | "transparente";
+  /** Multiplicador da espessura do contorno; ausente = 1. */
+  traco?: number;
+  pose: {
+    wrist: [SicroPoint, SicroPoint];
+    ankle: [SicroPoint, SicroPoint];
+    /** Lado da dobra de cotovelos e joelhos (±1). */
+    sArm: [number, number];
+    sLeg: [number, number];
+  };
+}
+
 // Vias e rotatórias vivem só em `road-parity/` (`kind: "road_parity"` /
 // "roundabout_parity"). Objetos `kind: "road"`/"roundabout" de croquis antigos
 // são descartados pelo `coerceCroquiDoc`.
@@ -257,6 +356,9 @@ export type SicroObject =
   | SicroMarkerObject
   | SicroTextObject
   | SicroMeasurementObject
+  | SicroTraceObject
+  | SicroFixtureObject
+  | SicroPersonObject
   | SicroParityObject;
 
 // ---- View / export / stamp (todos opcionais) ----

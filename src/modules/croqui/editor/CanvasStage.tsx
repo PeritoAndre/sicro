@@ -19,6 +19,8 @@ import {
   Layer,
   Line,
   Rect,
+  RegularPolygon,
+  Shape,
   Stage,
   Text as KonvaText,
   Transformer,
@@ -38,15 +40,41 @@ import {
   type SicroObject,
   type SicroPoint,
   type SicroTextObject,
+  type SicroTraceObject,
+  type SicroFixtureObject,
+  type SicroPersonObject,
   type SicroVehicleObject,
   type VehicleBodyType,
+  FIXTURE_SPECS,
+  personRig,
+  personToLocal,
+  personToWorld,
+  vadd,
+  vmul,
+  vsub,
+  fixtureExtentM,
+  fixtureGeomM,
+  fn,
+  fp,
+  fanGeom,
+  tn,
+  tp,
+  traceAt,
+  traceGeom,
+  traceGeomM,
+  traceSpanM,
 } from "../engine";
 import {
   RoadParityRenderer,
   isParityObject,
+  type ParityTema,
   type SicroParityObject,
+  resolveParityStyle,
   resolvePxPerM,
 } from "../engine/road-parity";
+import { drawTrace, tracePalette, traceHitShape } from "./traceDraw";
+import { drawFixture, fixtureHitShape, fixtureOnGround } from "./fixtureDraw";
+import { drawPerson, hitPerson, setPersonExporting } from "./personDraw";
 import {
   getCachedPessoaArtImage,
   getCachedVehicleArtImage,
@@ -159,10 +187,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       stage.position({ x: 0, y: 0 });
       tr?.visible(false);
       ui?.visible(false);
+      setPersonExporting(true);
       try {
         const pixelRatio = Math.min(targetWidthPx, 8000) / rect.width;
         return stage.toDataURL({ ...rect, pixelRatio, mimeType: "image/png" });
       } finally {
+        setPersonExporting(false);
         tr?.visible(trVisible);
         ui?.visible(uiVisible);
         stage.scale({ x: prev.scale, y: prev.scale });
@@ -271,7 +301,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     for (const id of editor.selectedIds) {
       // Linhas e cotas editam-se pelas pontas, não por caixa de escala.
       const k = kinds.get(id);
-      if (k === "line" || k === "measurement" || k === "road_parity" || k === "roundabout_parity") continue;
+      if (k === "line" || k === "measurement" || k === "trace" || k === "fixture" || k === "person" || k === "road_parity" || k === "roundabout_parity") continue;
       const node = layer.findOne(`#${id}`);
       if (node) nodes.push(node);
     }
@@ -360,7 +390,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       onSelect(null);
       return;
     }
-    const pxPerM = doc.scale?.px_per_m ?? 1;
+    const pxPerM = resolvePxPerM(doc.scale?.px_per_m);
     const hits: string[] = [];
     for (const obj of doc.objects) {
       const b = getObjectBoundsStagePx(obj, pxPerM);
@@ -417,7 +447,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       if (isParityObject(o)) parity.push(o);
       else others.push(o);
     }
-    return { parityObjects: parity, otherObjects: others };
+    // Pintura no chão, vestígios, elementos de pé e, por cima, veículos e anotações.
+    const rank = (o: SicroObject) =>
+      o.kind === "fixture" ? (fixtureOnGround(o) ? 0 : 2) : o.kind === "trace" ? 1 : 3;
+    const ordered = others.map((o, i) => [rank(o), i, o] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
+    return { parityObjects: parity, otherObjects: ordered };
   }, [doc.objects]);
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -528,6 +562,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
             tool={editor.tool}
             selected={editor.selectedIds.includes(obj.id)}
             solo={editor.selectedIds.length === 1 && editor.selectedIds[0] === obj.id}
+            zoom={editor.viewport.scale}
             onSelect={() => onSelect(obj.id)}
             onChange={(patch) => onObjectChange(obj.id, patch)}
           />
@@ -784,6 +819,7 @@ function ObjectNode({
   tool,
   selected,
   solo,
+  zoom,
   onSelect,
   onChange,
 }: {
@@ -793,11 +829,15 @@ function ObjectNode({
   selected: boolean;
   /** Único selecionado: só então o rótulo se arrasta separado do corpo. */
   solo: boolean;
+  /** Escala da tela: alças dos objetos paramétricos têm tamanho fixo na tela. */
+  zoom: number;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const draggable = tool === "select";
-  const labelProps = { draggable: draggable && !obj.locked && solo, onSelect, onChange };
+  const st = resolveParityStyle(doc.style);
+  const outlineTema = st.veiculos === "traco" ? st.tema : undefined;
+  const labelProps = { draggable: draggable && !obj.locked && solo, onSelect, onChange, outlineTema };
 
   switch (obj.kind) {
     case "vehicle":
@@ -807,6 +847,7 @@ function ObjectNode({
             obj={obj}
             draggable={draggable}
             selected={selected}
+            outlineTema={outlineTema}
             onSelect={onSelect}
             onChange={onChange}
           />
@@ -865,6 +906,42 @@ function ObjectNode({
           onChange={onChange}
         />
       );
+    case "trace":
+      return (
+        <TraceNode
+          obj={obj}
+          doc={doc}
+          zoom={zoom}
+          draggable={draggable}
+          solo={solo}
+          onSelect={onSelect}
+          onChange={onChange}
+        />
+      );
+    case "person":
+      return (
+        <PersonNode
+          obj={obj}
+          doc={doc}
+          zoom={zoom}
+          draggable={draggable}
+          solo={solo}
+          onSelect={onSelect}
+          onChange={onChange}
+        />
+      );
+    case "fixture":
+      return (
+        <FixtureNode
+          obj={obj}
+          doc={doc}
+          zoom={zoom}
+          draggable={draggable}
+          solo={solo}
+          onSelect={onSelect}
+          onChange={onChange}
+        />
+      );
     case "road_parity":
     case "roundabout_parity":
       // Parity é renderizado pelo RoadParityRenderer.
@@ -902,18 +979,22 @@ function VehicleNode({
   obj,
   draggable,
   selected,
+  outlineTema,
   onSelect,
   onChange,
 }: {
   obj: SicroVehicleObject;
   draggable: boolean;
   selected: boolean;
+  /** Presente = veículo em traço no tema dado. */
+  outlineTema?: ParityTema;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const body: VehicleBodyType = obj.body_type ?? "car";
   const isTwoWheel = body === "moto" || body === "bike";
-  const art = useVehicleArtImage(body, obj.color);
+  const artImg = useVehicleArtImage(body, obj.color);
+  const art = outlineTema ? null : artImg;
   return (
     <Group
       id={obj.id}
@@ -977,6 +1058,8 @@ function VehicleNode({
             />
           )}
         </>
+      ) : outlineTema ? (
+        <VehicleOutline obj={obj} body={body} tema={outlineTema} selected={selected} />
       ) : (
         <VehicleSilhouette
           body={body}
@@ -987,7 +1070,7 @@ function VehicleNode({
         />
       )}
       {/* Triângulo da frente (+x), só no fallback sem arte. */}
-      {!art && !isTwoWheel && (
+      {!art && !outlineTema && !isTwoWheel && (
         <Line
           points={[
             obj.width / 2,
@@ -1361,28 +1444,621 @@ function setCursor(e: Konva.KonvaEventObject<MouseEvent>, cursor: string) {
   if (c) c.style.cursor = cursor;
 }
 
+// ===========================================================================
+// Pessoa articulada (people.ts + personDraw.ts)
+
+function PersonNode({
+  obj,
+  doc,
+  draggable,
+  solo,
+  zoom,
+  onSelect,
+  onChange,
+}: {
+  obj: SicroPersonObject;
+  doc: SicroCroquiDoc;
+  draggable: boolean;
+  solo: boolean;
+  zoom: number;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = resolvePxPerM(doc.scale?.px_per_m);
+  const st = resolveParityStyle(doc.style);
+  const opts = { ppm, tema: st.tema, asfalto: st.asfalto };
+  const build = (o: SicroPersonObject): ParamView<SicroPersonObject> => {
+    const H = o.altura_m;
+    const W = (p: { x: number; y: number }) => personToWorld(o, p, ppm);
+    const L = (x: number, y: number) => personToLocal(o, { x, y }, ppm);
+    const rotHandle = (at: { x: number; y: number }): ParamHandle<SicroPersonObject> => ({
+      ...W(at),
+      patch: (x, y) => ({ rotation: Math.round(((Math.atan2(y - o.y, x - o.x) * 180) / Math.PI + 90) * 10) / 10 }),
+    });
+    let handles: ParamHandle<SicroPersonObject>[];
+    if (o.posicao === "empe") {
+      handles = [rotHandle({ x: 0, y: -0.3 * H })];
+    } else {
+      const R = personRig(o);
+      handles = [];
+      R.arms.forEach((a, i) => {
+        handles.push({ ...W(a.T), patch: (x, y) => ({ pose: setPose(o.pose, "wrist", i, vmul(L(x, y), 1 / H)) }) });
+        handles.push({ ...W(a.E), diamond: true, patch: (x, y) => ({ pose: setSign(o.pose, "sArm", i, bendSide(a, L(x, y))) }) });
+      });
+      R.legs.forEach((l, i) => {
+        handles.push({ ...W(l.T), patch: (x, y) => ({ pose: setPose(o.pose, "ankle", i, vmul(L(x, y), 1 / H)) }) });
+        handles.push({ ...W(l.E), diamond: true, patch: (x, y) => ({ pose: setSign(o.pose, "sLeg", i, bendSide(l, L(x, y))) }) });
+      });
+      handles.push({
+        ...W(R.headC),
+        patch: (x, y) => {
+          const v = vsub(L(x, y), R.neck);
+          const a = Math.atan2(v.y, v.x) - Math.atan2(R.up.y, R.up.x);
+          return { cabeca: Math.round(Math.max(-75, Math.min(75, (Math.atan2(Math.sin(a), Math.cos(a)) * 180) / Math.PI))) };
+        },
+      });
+      handles.push(rotHandle(vadd(R.headC, vmul(R.hdir, 0.28 * H))));
+    }
+    return {
+      draw: (ctx) => drawPerson(ctx, o, { ...opts, zoom }),
+      hit: { line: [], width: 0, polys: [] },
+      hitNative: (ctx, color) => hitPerson(ctx, o, ppm, color),
+      handles,
+      anchor: W({ x: 0.35 * H, y: -0.3 * H }),
+      move: (dx, dy) => ({ x: o.x + dx, y: o.y + dy }),
+    };
+  };
+  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={5 / zoom} onSelect={onSelect} onChange={onChange} />;
+}
+
+type Pose = SicroPersonObject["pose"];
+function setPose(pose: Pose, k: "wrist" | "ankle", i: number, p: { x: number; y: number }): Pose {
+  const list = [...pose[k]] as Pose["wrist"];
+  list[i] = p;
+  return { ...pose, [k]: list };
+}
+function setSign(pose: Pose, k: "sArm" | "sLeg", i: number, s: number): Pose {
+  const list = [...pose[k]] as [number, number];
+  list[i] = s;
+  return { ...pose, [k]: list };
+}
+/** Lado em que o ponteiro está em relação à linha raiz → ponta: define para onde a junta dobra. */
+function bendSide(seg: { S: { x: number; y: number }; T: { x: number; y: number } }, p: { x: number; y: number }): number {
+  return (seg.T.x - seg.S.x) * (p.y - seg.S.y) - (seg.T.y - seg.S.y) * (p.x - seg.S.x) >= 0 ? 1 : -1;
+}
+
+// ===========================================================================
+// Vestígios paramétricos (traces.ts + traceDraw.ts)
+
+const HANDLE_COLOR = "#d7a84f";
+
+type PathObj = SicroTraceObject | SicroFixtureObject;
+type ParamObj = PathObj | SicroPersonObject;
+
+interface ParamHandle<T extends ParamObj> {
+  x: number;
+  y: number;
+  diamond?: boolean;
+  patch: (x: number, y: number) => Partial<T>;
+}
+
+interface ParamView<T extends ParamObj> {
+  draw: (ctx: CanvasRenderingContext2D) => void;
+  hit: { line: SicroPoint[]; width: number; polys: SicroPoint[][] };
+  handles: ParamHandle<T>[];
+  anchor: SicroPoint;
+  extra?: React.ReactNode;
+  /** Patch ao arrastar o corpo inteiro por (dx, dy) px. */
+  move: (dx: number, dy: number) => Partial<T>;
+  /** Área clicável desenhada direto no canvas de hit (substitui `hit`). */
+  hitNative?: (ctx: CanvasRenderingContext2D, color: string) => void;
+}
+
+const nativeCtx = (kctx: Konva.Context) => (kctx as unknown as { _context: CanvasRenderingContext2D })._context;
+
+/** Objeto paramétrico (vestígio, sinalização, entorno): desenho por função, alças, arrasto e rótulo solto. */
+function ParamNode<T extends ParamObj>({
+  obj,
+  build,
+  draggable,
+  solo,
+  handleR,
+  onSelect,
+  onChange,
+}: {
+  obj: T;
+  build: (o: T) => ParamView<T>;
+  draggable: boolean;
+  solo: boolean;
+  /** Raio das alças em px de mundo (o chamador divide pelo zoom). */
+  handleR: number;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const [live, setLive] = useState<Partial<T> | null>(null);
+  const o = live ? ({ ...obj, ...live } as T) : obj;
+  const view = build(o);
+  const canEdit = draggable && solo && !obj.locked;
+  return (
+    <>
+      <Group
+        id={obj.id}
+        draggable={draggable && !obj.locked}
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          if (e.target !== e.currentTarget) return;
+          const dx = e.target.x();
+          const dy = e.target.y();
+          e.target.position({ x: 0, y: 0 });
+          onChange(build(obj).move(dx, dy) as Partial<SicroObject>);
+        }}
+      >
+        <Shape
+          fill="#000"
+          stroke="#000"
+          strokeWidth={view.hit.width || 1}
+          sceneFunc={(kctx) => view.draw(nativeCtx(kctx))}
+          hitFunc={(kctx, shape) => {
+            if (view.hitNative) {
+              view.hitNative(nativeCtx(kctx), (shape as unknown as { colorKey: string }).colorKey);
+              return;
+            }
+            for (const poly of view.hit.polys) {
+              kctx.beginPath();
+              poly.forEach((p, i) => (i ? kctx.lineTo(p.x, p.y) : kctx.moveTo(p.x, p.y)));
+              kctx.closePath();
+              kctx.fillShape(shape);
+            }
+            if (view.hit.line.length > 1) {
+              kctx.beginPath();
+              view.hit.line.forEach((p, i) => (i ? kctx.lineTo(p.x, p.y) : kctx.moveTo(p.x, p.y)));
+              kctx.setAttr("lineCap", "round");
+              kctx.setAttr("lineJoin", "round");
+              kctx.strokeShape(shape);
+            }
+          }}
+        />
+        {view.extra}
+        {canEdit &&
+          view.handles.map((h, i) => (
+            <PointHandle
+              key={i}
+              x={h.x}
+              y={h.y}
+              diamond={h.diamond}
+              r={handleR}
+              color={HANDLE_COLOR}
+              onMove={(x, y) => setLive(h.patch(x, y))}
+              onEnd={(x, y) => {
+                setLive(null);
+                onChange(h.patch(x, y) as Partial<SicroObject>);
+              }}
+            />
+          ))}
+      </Group>
+      <ObjectLabel
+        obj={o}
+        anchor={view.anchor}
+        draggable={draggable && !obj.locked && solo}
+        onSelect={onSelect}
+        onChange={onChange}
+      />
+    </>
+  );
+}
+
+/**
+ * Alças de início e fim (o ponto move junto com a direção nos elementos de ponto).
+ * `backPx` recua a alça do fim ao longo de p0 → p1, para não cobrir o que fica na ponta (cabeça do semáforo).
+ */
+function endHandles<T extends PathObj>(o: T, moveTogether: boolean, backPx = 0): ParamHandle<T>[] {
+  const d = Math.hypot(o.p1.x - o.p0.x, o.p1.y - o.p0.y);
+  const back = d > backPx * 1.5 ? backPx : 0;
+  const ux = d > 1e-6 ? (o.p1.x - o.p0.x) / d : 1;
+  const uy = d > 1e-6 ? (o.p1.y - o.p0.y) / d : 0;
+  return [
+    {
+      x: o.p0.x,
+      y: o.p0.y,
+      patch: (x, y) =>
+        (moveTogether ? { p0: { x, y }, p1: { x: o.p1.x + x - o.p0.x, y: o.p1.y + y - o.p0.y } } : { p0: { x, y } }) as Partial<T>,
+    },
+    {
+      x: o.p1.x - ux * back,
+      y: o.p1.y - uy * back,
+      patch: (x, y) => {
+        const dd = Math.hypot(x - o.p0.x, y - o.p0.y);
+        if (!back || dd < 1e-6) return { p1: { x, y } } as Partial<T>;
+        return { p1: { x: x + ((x - o.p0.x) / dd) * back, y: y + ((y - o.p0.y) / dd) * back } } as Partial<T>;
+      },
+    },
+  ];
+}
+
+/**
+ * Quatro cantos de um retângulo (eixo p0 → p1, `larguraM` de lado a lado): arrastar um canto
+ * redimensiona com o canto oposto fixo, mantendo a orientação.
+ */
+function cornerHandles(o: SicroFixtureObject, larguraM: number, ppm: number): ParamHandle<SicroFixtureObject>[] {
+  const L = Math.hypot(o.p1.x - o.p0.x, o.p1.y - o.p0.y) || 1e-6;
+  const u = { x: (o.p1.x - o.p0.x) / L, y: (o.p1.y - o.p0.y) / L };
+  const n = { x: -u.y, y: u.x };
+  const h = (larguraM * ppm) / 2;
+  const at = (p: SicroPoint, s: number) => ({ x: p.x + n.x * h * s, y: p.y + n.y * h * s });
+  const corners = [at(o.p0, 1), at(o.p1, 1), at(o.p1, -1), at(o.p0, -1)];
+  return corners.map((c, i) => {
+    const opp = corners[(i + 2) % 4]!;
+    return {
+      x: c.x,
+      y: c.y,
+      patch: (x: number, y: number) => {
+        const dx = x - opp.x;
+        const dy = y - opp.y;
+        let du = dx * u.x + dy * u.y;
+        let dn = dx * n.x + dy * n.y;
+        if (Math.abs(du) < ppm) du = Math.sign(du || 1) * ppm;
+        if (Math.abs(dn) < ppm) dn = Math.sign(dn || 1) * ppm;
+        const p0 = { x: opp.x + (n.x * dn) / 2, y: opp.y + (n.y * dn) / 2 };
+        const p1 = { x: p0.x + u.x * du, y: p0.y + u.y * du };
+        return { p0, p1, params: { ...o.params, largura: Math.round((Math.abs(dn) / ppm) * 10) / 10 } };
+      },
+    };
+  });
+}
+
+/** Losango da flecha: projeta o ponteiro na normal da corda. */
+function bendHandle<T extends PathObj>(o: T): ParamHandle<T> {
+  const C = Math.hypot(o.p1.x - o.p0.x, o.p1.y - o.p0.y) || 1e-6;
+  const cn = { x: -(o.p1.y - o.p0.y) / C, y: (o.p1.x - o.p0.x) / C };
+  const cm = { x: (o.p0.x + o.p1.x) / 2, y: (o.p0.y + o.p1.y) / 2 };
+  return {
+    x: cm.x + cn.x * (o.bend ?? 0),
+    y: cm.y + cn.y * (o.bend ?? 0),
+    diamond: true,
+    patch: (x, y) => ({ bend: (x - cm.x) * cn.x + (y - cm.y) * cn.y }) as Partial<T>,
+  };
+}
+
+/** Alça de raio à direita do ponto (edita `params.raio`). */
+function raioHandle<T extends PathObj>(o: T, raioM: number, ppm: number, k = 1): ParamHandle<T> {
+  return {
+    x: o.p0.x + raioM * ppm * k,
+    y: o.p0.y,
+    patch: (x, y) => {
+      const r = Math.hypot(x - o.p0.x, y - o.p0.y) / ppm / k;
+      return { params: { ...o.params, raio: Math.round(Math.min(8, Math.max(0.2, r)) * 100) / 100 } } as unknown as Partial<T>;
+    },
+  };
+}
+
+function TraceNode({
+  obj,
+  doc,
+  draggable,
+  solo,
+  zoom,
+  onSelect,
+  onChange,
+}: {
+  obj: SicroTraceObject;
+  doc: SicroCroquiDoc;
+  draggable: boolean;
+  solo: boolean;
+  zoom: number;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = resolvePxPerM(doc.scale?.px_per_m);
+  const st = resolveParityStyle(doc.style);
+  const opts = { ppm, tema: st.tema, finish: st.vestigios, asfalto: st.asfalto };
+  const build = (o: SicroTraceObject): ParamView<SicroTraceObject> => {
+    const raioK = tp(o, "forma") === "area" ? 1.25 : 1;
+    let anchor: SicroPoint;
+    if (o.subtype === "colisao") {
+      const r = tn(o, "raio") * ppm * raioK;
+      anchor = { x: o.p0.x + r + 14, y: o.p0.y - r - 8 };
+    } else {
+      // Rótulo do lado oposto à cota.
+      const C = Math.hypot(o.p1.x - o.p0.x, o.p1.y - o.p0.y) || 1e-6;
+      const g = o.subtype === "fragmentos" ? null : traceGeomM(o, ppm);
+      const m = g
+        ? traceAt(g, g.len / 2)
+        : { x: (o.p0.x + o.p1.x) / 2 / ppm, y: (o.p0.y + o.p1.y) / 2 / ppm, nx: -(o.p1.y - o.p0.y) / C, ny: (o.p1.x - o.p0.x) / C };
+      const off = -(traceSpanM(o) + 0.9) * ppm - 8;
+      anchor = { x: m.x * ppm + m.nx * off, y: m.y * ppm + m.ny * off };
+    }
+    const handles: ParamHandle<SicroTraceObject>[] =
+      o.subtype === "colisao"
+        ? [
+            { x: o.p0.x, y: o.p0.y, patch: (x, y) => ({ p0: { x, y }, p1: { x, y } }) },
+            raioHandle(o, tn(o, "raio"), ppm, raioK),
+          ]
+        : [...endHandles(o, false), ...(o.subtype !== "fragmentos" && o.subtype !== "sulcagem" ? [bendHandle(o)] : [])];
+    return {
+      draw: (ctx) => drawTrace(ctx, o, opts),
+      hit: traceHitShape(o, ppm),
+      handles,
+      anchor,
+      extra: o.show_measure ? <TraceCota o={o} ppm={ppm} tema={st.tema} /> : null,
+      move: (dx, dy) => ({ p0: { x: o.p0.x + dx, y: o.p0.y + dy }, p1: { x: o.p1.x + dx, y: o.p1.y + dy } }),
+    };
+  };
+  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} onSelect={onSelect} onChange={onChange} />;
+}
+
+/** Recuo da alça de alcance (m, mais o raio da alça em px): fora da cabeça do semáforo e da luminária. */
+function fixtureHandleBackM(o: SicroFixtureObject): number {
+  if (o.subtype === "semaforo" && fp(o, "braco")) return fn(o, "tam") * (fp(o, "grupo") === "ped" ? 0.35 : 0.5) + 0.2;
+  if (o.subtype === "poste" && fp(o, "luminaria")) return 0.45;
+  return 0;
+}
+
+function FixtureNode({
+  obj,
+  doc,
+  draggable,
+  solo,
+  zoom,
+  onSelect,
+  onChange,
+}: {
+  obj: SicroFixtureObject;
+  doc: SicroCroquiDoc;
+  draggable: boolean;
+  solo: boolean;
+  zoom: number;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = resolvePxPerM(doc.scale?.px_per_m);
+  const style = resolveParityStyle(doc.style);
+  const build = (o: SicroFixtureObject): ParamView<SicroFixtureObject> => {
+    const spec = FIXTURE_SPECS[o.subtype];
+    const ext = fixtureExtentM(o) * ppm;
+    let anchor: SicroPoint;
+    let handles: ParamHandle<SicroFixtureObject>[];
+    if (spec.forma === "linha") {
+      const g = fixtureGeomM(spec.curva ? o : { ...o, bend: 0 }, ppm);
+      const m = traceAt(g, g.len / 2);
+      const off = -(ext + 0.9 * ppm) - 8;
+      anchor = { x: m.x * ppm + m.nx * off, y: m.y * ppm + m.ny * off };
+      handles = o.subtype === "area_conflito" ? cornerHandles(o, fn(o, "largura"), ppm) : [...endHandles(o, false), ...(spec.curva ? [bendHandle(o)] : [])];
+    } else {
+      anchor = { x: o.p0.x + ext + 14, y: o.p0.y - ext - 8 };
+      handles =
+        spec.p1 === "raio"
+          ? [
+              { x: o.p0.x, y: o.p0.y, patch: (x, y) => ({ p0: { x, y }, p1: { x, y } }) },
+              raioHandle(o, fn(o, "raio"), ppm),
+            ]
+          : endHandles(o, true, fixtureHandleBackM(o) > 0 ? fixtureHandleBackM(o) * ppm + 11 / zoom : 0);
+    }
+    return {
+      draw: (ctx) => drawFixture(ctx, o, { ppm, style }),
+      hit: fixtureHitShape(o, ppm),
+      handles,
+      anchor,
+      move: (dx, dy) => ({ p0: { x: o.p0.x + dx, y: o.p0.y + dy }, p1: { x: o.p1.x + dx, y: o.p1.y + dy } }),
+    };
+  };
+  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} onSelect={onSelect} onChange={onChange} />;
+}
+
+const fmtM = (v: number, d = 1) => `${v.toFixed(d).replace(".", ",")} m`;
+
+/** Cota do vestígio (sempre reta): comprimento ao lado, ou corda e flecha na derrapagem. */
+function TraceCota({ o, ppm, tema }: { o: SicroTraceObject; ppm: number; tema: ParityTema }) {
+  const color = tema === "escuro" ? "#e8e8e8" : "#333333";
+  const halo = tema === "escuro" ? "#1c1c1c" : "#ffffff";
+  const size = 12;
+  const text = (t: string, x: number, y: number) => (
+    <KonvaText
+      text={t}
+      x={x}
+      y={y}
+      offsetX={textWidthPx(t, size) / 2}
+      offsetY={size / 2}
+      fontSize={size}
+      fontStyle="bold"
+      fill={color}
+      stroke={halo}
+      strokeWidth={3}
+      fillAfterStrokeEnabled
+      listening={false}
+    />
+  );
+  if (o.subtype === "colisao") return null;
+  if (o.subtype === "derrapagem") {
+    const g = traceGeomM(o, ppm);
+    const s = (v: number) => v * ppm;
+    const side = Math.sign(o.bend || 1);
+    const off = 14;
+    // "M" do lado de fora da curva, além da alça da flecha.
+    const mText = (t: string) =>
+      text(t, s(g.mid.x) + g.cn.x * side * (size + 10), s(g.mid.y) + g.cn.y * side * (size + 10));
+    return (
+      <Group listening={false}>
+        <Line points={[o.p0.x, o.p0.y, o.p1.x, o.p1.y]} stroke={color} strokeWidth={1} dash={[4, 3]} />
+        <Line points={[s(g.cm.x), s(g.cm.y), s(g.mid.x), s(g.mid.y)]} stroke={color} strokeWidth={1} dash={[4, 3]} />
+        {text(`C ${fmtM(g.chord)}`, s(g.cm.x) - g.cn.x * off * side, s(g.cm.y) - g.cn.y * off * side)}
+        {mText(`M ${fmtM(Math.abs(o.bend) / ppm, 2)}`)}
+      </Group>
+    );
+  }
+  const g =
+    o.subtype === "fragmentos"
+      ? traceGeom({ x: o.p0.x / ppm, y: o.p0.y / ppm }, { x: o.p1.x / ppm, y: o.p1.y / ppm }, 0)
+      : traceGeomM(o, ppm);
+  if (g.len < 0.05) return null;
+  const d = o.subtype === "fragmentos" ? 0.6 : traceSpanM(o) + 0.9;
+  const pts: number[] = [];
+  const n = 40;
+  for (let i = 0; i <= n; i++) {
+    const p = traceAt(g, (g.len * i) / n);
+    pts.push((p.x + p.nx * d) * ppm, (p.y + p.ny * d) * ppm);
+  }
+  const tick = (p: { x: number; y: number; nx: number; ny: number }) => {
+    const x = (p.x + p.nx * d) * ppm;
+    const y = (p.y + p.ny * d) * ppm;
+    return [x - p.nx * 4, y - p.ny * 4, x + p.nx * 4, y + p.ny * 4];
+  };
+  const a = traceAt(g, 0);
+  const b = traceAt(g, g.len);
+  const m = traceAt(g, g.len / 2);
+  const mx = (m.x + m.nx * d) * ppm + m.nx * 11;
+  const my = (m.y + m.ny * d) * ppm + m.ny * 11;
+  return (
+    <Group listening={false}>
+      <Line points={pts} stroke={color} strokeWidth={1} />
+      <Line points={tick(a)} stroke={color} strokeWidth={1} />
+      <Line points={tick(b)} stroke={color} strokeWidth={1} />
+      {text(fmtM(o.subtype === "fragmentos" ? fanGeom(o, ppm).D : g.len), mx, my)}
+    </Group>
+  );
+}
+
+const HEAVY = new Set<VehicleBodyType>(["truck", "caminhao", "caminhao_pesado", "carreta", "reboque_guincho", "trator"]);
+const BUS = new Set<VehicleBodyType>(["onibus", "micro_onibus", "onibus_leito"]);
+
+/** Veículo em traço (planta técnica): contorno, para-brisa e vidro traseiro; +x = frente. */
+function VehicleOutline({
+  obj,
+  body,
+  tema,
+  selected,
+}: {
+  obj: SicroVehicleObject;
+  body: VehicleBodyType;
+  tema: ParityTema;
+  selected: boolean;
+}) {
+  const L = obj.width;
+  const W = obj.height;
+  const pal = tracePalette(tema);
+  const fill = tema === "escuro" ? "#2a2f36" : "#ffffff";
+  const twoWheel = body.startsWith("moto") || body.startsWith("bike");
+  return (
+    <>
+      <Shape
+        fill="#000"
+        sceneFunc={(kctx) => {
+          const ctx = (kctx as unknown as { _context: CanvasRenderingContext2D })._context;
+          ctx.save();
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          ctx.strokeStyle = pal.traco;
+          ctx.fillStyle = fill;
+          ctx.lineWidth = 1.5;
+          if (obj.tracejado) ctx.setLineDash([5, 3.5]);
+          if (twoWheel) {
+            ctx.lineWidth = Math.max(1.5, W * 0.2);
+            ctx.beginPath();
+            ctx.moveTo(L * 0.3, 0);
+            ctx.lineTo(L * 0.5, 0);
+            ctx.moveTo(-L * 0.5, 0);
+            ctx.lineTo(-L * 0.3, 0);
+            ctx.stroke();
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.roundRect(-L * 0.32, -W * 0.24, L * 0.62, W * 0.48, W * 0.2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(L * 0.24, -W * 0.48);
+            ctx.lineTo(L * 0.24, W * 0.48);
+            ctx.stroke();
+          } else {
+            const heavy = HEAVY.has(body);
+            const bus = BUS.has(body);
+            ctx.beginPath();
+            ctx.roundRect(-L / 2, -W / 2, L, W, heavy || bus ? W * 0.08 : Math.min(W * 0.25, L * 0.1));
+            ctx.fill();
+            ctx.stroke();
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            if (heavy) {
+              const cab = L / 2 - W * 1.05;
+              ctx.moveTo(cab, -W / 2);
+              ctx.lineTo(cab, W / 2);
+              ctx.moveTo(L / 2 - W * 0.14, -W * 0.42);
+              ctx.lineTo(L / 2 - W * 0.14, W * 0.42);
+            } else if (bus) {
+              ctx.moveTo(L / 2 - W * 0.16, -W * 0.44);
+              ctx.lineTo(L / 2 - W * 0.16, W * 0.44);
+              ctx.moveTo(-L / 2 + W * 0.1, -W * 0.4);
+              ctx.lineTo(-L / 2 + W * 0.1, W * 0.4);
+            } else {
+              ctx.moveTo(L * 0.17, -W * 0.43);
+              ctx.quadraticCurveTo(L * 0.23, 0, L * 0.17, W * 0.43);
+              ctx.moveTo(-L * 0.28, -W * 0.4);
+              ctx.quadraticCurveTo(-L * 0.32, 0, -L * 0.28, W * 0.4);
+              ctx.moveTo(L * 0.17, -W * 0.43);
+              ctx.lineTo(-L * 0.28, -W * 0.4);
+              ctx.moveTo(L * 0.17, W * 0.43);
+              ctx.lineTo(-L * 0.28, W * 0.4);
+              ctx.moveTo(L * 0.2, -W / 2);
+              ctx.lineTo(L * 0.16, -W / 2 - W * 0.1);
+              ctx.moveTo(L * 0.2, W / 2);
+              ctx.lineTo(L * 0.16, W / 2 + W * 0.1);
+            }
+            ctx.stroke();
+          }
+          ctx.restore();
+        }}
+        hitFunc={(kctx, shape) => {
+          kctx.beginPath();
+          kctx.rect(-L / 2, -W / 2, L, W);
+          kctx.closePath();
+          kctx.fillShape(shape);
+        }}
+      />
+      {selected && (
+        <Rect
+          x={-L / 2 - 3}
+          y={-W / 2 - 3}
+          width={L + 6}
+          height={W + 6}
+          stroke="#38bdf8"
+          strokeWidth={1.5}
+          dash={[6, 4]}
+          listening={false}
+        />
+      )}
+    </>
+  );
+}
+
 /** Alça de ponto (px de mundo, raio fixo como nas vias). Eventos não sobem ao grupo. */
 function PointHandle({
   x,
   y,
   color,
+  diamond,
+  r = 7,
   onMove,
   onEnd,
 }: {
   x: number;
   y: number;
   color: string;
+  /** Raio (px de mundo); padrão 7, como nas vias. */
+  r?: number;
+  /** Losango: alça da flecha (curvatura). */
+  diamond?: boolean;
   onMove: (x: number, y: number) => void;
   onEnd: (x: number, y: number) => void;
 }) {
+  const Node = diamond ? RegularPolygon : Circle;
   return (
-    <Circle
+    <Node
+      sides={4}
       x={x}
       y={y}
-      radius={7}
+      radius={diamond ? r * 1.2 : r}
       fill="#ffffff"
       stroke={color}
-      strokeWidth={2}
+      strokeWidth={(2 * r) / 7}
       draggable
       onMouseEnter={(e) => setCursor(e, "crosshair")}
       onMouseLeave={(e) => setCursor(e, "default")}
@@ -1411,6 +2087,7 @@ function ObjectLabel({
   anchor,
   rotation = 0,
   draggable,
+  outlineTema,
   onSelect,
   onChange,
 }: {
@@ -1419,12 +2096,13 @@ function ObjectLabel({
   anchor: SicroPoint;
   rotation?: number;
   draggable: boolean;
+  outlineTema?: ParityTema;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const t = text ?? obj.label;
   if (!t) return null;
-  const d = labelDefaults(obj);
+  const d = labelDefaults(obj, outlineTema);
   const lf = obj as LabelFields;
   const size = lf.label_size ?? d.size;
   return (
@@ -1597,7 +2275,7 @@ function MarkerNode({
 }
 
 /** Glifo por subtype de `marker`, centrado em (0,0); o Group pai posiciona. */
-export function MarkerGlyph({
+function MarkerGlyph({
   obj,
   selected,
 }: {
@@ -2029,7 +2707,13 @@ function MeasurementNode({
   const color = obj.color ?? "#dc2626";
   const size = obj.label_size ?? labelDefaults(obj).size;
   const rad = (rot * Math.PI) / 180;
-  const gap = size * 0.9;
+  // Reto por padrão; null = acompanha a linha.
+  const labelRot = obj.label_rotation === null ? rot : (obj.label_rotation ?? 0);
+  // Afasta pela meia-largura da caixa girada na normal, para o texto não cruzar a linha.
+  const lr = ((labelRot - rot) * Math.PI) / 180;
+  const half =
+    Math.abs(Math.sin(lr)) * (textWidthPx(text, size) / 2) + Math.abs(Math.cos(lr)) * (size / 2);
+  const gap = half + size * 0.4;
   // Rótulo do lado de cima da linha, no sentido de leitura.
   const anchor = { x: mid.x + Math.sin(rad) * gap, y: mid.y - Math.cos(rad) * gap };
   // Traços de extremidade perpendiculares.
@@ -2091,7 +2775,7 @@ function MeasurementNode({
         obj={obj}
         text={text}
         anchor={anchor}
-        rotation={rot}
+        rotation={labelRot}
         draggable={draggable && !obj.locked && solo}
         onSelect={onSelect}
         onChange={onChange}
@@ -2179,7 +2863,19 @@ function toWorld(stage: Konva.Stage, screen: SicroPoint): SicroPoint {
 
 /** Linhas, cota, escala e vias: dois pontos (clique-clique ou arrastar). */
 function isTwoPointTool(tool: Tool): boolean {
-  return tool.startsWith("line_") || tool.startsWith("road_") || tool === "measurement" || tool === "set_scale";
+  return (
+    tool.startsWith("line_") ||
+    tool.startsWith("road_") ||
+    (tool.startsWith("trace_") && tool !== "trace_colisao") ||
+    isLinearFixtureTool(tool) ||
+    tool === "measurement" ||
+    tool === "set_scale"
+  );
+}
+
+function isLinearFixtureTool(tool: Tool): boolean {
+  const sub = tool.startsWith("fixture_") ? tool.slice("fixture_".length) : "";
+  return sub in FIXTURE_SPECS && FIXTURE_SPECS[sub as keyof typeof FIXTURE_SPECS].forma === "linha";
 }
 
 function isAddTool(tool: Tool): boolean {
@@ -2188,6 +2884,9 @@ function isAddTool(tool: Tool): boolean {
     tool.startsWith("line_") ||
     tool.startsWith("marker_") ||
     tool.startsWith("road_") ||
+    tool.startsWith("trace_") ||
+    tool.startsWith("fixture_") ||
+    tool.startsWith("person_") ||
     tool === "text" ||
     tool === "measurement" ||
     tool === "set_scale"

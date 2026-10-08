@@ -1,7 +1,7 @@
 /**
- * Orquestrador do editor de vídeo: reprodutor + linha do tempo à esquerda,
- * metadados/eventos/storyboard à direita. O tempo corrente do player é o
- * timestamp técnico de eventos e quadros coletados.
+ * Orquestrador do editor de vídeo. Trilho de modos à esquerda (Assistir, Velocidade,
+ * Distância); no centro o reprodutor ou o quadro exato; à direita metadados/eventos/
+ * storyboard (Assistir) ou o guia do modo. O tempo do player é o timestamp técnico.
  */
 
 import { registerOpenVideo } from "@modules/midia/midiaLink";
@@ -9,7 +9,7 @@ import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, AlertTriangle, Clock, Columns2, Copy, Repeat, Scissors, X } from "lucide-react";
+import { ArrowLeft, Clock, Columns2, Copy, Repeat, Scissors, X } from "lucide-react";
 import type {
   ClipMode,
   ExportClipResult,
@@ -33,8 +33,13 @@ import { VideoTimeline } from "./VideoTimeline";
 import { VideoEventPanel } from "./VideoEventPanel";
 import { VideoMetadataPanel } from "./VideoMetadataPanel";
 import { VideoStoryboardPanel } from "./VideoStoryboardPanel";
-import { SpeedPanel } from "./speed/SpeedPanel";
-import { MeasurePanel } from "./measure/MeasurePanel";
+import { ModeRail } from "./medir/ModeRail";
+import { MedirStage } from "./medir/MedirStage";
+import { SpeedGuide, type MedirActions } from "./medir/SpeedGuide";
+import { DistanceGuide } from "./medir/DistanceGuide";
+import { VideoHealth } from "./medir/VideoHealth";
+import medirStyles from "./medir/Medir.module.css";
+import { useMedirStore } from "./medir/medirStore";
 import { ClockDialog, ExportClipDialog, SequenceDialog } from "./AnalysisDialogs";
 import { StoryboardGallery } from "./StoryboardGallery";
 import { MultiCamView } from "./MultiCamView";
@@ -52,9 +57,6 @@ import {
 } from "./format";
 import styles from "./VideoAnalysisView.module.css";
 import { askConfirm } from "@components/Dialog/ask";
-
-/** Avisos fechados nesta sessão (vídeo + texto): não voltam ao trocar de aba. */
-const DISMISSED_WARNINGS = new Set<string>();
 
 export function VideoAnalysisView() {
   useImmersive();
@@ -98,9 +100,18 @@ export function VideoAnalysisView() {
   }, [openMediaRow]);
   const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [mainTab, setMainTab] = useState<"player" | "speed" | "measure">(
-    "player",
-  );
+  const modo = useMedirStore((s) => s.modo);
+  const setModo = useMedirStore((s) => s.setModo);
+  const speedStep = useMedirStore((s) => s.speed.step);
+  const distStep = useMedirStore((s) => s.dist.step);
+  const perito = useMedirStore((s) => s.perito);
+  const bindMedia = useMedirStore((s) => s.bindMedia);
+  // O reprodutor aparece em Assistir e no primeiro passo dos modos (escolher o momento).
+  const showPlayer =
+    modo === "assistir" || (modo === "velocidade" && speedStep === 0) || (modo === "distancia" && distStep === 0);
+  useEffect(() => {
+    if (openMediaRow) bindMedia(openMediaRow.sha256);
+  }, [openMediaRow, bindMedia]);
   const controllerRef = useRef<PlayerController | null>(null);
 
   // Autor das calibrações/cálculos; nunca vazio (cai para "Perito").
@@ -172,10 +183,10 @@ export function VideoAnalysisView() {
     return () => window.removeEventListener("keydown", onKey);
   }, [expanded]);
 
-  // Trocar de aba sai da tela cheia (o painel do reprodutor fica oculto).
+  // Sair do reprodutor sai da tela cheia (o painel fica oculto).
   useEffect(() => {
-    if (mainTab !== "player") exitFullscreen();
-  }, [mainTab, exitFullscreen]);
+    if (!showPlayer) exitFullscreen();
+  }, [showPlayer, exitFullscreen]);
 
   const bigScreen = fullscreen || expanded;
 
@@ -185,9 +196,16 @@ export function VideoAnalysisView() {
   // Galeria do storyboard e diálogo de trecho abertos: o teclado é deles.
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [clipOpen, setClipOpen] = useState(false);
-  const playerKeys =
-    mainTab === "player" && compareWith == null && galleryIndex == null && !clipOpen;
+  const playerKeys = showPlayer && compareWith == null && galleryIndex == null && !clipOpen;
   useShortcuts({ "video.fullscreen": toggleFullscreen }, { enabled: playerKeys });
+  useShortcuts(
+    {
+      "video.mode.assistir": () => setModo("assistir"),
+      "video.mode.velocidade": () => setModo("velocidade"),
+      "video.mode.distancia": () => setModo("distancia"),
+    },
+    { enabled: compareWith == null && galleryIndex == null && !clipOpen },
+  );
 
   // vídeos do caso: alternar e adicionar sem sair da análise
   const switchVideo = (id: string) => {
@@ -240,8 +258,6 @@ export function VideoAnalysisView() {
 
   const media0 = bundle?.media ?? null;
   const fpsDeclared = media0?.fps_declared ?? null;
-  const [, bumpWarnings] = useState(0);
-  const warnKey = [media0?.id ?? "", ...probeWarnings, ...warningsFromLastAction].join("\n");
   const startTime = useMemo(
     () => probeStartTime(media0?.raw_probe_json),
     [media0?.raw_probe_json],
@@ -647,6 +663,19 @@ export function VideoAnalysisView() {
     controllerRef.current?.seek(seconds);
   };
 
+  const medirActions: MedirActions = {
+    now: nowTime,
+    collectAt: async (t, title) => {
+      const f = await collectFrame(workspacePath, { media_hash: media.sha256, timestamp_s: t, event_id: null, title });
+      return f;
+    },
+    seek: (t) => {
+      handleSeek(t);
+      setCurrentTime(t);
+    },
+    fps: media.fps_declared,
+  };
+
   const handleCollectFrame = async (opts?: {
     title?: string;
     eventId?: string | null;
@@ -783,33 +812,6 @@ export function VideoAnalysisView() {
         </div>
       )}
 
-      {(probeWarnings.length > 0 || warningsFromLastAction.length > 0) &&
-        !DISMISSED_WARNINGS.has(warnKey) && (
-        <div className={styles.warningBanner}>
-          <AlertTriangle size={14} />
-          <div>
-            {probeWarnings.map((w, i) => (
-              <div key={`p-${i}`}>{w}</div>
-            ))}
-            {warningsFromLastAction.map((w, i) => (
-              <div key={`a-${i}`}>{w}</div>
-            ))}
-          </div>
-          <button
-            type="button"
-            className={styles.warningClose}
-            onClick={() => {
-              DISMISSED_WARNINGS.add(warnKey);
-              bumpWarnings((n) => n + 1);
-            }}
-            title="Fechar aviso (volta se aparecer outro)"
-            aria-label="Fechar aviso"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
       {compareWith && workspacePath ? (
         <MultiCamView
           workspacePath={workspacePath}
@@ -821,6 +823,7 @@ export function VideoAnalysisView() {
         />
       ) : (
       <div ref={bodyRef} className={styles.body}>
+        <ModeRail modo={modo} onChange={setModo} />
         {galleryIndex != null && workspacePath && (
           <StoryboardGallery
             workspacePath={workspacePath}
@@ -833,38 +836,11 @@ export function VideoAnalysisView() {
           />
         )}
         <main className={styles.main}>
-          <div className={styles.mainTabs}>
-            <button
-              type="button"
-              className={mainTab === "player" ? styles.mainTabActive : styles.mainTab}
-              onClick={() => setMainTab("player")}
-            >
-              Reprodutor
-            </button>
-            <button
-              type="button"
-              className={mainTab === "speed" ? styles.mainTabActive : styles.mainTab}
-              onClick={() => setMainTab("speed")}
-              title="Calculador de velocidade (sobre frames coletados)"
-            >
-              Velocidade
-            </button>
-            <button
-              type="button"
-              className={mainTab === "measure" ? styles.mainTabActive : styles.mainTab}
-              onClick={() => setMainTab("measure")}
-              title="Medição de distância (compartilha a calibração)"
-            >
-              Medições
-            </button>
-          </div>
-
-          {/* Reprodutor, Velocidade e Medições ficam montados (só muda a
-              visibilidade) para preservar marcações e o estado do player ao trocar de aba. */}
+          {/* O reprodutor fica sempre montado (só muda a visibilidade) para preservar o estado do player. */}
           <div
             ref={playerPaneRef}
             className={`${styles.tabPane} ${expanded ? styles.tabPaneExpanded : ""}`}
-            style={{ display: mainTab === "player" ? "flex" : "none" }}
+            style={{ display: showPlayer ? "flex" : "none" }}
           >
             {clockOpen && (
               <ClockDialog
@@ -1092,29 +1068,7 @@ export function VideoAnalysisView() {
             </div>
           </div>
 
-          <div
-            className={styles.tabPaneScroll}
-            style={{ display: mainTab === "speed" ? "flex" : "none" }}
-          >
-            <SpeedPanel
-              workspacePath={workspacePath}
-              media={media}
-              frames={storyboard}
-              author={author}
-            />
-          </div>
-
-          <div
-            className={styles.tabPaneScroll}
-            style={{ display: mainTab === "measure" ? "flex" : "none" }}
-          >
-            <MeasurePanel
-              workspacePath={workspacePath}
-              media={media}
-              frames={storyboard}
-              author={author}
-            />
-          </div>
+          {!showPlayer && <MedirStage workspacePath={workspacePath} media={media} frames={storyboard} />}
         </main>
 
         <div
@@ -1126,6 +1080,31 @@ export function VideoAnalysisView() {
           aria-orientation="vertical"
         />
         <aside className={styles.side} style={{ width: sideWidth }}>
+          {modo === "velocidade" ? (
+            <SpeedGuide
+              workspacePath={workspacePath}
+              media={media}
+              author={author}
+              frames={storyboard}
+              warnings={[...probeWarnings, ...warningsFromLastAction]}
+              actions={medirActions}
+            />
+          ) : modo === "distancia" ? (
+            <DistanceGuide
+              workspacePath={workspacePath}
+              media={media}
+              author={author}
+              frames={storyboard}
+              warnings={[...probeWarnings, ...warningsFromLastAction]}
+              actions={medirActions}
+            />
+          ) : (
+          <>
+          {(probeWarnings.length > 0 || warningsFromLastAction.length > 0) && (
+            <div className={medirStyles.healthWrap}>
+              <VideoHealth warnings={[...probeWarnings, ...warningsFromLastAction]} perito={perito} />
+            </div>
+          )}
           <VideoMetadataPanel media={media} warnings={probeWarnings} />
           <VideoEventPanel
             events={events}
@@ -1153,6 +1132,8 @@ export function VideoAnalysisView() {
             onOpenGallery={(i) => setGalleryIndex(i)}
             onCopyTime={(f) => void copyFrameTime(f)}
           />
+          </>
+          )}
         </aside>
       </div>
       )}

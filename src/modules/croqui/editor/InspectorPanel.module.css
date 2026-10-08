@@ -311,3 +311,61 @@
   border-color: var(--sicro-accent);
   font-weight: 600;
 }
+
+/* Vestígios: sliders e contas de referência */
+.range {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rangeTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 6px;
+}
+.rangeValue {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  font-variant-numeric: tabular-nums;
+}
+.range input[type="range"] {
+  width: 100%;
+  accent-color: var(--sicro-accent);
+}
+.readouts {
+  margin: 4px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--sicro-border);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.readouts div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: var(--text-xs);
+}
+.readouts dt {
+  color: var(--sicro-fg-muted);
+}
+.readouts dd {
+  margin: 0;
+  font-family: var(--font-mono);
+  color: var(--sicro-fg);
+  font-variant-numeric: tabular-nums;
+}
+.readouts p {
+  margin: 2px 0 0;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+}
+.segWrap {
+  flex-wrap: wrap;
+}
+.segWrap .temaBtn {
+  flex: 1 1 30%;
+}

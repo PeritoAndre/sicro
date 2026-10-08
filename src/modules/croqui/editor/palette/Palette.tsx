@@ -16,6 +16,9 @@ import {
 } from "lucide-react";
 import type { Tool } from "../useEditorState";
 import { RAIL, groupOfTool, type PaletteItem, type RailEntry } from "./catalog";
+import { ACTION_BY_ID } from "@core/keymapActions";
+import { formatBinding } from "@core/keymap";
+import { useKeymapStore } from "@stores/keymapStore";
 
 type OpenEntry = Extract<RailEntry, { kind: "group" } | { kind: "actions" }>;
 
@@ -36,7 +39,6 @@ interface Props {
   canDuplicate: boolean;
   onDuplicate: () => void;
   onImportBackground: () => void;
-  onPickFromDossie: () => void;
   onImportDrone?: () => void;
   onImportOsm?: () => void;
   onCenterBackground?: () => void;
@@ -58,6 +60,13 @@ interface Props {
 
 export function Palette(props: Props) {
   const { activeTool, onSelectTool, onDropTool, onBackToList } = props;
+  // Tecla de cada ferramenta (o que o usuário configurou, senão o padrão).
+  const overrides = useKeymapStore((s) => s.overrides);
+  const keyOf = (action?: string) => {
+    if (!action) return "";
+    const raw = overrides[action] ?? ACTION_BY_ID[action]?.defaultBinding ?? "";
+    return raw ? formatBinding(raw).replace(/Shift \+ /, "⇧") : "";
+  };
   const [open, setOpen] = useState<string | null>(null);
   const [pinned, setPinned] = useState(false);
   const pinnedRef = useRef(false);
@@ -145,10 +154,11 @@ export function Palette(props: Props) {
                 type="button"
                 className={`${styles.entry} ${active ? styles.entryActive : ""}`}
                 onClick={() => pickDirect(e.tool)}
-                title={e.hint ? `${e.label} (${e.hint})` : e.label}
+                title={keyOf(e.action) ? `${e.label} (${keyOf(e.action)})` : e.label}
               >
                 <Icon size={18} aria-hidden />
                 <span>{e.label}</span>
+                {keyOf(e.action) && <kbd className={styles.key}>{keyOf(e.action)}</kbd>}
               </button>
             );
           }
@@ -161,10 +171,11 @@ export function Palette(props: Props) {
               className={[styles.entry, active ? styles.entryActive : "", isOpen ? styles.entryOpen : ""].join(" ")}
               onClick={() => setOpen(isOpen ? null : e.id)}
               aria-expanded={isOpen}
-              title={e.label}
+              title={e.kind === "group" && keyOf(e.action) ? `${e.label} (${keyOf(e.action)})` : e.label}
             >
               <Icon size={18} aria-hidden />
               <span>{e.label}</span>
+              {e.kind === "group" && keyOf(e.action) && <kbd className={styles.key}>{keyOf(e.action)}</kbd>}
             </button>
           );
         })}
@@ -219,10 +230,11 @@ export function Palette(props: Props) {
                         closeUnlessPinned();
                       }
                     }}
-                    title={it.label}
+                    title={keyOf(it.action) ? `${it.label} (${keyOf(it.action)})` : it.label}
                   >
                     <div className={styles.thumbArt} data-thumb>
                       {it.thumb}
+                      {keyOf(it.action) && <kbd className={styles.thumbKey}>{keyOf(it.action)}</kbd>}
                     </div>
                     <span className={styles.thumbLabel}>{it.label}</span>
                   </button>
@@ -272,9 +284,6 @@ function ImageActions(p: Props) {
       <button type="button" className={styles.actionBtn} onClick={p.onImportBackground} title="Imagem do disco como fundo">
         <ImageIcon size={13} /> Importar imagem
       </button>
-      <button type="button" className={styles.actionBtn} onClick={p.onPickFromDossie} title="Uma foto do caso como fundo">
-        <MapPin size={13} /> Fotos do caso
-      </button>
       {p.onImportDrone && (
         <button type="button" className={styles.actionBtn} onClick={p.onImportDrone} title="Correção de lente, recorte e sidecar antes de usar como fundo">
           <FileImage size={13} /> Importar drone…
@@ -307,7 +316,7 @@ function ImageActions(p: Props) {
             <button type="button" className={styles.actionBtn} onClick={p.onCenterBackground}>Centralizar na folha</button>
           )}
           {p.onFitBackground && (
-            <button type="button" className={styles.actionBtn} onClick={p.onFitBackground}>Ajustar à folha</button>
+            <button type="button" className={styles.actionBtn} onClick={p.onFitBackground}>Tamanho original</button>
           )}
           {p.onResetBackgroundRotation && (
             <button type="button" className={styles.actionBtn} onClick={p.onResetBackgroundRotation}>Rotação a 0°</button>

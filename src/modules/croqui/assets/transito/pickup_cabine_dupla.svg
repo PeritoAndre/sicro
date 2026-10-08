@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Pickup cabine dupla, vista de cima, frente para cima; 1 unidade = 1 m (como a frota do designer). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="2.4mm" height="5.3mm" version="1.1" viewBox="0 0 2.4 5.3" style="shape-rendering:geometricPrecision; fill-rule:evenodd; clip-rule:evenodd">
+ <defs>
+  <style type="text/css">
+   <![CDATA[
+    .fil0 {fill:#CC0000}
+    .fil5 {fill:#373435}
+    .fil4 {fill:white}
+    .fil3 {fill:red}
+    .str0 {stroke:#373435; stroke-width:0.035; stroke-linejoin:round}
+    .str1 {stroke:#373435; stroke-width:0.018; fill:none}
+    .str2 {stroke:#555555; stroke-width:0.02; fill:none}
+   ]]>
+  </style>
+  <linearGradient id="pk_vidro" gradientUnits="userSpaceOnUse" x1="0.45" y1="1.75" x2="1.95" y2="1.75">
+   <stop offset="0" style="stop-color:black"/>
+   <stop offset="0.39" style="stop-color:#303030"/>
+   <stop offset="0.57" style="stop-color:#616161"/>
+   <stop offset="0.68" style="stop-color:#999999"/>
+   <stop offset="0.87" style="stop-color:#D1D1D1"/>
+   <stop offset="0.93" style="stop-color:dimgray"/>
+   <stop offset="1" style="stop-color:black"/>
+  </linearGradient>
+  <linearGradient id="pk_lateral" gradientUnits="userSpaceOnUse" x1="0.4" y1="1.65" x2="0.4" y2="3.05">
+   <stop offset="0" style="stop-color:black"/>
+   <stop offset="0.31" style="stop-color:#2F2F2F"/>
+   <stop offset="0.37" style="stop-color:#5E5E5E"/>
+   <stop offset="0.43" style="stop-color:#2F2F2F"/>
+   <stop offset="0.68" style="stop-color:black"/>
+   <stop offset="0.9" style="stop-color:#1D1D1D"/>
+   <stop offset="1" style="stop-color:#3B3B3B"/>
+  </linearGradient>
+  <linearGradient id="pk_cacamba" gradientUnits="userSpaceOnUse" x1="0.4" y1="4.2" x2="2.0" y2="4.2">
+   <stop offset="0" style="stop-color:#1f1f1f"/>
+   <stop offset="0.5" style="stop-color:#3d3d3d"/>
+   <stop offset="1" style="stop-color:#1f1f1f"/>
+  </linearGradient>
+ </defs>
+ <g id="pickup">
+  <!-- retrovisores -->
+  <path class="fil0 str0" d="M0.29 1.52 L0.09 1.55 C0.04 1.57 0.03 1.66 0.08 1.69 L0.29 1.68 Z"/>
+  <path class="fil0 str0" d="M2.11 1.52 L2.31 1.55 C2.36 1.57 2.37 1.66 2.32 1.69 L2.11 1.68 Z"/>
+  <!-- carroceria inteira (cabine + caçamba) -->
+  <path class="fil0 str0" d="M0.62 0.06 Q1.2 0.0 1.78 0.06 Q2.1 0.1 2.12 0.44 L2.13 5.12 Q2.13 5.25 2.0 5.25 L0.4 5.25 Q0.27 5.25 0.27 5.12 L0.28 0.44 Q0.3 0.1 0.62 0.06 Z"/>
+  <!-- faróis -->
+  <path class="fil4 str1" d="M0.35 0.36 Q0.4 0.15 0.72 0.11 L0.7 0.25 Q0.5 0.27 0.35 0.36 Z"/>
+  <path class="fil4 str1" d="M2.05 0.36 Q2.0 0.15 1.68 0.11 L1.7 0.25 Q1.9 0.27 2.05 0.36 Z"/>
+  <!-- vincos do capô -->
+  <path class="str1" d="M0.78 0.32 L0.84 1.44 M1.62 0.32 L1.56 1.44"/>
+  <!-- para-brisa -->
+  <path class="str1" style="fill:url(#pk_vidro)" d="M0.42 1.56 Q1.2 1.42 1.98 1.56 L1.86 2.02 Q1.2 1.96 0.54 2.02 Z"/>
+  <!-- vidros laterais (cabine dupla: duas portas por lado) -->
+  <path class="str1" style="fill:url(#pk_lateral)" d="M0.31 1.74 L0.43 1.64 L0.47 3.0 L0.32 3.04 Z"/>
+  <path class="str1" style="fill:url(#pk_lateral)" d="M2.09 1.74 L1.97 1.64 L1.93 3.0 L2.08 3.04 Z"/>
+  <path class="str1" d="M0.3 2.36 L0.46 2.36 M2.1 2.36 L1.94 2.36"/>
+  <!-- teto: frisos e vidro traseiro -->
+  <path class="str1" d="M0.62 2.1 L0.62 2.88 M1.78 2.1 L1.78 2.88"/>
+  <path class="str1" style="fill:url(#pk_vidro)" d="M0.56 2.98 Q1.2 3.03 1.84 2.98 L1.81 3.12 Q1.2 3.16 0.59 3.12 Z"/>
+  <!-- caçamba: assoalho com nervuras, laterais e tampa traseira na cor da lataria -->
+  <path class="fil5" d="M0.37 3.28 L2.03 3.28 L2.03 5.12 L0.37 5.12 Z"/>
+  <path style="fill:url(#pk_cacamba)" d="M0.42 3.33 L1.98 3.33 L1.98 5.08 L0.42 5.08 Z"/>
+  <path class="str2" d="M0.6 3.38 L0.6 5.03 M0.82 3.38 L0.82 5.03 M1.04 3.38 L1.04 5.03 M1.26 3.38 L1.26 5.03 M1.48 3.38 L1.48 5.03 M1.7 3.38 L1.7 5.03 M1.9 3.38 L1.9 5.03"/>
+  <path class="str1" d="M0.27 3.22 L2.13 3.22"/>
+  <!-- lanternas -->
+  <path class="fil3 str1" d="M0.29 5.1 L0.46 5.1 L0.46 5.23 L0.33 5.23 Q0.29 5.23 0.29 5.19 Z"/>
+  <path class="fil3 str1" d="M2.11 5.1 L1.94 5.1 L1.94 5.23 L2.07 5.23 Q2.11 5.23 2.11 5.19 Z"/>
+ </g>
+</svg>

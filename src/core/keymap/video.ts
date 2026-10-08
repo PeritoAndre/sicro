@@ -39,6 +39,10 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
 
   // Tela.
   { id: "video.fullscreen", scope: "video", group: "Vídeo · Tela", label: "Tela cheia (entrar / sair)", defaultBinding: "F" },
+  // Modos da análise (trilho da esquerda).
+  { id: "video.mode.assistir", scope: "video", group: "Vídeo · Modos", label: "Modo Assistir", defaultBinding: "Alt+1" },
+  { id: "video.mode.velocidade", scope: "video", group: "Vídeo · Modos", label: "Modo Velocidade", defaultBinding: "Alt+2" },
+  { id: "video.mode.distancia", scope: "video", group: "Vídeo · Modos", label: "Modo Distância", defaultBinding: "Alt+3" },
   { id: "video.magnifyIn", scope: "video", group: "Vídeo · Tela", label: "Lupa: aproximar a imagem", defaultBinding: "Ctrl+=" },
   { id: "video.magnifyOut", scope: "video", group: "Vídeo · Tela", label: "Lupa: afastar a imagem", defaultBinding: "Ctrl+-" },
   { id: "video.magnifyReset", scope: "video", group: "Vídeo · Tela", label: "Lupa: imagem inteira", defaultBinding: "Ctrl+0" },

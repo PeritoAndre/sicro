@@ -66,9 +66,9 @@ describe("getVehicleArtSvg (recolor)", () => {
     expect(a).toBe(b);
   });
 
-  it("tipos sem arte (pickup/other) devolvem null", () => {
-    expect(getVehicleArtSvg("pickup", "#111111")).toBeNull();
+  it("tipo sem arte (other) devolve null; pickup tem arte recolorível", () => {
     expect(getVehicleArtSvg("other", "#111111")).toBeNull();
+    expect(getVehicleArtSvg("pickup", "#111111")).toContain("#111111");
   });
 
   it("sedan: a sombra também é trocada (não sobra B0080A)", () => {
@@ -102,9 +102,9 @@ describe("makeVehicle em escala real", () => {
   });
 
   it("tipo sem arte ignora a escala e usa preset", () => {
-    const v = makeVehicle({ x: 0, y: 0 }, "V1", "pickup", 10);
-    expect(v.width).toBe(96);
-    expect(v.height).toBe(42);
+    const v = makeVehicle({ x: 0, y: 0 }, "V1", "other", 10);
+    expect(v.width).toBe(80);
+    expect(v.height).toBe(40);
   });
 });
 

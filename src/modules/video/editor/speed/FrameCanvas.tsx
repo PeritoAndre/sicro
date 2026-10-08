@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Circle,
+  Group,
   Image as KonvaImage,
   Layer,
   Line,
@@ -23,6 +24,17 @@ export interface FramePoint {
 export interface FrameMarker extends FramePoint {
   label?: string;
   color?: string;
+  /** Marca apagada (outros momentos). */
+  faint?: boolean;
+}
+
+/** Linha de guia em pixel nativo (grade de 1 m, régua, trajetória). */
+export interface FrameGuide {
+  points: number[];
+  color?: string;
+  /** Espessura em px de tela. */
+  width?: number;
+  dash?: boolean;
 }
 
 interface Props {
@@ -43,6 +55,12 @@ interface Props {
   height?: number;
   /** Desabilita a captura de cliques (sem travar zoom/pan). */
   disabled?: boolean;
+  /** Linhas de guia por cima do quadro (recortadas na imagem). */
+  guides?: FrameGuide[];
+  /** O que clicar agora, num selo sobre o quadro. */
+  hint?: string | null;
+  /** Lupa 3× ao lado do cursor. */
+  lupa?: boolean;
 }
 
 const ZOOM_MIN = 0.1;
@@ -58,7 +76,12 @@ export function FrameCanvas({
   onAddPoint,
   height = 460,
   disabled = false,
+  guides = [],
+  hint = null,
+  lupa = false,
 }: Props) {
+  const lupaRef = useRef<HTMLCanvasElement>(null);
+  const [hover, setHover] = useState<{ sx: number; sy: number; x: number; y: number } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const stageRef = useRef<Konva.Stage | null>(null);
   const [size, setSize] = useState({ w: 640, h: height });
@@ -153,8 +176,48 @@ export function FrameCanvas({
 
   const interactive = !!onAddPoint && !disabled;
 
+  // Lupa: recorte do quadro original, ampliado, desenhado num canvas HTML ao lado do cursor.
+  useEffect(() => {
+    const c = lupaRef.current;
+    if (!c || !hover || !image) return;
+    const g = c.getContext("2d");
+    if (!g) return;
+    const R = 70;
+    const Z = 3;
+    g.clearRect(0, 0, 2 * R, 2 * R);
+    g.save();
+    g.beginPath();
+    g.arc(R, R, R - 1, 0, Math.PI * 2);
+    g.clip();
+    g.imageSmoothingEnabled = false;
+    g.drawImage(image, hover.x - R / Z, hover.y - R / Z, (2 * R) / Z, (2 * R) / Z, 0, 0, 2 * R, 2 * R);
+    g.strokeStyle = "rgba(255,255,255,0.9)";
+    g.lineWidth = 1;
+    g.beginPath();
+    g.moveTo(R - 9, R);
+    g.lineTo(R + 9, R);
+    g.moveTo(R, R - 9);
+    g.lineTo(R, R + 9);
+    g.stroke();
+    g.restore();
+    g.strokeStyle = "#d7a84f";
+    g.lineWidth = 2;
+    g.beginPath();
+    g.arc(R, R, R - 1, 0, Math.PI * 2);
+    g.stroke();
+  }, [hover, image]);
+
+  const handleMove = () => {
+    if (!lupa) return;
+    const pos = stageRef.current?.getPointerPosition();
+    if (!pos) return;
+    const x = (pos.x - viewport.x) / viewport.scale;
+    const y = (pos.y - viewport.y) / viewport.scale;
+    setHover(x < 0 || y < 0 || x > natW || y > natH ? null : { sx: pos.x, sy: pos.y, x, y });
+  };
+
   return (
-    <div ref={wrapRef} style={{ width: "100%", height: "100%" }}>
+    <div ref={wrapRef} style={{ width: "100%", height: "100%", position: "relative" }}>
       <Stage
         ref={stageRef}
         width={size.w}
@@ -166,6 +229,8 @@ export function FrameCanvas({
         onClick={handleClick}
         onTap={handleClick}
         onWheel={handleWheel}
+        onMouseMove={handleMove}
+        onMouseLeave={() => setHover(null)}
         style={{
           background: "#0f172a",
           cursor: interactive ? "crosshair" : "default",
@@ -178,6 +243,19 @@ export function FrameCanvas({
           )}
         </Layer>
         <Layer listening={false}>
+          <Group clipX={0} clipY={0} clipWidth={natW} clipHeight={natH}>
+            {guides.map((g, i) => (
+              <Line
+                key={i}
+                points={g.points}
+                stroke={g.color ?? "rgba(215,168,79,0.55)"}
+                strokeWidth={(g.width ?? 1) * inv}
+                dash={g.dash ? [6 * inv, 5 * inv] : undefined}
+                lineCap="round"
+                lineJoin="round"
+              />
+            ))}
+          </Group>
           {flatPolyline && flatPolyline.length >= 4 && (
             <Line
               points={flatPolyline}
@@ -196,10 +274,41 @@ export function FrameCanvas({
               inv={inv}
               label={m.label}
               color={m.color ?? "#22d3ee"}
+              faint={m.faint}
             />
           ))}
         </Layer>
       </Stage>
+      {hint && (
+        <div
+          style={{
+            position: "absolute",
+            left: 10,
+            bottom: 10,
+            padding: "5px 10px",
+            borderRadius: 6,
+            background: "rgba(13,21,32,0.82)",
+            color: "#f6e2b5",
+            font: "500 13px var(--font-ui)",
+            pointerEvents: "none",
+          }}
+        >
+          {hint}
+        </div>
+      )}
+      {lupa && hover && (
+        <canvas
+          ref={lupaRef}
+          width={140}
+          height={140}
+          style={{
+            position: "absolute",
+            left: Math.min(size.w - 150, hover.sx + 24),
+            top: Math.max(6, hover.sy - 164),
+            pointerEvents: "none",
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -210,14 +319,17 @@ function CrosshairMarker({
   inv,
   label,
   color,
+  faint,
 }: {
   x: number;
   y: number;
   inv: number;
   label?: string;
   color: string;
+  faint?: boolean;
 }) {
-  const r = 10 * inv;
+  const r = (faint ? 6 : 10) * inv;
+  if (faint) return <Circle x={x} y={y} radius={r} stroke={color} strokeWidth={1.5 * inv} opacity={0.6} />;
   return (
     <>
       <Line points={[x - r, y, x + r, y]} stroke={color} strokeWidth={1.5 * inv} />

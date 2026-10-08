@@ -65,9 +65,9 @@ describe("makeMarker", () => {
     const brake = makeMarker({ x: 0, y: 0 }, "brake_mark");
     const fluid = makeMarker({ x: 0, y: 0 }, "fluid");
     const body = makeMarker({ x: 0, y: 0 }, "body");
-    expect(x.label).toBe("X");
-    expect(brake.label).toBe("Frenagem");
-    expect(fluid.label).toBe("Fluido");
+    expect(x.label).toBe("");
+    expect(brake.label).toBe("");
+    expect(fluid.label).toBe("");
     expect(body.label).toBe("Vítima");
     expect(brake.size).toBeGreaterThan(x.size);
     expect(x.category).toBe("vestigios");

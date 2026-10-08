@@ -19,7 +19,6 @@ import type {
   ImportReport,
   ImportResult,
   ImportSicroappInput,
-  MediaAsset,
 } from "@domain/import";
 import type {
   Croqui,
@@ -233,9 +232,6 @@ export const commands = {
     });
   },
 
-  listDossiePhotos(workspacePath: string): Promise<MediaAsset[]> {
-    return safeInvoke<MediaAsset[]>("list_dossie_photos", { workspacePath });
-  },
 
   // ----- Croqui -----
   /** Consulta Overpass QL pelo Rust (do WebView o fetch falha no Linux). Devolve o JSON cru. */

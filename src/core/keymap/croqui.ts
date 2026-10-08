@@ -26,9 +26,9 @@ export const CROQUI_ACTIONS: ShortcutAction[] = [
 
   // Objetos.
   { id: "croqui.tool.vehicle", scope: "croqui", group: "Croqui · Objetos", label: "Veículo (sedan)", defaultBinding: "C" },
-  { id: "croqui.tool.vestigio", scope: "croqui", group: "Croqui · Objetos", label: "Vestígio (ponto de colisão X)", defaultBinding: "X" },
-  { id: "croqui.tool.mobiliario", scope: "croqui", group: "Croqui · Objetos", label: "Mobiliário urbano (semáforo)", defaultBinding: "U" },
-  { id: "croqui.tool.pessoa", scope: "croqui", group: "Croqui · Objetos", label: "Pessoa (pedestre)", defaultBinding: "B" },
+  { id: "croqui.tool.vestigio", scope: "croqui", group: "Croqui · Objetos", label: "Ponto de colisão", defaultBinding: "X" },
+  { id: "croqui.tool.mobiliario", scope: "croqui", group: "Croqui · Objetos", label: "Sinalização (placa)", defaultBinding: "U" },
+  { id: "croqui.tool.pessoa", scope: "croqui", group: "Croqui · Objetos", label: "Pessoa (deitada, dorsal)", defaultBinding: "B" },
 
   // Anotações (setas / chamadas / trajetória).
   { id: "croqui.tool.arrow", scope: "croqui", group: "Croqui · Anotações", label: "Seta direcional", defaultBinding: "Shift+A" },
@@ -52,7 +52,7 @@ export const CROQUI_ACTIONS: ShortcutAction[] = [
   // Imagem de fundo.
   { id: "croqui.bg.import", scope: "croqui", group: "Croqui · Imagem de fundo", label: "Importar imagem de fundo", defaultBinding: "Ctrl+Shift+B" },
   { id: "croqui.bg.toggleLock", scope: "croqui", group: "Croqui · Imagem de fundo", label: "Bloquear / desbloquear fundo", defaultBinding: "L" },
-  { id: "croqui.bg.fit", scope: "croqui", group: "Croqui · Imagem de fundo", label: "Ajustar fundo à área útil", defaultBinding: "Shift+F" },
+  { id: "croqui.bg.fit", scope: "croqui", group: "Croqui · Imagem de fundo", label: "Fundo no tamanho original", defaultBinding: "Shift+F" },
   { id: "croqui.importDrone", scope: "croqui", group: "Croqui · Imagem de fundo", label: "Importar imagem de drone", defaultBinding: "Ctrl+Shift+D" },
   { id: "croqui.importOsm", scope: "croqui", group: "Croqui · Imagem de fundo", label: "Importar vias do OSM", defaultBinding: "Ctrl+Shift+O" },
 

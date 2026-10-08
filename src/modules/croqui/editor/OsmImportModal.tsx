@@ -55,7 +55,7 @@ export interface OsmImportResult {
 interface OsmImportModalProps {
   canvasWidth: number;
   canvasHeight: number;
-  dossieCoords?: LatLon | null;
+  ocorrenciaCoords?: LatLon | null;
   onConfirm: (result: OsmImportResult) => void;
   onCancel: () => void;
 }
@@ -68,7 +68,7 @@ const DEFAULT_RADIUS = 25;
 export function OsmImportModal({
   canvasWidth,
   canvasHeight,
-  dossieCoords,
+  ocorrenciaCoords,
   onConfirm,
   onCancel,
 }: OsmImportModalProps) {
@@ -77,10 +77,10 @@ export function OsmImportModal({
   }
 
   const [coordInput, setCoordInput] = useState(
-    dossieCoords ? formatCoordinates(dossieCoords) : "",
+    ocorrenciaCoords ? formatCoordinates(ocorrenciaCoords) : "",
   );
   const [centre, setCentre] = useState<LatLon | null>(
-    dossieCoords ?? null,
+    ocorrenciaCoords ?? null,
   );
   const [parseError, setParseError] = useState<CoordinateParseError | null>(
     null,
@@ -234,13 +234,13 @@ export function OsmImportModal({
     onConfirm,
   ]);
 
-  const hasDossie = !!dossieCoords;
-  const applyDossie = useCallback(() => {
-    if (!dossieCoords) return;
-    setCoordInput(formatCoordinates(dossieCoords));
-    setCentre(dossieCoords);
+  const hasOcorrencia = !!ocorrenciaCoords;
+  const applyOcorrencia = useCallback(() => {
+    if (!ocorrenciaCoords) return;
+    setCoordInput(formatCoordinates(ocorrenciaCoords));
+    setCentre(ocorrenciaCoords);
     setParseError(null);
-  }, [dossieCoords]);
+  }, [ocorrenciaCoords]);
 
   return (
     <div
@@ -285,8 +285,8 @@ export function OsmImportModal({
             onCoordInputChange={setCoordInput}
             onApplyCoordString={applyCoordString}
             parseError={parseError}
-            hasDossie={hasDossie}
-            onApplyDossie={applyDossie}
+            hasOcorrencia={hasOcorrencia}
+            onApplyOcorrencia={applyOcorrencia}
             radius={radius}
             onRadiusChange={(r) => {
               setRadius(r);
@@ -402,8 +402,8 @@ function LeftPanel({
   onCoordInputChange,
   onApplyCoordString,
   parseError,
-  hasDossie,
-  onApplyDossie,
+  hasOcorrencia,
+  onApplyOcorrencia,
   radius,
   onRadiusChange,
   customRadius,
@@ -418,8 +418,8 @@ function LeftPanel({
   onCoordInputChange: (v: string) => void;
   onApplyCoordString: (raw: string) => void;
   parseError: CoordinateParseError | null;
-  hasDossie: boolean;
-  onApplyDossie: () => void;
+  hasOcorrencia: boolean;
+  onApplyOcorrencia: () => void;
   radius: number;
   onRadiusChange: (r: number) => void;
   customRadius: string;
@@ -452,11 +452,11 @@ function LeftPanel({
         >
           Usar coordenadas
         </button>
-        {hasDossie && (
+        {hasOcorrencia && (
           <button
             type="button"
             className={styles.dialogClose}
-            onClick={onApplyDossie}
+            onClick={onApplyOcorrencia}
             title="Usa as coordenadas registradas na ocorrência"
           >
             Da ocorrência

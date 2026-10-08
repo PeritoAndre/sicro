@@ -87,7 +87,6 @@ pub fn run() {
             commands::import_commands::list_workspace_imports,
             commands::import_commands::read_import_report,
             // dossiê
-            commands::dossie_commands::list_dossie_photos,
             // croqui
             commands::croqui_commands::create_croqui,
             commands::croqui_commands::list_croquis,

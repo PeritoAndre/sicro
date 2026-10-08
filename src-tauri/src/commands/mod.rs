@@ -7,7 +7,6 @@ pub mod alpha_commands;
 pub mod audio_commands;
 pub mod case_index_commands;
 pub mod croqui_commands;
-pub mod dossie_commands;
 pub mod image_commands;
 pub mod import_commands;
 pub mod os_open;

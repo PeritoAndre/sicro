@@ -1,10 +1,23 @@
-/** Miniaturas da prateleira: arte real dos veículos e pessoas; glifo do canvas para marcadores. */
+/** Miniaturas da prateleira: arte real dos veículos e pessoas; vestígios e elementos pelo código do canvas. */
 
 import { useMemo } from "react";
-import { Group, Layer, Stage } from "react-konva";
-import { makeMarker, makeVehicle, type MarkerSubtype, type VehicleBodyType } from "../../engine";
-import { getPessoaArt, getVehicleArtSvg } from "../../engine/vehicleArt";
-import { MarkerGlyph } from "../CanvasStage";
+import { Layer, Rect, Shape, Stage } from "react-konva";
+import {
+  FIXTURE_SPECS,
+  makeFixture,
+  makePerson,
+  type PersonPosicao,
+  makeTrace,
+  makeVehicle,
+  type FixtureSubtype,
+  type TraceSubtype,
+  type VehicleBodyType,
+} from "../../engine";
+import { PARITY_STYLE_DEFAULT } from "../../engine/road-parity";
+import { drawTrace } from "../traceDraw";
+import { drawFixture } from "../fixtureDraw";
+import { drawPerson } from "../personDraw";
+import { getVehicleArtSvg } from "../../engine/vehicleArt";
 import styles from "./Palette.module.css";
 
 const svgUrl = (svg: string) => `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
@@ -26,22 +39,112 @@ export function VehicleThumb({ body }: { body: VehicleBodyType }) {
   return <img src={svgUrl(svg)} alt="" className={styles.thumbImgRot} draggable={false} />;
 }
 
-export function PessoaThumb({ subtype }: { subtype: string }) {
-  const art = getPessoaArt(subtype);
-  if (!art) return null;
-  return <img src={svgUrl(art.svg)} alt="" className={styles.thumbImgRot} draggable={false} />;
-}
 
-/** O mesmo glifo que o canvas desenha, num Stage de 64×40. */
-export function MarkerThumb({ subtype }: { subtype: MarkerSubtype }) {
-  const m = useMemo(() => makeMarker({ x: 0, y: 0 }, subtype, undefined, null), [subtype]);
-  const s = Math.min(34 / m.size, 1.5);
+/** Amostra de cada vestígio na miniatura: px/m, pontas (px) e ajustes. */
+const TRACE_THUMBS: Record<TraceSubtype, { ppm: number; a: [number, number]; b: [number, number]; bendM?: number; params?: Record<string, number | string | boolean> }> = {
+  frenagem: { ppm: 9, a: [5, 20], b: [59, 20] },
+  derrapagem: { ppm: 8, a: [5, 15], b: [59, 22], bendM: -0.9, params: { abre: 0.9 } },
+  arrasto: { ppm: 10, a: [7, 20], b: [57, 20] },
+  sulcagem: { ppm: 30, a: [10, 20], b: [56, 20] },
+  ranhura: { ppm: 13, a: [7, 20], b: [57, 20] },
+  fluido: { ppm: 14, a: [5, 17], b: [40, 21] },
+  fragmentos: { ppm: 24, a: [8, 20], b: [58, 20], params: { dens: 30 } },
+  colisao: { ppm: 24, a: [32, 20], b: [32, 20] },
+};
+
+/** O vestígio desenhado pelo mesmo código do canvas, sobre asfalto. */
+export function TraceThumb({ subtype }: { subtype: TraceSubtype }) {
+  const t = TRACE_THUMBS[subtype];
+  const obj = useMemo(() => {
+    const o = makeTrace(subtype, { x: t.a[0], y: t.a[1] }, { x: t.b[0], y: t.b[1] }, t.ppm);
+    o.seed = 7;
+    if (t.bendM !== undefined) o.bend = t.bendM * t.ppm;
+    if (t.params) o.params = { ...o.params, ...t.params };
+    return o;
+  }, [subtype, t]);
   return (
     <Stage width={64} height={40} listening={false} className={styles.thumbStage}>
       <Layer listening={false}>
-        <Group x={32} y={20} scaleX={s} scaleY={s}>
-          <MarkerGlyph obj={{ ...m, x: 0, y: 0 }} selected={false} />
-        </Group>
+        <Rect x={0} y={4} width={64} height={32} fill="#e6e6e6" />
+        <Shape
+          sceneFunc={(kctx) => {
+            drawTrace((kctx as unknown as { _context: CanvasRenderingContext2D })._context, obj, {
+              ppm: t.ppm,
+              tema: "tecnico",
+              finish: "textura",
+              asfalto: "#e6e6e6",
+            });
+          }}
+        />
+      </Layer>
+    </Stage>
+  );
+}
+
+/** Amostra de cada elemento na miniatura: px/m, pontas (px) e ajustes. */
+const FIXTURE_THUMBS: Record<FixtureSubtype, { ppm: number; a: [number, number]; b: [number, number]; bendM?: number; params?: Record<string, number | string | boolean> }> = {
+  placa: { ppm: 14, a: [46, 20], b: [60, 20] },
+  semaforo: { ppm: 14, a: [12, 33], b: [42, 15] },
+  faixa_pedestre: { ppm: 5, a: [6, 20], b: [58, 20] },
+  retencao: { ppm: 8, a: [32, 5], b: [32, 35] },
+  lombada: { ppm: 7, a: [32, 2], b: [32, 38] },
+  area_conflito: { ppm: 3, a: [32, 5], b: [32, 35], params: { largura: 13, passo: 2.2 } },
+  seta: { ppm: 8, a: [34, 20], b: [50, 20] },
+  poste: { ppm: 14, a: [22, 26], b: [46, 13], params: { luminaria: true } },
+  arvore: { ppm: 6, a: [32, 20], b: [32, 20] },
+  hidrante: { ppm: 30, a: [32, 20], b: [44, 20] },
+  abrigo: { ppm: 7, a: [32, 20], b: [32, 30] },
+  barreira: { ppm: 8, a: [6, 25], b: [58, 25], bendM: -0.9 },
+  obstaculo: { ppm: 10, a: [32, 20], b: [44, 20] },
+  camera: { ppm: 3.2, a: [8, 20], b: [60, 20] },
+};
+
+/** O elemento desenhado pelo mesmo código do canvas; sinalização sobre asfalto. */
+export function FixtureThumb({ subtype }: { subtype: FixtureSubtype }) {
+  const t = FIXTURE_THUMBS[subtype];
+  const obj = useMemo(() => {
+    const o = makeFixture(subtype, { x: t.a[0], y: t.a[1] }, { x: t.b[0], y: t.b[1] }, t.ppm);
+    o.seed = 40;
+    if (t.bendM !== undefined) o.bend = t.bendM * t.ppm;
+    if (t.params) o.params = { ...o.params, ...t.params };
+    return o;
+  }, [subtype, t]);
+  const asfalto = FIXTURE_SPECS[subtype].grupo === "sinalizacao" && subtype !== "placa" && subtype !== "semaforo";
+  return (
+    <Stage width={64} height={40} listening={false} className={styles.thumbStage}>
+      <Layer listening={false}>
+        {asfalto && <Rect x={0} y={2} width={64} height={36} fill="#e6e6e6" />}
+        <Shape
+          sceneFunc={(kctx) => {
+            drawFixture((kctx as unknown as { _context: CanvasRenderingContext2D })._context, obj, {
+              ppm: t.ppm,
+              style: PARITY_STYLE_DEFAULT,
+            });
+          }}
+        />
+      </Layer>
+    </Stage>
+  );
+}
+
+/** Pessoa deitada na horizontal (cabeça à direita) ou em pé vista de cima. */
+export function PersonThumb({ posicao }: { posicao: PersonPosicao }) {
+  const obj = useMemo(() => {
+    const empe = posicao === "empe";
+    const o = makePerson(posicao, { x: empe ? 32 : 30, y: 20 });
+    o.rotation = 90;
+    return o;
+  }, [posicao]);
+  const ppm = posicao === "empe" ? 62 : 27;
+  return (
+    <Stage width={64} height={40} listening={false} className={styles.thumbStage}>
+      <Layer listening={false}>
+        <Rect x={0} y={0} width={64} height={40} fill="#e6e6e6" />
+        <Shape
+          sceneFunc={(kctx) => {
+            drawPerson((kctx as unknown as { _context: CanvasRenderingContext2D })._context, obj, { ppm, tema: "tecnico", asfalto: "#e6e6e6", zoom: 1 });
+          }}
+        />
       </Layer>
     </Stage>
   );

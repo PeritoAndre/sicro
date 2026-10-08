@@ -1,0 +1,494 @@
+/* Modos Velocidade e Distância: trilho, palco do quadro e guia (mesmo idioma do croqui). */
+
+.rail {
+  width: 74px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 6px;
+  background: var(--sicro-surface-1);
+  border-right: 1px solid var(--sicro-divider);
+}
+.railBtn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 9px 2px 7px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.railBtn:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+.railBtn:focus-visible {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: -2px;
+}
+.railOn {
+  color: var(--sicro-accent);
+  background: var(--sicro-accent-soft);
+  border-color: rgba(215, 168, 79, 0.25);
+  font-weight: 600;
+}
+.key {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  font: 600 8.5px/11px var(--font-mono);
+  padding: 0 2px;
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+  color: var(--sicro-fg-dim);
+}
+
+/* ---------- palco (quadro exato) ---------- */
+.stage {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 8px;
+  padding: 10px;
+}
+.canvasBox {
+  flex: 1;
+  min-height: 240px;
+}
+.strip {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.thumb {
+  position: relative;
+  flex-shrink: 0;
+  width: 112px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  background: var(--sicro-surface-1);
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  color: var(--sicro-fg-muted);
+  font: 500 11px var(--font-mono);
+  text-align: left;
+}
+.thumb img {
+  width: 100%;
+  height: 58px;
+  object-fit: cover;
+  display: block;
+}
+.thumb span {
+  display: block;
+  padding: 2px 6px 3px;
+  font-variant-numeric: tabular-nums;
+}
+.thumbOn {
+  border-color: var(--sicro-accent);
+  color: var(--sicro-accent);
+}
+.thumbOk::after {
+  content: "✓";
+  position: absolute;
+  top: 3px;
+  right: 4px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 10px var(--font-ui);
+  color: #0d1520;
+  background: var(--sicro-success);
+}
+
+/* ---------- guia ---------- */
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 14px 16px 18px;
+}
+.steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.stepBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px 4px 5px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.stepBtn b {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid var(--sicro-border-strong);
+  display: grid;
+  place-items: center;
+  font: 600 10px var(--font-mono);
+}
+.stepBtn:hover {
+  color: var(--sicro-fg);
+}
+.stepOn {
+  color: var(--sicro-accent);
+  background: var(--sicro-accent-soft);
+  border-color: rgba(215, 168, 79, 0.3);
+}
+.stepOn b {
+  border-color: var(--sicro-accent);
+}
+.stepDone b {
+  background: var(--sicro-success);
+  border-color: var(--sicro-success);
+  color: #0d1520;
+}
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.perito {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+  user-select: none;
+}
+.perito input {
+  accent-color: var(--sicro-accent);
+}
+.title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--sicro-fg);
+  text-wrap: balance;
+}
+.text {
+  margin: 0;
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--sicro-fg-muted);
+}
+.text b {
+  color: var(--sicro-fg);
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px 3px 9px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-full);
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  font: 500 12px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.chip button {
+  border: 0;
+  background: transparent;
+  color: var(--sicro-fg-dim);
+  font: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.chip button:hover {
+  color: var(--sicro-fg);
+}
+.chipOk {
+  border-color: rgba(80, 190, 130, 0.45);
+}
+.chipCur {
+  border-color: var(--sicro-accent);
+  color: var(--sicro-accent);
+}
+.empty {
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+  padding: 14px;
+  border: 1px dashed var(--sicro-border-strong);
+  border-radius: var(--radius-md);
+}
+.emptyIco {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: center;
+  background: var(--sicro-accent-soft);
+  color: var(--sicro-accent);
+}
+.empty b {
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+}
+.cards {
+  display: grid;
+  gap: 7px;
+}
+.card {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  padding: 9px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.card:hover {
+  border-color: var(--sicro-border-strong);
+}
+.cardOn {
+  border-color: var(--sicro-accent);
+  background: var(--sicro-accent-soft);
+}
+.card svg {
+  width: 52px;
+  height: 36px;
+  display: block;
+}
+.card b {
+  display: block;
+  font-size: var(--text-sm);
+}
+.card small {
+  display: block;
+  font-size: 11.5px;
+  line-height: 1.35;
+  color: var(--sicro-fg-muted);
+}
+.tech {
+  font-style: normal;
+  font-family: var(--font-mono);
+  color: var(--sicro-fg-dim);
+}
+.fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.field {
+  display: grid;
+  gap: 3px;
+  font-size: 11.5px;
+  color: var(--sicro-fg-muted);
+}
+.field input,
+.field select {
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  background: var(--sicro-bg);
+  color: var(--sicro-fg);
+  font: 500 13px var(--font-mono);
+}
+.seg {
+  display: flex;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+.seg button {
+  flex: 1;
+  padding: 6px 6px;
+  border: 0;
+  border-right: 1px solid var(--sicro-border);
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.seg button:last-child {
+  border-right: 0;
+}
+.segOn {
+  background: var(--sicro-accent-soft) !important;
+  color: var(--sicro-accent) !important;
+  font-weight: 600;
+}
+.check {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  line-height: 1.4;
+}
+.check i {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font: 700 11px var(--font-ui);
+  font-style: normal;
+}
+.ok {
+  background: rgba(80, 190, 130, 0.18);
+  color: var(--sicro-success);
+}
+.warn {
+  background: rgba(230, 180, 80, 0.18);
+  color: var(--sicro-warning);
+}
+.hint {
+  font-size: 11.5px;
+  color: var(--sicro-fg-dim);
+}
+.error {
+  font-size: var(--text-sm);
+  color: var(--sicro-danger);
+}
+.techBox {
+  display: grid;
+  gap: 6px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--sicro-border);
+  font: 11.5px/1.5 var(--font-mono);
+  color: var(--sicro-fg-muted);
+}
+.techBox b {
+  color: var(--sicro-fg);
+  font-weight: 500;
+}
+.kv {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+}
+.sigmas {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+
+/* ---------- resultado ---------- */
+.big {
+  margin: 0;
+  font-size: var(--text-md);
+  line-height: 1.4;
+  color: var(--sicro-fg);
+}
+.big strong {
+  display: block;
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  color: var(--sicro-accent);
+  font-variant-numeric: tabular-nums;
+}
+.svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.how {
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+}
+.how summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+}
+.how[open] summary {
+  margin-bottom: 8px;
+}
+.pts {
+  width: 100%;
+  border-collapse: collapse;
+  font: 11px var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.pts th,
+.pts td {
+  padding: 2px 4px;
+  text-align: right;
+  border-bottom: 1px solid var(--sicro-divider);
+}
+.pts th {
+  color: var(--sicro-fg-dim);
+  font-weight: 500;
+}
+.stale {
+  padding: 8px 10px;
+  border: 1px solid rgba(230, 180, 80, 0.4);
+  border-radius: var(--radius-md);
+  background: rgba(230, 180, 80, 0.07);
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+}
+
+/* ---------- saúde do vídeo ---------- */
+.health {
+  display: grid;
+  gap: 4px;
+  padding: 9px 11px;
+  border: 1px solid rgba(230, 180, 80, 0.35);
+  border-radius: var(--radius-md);
+  background: rgba(230, 180, 80, 0.06);
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: var(--sicro-fg);
+}
+.health b {
+  color: var(--sicro-warning);
+  font-weight: 600;
+}
+.health code {
+  font: 11px var(--font-mono);
+  color: var(--sicro-fg-dim);
+  word-break: break-all;
+}
+.healthWrap {
+  padding: 12px 14px 0;
+}
