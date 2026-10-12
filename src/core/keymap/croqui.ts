@@ -9,6 +9,7 @@ export const CROQUI_ACTIONS: ShortcutAction[] = [
   { id: "croqui.tool.select", scope: "croqui", group: "Croqui · Ferramentas", label: "Selecionar / mover", defaultBinding: "V" },
   { id: "croqui.tool.pan", scope: "croqui", group: "Croqui · Ferramentas", label: "Mão (pan)", defaultBinding: "H" },
   { id: "croqui.tool.measure", scope: "croqui", group: "Croqui · Ferramentas", label: "Medida / cota", defaultBinding: "M" },
+  { id: "croqui.tool.area", scope: "croqui", group: "Croqui · Ferramentas", label: "Área (polígono)", defaultBinding: "Shift+M" },
   { id: "croqui.tool.scale", scope: "croqui", group: "Croqui · Ferramentas", label: "Definir escala", defaultBinding: "E" },
   { id: "croqui.tool.text", scope: "croqui", group: "Croqui · Ferramentas", label: "Texto / etiqueta", defaultBinding: "T" },
 

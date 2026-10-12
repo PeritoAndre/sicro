@@ -83,6 +83,7 @@ type SicroObjectKind =
   | "marker"
   | "text"
   | "measurement"
+  | "area"
   | "road"
   | "roundabout"
   | "trace"
@@ -252,6 +253,14 @@ export interface SicroMeasurementObject extends SicroObjectBase {
   label_override?: string | null;
 }
 
+/** Área: polígono fechado clicado ponto a ponto (px de mundo), com a medida de cada lado. */
+export interface SicroAreaObject extends SicroObjectBase {
+  kind: "area";
+  points: SicroPoint[];
+  /** Medida de cada lado; ausente = mostra. */
+  show_sides?: boolean;
+}
+
 export type TraceSubtype =
   | "frenagem"
   | "derrapagem"
@@ -356,6 +365,7 @@ export type SicroObject =
   | SicroMarkerObject
   | SicroTextObject
   | SicroMeasurementObject
+  | SicroAreaObject
   | SicroTraceObject
   | SicroFixtureObject
   | SicroPersonObject

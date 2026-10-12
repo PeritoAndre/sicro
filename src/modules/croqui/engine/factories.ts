@@ -9,6 +9,8 @@ import type {
   SicroLineObject,
   SicroMarkerObject,
   SicroMeasurementObject,
+  SicroAreaObject,
+  SicroObject,
   SicroPoint,
   SicroTextObject,
   SicroTraceObject,
@@ -266,6 +268,30 @@ export function makeMeasurement(
   };
 }
 
+export function makeArea(points: SicroPoint[], label: string | null = null): SicroAreaObject {
+  return {
+    id: uid("area"),
+    layer_id: OBJECT_LAYER,
+    kind: "area",
+    points,
+    label,
+    color: "#2563eb",
+    visible: true,
+    locked: false,
+    category: "medidas",
+  };
+}
+
+/** Próximo nome livre "Área A", "Área B"… */
+export function nextAreaLabel(objects: SicroObject[]): string {
+  const used = new Set(objects.filter((o) => o.kind === "area").map((o) => o.label));
+  for (let i = 0; i < 26; i++) {
+    const l = `Área ${String.fromCharCode(65 + i)}`;
+    if (!used.has(l)) return l;
+  }
+  return `Área ${objects.length + 1}`;
+}
+
 /**
  * Clone com id novo (Ctrl+D), deslocado para não cobrir o original: 16 px nos
  * objetos em pixels, 1 m nos objetos parity (coordenadas em metros).
@@ -275,6 +301,7 @@ export function cloneObject<T extends SicroVehicleObject
   | SicroMarkerObject
   | SicroTextObject
   | SicroMeasurementObject
+  | SicroAreaObject
   | SicroTraceObject
   | SicroFixtureObject
   | SicroPersonObject
@@ -297,6 +324,9 @@ export function cloneObject<T extends SicroVehicleObject
       cloned.p1 = { x: source.p1.x + 16, y: source.p1.y + 16 };
       cloned.p2 = { x: source.p2.x + 16, y: source.p2.y + 16 };
     }
+  }
+  if (cloned.kind === "area" && source.kind === "area") {
+    cloned.points = source.points.map((p) => ({ x: p.x + 16, y: p.y + 16 }));
   }
   if ((cloned.kind === "trace" && source.kind === "trace") || (cloned.kind === "fixture" && source.kind === "fixture")) {
     cloned.p0 = { x: source.p0.x + 16, y: source.p0.y + 16 };

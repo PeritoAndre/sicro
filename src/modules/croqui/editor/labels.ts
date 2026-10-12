@@ -44,6 +44,8 @@ export function labelDefaults(obj: SicroObject, outlineTema?: ParityTema): Label
     }
     case "measurement":
       return { dx: 0, dy: 0, size: 12, color: obj.color ?? "#dc2626", center: true };
+    case "area":
+      return { dx: 0, dy: 0, size: 13, color: obj.color ?? "#2563eb", center: true };
     default:
       return { dx: 0, dy: 0, size: 12, color: "#111827", center: false };
   }

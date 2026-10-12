@@ -70,6 +70,7 @@ const SUPPORTED_KINDS = new Set<string>([
   "marker",
   "text",
   "measurement",
+  "area",
   "trace",
   "fixture",
   "person",
@@ -304,6 +305,7 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
     case "vehicle":
       return "veiculos";
     case "measurement":
+    case "area":
       return "medidas";
     case "text":
       return "anotacoes";

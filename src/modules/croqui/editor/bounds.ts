@@ -78,6 +78,14 @@ export function getObjectBoundsStagePx(
       const maxY = Math.max(obj.p1.y, obj.p2.y);
       return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
     }
+    case "area": {
+      if (obj.points.length === 0) return ZERO;
+      const xs = obj.points.map((p) => p.x);
+      const ys = obj.points.map((p) => p.y);
+      const minX = Math.min(...xs);
+      const minY = Math.min(...ys);
+      return { x: minX, y: minY, width: Math.max(...xs) - minX, height: Math.max(...ys) - minY };
+    }
     case "trace":
       return traceBoundsPx(obj, pxPerM);
     case "fixture":
@@ -162,6 +170,8 @@ export function translateObjectPatch(
         p1: { x: obj.p1.x + dx, y: obj.p1.y + dy },
         p2: { x: obj.p2.x + dx, y: obj.p2.y + dy },
       };
+    case "area":
+      return { points: obj.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) };
     case "trace":
     case "fixture":
       return {

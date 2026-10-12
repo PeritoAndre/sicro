@@ -17,7 +17,10 @@ import {
 import {
   angleDeg,
   distancePx,
+  formatArea,
   formatMeasurement,
+  polygonAreaPx,
+  polygonPerimeterPx,
   inferCategory,
   MARKER_STYLES,
   TRACE_SPECS,
@@ -39,6 +42,7 @@ import {
   type SicroLineObject,
   type SicroMarkerObject,
   type SicroMeasurementObject,
+  type SicroAreaObject,
   type SicroObject,
   type SicroTextObject,
   type SicroVehicleObject,
@@ -463,6 +467,8 @@ function shortKind(o: SicroObject): string {
       return "T";
     case "measurement":
       return "↔";
+    case "area":
+      return "▱";
     case "trace":
       return TRACE_SPECS[o.subtype]?.sigla ?? "·";
     case "fixture":
@@ -491,6 +497,8 @@ function summariseObject(o: SicroObject): string {
       return o.text.slice(0, 32);
     case "measurement":
       return "Medição";
+    case "area":
+      return "Área";
     case "trace":
       return TRACE_SPECS[o.subtype]?.nome ?? "Vestígio";
     case "fixture":
@@ -528,6 +536,7 @@ function ObjectProperties({
     object.kind === "marker" ||
     object.kind === "line" ||
     object.kind === "measurement" ||
+    object.kind === "area" ||
     object.kind === "trace" ||
     object.kind === "fixture" ||
     object.kind === "person";
@@ -566,6 +575,9 @@ function ObjectProperties({
       )}
       {object.kind === "measurement" && (
         <MeasurementProps object={object} scale={scale} onChange={onChange} />
+      )}
+      {object.kind === "area" && (
+        <AreaProps object={object} scale={scale} onChange={onChange} />
       )}
       {object.kind === "road_parity" && (
         <ParityRoadProps object={object} onChange={onChange} />
@@ -836,6 +848,37 @@ function MeasurementProps({
           } as Partial<SicroObject>)
         }
       />
+    </>
+  );
+}
+
+function AreaProps({
+  object,
+  scale,
+  onChange,
+}: {
+  object: SicroAreaObject;
+  scale: SicroCroquiScale | null;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const ppm = scale?.px_per_m;
+  const pts = object.points;
+  const lados = pts
+    .map((p, i) => formatMeasurement(distancePx(p, pts[(i + 1) % pts.length]!), ppm))
+    .join(" · ");
+  return (
+    <>
+      <Field label="Área" value={formatArea(polygonAreaPx(pts), ppm)} readOnly mono />
+      <Field label="Perímetro" value={formatMeasurement(polygonPerimeterPx(pts), ppm)} readOnly mono />
+      <Field label={`Lados (${pts.length})`} value={lados} readOnly mono />
+      <CheckboxRow
+        label="Medida de cada lado"
+        checked={object.show_sides !== false}
+        onChange={(v) => onChange({ show_sides: v } as Partial<SicroObject>)}
+      />
+      <p className={styles.empty}>
+        Arraste um vértice para mover; o círculo no meio do lado cria um vértice novo; botão direito no vértice o remove.
+      </p>
     </>
   );
 }

@@ -51,6 +51,115 @@ export function formatMeasurement(
   return `${meters.toFixed(1)} m`;
 }
 
+/** Área do polígono (fórmula do laço), em px²; sentido dos pontos não importa. */
+export function polygonAreaPx(pts: SicroPoint[]): number {
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    s += a.x * b.y - b.x * a.y;
+  }
+  return Math.abs(s) / 2;
+}
+
+export function polygonPerimeterPx(pts: SicroPoint[]): number {
+  if (pts.length < 2) return 0;
+  let s = 0;
+  for (let i = 0; i < pts.length; i++) s += distancePx(pts[i]!, pts[(i + 1) % pts.length]!);
+  return s;
+}
+
+/** Centroide da superfície; polígono degenerado cai na média dos vértices. */
+export function polygonCentroid(pts: SicroPoint[]): SicroPoint {
+  let a = 0;
+  let cx = 0;
+  let cy = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!;
+    const q = pts[(i + 1) % pts.length]!;
+    const c = p.x * q.y - q.x * p.y;
+    a += c;
+    cx += (p.x + q.x) * c;
+    cy += (p.y + q.y) * c;
+  }
+  if (Math.abs(a) < 1e-9) {
+    const n = Math.max(pts.length, 1);
+    return {
+      x: pts.reduce((s, p) => s + p.x, 0) / n,
+      y: pts.reduce((s, p) => s + p.y, 0) / n,
+    };
+  }
+  return { x: cx / (3 * a), y: cy / (3 * a) };
+}
+
+function pointInPolygon(p: SicroPoint, pts: SicroPoint[]): boolean {
+  let inside = false;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    const a = pts[i]!;
+    const b = pts[j]!;
+    if (a.y > p.y !== b.y > p.y && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside;
+  }
+  return inside;
+}
+
+function distToSegment(p: SicroPoint, a: SicroPoint, b: SicroPoint): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const l2 = dx * dx + dy * dy;
+  const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / l2));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/**
+ * Onde pôr o rótulo da área: ponto de dentro mais longe das bordas (no L o centroide cai na
+ * quina ou fora). Busca em grade com refinamento; sem ponto interno, volta ao centroide.
+ */
+export function polygonLabelPoint(pts: SicroPoint[]): SicroPoint {
+  if (pts.length < 3) return polygonCentroid(pts);
+  const xs = pts.map((p) => p.x);
+  const ys = pts.map((p) => p.y);
+  let x0 = Math.min(...xs);
+  let x1 = Math.max(...xs);
+  let y0 = Math.min(...ys);
+  let y1 = Math.max(...ys);
+  const clearance = (p: SicroPoint) => {
+    let d = Infinity;
+    for (let i = 0; i < pts.length; i++) d = Math.min(d, distToSegment(p, pts[i]!, pts[(i + 1) % pts.length]!));
+    return d;
+  };
+  let best: SicroPoint | null = null;
+  let bestD = -1;
+  const N = 16;
+  for (let round = 0; round < 4; round++) {
+    const sx = (x1 - x0) / N;
+    const sy = (y1 - y0) / N;
+    for (let i = 0; i <= N; i++) {
+      for (let j = 0; j <= N; j++) {
+        const p = { x: x0 + i * sx, y: y0 + j * sy };
+        if (!pointInPolygon(p, pts)) continue;
+        const d = clearance(p);
+        if (d > bestD) {
+          bestD = d;
+          best = p;
+        }
+      }
+    }
+    if (!best) break;
+    x0 = best.x - sx;
+    x1 = best.x + sx;
+    y0 = best.y - sy;
+    y1 = best.y + sy;
+  }
+  return best ?? polygonCentroid(pts);
+}
+
+/** Rótulo da área: px² sem escala; 2 casas até 100 m²; 1 casa acima. */
+export function formatArea(areaPx2: number, pxPerMeter: number | null | undefined): string {
+  if (!pxPerMeter || pxPerMeter <= 0) return `${areaPx2.toFixed(0)} px²`;
+  const m2 = areaPx2 / (pxPerMeter * pxPerMeter);
+  return m2 < 100 ? `${m2.toFixed(2)} m²` : `${m2.toFixed(1)} m²`;
+}
+
 export function midpoint(a: SicroPoint, b: SicroPoint): SicroPoint {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }

@@ -5,7 +5,12 @@ import {
   angleDeg,
   computePxPerMeter,
   distancePx,
+  formatArea,
   formatMeasurement,
+  polygonAreaPx,
+  polygonCentroid,
+  polygonLabelPoint,
+  polygonPerimeterPx,
   midpoint,
   pxToMeters,
 } from "./geometry";
@@ -83,5 +88,55 @@ describe("angleDeg", () => {
   });
   it("returns 180 going left", () => {
     expect(Math.abs(angleDeg({ x: 0, y: 0 }, { x: -10, y: 0 }))).toBe(180);
+  });
+});
+
+describe("polígono (área)", () => {
+  // Retângulo 40 × 20 px; com 10 px/m = 4 × 2 m.
+  const ret = [
+    { x: 0, y: 0 },
+    { x: 40, y: 0 },
+    { x: 40, y: 20 },
+    { x: 0, y: 20 },
+  ];
+
+  it("área pela fórmula do laço, nos dois sentidos", () => {
+    expect(polygonAreaPx(ret)).toBe(800);
+    expect(polygonAreaPx([...ret].reverse())).toBe(800);
+  });
+
+  it("polígono côncavo (L)", () => {
+    const l = [
+      { x: 0, y: 0 },
+      { x: 30, y: 0 },
+      { x: 30, y: 10 },
+      { x: 10, y: 10 },
+      { x: 10, y: 30 },
+      { x: 0, y: 30 },
+    ];
+    expect(polygonAreaPx(l)).toBe(500);
+  });
+
+  it("rótulo cai dentro do L, longe da quina interna", () => {
+    const l = [
+      { x: 0, y: 0 }, { x: 300, y: 0 }, { x: 300, y: 100 },
+      { x: 100, y: 100 }, { x: 100, y: 300 }, { x: 0, y: 300 },
+    ];
+    const p = polygonLabelPoint(l);
+    // Meia largura do braço = 50: ponto bem dentro de um dos braços.
+    const folga = Math.min(p.x, p.y, Math.max(300 - p.x, 0), Math.max(300 - p.y, 0));
+    expect(folga).toBeGreaterThan(40);
+    expect(p.x < 100 || p.y < 100).toBe(true);
+  });
+
+  it("perímetro e centroide", () => {
+    expect(polygonPerimeterPx(ret)).toBe(120);
+    expect(polygonCentroid(ret)).toEqual({ x: 20, y: 10 });
+  });
+
+  it("formatArea em m² com escala e px² sem", () => {
+    expect(formatArea(800, 10)).toBe("8.00 m²");
+    expect(formatArea(1_250_000, 10)).toBe("12500.0 m²");
+    expect(formatArea(800, null)).toBe("800 px²");
   });
 });

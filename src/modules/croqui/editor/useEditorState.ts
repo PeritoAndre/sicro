@@ -114,6 +114,7 @@ export type Tool =
   // Anotação / medição / escala
   | "text"
   | "measurement"
+  | "area"
   | "set_scale"
   // Vias multi-click, uma ferramenta por estilo
   | "road_urban"
@@ -162,6 +163,8 @@ export function useEditorState() {
   const [marquee, setMarquee] = useState<Marquee | null>(null);
   const [pending, setPending] = useState<PendingTwoClick | null>(null);
   const [roadDraft, setRoadDraft] = useState<RoadDraft | null>(null);
+  // Área em desenho: vértices clicados até fechar (Enter, duplo clique ou clique no 1º ponto).
+  const [areaDraft, setAreaDraft] = useState<SicroPoint[] | null>(null);
   const [viewport, setViewport] = useState<Viewport>(DEFAULT_VIEWPORT);
   const [pointerWorld, setPointerWorld] = useState<SicroPoint>({ x: 0, y: 0 });
   // Pilhas em refs: o caller lê o pop no mesmo tick. Com useState o updater
@@ -239,6 +242,8 @@ export function useEditorState() {
     setPending,
     roadDraft,
     setRoadDraft,
+    areaDraft,
+    setAreaDraft,
     viewport,
     setViewport,
     pointerWorld,

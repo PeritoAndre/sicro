@@ -30,13 +30,17 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   angleDeg,
   distancePx,
+  formatArea,
   formatMeasurement,
   midpoint,
+  polygonAreaPx,
+  polygonLabelPoint,
   type SicroCroquiBackgroundImage,
   type SicroCroquiDoc,
   type SicroLineObject,
   type SicroMarkerObject,
   type SicroMeasurementObject,
+  type SicroAreaObject,
   type SicroObject,
   type SicroPoint,
   type SicroTextObject,
@@ -301,7 +305,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     for (const id of editor.selectedIds) {
       // Linhas e cotas editam-se pelas pontas, não por caixa de escala.
       const k = kinds.get(id);
-      if (k === "line" || k === "measurement" || k === "trace" || k === "fixture" || k === "person" || k === "road_parity" || k === "roundabout_parity") continue;
+      if (k === "line" || k === "measurement" || k === "area" || k === "trace" || k === "fixture" || k === "person" || k === "road_parity" || k === "roundabout_parity") continue;
       const node = layer.findOne(`#${id}`);
       if (node) nodes.push(node);
     }
@@ -448,8 +452,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       else others.push(o);
     }
     // Pintura no chão, vestígios, elementos de pé e, por cima, veículos e anotações.
+    // Área fica no chão, logo acima das vias: o que está dentro dela continua clicável.
     const rank = (o: SicroObject) =>
-      o.kind === "fixture" ? (fixtureOnGround(o) ? 0 : 2) : o.kind === "trace" ? 1 : 3;
+      o.kind === "area" ? -1 : o.kind === "fixture" ? (fixtureOnGround(o) ? 0 : 2) : o.kind === "trace" ? 1 : 3;
     const ordered = others.map((o, i) => [rank(o), i, o] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
     return { parityObjects: parity, otherObjects: ordered };
   }, [doc.objects]);
@@ -612,6 +617,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       <Layer listening={false} ref={uiLayerRef}>
         <PendingTwoClickPreview editor={editor} />
         <RoadDraftPreview editor={editor} />
+        <AreaDraftPreview editor={editor} pxPerM={doc.scale?.px_per_m ?? null} />
       </Layer>
     </Stage>
   );
@@ -899,6 +905,19 @@ function ObjectNode({
         <MeasurementNode
           obj={obj}
           doc={doc}
+          draggable={draggable}
+          selected={selected}
+          solo={solo}
+          onSelect={onSelect}
+          onChange={onChange}
+        />
+      );
+    case "area":
+      return (
+        <AreaNode
+          obj={obj}
+          doc={doc}
+          zoom={zoom}
           draggable={draggable}
           selected={selected}
           solo={solo}
@@ -2038,6 +2057,7 @@ function PointHandle({
   r = 7,
   onMove,
   onEnd,
+  onRemove,
 }: {
   x: number;
   y: number;
@@ -2048,6 +2068,8 @@ function PointHandle({
   diamond?: boolean;
   onMove: (x: number, y: number) => void;
   onEnd: (x: number, y: number) => void;
+  /** Botão direito na alça: remove o ponto (vértice da área). */
+  onRemove?: () => void;
 }) {
   const Node = diamond ? RegularPolygon : Circle;
   return (
@@ -2064,6 +2086,12 @@ function PointHandle({
       onMouseLeave={(e) => setCursor(e, "default")}
       onClick={(e) => {
         e.cancelBubble = true;
+      }}
+      onContextMenu={(e) => {
+        if (!onRemove) return;
+        e.evt.preventDefault();
+        e.cancelBubble = true;
+        onRemove();
       }}
       onDragStart={(e) => {
         e.cancelBubble = true;
@@ -2784,6 +2812,173 @@ function MeasurementNode({
   );
 }
 
+/** Ângulo de leitura: texto nunca de cabeça para baixo. */
+function readableDeg(a: SicroPoint, b: SicroPoint): number {
+  const d = angleDeg(a, b);
+  return d > 90 ? d - 180 : d < -90 ? d + 180 : d;
+}
+
+/** Medida de cada lado, por fora do polígono. `closed` = inclui o lado último → primeiro. */
+function SideLengths({
+  pts,
+  closed,
+  pxPerM,
+  color,
+  size,
+}: {
+  pts: SicroPoint[];
+  closed: boolean;
+  pxPerM: number | null | undefined;
+  color: string;
+  size: number;
+}) {
+  // Sinal do laço: diz de que lado fica o "fora" (y para baixo).
+  let signed = 0;
+  for (let i = 0; i < pts.length; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    signed += a.x * b.y - b.x * a.y;
+  }
+  const out = signed >= 0 ? 1 : -1;
+  const n = closed ? pts.length : pts.length - 1;
+  const items = [];
+  for (let i = 0; i < n; i++) {
+    const a = pts[i]!;
+    const b = pts[(i + 1) % pts.length]!;
+    const len = distancePx(a, b);
+    if (len < 1e-6) continue;
+    const text = formatMeasurement(len, pxPerM);
+    const m = midpoint(a, b);
+    const gap = size * 0.9;
+    const nx = ((b.y - a.y) / len) * out * gap;
+    const ny = (-(b.x - a.x) / len) * out * gap;
+    items.push(
+      <KonvaText
+        key={i}
+        text={text}
+        x={m.x + nx}
+        y={m.y + ny}
+        rotation={readableDeg(a, b)}
+        offsetX={textWidthPx(text, size) / 2}
+        offsetY={size / 2}
+        fontSize={size}
+        fontStyle="bold"
+        fill={color}
+        listening={false}
+      />,
+    );
+  }
+  return <>{items}</>;
+}
+
+/** Área: polígono com a medida de cada lado e a área no centro; vértices e meios de lado editáveis. */
+function AreaNode({
+  obj,
+  doc,
+  zoom,
+  draggable,
+  selected,
+  solo,
+  onSelect,
+  onChange,
+}: {
+  obj: SicroAreaObject;
+  doc: SicroCroquiDoc;
+  zoom: number;
+  draggable: boolean;
+  selected: boolean;
+  solo: boolean;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const [live, setLive] = useState<SicroPoint[] | null>(null);
+  const pts = live ?? obj.points;
+  const ppm = doc.scale?.px_per_m;
+  const color = obj.color ?? "#2563eb";
+  const flat = pts.flatMap((p) => [p.x, p.y]);
+  const area = formatArea(polygonAreaPx(pts), ppm);
+  const text = obj.label ? `${obj.label}: ${area}` : area;
+  const size = obj.label_size ?? labelDefaults(obj).size;
+  const canEdit = draggable && selected && !obj.locked;
+  // Alças com tamanho fixo na tela.
+  const r = 6 / Math.max(zoom, 0.0001);
+  const commit = (next: SicroPoint[]) => {
+    setLive(null);
+    onChange({ points: next } as Partial<SicroObject>);
+  };
+  const withPoint = (i: number, p: SicroPoint) => pts.map((q, j) => (j === i ? p : q));
+  const withInserted = (i: number, p: SicroPoint) => [...pts.slice(0, i + 1), p, ...pts.slice(i + 1)];
+
+  return (
+    <>
+      <Group
+        id={obj.id}
+        draggable={draggable && !obj.locked}
+        onClick={onSelect}
+        onTap={onSelect}
+        onDragEnd={(e) => {
+          if (e.target !== e.currentTarget) return;
+          const dx = e.target.x();
+          const dy = e.target.y();
+          e.target.position({ x: 0, y: 0 });
+          onChange({ points: obj.points.map((p) => ({ x: p.x + dx, y: p.y + dy })) } as Partial<SicroObject>);
+        }}
+      >
+        <Line points={flat} closed fill={color} opacity={0.12} />
+        <Line
+          points={flat}
+          closed
+          stroke={color}
+          strokeWidth={selected ? 2 : 1.5}
+          hitStrokeWidth={12}
+          lineJoin="round"
+        />
+        {obj.show_sides !== false && (
+          <SideLengths pts={pts} closed pxPerM={ppm} color={color} size={Math.round(size * 0.85)} />
+        )}
+        {canEdit &&
+          pts.map((p, i) => {
+            const q = pts[(i + 1) % pts.length]!;
+            const m = midpoint(p, q);
+            // Meio do lado: arrastar cria um vértice novo ali.
+            return (
+              <PointHandle
+                key={`m${i}`}
+                x={m.x}
+                y={m.y}
+                r={r * 0.7}
+                color={color}
+                onMove={(x, y) => setLive(withInserted(i, { x, y }))}
+                onEnd={(x, y) => commit(withInserted(i, { x, y }))}
+              />
+            );
+          })}
+        {canEdit &&
+          pts.map((p, i) => (
+            <PointHandle
+              key={`v${i}`}
+              x={p.x}
+              y={p.y}
+              r={r}
+              color={color}
+              onMove={(x, y) => setLive(withPoint(i, { x, y }))}
+              onEnd={(x, y) => commit(withPoint(i, { x, y }))}
+              onRemove={pts.length > 3 ? () => commit(pts.filter((_, j) => j !== i)) : undefined}
+            />
+          ))}
+      </Group>
+      <ObjectLabel
+        obj={obj}
+        text={text}
+        anchor={polygonLabelPoint(pts)}
+        draggable={draggable && !obj.locked && solo}
+        onSelect={onSelect}
+        onChange={onChange}
+      />
+    </>
+  );
+}
+
 // ===========================================================================
 // Previews (camada de UI)
 
@@ -2806,6 +3001,54 @@ function PendingTwoClickPreview({ editor }: { editor: EditorState }) {
         height={6}
         fill="#0ea5e9"
       />
+    </Group>
+  );
+}
+
+/** Área em desenho: lados com medida, fechamento tracejado e área ao vivo. */
+function AreaDraftPreview({ editor, pxPerM }: { editor: EditorState; pxPerM: number | null }) {
+  const draft = editor.areaDraft;
+  if (editor.tool !== "area" || !draft || draft.length === 0) return null;
+  const inv = 1 / Math.max(editor.viewport.scale, 0.0001);
+  const first = draft[0]!;
+  const cursor = editor.pointerWorld;
+  // Perto do 1º vértice o cursor "gruda" nele: mostra como a área vai fechar.
+  const closing = draft.length >= 3 && distancePx(cursor, first) * editor.viewport.scale <= 8;
+  const pts = closing ? draft : [...draft, cursor];
+  const flat = pts.flatMap((p) => [p.x, p.y]);
+  const color = "#0ea5e9";
+  const size = 11;
+  const area = pts.length >= 3 ? formatArea(polygonAreaPx(pts), pxPerM) : null;
+  return (
+    <Group listening={false}>
+      {pts.length >= 3 && <Line points={flat} closed fill={color} opacity={0.1} />}
+      <Line points={flat} stroke={color} strokeWidth={1.5 * inv} />
+      {!closing && pts.length >= 3 && (
+        <Line points={[cursor.x, cursor.y, first.x, first.y]} stroke={color} strokeWidth={1 * inv} dash={[6 * inv, 4 * inv]} />
+      )}
+      <SideLengths pts={pts} closed={closing} pxPerM={pxPerM} color={color} size={size} />
+      {draft.map((p, i) => (
+        <Rect
+          key={i}
+          x={p.x - (i === 0 && closing ? 6 : 3) * inv}
+          y={p.y - (i === 0 && closing ? 6 : 3) * inv}
+          width={(i === 0 && closing ? 12 : 6) * inv}
+          height={(i === 0 && closing ? 12 : 6) * inv}
+          fill={i === 0 && closing ? "#ffffff" : color}
+          stroke={color}
+          strokeWidth={1.5 * inv}
+        />
+      ))}
+      {area && (
+        <KonvaText
+          text={area}
+          x={cursor.x + 14 * inv}
+          y={cursor.y + 14 * inv}
+          fontSize={13 * inv}
+          fontStyle="bold"
+          fill={color}
+        />
+      )}
     </Group>
   );
 }
@@ -2889,6 +3132,7 @@ function isAddTool(tool: Tool): boolean {
     tool.startsWith("person_") ||
     tool === "text" ||
     tool === "measurement" ||
+    tool === "area" ||
     tool === "set_scale"
   );
 }

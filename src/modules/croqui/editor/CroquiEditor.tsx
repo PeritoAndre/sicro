@@ -20,8 +20,13 @@ import {
   cloneObject,
   computePxPerMeter,
   distancePx,
+  formatArea,
   formatMeasurement,
   inferCategory,
+  makeArea,
+  nextAreaLabel,
+  polygonAreaPx,
+  polygonPerimeterPx,
   makeLine,
   makeMarker,
   makeMeasurement,
@@ -326,6 +331,10 @@ export function CroquiEditor() {
     (t: Tool) => {
       editor.setTool(t);
       editor.setPending(null);
+      editor.setAreaDraft(null);
+      if (t === "area") {
+        setFeedback("Área: clique os vértices · feche no 1º ponto, Enter ou duplo clique · Backspace desfaz o último · Esc cancela.");
+      }
     },
     [editor],
   );
@@ -682,9 +691,25 @@ export function CroquiEditor() {
 
   // ----- Cliques no canvas -----
 
-  const handleCanvasDblClick = useCallback(() => {
-    // No-op por ora.
-  }, []);
+  /** Fecha o polígono em desenho; precisa de 3 vértices. */
+  const finishArea = (points: SicroPoint[]) => {
+    if (!doc) return;
+    if (points.length < 3) {
+      setFeedback("A área precisa de pelo menos 3 pontos.");
+      return;
+    }
+    const obj = makeArea(points, nextAreaLabel(doc.objects));
+    addObject(obj);
+    editor.setAreaDraft(null);
+    editor.setTool("select");
+    const ppm = doc.scale?.px_per_m;
+    const msg = `${obj.label}: ${formatArea(polygonAreaPx(points), ppm)} · perímetro ${formatMeasurement(polygonPerimeterPx(points), ppm)}`;
+    setFeedback(doc.scale ? msg : `${msg} · aviso: escala ainda não foi definida.`);
+  };
+
+  const handleCanvasDblClick = () => {
+    if (editor.tool === "area" && editor.areaDraft) finishArea(editor.areaDraft);
+  };
 
   /** Insere com `tool` em `p`. `dropped` = veio da prateleira: dois pontos viram 10 m na horizontal. */
   const placeTool = (tool: Tool, p: SicroPoint, dropped = false) => {
@@ -708,6 +733,24 @@ export function CroquiEditor() {
       const pxPerM = doc.scale?.px_per_m ?? 10;
       return { x: pt.x / pxPerM, y: pt.y / pxPerM };
     };
+
+    if (tool === "area") {
+      if (dropped) {
+        handleSelectTool("area");
+        return;
+      }
+      const draft = editor.areaDraft ?? [];
+      const zoom = editor.viewport.scale;
+      // Clique no 1º vértice fecha; o 2º clique do duplo clique cai no mesmo lugar e é ignorado.
+      if (draft.length >= 3 && distancePx(p, draft[0]!) * zoom <= 8) {
+        finishArea(draft);
+        return;
+      }
+      const last = draft[draft.length - 1];
+      if (last && distancePx(p, last) * zoom <= 4) return;
+      editor.setAreaDraft([...draft, p]);
+      return;
+    }
 
     if (tool === "roundabout") {
       const pm = pxToM(p);
@@ -886,10 +929,30 @@ export function CroquiEditor() {
   // ----- Atalhos (escopo `croqui`) -----
   // handleSave/handleExportPng são declarados mais abaixo: só são lidos
   // quando a tecla dispara, nunca no render, então a ordem não importa.
+  // Área em desenho: Enter fecha, Backspace desfaz o último vértice.
+  const areaDraft = editor.areaDraft;
+  useEffect(() => {
+    if (!areaDraft) return;
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        finishArea(areaDraft);
+      } else if (e.key === "Backspace") {
+        e.preventDefault();
+        editor.setAreaDraft(areaDraft.length > 1 ? areaDraft.slice(0, -1) : null);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
+
   useShortcuts({
     "croqui.cancel": () => {
       editor.setPending(null);
       editor.setRoadDraft(null);
+      editor.setAreaDraft(null);
       editor.setSelectedId(null);
       editor.setTool("select");
     },
@@ -897,6 +960,7 @@ export function CroquiEditor() {
     "croqui.tool.select": () => handleSelectTool("select"),
     "croqui.tool.pan": () => handleSelectTool("pan"),
     "croqui.tool.measure": () => handleSelectTool("measurement"),
+    "croqui.tool.area": () => handleSelectTool("area"),
     "croqui.tool.scale": () => handleSelectTool("set_scale"),
     "croqui.tool.text": () => handleSelectTool("text"),
     "croqui.tool.r1": () => handleSelectTool("line_r1"),
@@ -1009,6 +1073,7 @@ export function CroquiEditor() {
         editor.setSelectedId(null);
         editor.setPending(null);
         editor.setRoadDraft(null);
+        editor.setAreaDraft(null);
         editor.setMarquee(null);
       });
       await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
