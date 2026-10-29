@@ -141,7 +141,8 @@ export const useRealceStore = create<RealceState>((set, get) => ({
       persp: PERSP_VAZIA,
     });
   },
-  setAba: (aba) => set({ aba, erro: null, msg: null, vista: get().comparacao && aba !== "lente" ? get().vista : "quadro" }),
+  // cada aba começa no quadro de trabalho; o resultado da anterior sai de cena (continua na lista)
+  setAba: (aba) => set({ aba, erro: null, msg: null, comparacao: null, vista: "quadro" }),
   setQuadro: (quadro) =>
     set({ quadro, cantos: [], roi: null, comparacao: null, vista: "quadro", lentePrevia: null, persp: { ...get().persp, pts: [], calId: null } }),
   addCanto(p) {
