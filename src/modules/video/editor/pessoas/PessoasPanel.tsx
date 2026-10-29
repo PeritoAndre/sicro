@@ -82,6 +82,10 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
   const editar = (e: Parameters<typeof st.editar>[2]) => st.editar(workspacePath, hash, e);
 
   const rastrear = async () => {
+    if (pronto === false) {
+      navigate("/configuracoes?aba=iaocr");
+      return;
+    }
     if (pessoas.length > 0) {
       const editadas = pessoas.some((p) => p.estado === "editado");
       const ok = await askConfirm({
