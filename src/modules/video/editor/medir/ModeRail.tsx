@@ -1,6 +1,6 @@
 /** Trilho dos modos da análise de vídeo, como o do croqui. */
 
-import { Gauge, Play, Ruler, Users } from "lucide-react";
+import { Gauge, Play, Ruler, Users, Wand2 } from "lucide-react";
 import type { Modo } from "./medirStore";
 import styles from "./Medir.module.css";
 
@@ -9,6 +9,7 @@ const MODOS: { id: Modo; label: string; icon: typeof Play; key: string; title: s
   { id: "velocidade", label: "Velocidade", icon: Gauge, key: "2", title: "Calcular a velocidade de um veículo (Alt+2)" },
   { id: "distancia", label: "Distância", icon: Ruler, key: "3", title: "Medir uma distância no chão (Alt+3)" },
   { id: "pessoas", label: "Pessoas", icon: Users, key: "4", title: "Numerar e acompanhar as pessoas da cena (Alt+4)" },
+  { id: "realce", label: "Realce", icon: Wand2, key: "5", title: "Ler melhor a imagem: média de quadros, super-resolução, estabilização, lente e perspectiva (Alt+5)" },
 ];
 
 export function ModeRail({ modo, onChange }: { modo: Modo; onChange: (m: Modo) => void }) {

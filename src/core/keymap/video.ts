@@ -44,6 +44,7 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
   { id: "video.mode.velocidade", scope: "video", group: "Vídeo · Modos", label: "Modo Velocidade", defaultBinding: "Alt+2" },
   { id: "video.mode.distancia", scope: "video", group: "Vídeo · Modos", label: "Modo Distância", defaultBinding: "Alt+3" },
   { id: "video.mode.pessoas", scope: "video", group: "Vídeo · Modos", label: "Modo Pessoas", defaultBinding: "Alt+4" },
+  { id: "video.mode.realce", scope: "video", group: "Vídeo · Modos", label: "Modo Realce", defaultBinding: "Alt+5" },
   { id: "video.pessoas.toggle", scope: "video", group: "Vídeo · Pessoas", label: "Pessoas: mostrar / ocultar na imagem", defaultBinding: "P" },
   { id: "video.pessoas.frame", scope: "video", group: "Vídeo · Pessoas", label: "Pessoas: quadro atual com a sobreposição no storyboard", defaultBinding: "Ctrl+Shift+P" },
   { id: "video.pessoas.next", scope: "video", group: "Vídeo · Pessoas", label: "Pessoas: selecionar a próxima", defaultBinding: "]" },

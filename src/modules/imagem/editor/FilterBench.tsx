@@ -80,6 +80,7 @@ export function FilterStackPanel({
   activeSelection,
   onOpenGallery,
   busy,
+  extraSlot,
 }: {
   stack: ProcessingOp[];
   onChange: (next: ProcessingOp[]) => void;
@@ -90,6 +91,8 @@ export function FilterStackPanel({
   activeSelection: SicroImageSelection | null;
   onOpenGallery: () => void;
   busy: boolean;
+  /** Ferramentas que não são filtros da pilha (super-resolução). */
+  extraSlot?: ReactNode;
 }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [adjOpen, setAdjOpen] = useState(false);
@@ -265,6 +268,8 @@ export function FilterStackPanel({
             </section>
           );
         })}
+
+        {extraSlot}
       </div>
     </div>
   );

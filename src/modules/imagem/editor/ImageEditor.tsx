@@ -130,6 +130,7 @@ import {
   type SelDraft,
 } from "./SelectionMarqueeLayer";
 import { LayersPanelPro } from "./LayersPanelPro";
+import { SuperResBox } from "./SuperResBox";
 import { simplifyPath, selectionArea } from "./selectionGeom";
 import type {
   PixelLayerSource,
@@ -2675,6 +2676,13 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
               busy={previewBusy}
               adjustmentsActive={cssFilter !== ""}
               onResetAdjustments={resetAdjustments}
+              extraSlot={
+                <SuperResBox
+                  workspacePath={workspacePath}
+                  relativePath={doc.source.original_relative_path}
+                  selection={doc.selection ?? null}
+                />
+              }
               adjustmentsSlot={
                 <AdjustmentsPanel adjustments={doc.view_adjustments} onChange={updateAdjustments} onReset={resetAdjustments} />
               }

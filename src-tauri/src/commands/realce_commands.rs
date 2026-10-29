@@ -837,7 +837,10 @@ pub async fn realce_lente_previa(
         }
         let coef = LensCoefficients { k1: perfil.k1, k2: perfil.k2, k3: 0.0 };
         let out = apply_radial_correction_centered(&DynamicImage::ImageRgba8(img.to_rgba8()), coef, perfil.cx, perfil.cy);
-        let destino = cache.join(format!("lente_previa_{}.png", &media_hash[..12]));
+        // quatro arquivos em rodízio: o caminho muda a cada prévia (sem cache velho) e não enche o disco
+        static CONTADOR: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = CONTADOR.fetch_add(1, Ordering::Relaxed) % 4;
+        let destino = cache.join(format!("lente_previa_{}_{n}.png", &media_hash[..12]));
         out.save(&destino).map_err(|e| SicroError::Filesystem(format!("gravar prévia: {e}")))?;
         Ok(PreviaLente { absoluto: destino.to_string_lossy().into(), largura: out.width(), altura: out.height() })
     })

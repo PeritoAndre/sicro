@@ -6,7 +6,7 @@
 
 import { create } from "zustand";
 
-export type Modo = "assistir" | "velocidade" | "distancia" | "pessoas";
+export type Modo = "assistir" | "velocidade" | "distancia" | "pessoas" | "realce";
 export type RefKind = "retangulo" | "fila" | "medida" | "veiculo";
 export type Nitidez = "nitido" | "normal" | "borrado";
 
