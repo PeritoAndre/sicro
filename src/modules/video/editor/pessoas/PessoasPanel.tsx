@@ -43,6 +43,16 @@ const PASSOS = [
   { v: 4, rotulo: "1 a cada 4" },
 ];
 
+/** Limiar usado na última rodada, lido do params_json gravado pelo Rust. */
+function limiarDoRun(run: { params_json: string }): string | null {
+  try {
+    const v = JSON.parse(run.params_json).limiar;
+    return typeof v === "number" ? v.toFixed(2) : null;
+  } catch {
+    return null;
+  }
+}
+
 export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek, hasAudio }: Props) {
   const navigate = useNavigate();
   const st = usePessoasStore();
@@ -198,7 +208,7 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
             Confiança
             <input
               type="range"
-              min={0.25}
+              min={0.15}
               max={0.85}
               step={0.05}
               value={st.limiar}
@@ -232,6 +242,12 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
           </span>
         )}
         {st.erro && <span className={styles.error}>{st.erro}</span>}
+        {run && !tarefa && !st.erro && pessoas.length === 0 && (
+          <span className={styles.dim}>
+            Nenhuma pessoa encontrada com confiança {limiarDoRun(run) ?? st.limiar.toFixed(2)}. À noite, de longe ou em
+            baixa resolução, baixe a confiança (0,25 a 0,35) e rastreie de novo.
+          </span>
+        )}
       </section>
 
       {pessoas.length > 0 && (
