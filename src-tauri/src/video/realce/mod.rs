@@ -4,3 +4,4 @@
 
 pub mod align;
 pub mod average;
+pub mod perspective;

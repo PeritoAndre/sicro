@@ -223,14 +223,6 @@ mod tests {
         img.save(&src).unwrap();
         let c = LensCoefficients { k1: -0.25, k2: 0.05, k3: 0.0 };
         let (k1, k2) = para_ffmpeg(c, w, h).unwrap();
-        let st = crate::tools::command(&ff).args(["-v", "error", "-y", "-i"]).arg(&src).args(["-vf", &format!("lenscorrection=k1={a}:k2={b}:i=bilinear")]).arg(&dst).status().unwrap();
-            assert!(st.success());
-            let theirs = image::open(&dst).unwrap().to_rgb8();
-            let ours = apply_radial_correction(&DynamicImage::ImageRgba8(img.clone()), c);
-            let (mut s, mut n) = (0.0f64, 0u64);
-            for y in 20..h - 20 { for x in 20..w - 20 { let (p, q) = (ours.get_pixel(x, y).0[0] as f64, theirs.get_pixel(x, y).0[0] as f64); s += (p - q).powi(2); n += 1; } }
-            println!("{nome}: {:.2}", (s / n as f64).sqrt());
-        }
         let st = crate::tools::command(ff)
             .args(["-v", "error", "-y", "-i"])
             .arg(&src)
