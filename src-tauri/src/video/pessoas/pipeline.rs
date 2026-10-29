@@ -316,4 +316,38 @@ mod testes {
             std::fs::write(Path::new(&dir).join("pessoas.json"), serde_json::to_string(&r.pessoas).unwrap()).unwrap();
         }
     }
+
+    /// Teste manual: lê PESSOAS_JSON (trilhas de `rastreio_real`) e grava em PESSOAS_SAIDA um MP4
+    /// com a sobreposição e PNGs de alguns instantes.
+    #[test]
+    #[ignore]
+    fn exportacao_real() {
+        let (Ok(video), Ok(json), Ok(saida)) = (
+            std::env::var("PESSOAS_VIDEO"),
+            std::env::var("PESSOAS_JSON"),
+            std::env::var("PESSOAS_SAIDA"),
+        ) else {
+            return;
+        };
+        let pessoas: Vec<Pessoa> = serde_json::from_str(&std::fs::read_to_string(json).unwrap()).unwrap();
+        let cad = Cadencia { frame_dur: 1001.0 / 24000.0, passo: 1 };
+        let op = Opcoes::default();
+        let cancel = AtomicBool::new(false);
+        let mp4 = Path::new(&saida).join("saida.mp4");
+        let t0 = Instant::now();
+        let n = exportar_video(Path::new(&video), &mp4, &pessoas, cad, op, true, &cancel, &mut |_| {}).unwrap();
+        eprintln!("mp4: {n} quadros em {:.1}s", t0.elapsed().as_secs_f64());
+        for t in [20.0f64, 35.0, 50.0] {
+            let png = Path::new(&saida).join(format!("quadro_{t}.png"));
+            let ff = crate::video::frame_export::detect_ffmpeg().unwrap();
+            let ok = crate::tools::command(ff)
+                .args(["-v", "error", "-y", "-ss", &t.to_string(), "-i", &video, "-frames:v", "1"])
+                .arg(&png)
+                .status()
+                .unwrap();
+            assert!(ok.success());
+            let nums = sobrepor_png(&png, t, &pessoas, cad, op).unwrap();
+            eprintln!("quadro {t}: {} pessoas", nums.len());
+        }
+    }
 }

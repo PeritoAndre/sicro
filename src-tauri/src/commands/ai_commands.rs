@@ -924,4 +924,33 @@ mod tests {
         assert!(find_executable(&dir.join("nova"), "programa").is_some());
         let _ = std::fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn extrai_so_a_lib_do_tgz_e_acha_a_biblioteca() {
+        let dir = std::env::temp_dir().join(format!("sicro-tgz-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let pkg = dir.join("p.tgz");
+        {
+            let enc = flate2::write::GzEncoder::new(std::fs::File::create(&pkg).unwrap(), flate2::Compression::fast());
+            let mut b = tar::Builder::new(enc);
+            for (nome, dados) in [
+                ("onnxruntime-x/include/cabecalho.h", &b"h"[..]),
+                ("onnxruntime-x/lib/libonnxruntime.so.1.31.1", &b"lib"[..]),
+                ("onnxruntime-x/lib/libonnxruntime_providers_shared.so", &b"p"[..]),
+            ] {
+                let mut h = tar::Header::new_gnu();
+                h.set_size(dados.len() as u64);
+                h.set_mode(0o644);
+                h.set_cksum();
+                b.append_data(&mut h, nome, dados).unwrap();
+            }
+            b.into_inner().unwrap().finish().unwrap();
+        }
+        extract_tar_gz_lib(&pkg, &dir.join("out")).unwrap();
+        assert!(!dir.join("out/onnxruntime-x/include").exists());
+        let lib = find_ort_lib(&dir.join("out/onnxruntime-x")).unwrap();
+        assert!(lib.ends_with("libonnxruntime.so.1.31.1"));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }
