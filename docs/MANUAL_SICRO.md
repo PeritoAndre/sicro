@@ -380,6 +380,11 @@ original é copiado e "hasheado"; todo o trabalho fica numa pilha por cima.
 - **Receitas:** "Placa no escuro", "Bordas e marcas" e "Adulteração (ELA)"
   montam pilhas prontas; **Salvar como receita** guarda a pilha atual com um
   nome, disponível em qualquer caso.
+- **Super-resolução** (no fim do painel): amplia 2x ou 4x a imagem inteira ou só a
+  seleção com a rede Real-ESRGAN, baixada em **Configurações → IA (local)**. Gera um
+  arquivo novo em `imagens/realce` (SHA-256 e parâmetros num `.json`) que pode virar uma
+  imagem do caso. **A rede pode inventar detalhe**: não use para identificação sem o
+  original ao lado. Ver 7.4.2.
 
 ### 6.4 Análise e metadados
 
@@ -605,6 +610,67 @@ mudam em Configurações → Atalhos.
 > ⚠️ Detecção e numeração são **automáticas**: cruzamentos trocam números, pessoa
 > escondida por mais de ~1 s volta com outro número, e imagem escura ou de baixa
 > resolução perde gente. Confira o vídeo todo antes de usar. Ver Limitações.
+
+---
+
+### 7.4.2 Realce (leitura e melhora da imagem)
+
+Ferramentas para **enxergar melhor** uma placa, um rosto ou um objeto. São apoio de
+leitura: o vídeo original nunca é alterado e **realce não é prova por si só**. Cada saída
+é um arquivo novo na pasta `videos/realce` do caso, com SHA-256, parâmetros e aviso
+gravados ao lado (arquivo `.json`), e aparece na lista **Resultados** do modo.
+
+**Como começar.** Entre no modo **Realce** (trilho da esquerda ou **Alt+5**), pause no
+instante e clique em **Usar o quadro atual**. O quadro exato (PNG do ffmpeg) aparece no
+lugar do player; **Vídeo** volta ao player para escolher outro. As abas são **Média**,
+**Super-res.**, **Estabilizar**, **Lente** e **Perspectiva**.
+
+**Média de quadros alinhados.** Marque a região (dois cliques, cantos opostos), escolha
+quantos quadros em volta (5 a 60) e **Calcular**. O SICRO alinha a região de cada quadro ao
+quadro de referência (correlação de fase e refinamento de subpixel; marcando *Alinhar também
+giro e mudança de escala*, por homografia) e tira a **média** (ou a **mediana**, que ignora o que
+aparece só em alguns quadros). Quadros que não casam com os outros ficam de fora, e a tela
+diz **quantos entraram** ("27 de 30"). O resultado aparece **lado a lado**, quadro cru ×
+realce, com zoom (roda) e arraste nos dois ao mesmo tempo. Saem a região (PNG) e o quadro
+inteiro com a região trocada. Serve quando a câmera ou o objeto ficam quase parados e o que
+atrapalha é o ruído; o que muda de fato entre os quadros (reflexo, movimento) não melhora.
+**Guardar no storyboard** leva a região ao storyboard com a legenda "Realce".
+
+**Super-resolução.** Amplia 2x ou 4x o quadro, a região marcada ou a média, com a rede
+Real-ESRGAN (general-x4v3, BSD-3), baixada uma vez em **Configurações → IA (local) →
+Super-resolução** (≈ 5 MB, mais o onnxruntime se ainda não estiver instalado; roda na CPU,
+offline). A imagem é processada em ladrilhos; marque uma região para ser rápido. A
+tela mostra o aviso fixo: **a rede pode inventar detalhe; não use para identificação sem o
+original ao lado**. Na **Imagem**, a mesma ferramenta está no fim da bancada de filtros
+(imagem inteira ou só a seleção).
+
+**Estabilizar.** Gera uma **cópia** estabilizada do vídeo (ffmpeg, duas passadas:
+`vidstabdetect` e `vidstabtransform`), com barra de progresso e **Cancelar**.
+**Suavizar** define quantos quadros de cada lado entram no suavizado. **Cortar a borda**
+amplia a imagem até a borda preta sumir; **Preencher** mantém o enquadramento. A cópia é
+recomprimida (H.264), entra no caso ligada ao original e abre numa aba nova, com a barra
+"cópia estabilizada de…". Se o ffmpeg do computador não tiver o vidstab, o SICRO usa o
+`deshake`, mais simples (a tela avisa).
+
+**Lente.** Corrige a distorção de barril ou almofada (k1, k2) e o centro óptico, com
+**prévia ao vivo** sobre o quadro e uma **grade de referência**: ajuste até as linhas que
+deviam ser retas (poste, calçada, parede) casarem com a grade. **Salvar perfil** guarda a
+correção para o vídeo (e dá para reaproveitar o perfil de outro vídeo do caso, da mesma
+câmera). Com perfil salvo, a caixa **lente corrigida** aplica a correção ao quadro de
+trabalho e ao realce; **Quadro corrigido** grava o quadro e **Cópia do vídeo** grava uma
+cópia com a lente corrigida (recomprimida).
+
+**Perspectiva.** Marque 4 pontos de um retângulo de um plano (chão, parede, placa) na ordem
+*perto-esquerda → perto-direita → longe-direita → longe-esquerda*, informe as medidas reais
+dos lados 1→2 e 2→3 e **Gerar a vista de cima**: a imagem é retificada por homografia (a
+mesma da Velocidade/Distância) e a tela informa a escala (1 m = N px). Se o vídeo já tem
+uma calibração de plano da Velocidade, ela pode ser reaproveitada em vez de marcar de novo.
+Só vale para o que está **no plano marcado**: pessoas e veículos (que têm altura) saem
+deformados.
+
+> ⚠️ Realce ajuda a ler, não a concluir. A média só tira ruído; a super-resolução e a
+> correção de lente refazem a imagem; a estabilização recorta ou preenche a borda. Mostre sempre
+> o original ao lado e diga no laudo o que foi aplicado (os parâmetros ficam no `.json`).
 
 ---
 
