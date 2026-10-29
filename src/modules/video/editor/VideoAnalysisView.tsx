@@ -9,7 +9,7 @@ import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Clock, Columns2, Copy, Repeat, Scissors, X } from "lucide-react";
+import { ArrowLeft, Clock, Columns2, Copy, Repeat, Scissors, Wand2, X } from "lucide-react";
 import type {
   ClipMode,
   ExportClipResult,
@@ -42,6 +42,9 @@ import medirStyles from "./medir/Medir.module.css";
 import { useMedirStore } from "./medir/medirStore";
 import { ClockDialog, ExportClipDialog, SequenceDialog } from "./AnalysisDialogs";
 import { StoryboardGallery } from "./StoryboardGallery";
+import { RealcePanel } from "./realce/RealcePanel";
+import { RealceStage } from "./realce/RealceStage";
+import { useRealceStore } from "./realce/realceStore";
 import { PessoasOverlay } from "./pessoas/PessoasOverlay";
 import { PessoasPanel } from "./pessoas/PessoasPanel";
 import { cadenciaDe, usePessoasStore } from "./pessoas/pessoasStore";
@@ -54,6 +57,7 @@ import {
   formatDuration,
   formatLaudoTime,
   parseDerivation,
+  parseRealceCopia,
   parseTimeInput,
   parseWarnings,
   probeHasAudio,
@@ -111,9 +115,11 @@ export function VideoAnalysisView() {
   const perito = useMedirStore((s) => s.perito);
   const bindMedia = useMedirStore((s) => s.bindMedia);
   // O reprodutor aparece em Assistir e no primeiro passo dos modos (escolher o momento).
+  const realceQuadro = useRealceStore((s) => (s.mediaHash === openMediaRow?.sha256 ? s.quadro : null));
   const showPlayer =
     modo === "assistir" ||
     modo === "pessoas" ||
+    (modo === "realce" && !realceQuadro) ||
     (modo === "velocidade" && speedStep === 0) ||
     (modo === "distancia" && distStep === 0);
   useEffect(() => {
@@ -211,6 +217,7 @@ export function VideoAnalysisView() {
       "video.mode.velocidade": () => setModo("velocidade"),
       "video.mode.distancia": () => setModo("distancia"),
       "video.mode.pessoas": () => setModo("pessoas"),
+      "video.mode.realce": () => setModo("realce"),
     },
     { enabled: compareWith == null && galleryIndex == null && !clipOpen },
   );
@@ -652,6 +659,8 @@ export function VideoAnalysisView() {
   const otherVideos = mediaList.filter((m) => m.sha256 !== media0?.sha256);
   // Este vídeo é um trecho exportado? (de onde veio)
   const derivation = parseDerivation(media0?.derivation_json);
+  const copiaRealce = parseRealceCopia(media0?.derivation_json);
+  const origemDaCopia = copiaRealce ? mediaList.find((m) => m.sha256 === copiaRealce.source.sha256) ?? null : null;
   const sourceOfClip = derivation
     ? mediaList.find((m) => m.sha256 === derivation.source.sha256) ?? null
     : null;
@@ -858,6 +867,22 @@ export function VideoAnalysisView() {
             <button
               type="button"
               onClick={() => workspacePath && void openMedia(workspacePath, sourceOfClip.id)}
+              title="Abrir o vídeo de origem"
+            >
+              abrir origem
+            </button>
+          )}
+        </div>
+      )}
+
+      {copiaRealce && (
+        <div className={styles.derivedBar}>
+          <Wand2 size={11} /> {copiaRealce.kind === "estabilizado" ? "cópia estabilizada" : "cópia com a lente corrigida"} de{" "}
+          <strong>{copiaRealce.source.filename}</strong> (recomprimida: os pixels não são os do original)
+          {origemDaCopia && (
+            <button
+              type="button"
+              onClick={() => workspacePath && void openMedia(workspacePath, origemDaCopia.id)}
               title="Abrir o vídeo de origem"
             >
               abrir origem
@@ -1135,7 +1160,12 @@ export function VideoAnalysisView() {
             </div>
           </div>
 
-          {!showPlayer && <MedirStage workspacePath={workspacePath} media={media} frames={storyboard} />}
+          {!showPlayer &&
+            (modo === "realce" ? (
+              <RealceStage media={media} onVoltar={() => useRealceStore.getState().setQuadro(null)} />
+            ) : (
+              <MedirStage workspacePath={workspacePath} media={media} frames={storyboard} />
+            ))}
         </main>
 
         <div
@@ -1155,6 +1185,15 @@ export function VideoAnalysisView() {
               frames={storyboard}
               warnings={[...probeWarnings, ...warningsFromLastAction]}
               actions={medirActions}
+            />
+          ) : modo === "realce" ? (
+            <RealcePanel
+              workspacePath={workspacePath}
+              media={media}
+              currentTime={currentTime}
+              onVideoDerivado={(m) => {
+                void loadList(workspacePath).then(() => openMedia(workspacePath, m.id));
+              }}
             />
           ) : modo === "pessoas" ? (
             <PessoasPanel

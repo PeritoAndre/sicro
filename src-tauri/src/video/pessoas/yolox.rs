@@ -4,7 +4,6 @@
 //! O ONNX oficial sai SEM decodificar: grades e passos (8/16/32) são aplicados aqui.
 
 use std::path::Path;
-use std::sync::OnceLock;
 
 use crate::error::{Result, SicroError};
 
@@ -139,8 +138,6 @@ pub fn nms(mut dets: Vec<Det>, thr: f32) -> Vec<Det> {
 // ---------------------------------------------------------------------------
 // Sessão ONNX
 
-static ENV: OnceLock<ort::environment::Environment> = OnceLock::new();
-
 pub struct Yolox {
     session: ort::session::Session,
     pub side: usize,
@@ -151,14 +148,7 @@ impl Yolox {
     /// Carrega a libonnxruntime de `lib` e o modelo. O ambiente do `ort` é um só por processo.
     pub fn load(lib: &Path, model: &Path) -> Result<Self> {
         let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
-        if ENV.get().is_none() {
-            let env = ort::init_from(lib)
-                .map_err(|e| err(&e))?
-                .build()
-                .map_err(|e| err(&e))?;
-            let _ = ENV.set(env);
-        }
-        let env = ENV.get().ok_or_else(|| err(&"ambiente não iniciado"))?;
+        let env = crate::video::ort_env::entorno(lib)?;
         let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
         let session = ort::session::Session::builder(env)
             .map_err(|e| err(&e))?

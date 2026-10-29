@@ -188,3 +188,18 @@ export function parseDerivation(
     return null;
   }
 }
+
+/** Cópia de realce (estabilizada ou com a lente corrigida): lê o `derivation_json`; null se não for. */
+export function parseRealceCopia(
+  json: string | null | undefined,
+): { kind: "estabilizado" | "lente_video"; source: { sha256: string; filename: string } } | null {
+  if (!json) return null;
+  try {
+    const d = JSON.parse(json) as { kind?: string; source?: { sha256: string; filename: string } };
+    return d && (d.kind === "estabilizado" || d.kind === "lente_video") && d.source
+      ? { kind: d.kind, source: d.source }
+      : null;
+  } catch {
+    return null;
+  }
+}

@@ -63,6 +63,23 @@ contrato honesto com quem usa.
     conferindo: confira quadro a quadro.
   - **Só CPU:** a detecção roda no processador; não há aceleração por placa de vídeo
     nesta versão. O Windows não foi testado nesta versão (compila no Actions).
+- **Realce de imagem no vídeo (aba Realce, 5.3) é apoio de leitura, não prova.** Nada
+  substitui o original; cada saída guarda SHA-256, parâmetros e aviso.
+  - **A média de quadros só tira ruído:** exige câmera e objeto quase parados na região;
+    reflexo, movimento e compressão forte não somem. Quadros que não casam são
+    descartados (a tela mostra quantos entraram). Rotação e escala grandes pedem o alinhamento
+    por homografia e podem falhar em região lisa.
+  - **A super-resolução inventa detalhe.** A rede Real-ESRGAN (general-x4v3) completa o que
+    não existe na imagem: o resultado é verossímil, não necessariamente fiel. Não use para
+    identificar pessoa ou placa sem o original ao lado. Só CPU: um quadro inteiro de 1080p
+    leva alguns minutos; marque uma região. O arquivo do modelo vem de um repositório
+    comunitário (hash fixo e conferido), não do lançamento oficial do projeto.
+  - **A estabilização corta ou preenche a borda e recomprime o vídeo.** A cópia muda os
+    pixels e o movimento da câmera: serve para ler a cena, não para medir (velocidade e
+    distância usam o vídeo original). Sem o vidstab no ffmpeg, o `deshake` é mais fraco.
+  - **Lente e perspectiva** supõem um modelo simples (distorção radial k1/k2; plano). A
+    vista de cima só vale para o que está no plano marcado e depende das medidas reais
+    informadas. A cópia do vídeo com a lente corrigida também é recomprimida.
 - **Degravação por IA é rascunho**: pode errar ou "inventar" texto em ruído e
   silêncio. Cada linha precisa ser revisada antes de ir ao laudo.
 - **ENF e realces de áudio** são apoio à escuta e indícios, não conclusão.

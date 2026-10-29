@@ -50,6 +50,10 @@ export interface AiSettings {
   ort_lib_path: string;
   pessoas_model_path: string;
   pessoas_version: string;
+  /** Super-resolução (Real-ESRGAN): modelo, onnxruntime próprio (vazio = o das Pessoas), versão. */
+  sr_model_path: string;
+  sr_ort_lib_path: string;
+  sr_version: string;
 }
 
 /** Motor de OCR (Tesseract) + idiomas instalados. */
@@ -123,6 +127,9 @@ export function defaultAppSettings(): AppSettings {
       ort_lib_path: "",
       pessoas_model_path: "",
       pessoas_version: "",
+      sr_model_path: "",
+      sr_ort_lib_path: "",
+      sr_version: "",
     },
     ocr: {
       engine_bin_path: "",

@@ -109,6 +109,10 @@ const MIGRATIONS: &[Migration] = &[
         version: "024_video_rastreio_classes",
         sql: include_str!("../../migrations/024_video_rastreio_classes.sql"),
     },
+    Migration {
+        version: "025_video_realce",
+        sql: include_str!("../../migrations/025_video_realce.sql"),
+    },
 ];
 
 pub fn run_migrations(conn: &mut Connection) -> Result<()> {
