@@ -541,8 +541,70 @@ mudança de faixa…), com título e — se quiser — um frame vinculado.
    IC se informar σ).
 
 > ⚠️ **§13:** velocidade e distância são **medições com incerteza**, exibidas de
-> forma descritiva — **não são conclusão pericial**. Não há rastreamento nem
-> detecção automática: você marca cada ponto; o perito interpreta.
+> forma descritiva — **não são conclusão pericial**. Você marca cada ponto; o
+> perito interpreta. (O acompanhamento automático da aba **Pessoas** não entra
+> nestas contas.)
+
+### 7.4.1 Pessoas no vídeo
+
+Numera as pessoas da cena e desenha um **número**, uma **seta** e uma **caixa fina**
+acompanhando cada uma, quadro a quadro. É apoio para o laudo: o perito confere e
+corrige. O vídeo original nunca é alterado; o que sai é cópia, com SHA-256.
+
+**Preparar (uma vez).** Em **Configurações → IA (local) → Pessoas no vídeo**, baixe o
+pacote (≈ 47 MB: modelo YOLOX-S, Apache-2.0, e onnxruntime, MIT). Depois roda
+offline. Sem o pacote, a aba Pessoas leva a esse botão.
+
+**Rastrear.** Abra o vídeo, entre no modo **Pessoas** (trilho da esquerda ou
+**Alt+4**) e clique em **Rastrear**. Escolha antes se analisa todos os quadros (padrão)
+ou um a cada 2 ou 4 (mais rápido, com a caixa interpolada entre os analisados), e a
+**confiança** mínima (0,50 padrão; mais baixa acha mais gente e erra mais). Há barra de
+progresso e **Cancelar**. A análise fica salva no caso; rastrear de novo substitui a
+anterior (com confirmação, se houver edições).
+
+**Na imagem.** Cada pessoa leva a cor do seu número. Em **+ caixa**, desenha número,
+seta e caixa; **+ seta** tira a caixa; **Número** deixa só o número. O cursor **Tamanho**
+muda número e seta. **P** (ou "na imagem") mostra/oculta. A sobreposição acompanha o
+quadro exibido, também pausado e no passo por quadro (**,** e **.**), e segue a lupa.
+
+**Lista (painel da direita).** Uma linha por pessoa, com o primeiro e o último instante
+e o número de quadros. Clique seleciona (a caixa ganha alças); duplo clique leva ao
+instante em que ela entra. A caixa em destaque mostra quem está na imagem agora.
+
+- **Nome:** campo da linha (opcional; não é desenhado no vídeo).
+- **Número:** clique no quadradinho colorido, digite e Enter (quem já tinha esse número
+  fica com o seu antigo). **↑ / ↓** sobem e descem um número. **numerar por entrada**
+  renumera pela ordem em que entram em cena.
+- **Juntar** (ícone de fusão): "esta pessoa é a mesma que outra". Clique na outra, na
+  lista ou na imagem; fica o número da primeira.
+- **Separar aqui** (ícone de divisão): do instante atual em diante vira outra pessoa,
+  com número novo. Serve para quando o acompanhamento trocou duas pessoas num cruzamento.
+- **Apagar:** falso positivo (poste, sombra). Os outros números não mudam.
+- **Corrigir a caixa:** com a pessoa selecionada, arraste a caixa ou as alças no quadro
+  desejado. A correção vale dali até a próxima correção, interpolando entre elas (e
+  fica constante depois da última). Cada pessoa mostra quantos ajustes tem.
+
+**Linha do tempo.** Abaixo da régua, uma faixa por pessoa mostra onde ela aparece;
+clique numa faixa para ir até o instante e selecionar a pessoa.
+
+**Saídas** (todas registradas na trilha de operações, com SHA-256, na pasta
+`videos/pessoas` do caso, sem tempo nem número de quadro queimado na imagem):
+
+- **Vídeo MP4:** o vídeo inteiro com a sobreposição gravada, no mesmo tamanho e com os
+  mesmos quadros (com o som, se marcar). Demora mais que assistir.
+- **Este quadro** (**Ctrl+Shift+P**) e **Eventos:** quadros com a sobreposição que
+  entram no storyboard (legenda "Pessoas: 1, 3, 4").
+- **Tabela:** CSV (separador `;`, abre no Excel/LibreOffice) e relatório HTML com
+  número, nome, entra em, sai de e quadros de cada pessoa, os parâmetros da análise e o
+  hash do vídeo.
+
+**Atalhos.** **Alt+4** modo Pessoas · **P** mostrar/ocultar · **]** e **[** pessoa
+seguinte/anterior · **Ctrl+Shift+P** quadro com a sobreposição no storyboard. Todos
+mudam em Configurações → Atalhos.
+
+> ⚠️ Detecção e numeração são **automáticas**: cruzamentos trocam números, pessoa
+> escondida por mais de ~1 s volta com outro número, e imagem escura ou de baixa
+> resolução perde gente. Confira o vídeo todo antes de usar. Ver Limitações.
 
 ---
 
@@ -688,7 +750,7 @@ Abas:
   (*Escolher destino e fazer backup*, *Repetir neste destino*). **Restaurar
   backup…** recria os casos na pasta local padrão — sem sobrescrever os que já
   existem — e traz de volta o perfil.
-- **IA (degravação):** baixa o motor de transcrição local (whisper.cpp) e os
+- **IA (local):** baixa o motor de transcrição local (whisper.cpp) e os
   modelos, só quando você clica. Usado pelo Rascunho por IA da degravação. Ali
   também fica o **Separador de locutores** (sherpa-onnx, ≈ 58 MB, um clique):
   programa e modelos oficiais com hash conferido — se o arquivo não conferir,

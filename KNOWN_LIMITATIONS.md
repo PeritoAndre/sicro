@@ -1,6 +1,6 @@
-# Limitações conhecidas — SICRO 5.0
+# Limitações conhecidas — SICRO 5.2
 
-O que o SICRO 5.0 **não faz** ou faz com ressalvas. Não é lista de bugs: é o
+O que o SICRO 5.2 **não faz** ou faz com ressalvas. Não é lista de bugs: é o
 contrato honesto com quem usa.
 
 ## Instalação
@@ -27,8 +27,24 @@ contrato honesto com quem usa.
 - **Esc com um menu aberto em tela cheia** também sai da tela cheia no Linux (o
   WebKit trata o Esc antes da página).
 - **Velocidade e distância são medições com incerteza**: os pontos são marcados
-  pelo perito, não há rastreamento automático; o resultado é descritivo, com
-  intervalo de confiança quando as incertezas são informadas.
+  pelo perito (o rastreamento da aba Pessoas não alimenta essas contas); o
+  resultado é descritivo, com intervalo de confiança quando as incertezas são
+  informadas.
+- **Pessoas no vídeo (detecção e numeração automáticas) é apoio, não conclusão.**
+  O perito confere e corrige antes de usar no laudo.
+  - **Cruzamentos trocam números:** quando duas pessoas se cruzam ou andam coladas,
+    o acompanhamento pode trocar os números ou criar uma pessoa nova ao reaparecer.
+    Use *juntar* e *separar* na lista.
+  - **Oclusão longa:** a pessoa escondida por mais de ~1 s (poste, veículo, grupo)
+    volta com outro número, e some da imagem enquanto não é vista.
+  - **Noite, contraluz e baixa resolução:** pessoas pequenas (câmera alta e
+    distante), borradas ou no escuro podem não ser detectadas, e sombras ou objetos
+    podem virar falso positivo. A detecção usa o modelo YOLOX-S em 640 px.
+  - **Vídeo com fps variável:** a caixa de cada quadro usa o tempo real do quadro,
+    mas o MP4 exportado sai em taxa constante (duração preservada; pode haver
+    pequena diferença de sincronia em relação ao original).
+  - **Só CPU:** a detecção roda no processador; não há aceleração por placa de vídeo
+    nesta versão. O Windows não foi testado nesta versão (compila no Actions).
 - **Degravação por IA é rascunho**: pode errar ou "inventar" texto em ruído e
   silêncio. Cada linha precisa ser revisada antes de ir ao laudo.
 - **ENF e realces de áudio** são apoio à escuta e indícios, não conclusão.
