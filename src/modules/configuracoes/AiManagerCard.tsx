@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Bot, CheckCircle2, Download, RefreshCw, ScanSearch, Trash2, Users } from "lucide-react";
+import { Bot, CheckCircle2, Download, RefreshCw, ScanSearch, Sparkles, Trash2, Users } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
@@ -190,6 +190,38 @@ export function AiManagerCard() {
     }
   };
 
+  const installSuperres = async () => {
+    setBusy(SUPERRES_ID);
+    setError(null);
+    setProgress((p) => ({ ...p, [SUPERRES_ID]: { id: SUPERRES_ID, received: 0, total: 0 } }));
+    try {
+      setStatus(await commands.installSuperres());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setError(toSicroError(e).message);
+    } finally {
+      setBusy(null);
+      setProgress((p) => {
+        const n = { ...p };
+        delete n[SUPERRES_ID];
+        return n;
+      });
+    }
+  };
+
+  const removeSuperres = async () => {
+    setBusy(SUPERRES_ID);
+    setError(null);
+    try {
+      setStatus(await commands.removeSuperres());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setError(toSicroError(e).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const isInstalled = (item: CatalogItem): boolean => {
     if (!status) return false;
     if (item.kind === "build") {
@@ -313,6 +345,32 @@ export function AiManagerCard() {
         </>
       )}
 
+      {status?.superres_available && (
+        <>
+          <h3 className={styles.group}>
+            <Sparkles size={13} aria-hidden /> Super-resolução
+          </h3>
+          <DiarRow
+            id={SUPERRES_ID}
+            label="Super-resolução — Real-ESRGAN + onnxruntime"
+            ok={status.superres_ok}
+            version={status.superres_version}
+            note={
+              <>
+                ≈ {status.superres_approx_mb} MB · Amplia 2x ou 4x um quadro ou uma região (aba Realce
+                do vídeo e filtros da imagem). Modelo Real-ESRGAN general-x4v3 (BSD-3) e onnxruntime
+                (MIT), com hash conferido; roda na CPU, offline. A rede pode inventar detalhe: o
+                resultado é só leitura, nunca prova.
+              </>
+            }
+            busy={busy}
+            progress={progress[SUPERRES_ID]}
+            onInstall={() => void installSuperres()}
+            onRemove={() => void removeSuperres()}
+          />
+        </>
+      )}
+
       <div className={styles.footer}>
         <Button
           variant="ghost"
@@ -337,6 +395,7 @@ export function AiManagerCard() {
 
 const DIAR_ID = "diarizacao";
 const PESSOAS_ID = "pessoas";
+const SUPERRES_ID = "superres";
 
 /** Pacotes de vários arquivos (separador de locutores, pessoas no vídeo): uma barra só. */
 function DiarRow({

@@ -45,6 +45,11 @@ export interface AiStatus {
   pessoas_ok: boolean;
   pessoas_version: string;
   pessoas_approx_mb: number;
+  /** Super-resolução (Real-ESRGAN): pacote para este sistema? instalado? */
+  superres_available: boolean;
+  superres_ok: boolean;
+  superres_version: string;
+  superres_approx_mb: number;
 }
 
 export interface AiUpdateInfo {

@@ -64,6 +64,24 @@ import type {
   QuadroPessoas,
   TabelaGerada,
 } from "@domain/video_pessoas";
+import type {
+  ArquivoRealce,
+  EstadoEstabilizacao,
+  ParamsEstabilizar,
+  ParamsMedia,
+  ParamsPerspectiva,
+  ParamsSuperRes,
+  PerfilDeVideo,
+  PerfilLente,
+  PreviaLente,
+  QuadroTrabalho,
+  ResultadoMedia,
+  ResultadoPerspectiva,
+  ResultadoSuperRes,
+  ResultadoSuperResImagem,
+  Roi,
+  VideoDerivado,
+} from "@domain/video_realce";
 import type { EvidenceLink } from "@domain/evidence";
 import type {
   IntegrityReportArtifact,
@@ -1114,6 +1132,97 @@ export const commands = {
 
   removePessoas(): Promise<AiStatus> {
     return safeInvoke<AiStatus>("remove_pessoas", {});
+  },
+
+  installSuperres(): Promise<AiStatus> {
+    return safeInvoke<AiStatus>("install_superres", {});
+  },
+
+  removeSuperres(): Promise<AiStatus> {
+    return safeInvoke<AiStatus>("remove_superres", {});
+  },
+
+  // --- Leitura e realce de imagem (5.3) ---
+  realceCancelar(): Promise<void> {
+    return safeInvoke<void>("realce_cancelar", {});
+  },
+
+  realceListar(workspacePath: string, mediaHash: string): Promise<ArquivoRealce[]> {
+    return safeInvoke<ArquivoRealce[]>("realce_listar", { workspacePath, mediaHash });
+  },
+
+  realceParaStoryboard(
+    workspacePath: string,
+    mediaHash: string,
+    resultadoId: string,
+    titulo?: string,
+  ): Promise<VideoStoryboardFrame> {
+    return safeInvoke<VideoStoryboardFrame>("realce_para_storyboard", { workspacePath, mediaHash, resultadoId, titulo });
+  },
+
+  realceQuadro(workspacePath: string, mediaHash: string, t: number, comLente: boolean): Promise<QuadroTrabalho> {
+    return safeInvoke<QuadroTrabalho>("realce_quadro", { workspacePath, mediaHash, t, comLente });
+  },
+
+  realceMedia(workspacePath: string, mediaHash: string, params: ParamsMedia): Promise<ResultadoMedia> {
+    return safeInvoke<ResultadoMedia>("realce_media", { workspacePath, mediaHash, params });
+  },
+
+  realceSuperres(workspacePath: string, mediaHash: string, params: ParamsSuperRes): Promise<ResultadoSuperRes> {
+    return safeInvoke<ResultadoSuperRes>("realce_superres", { workspacePath, mediaHash, params });
+  },
+
+  realceSuperresImagem(
+    workspacePath: string,
+    params: { relative_path: string; roi: Roi | null; escala: 2 | 4 },
+  ): Promise<ResultadoSuperResImagem> {
+    return safeInvoke<ResultadoSuperResImagem>("realce_superres_imagem", { workspacePath, params });
+  },
+
+  realceLenteObter(workspacePath: string, mediaHash: string): Promise<PerfilLente | null> {
+    return safeInvoke<PerfilLente | null>("realce_lente_obter", { workspacePath, mediaHash });
+  },
+
+  realceLenteSalvar(workspacePath: string, mediaHash: string, perfil: PerfilLente): Promise<void> {
+    return safeInvoke<void>("realce_lente_salvar", { workspacePath, mediaHash, perfil });
+  },
+
+  realceLenteApagar(workspacePath: string, mediaHash: string): Promise<void> {
+    return safeInvoke<void>("realce_lente_apagar", { workspacePath, mediaHash });
+  },
+
+  realceLenteListar(workspacePath: string): Promise<PerfilDeVideo[]> {
+    return safeInvoke<PerfilDeVideo[]>("realce_lente_listar", { workspacePath });
+  },
+
+  realceLentePrevia(
+    workspacePath: string,
+    mediaHash: string,
+    t: number,
+    perfil: PerfilLente,
+    maxLado?: number,
+  ): Promise<PreviaLente> {
+    return safeInvoke<PreviaLente>("realce_lente_previa", { workspacePath, mediaHash, t, perfil, maxLado });
+  },
+
+  realceQuadroCorrigido(workspacePath: string, mediaHash: string, t: number): Promise<ArquivoRealce> {
+    return safeInvoke<ArquivoRealce>("realce_quadro_corrigido", { workspacePath, mediaHash, t });
+  },
+
+  realcePerspectiva(workspacePath: string, mediaHash: string, params: ParamsPerspectiva): Promise<ResultadoPerspectiva> {
+    return safeInvoke<ResultadoPerspectiva>("realce_perspectiva", { workspacePath, mediaHash, params });
+  },
+
+  realceEstabilizacaoDisponivel(): Promise<EstadoEstabilizacao> {
+    return safeInvoke<EstadoEstabilizacao>("realce_estabilizacao_disponivel", {});
+  },
+
+  realceEstabilizar(workspacePath: string, mediaHash: string, params: ParamsEstabilizar): Promise<VideoDerivado> {
+    return safeInvoke<VideoDerivado>("realce_estabilizar", { workspacePath, mediaHash, params });
+  },
+
+  realceLenteVideo(workspacePath: string, mediaHash: string): Promise<VideoDerivado> {
+    return safeInvoke<VideoDerivado>("realce_lente_video", { workspacePath, mediaHash });
   },
 
   // --- Pessoas no vídeo ---
