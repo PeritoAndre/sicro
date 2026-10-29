@@ -4,5 +4,7 @@
 
 pub mod align;
 pub mod average;
+pub mod janela;
 pub mod perspective;
+pub mod stabilize;
 pub mod superres;

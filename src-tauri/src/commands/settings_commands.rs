@@ -118,6 +118,13 @@ pub struct AiSettings {
     pub pessoas_model_path: String,
     #[serde(default)]
     pub pessoas_version: String,
+    /// Super-resolução (Real-ESRGAN): modelo, onnxruntime próprio (vazio = o das Pessoas), versão.
+    #[serde(default)]
+    pub sr_model_path: String,
+    #[serde(default)]
+    pub sr_ort_lib_path: String,
+    #[serde(default)]
+    pub sr_version: String,
 }
 
 /// OCR (Tesseract) instalado pelo gerenciador: `engine_bin_path` é o executável;

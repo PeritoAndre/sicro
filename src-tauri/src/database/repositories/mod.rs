@@ -14,3 +14,4 @@ pub mod video_distance_repo;
 pub mod video_repo;
 pub mod video_speed_repo;
 pub mod video_people_repo;
+pub mod video_realce_repo;

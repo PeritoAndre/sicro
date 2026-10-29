@@ -11,6 +11,7 @@ pub mod image_commands;
 pub mod import_commands;
 pub mod os_open;
 pub mod pessoas_commands;
+pub mod realce_commands;
 pub mod registry_commands;
 pub mod settings_commands;
 pub mod video_commands;

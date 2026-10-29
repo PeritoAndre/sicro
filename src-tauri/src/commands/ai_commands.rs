@@ -154,6 +154,11 @@ pub struct AiStatus {
     pub pessoas_ok: bool,
     pub pessoas_version: String,
     pub pessoas_approx_mb: u32,
+    /// Super-resolução (Real-ESRGAN): pacote para este sistema? instalado?
+    pub superres_available: bool,
+    pub superres_ok: bool,
+    pub superres_version: String,
+    pub superres_approx_mb: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -636,6 +641,121 @@ pub async fn remove_pessoas(app: AppHandle) -> Result<AiStatus> {
 }
 
 // ---------------------------------------------------------------------------
+// Super-resolução (5.3): Real-ESRGAN general-x4v3 (BSD-3, Xintao Wang) em ONNX, pelo mesmo
+// onnxruntime das Pessoas (reaproveitado quando já está instalado). Só CPU.
+
+const REALESRGAN_X4V3: DiarFile = DiarFile {
+    url: "https://huggingface.co/OwlMaster/AllFilesRope/resolve/d783e61585b3d83a85c91ca8a3b299e8ade94d72/realesr-general-x4v3.onnx",
+    filename: "realesr-general-x4v3.onnx",
+    bytes: 4_871_181,
+    sha256: "09b757accd747d7e423c1d352b3e8f23e77cc5742d04bae958d4eb8082b76fa4",
+};
+
+/// Biblioteca do onnxruntime que a super-resolução usa: a própria, senão a das Pessoas.
+pub fn superres_lib(ai: &crate::commands::settings_commands::AiSettings) -> Option<PathBuf> {
+    [&ai.sr_ort_lib_path, &ai.ort_lib_path]
+        .iter()
+        .map(|p| PathBuf::from(p.as_str()))
+        .find(|p| !p.as_os_str().is_empty() && p.is_file())
+}
+
+pub fn superres_ready(ai: &crate::commands::settings_commands::AiSettings) -> bool {
+    superres_lib(ai).is_some()
+        && !ai.sr_model_path.is_empty()
+        && Path::new(ai.sr_model_path.as_str()).is_file()
+}
+
+fn superres_total_bytes(precisa_ort: bool) -> u64 {
+    REALESRGAN_X4V3.bytes + if precisa_ort { ort_package().map_or(0, |e| e.bytes) } else { 0 }
+}
+
+#[tauri::command]
+pub async fn install_superres(app: AppHandle) -> Result<AiStatus> {
+    let pkg = ort_package().ok_or_else(|| {
+        SicroError::Validation("super-resolução não disponível neste sistema".into())
+    })?;
+    let atual = get_app_settings(app.clone()).await?;
+    let ja_tem_ort = atual.ai.ort_lib_path.as_str() != "" && Path::new(atual.ai.ort_lib_path.as_str()).is_file();
+    let dir = ai_base_dir(&app)?.join("superres");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| SicroError::Filesystem(format!("criar pasta IA: {e}")))?;
+
+    let app2 = app.clone();
+    let dir2 = dir.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(Option<PathBuf>, PathBuf)> {
+        let total = superres_total_bytes(!ja_tem_ort);
+        let mut base = 0u64;
+        let mut fetch = |f: &DiarFile| -> Result<PathBuf> {
+            let tmp = dir2.join(format!("{}.part", f.filename));
+            let sha = download_with_progress(&app2, f.url, &tmp, "superres", base, total)?;
+            base += f.bytes;
+            if sha != f.sha256 {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(SicroError::Validation(format!(
+                    "o arquivo baixado ({}) não confere com o hash esperado — download corrompido ou alterado; nada foi instalado",
+                    f.filename
+                )));
+            }
+            let fin = dir2.join(f.filename);
+            std::fs::rename(&tmp, &fin)
+                .map_err(|e| SicroError::Filesystem(format!("finalizar download: {e}")))?;
+            Ok(fin)
+        };
+        let lib = if ja_tem_ort {
+            None
+        } else {
+            let ort_pkg = fetch(&pkg)?;
+            let out = dir2.join("onnxruntime");
+            if pkg.filename.ends_with(".zip") {
+                std::fs::create_dir_all(&out).ok();
+                extract_zip(&ort_pkg, &out)?;
+            } else {
+                extract_tar_gz_lib(&ort_pkg, &out)?;
+            }
+            let _ = std::fs::remove_file(&ort_pkg);
+            let raiz = std::fs::read_dir(&out)
+                .ok()
+                .and_then(|mut r| r.find_map(|e| e.ok().map(|e| e.path()).filter(|p| p.is_dir())))
+                .unwrap_or(out.clone());
+            Some(find_ort_lib(&raiz).ok_or_else(|| {
+                SicroError::Validation("biblioteca do onnxruntime não encontrada no pacote".into())
+            })?)
+        };
+        let model = fetch(&REALESRGAN_X4V3)?;
+        Ok((lib, model))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))?;
+
+    let (lib, model) = match result {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(e);
+        }
+    };
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.sr_ort_lib_path = lib.map(|l| l.to_string_lossy().to_string()).unwrap_or_default();
+    s.ai.sr_model_path = model.to_string_lossy().to_string();
+    s.ai.sr_version = format!("Real-ESRGAN general-x4v3 + onnxruntime {ORT_VERSION}");
+    save_app_settings(app.clone(), s).await?;
+    tracing::info!("super-resolução instalada");
+    get_ai_status(app).await
+}
+
+#[tauri::command]
+pub async fn remove_superres(app: AppHandle) -> Result<AiStatus> {
+    let _ = std::fs::remove_dir_all(ai_base_dir(&app)?.join("superres"));
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.sr_ort_lib_path = String::new();
+    s.ai.sr_model_path = String::new();
+    s.ai.sr_version = String::new();
+    save_app_settings(app.clone(), s).await?;
+    get_ai_status(app).await
+}
+
+// ---------------------------------------------------------------------------
 // Comandos
 
 /// Catálogo curado + se há GPU NVIDIA detectada (sugere o build cuBLAS).
@@ -679,6 +799,8 @@ pub async fn get_ai_status(app: AppHandle) -> Result<AiStatus> {
         .iter()
         .all(|p| !p.is_empty() && Path::new(p.as_str()).is_file());
     let pessoas_ok = pessoas_ready(&s.ai);
+    let sr_version = s.ai.sr_version.clone();
+    let (sr_ok, sr_mb) = (superres_ready(&s.ai), superres_total_bytes(s.ai.ort_lib_path.is_empty()) / 1_000_000);
     Ok(AiStatus {
         whisper_bin_path,
         whisper_ok,
@@ -694,6 +816,10 @@ pub async fn get_ai_status(app: AppHandle) -> Result<AiStatus> {
         pessoas_ok,
         pessoas_version: s.ai.pessoas_version,
         pessoas_approx_mb: (pessoas_total_bytes() / 1_000_000) as u32,
+        superres_available: ort_package().is_some(),
+        superres_ok: sr_ok,
+        superres_version: sr_version,
+        superres_approx_mb: sr_mb as u32,
     })
 }
 
