@@ -42,6 +42,10 @@ import medirStyles from "./medir/Medir.module.css";
 import { useMedirStore } from "./medir/medirStore";
 import { ClockDialog, ExportClipDialog, SequenceDialog } from "./AnalysisDialogs";
 import { StoryboardGallery } from "./StoryboardGallery";
+import { PessoasOverlay } from "./pessoas/PessoasOverlay";
+import { PessoasPanel } from "./pessoas/PessoasPanel";
+import { cadenciaDe, usePessoasStore } from "./pessoas/pessoasStore";
+import { segmentos } from "./pessoas/pessoasMath";
 import { MultiCamView } from "./MultiCamView";
 import {
   cameraClockAt,
@@ -108,7 +112,10 @@ export function VideoAnalysisView() {
   const bindMedia = useMedirStore((s) => s.bindMedia);
   // O reprodutor aparece em Assistir e no primeiro passo dos modos (escolher o momento).
   const showPlayer =
-    modo === "assistir" || (modo === "velocidade" && speedStep === 0) || (modo === "distancia" && distStep === 0);
+    modo === "assistir" ||
+    modo === "pessoas" ||
+    (modo === "velocidade" && speedStep === 0) ||
+    (modo === "distancia" && distStep === 0);
   useEffect(() => {
     if (openMediaRow) bindMedia(openMediaRow.sha256);
   }, [openMediaRow, bindMedia]);
@@ -203,6 +210,7 @@ export function VideoAnalysisView() {
       "video.mode.assistir": () => setModo("assistir"),
       "video.mode.velocidade": () => setModo("velocidade"),
       "video.mode.distancia": () => setModo("distancia"),
+      "video.mode.pessoas": () => setModo("pessoas"),
     },
     { enabled: compareWith == null && galleryIndex == null && !clipOpen },
   );
@@ -591,6 +599,51 @@ export function VideoAnalysisView() {
     { enabled: playerKeys },
   );
 
+  // Pessoas: mostrar/ocultar, trocar a selecionada, quadro com a sobreposição.
+  const addStoryboardFrames = useVideoStore((s) => s.addStoryboardFrames);
+  const pessoasFrame = async () => {
+    if (!workspacePath || !media0) return;
+    const ps = usePessoasStore.getState();
+    try {
+      const r = await commands.pessoasExportarQuadros(workspacePath, media0.sha256, [nowTime()], ps.desenho);
+      addStoryboardFrames(r.map((q) => q.frame));
+      flash("Quadro com as pessoas no storyboard.");
+    } catch (e) {
+      flash(`Falha: ${toSicroError(e).message}`, 5000);
+    }
+  };
+  const pessoasProxima = (dir: 1 | -1) => {
+    const ps = usePessoasStore.getState();
+    const lista = ps.estado?.pessoas ?? [];
+    if (lista.length === 0) return;
+    const i = lista.findIndex((p) => p.id === ps.selecionada);
+    ps.selecionar(lista[(i + dir + lista.length) % lista.length]!.id);
+  };
+  useShortcuts(
+    {
+      "video.pessoas.toggle": () => usePessoasStore.getState().setMostrar(!usePessoasStore.getState().mostrar),
+      "video.pessoas.frame": () => void pessoasFrame(),
+      "video.pessoas.next": () => pessoasProxima(1),
+      "video.pessoas.prev": () => pessoasProxima(-1),
+    },
+    { enabled: playerKeys && modo === "pessoas" },
+  );
+
+  // Faixas das pessoas na linha do tempo (uma por pessoa, só no modo Pessoas).
+  const pessoasEstado = usePessoasStore((s) => s.estado);
+  const pessoaSel = usePessoasStore((s) => s.selecionada);
+  const pessoasMostrar = usePessoasStore((s) => s.mostrar);
+  const faixas = useMemo(() => {
+    const cad = cadenciaDe(pessoasEstado);
+    if (modo !== "pessoas" || !cad || !pessoasEstado) return undefined;
+    return pessoasEstado.pessoas.map((p) => ({
+      id: p.id,
+      numero: p.numero,
+      cor: p.cor,
+      trechos: segmentos(p, cad),
+    }));
+  }, [modo, pessoasEstado]);
+
   // Lista de vídeos da ocorrência (para escolher a 2ª câmera).
   useEffect(() => {
     if (workspacePath && mediaList.length === 0) void loadList(workspacePath);
@@ -892,6 +945,13 @@ export function VideoAnalysisView() {
               menuItems={videoMenuItems}
               fullscreen={bigScreen}
               onToggleFullscreen={toggleFullscreen}
+              overlay={
+                modo === "pessoas"
+                  ? ({ wrap, view }) => (
+                      <PessoasOverlay wrap={wrap} view={view} workspacePath={workspacePath} mediaHash={media.sha256} />
+                    )
+                  : undefined
+              }
             />
             <VideoTimeline
               duration={effectiveDuration}
@@ -903,6 +963,12 @@ export function VideoAnalysisView() {
               loopOn={loopOn}
               shortcutsEnabled={playerKeys}
               contextItems={timelineMenuItems}
+              lanes={faixas}
+              selectedLane={pessoasMostrar ? pessoaSel : null}
+              onLane={(id, t) => {
+                usePessoasStore.getState().selecionar(id);
+                handleSeek(t);
+              }}
               onScrubStart={() => controllerRef.current?.scrubStart()}
               onScrub={(t) => {
                 controllerRef.current?.scrub(t);
@@ -1088,6 +1154,15 @@ export function VideoAnalysisView() {
               frames={storyboard}
               warnings={[...probeWarnings, ...warningsFromLastAction]}
               actions={medirActions}
+            />
+          ) : modo === "pessoas" ? (
+            <PessoasPanel
+              workspacePath={workspacePath}
+              media={media}
+              currentTime={currentTime}
+              events={events}
+              onSeek={handleSeek}
+              hasAudio={probeHasAudio(media.raw_probe_json)}
             />
           ) : modo === "distancia" ? (
             <DistanceGuide

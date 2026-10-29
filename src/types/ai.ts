@@ -40,6 +40,11 @@ export interface AiStatus {
   diar_ok: boolean;
   diar_version: string;
   diar_approx_mb: number;
+  /** Pessoas no vídeo (onnxruntime + YOLOX): pacote para este sistema? instalado? */
+  pessoas_available: boolean;
+  pessoas_ok: boolean;
+  pessoas_version: string;
+  pessoas_approx_mb: number;
 }
 
 export interface AiUpdateInfo {

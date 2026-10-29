@@ -241,3 +241,54 @@
   background: #fff;
   clip-path: polygon(0 0, 100% 0, 50% 100%);
 }
+
+/* Faixas das pessoas (modo Pessoas) */
+.lanes {
+  max-height: 96px;
+  overflow-y: auto;
+  margin-top: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.lane {
+  position: relative;
+  flex: none;
+  height: 10px;
+  background: var(--sicro-surface-2);
+  cursor: pointer;
+}
+.lane:hover {
+  background: var(--sicro-surface-3);
+}
+.laneOn {
+  outline: 1px solid var(--sicro-fg);
+  outline-offset: -1px;
+}
+.laneSeg {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  min-width: 2px;
+  border-radius: 1px;
+  opacity: 0.9;
+}
+.laneNum {
+  position: absolute;
+  left: 3px;
+  top: 0;
+  z-index: 1;
+  font: 700 8px/10px var(--font-mono);
+  color: var(--sicro-fg);
+  text-shadow: 0 0 2px #000, 0 0 2px #000;
+  pointer-events: none;
+}
+.lanePlayhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--sicro-fg);
+  opacity: 0.7;
+  pointer-events: none;
+}

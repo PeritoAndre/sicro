@@ -55,6 +55,15 @@ import type {
   CreateDistanceMeasurementInput,
   VideoDistanceMeasurement,
 } from "@domain/video_distance";
+import type {
+  ArquivoGerado,
+  EdicaoPessoa,
+  OpcoesDesenho,
+  OpcoesRastreio,
+  PessoasEstado,
+  QuadroPessoas,
+  TabelaGerada,
+} from "@domain/video_pessoas";
 import type { EvidenceLink } from "@domain/evidence";
 import type {
   IntegrityReportArtifact,
@@ -1097,6 +1106,57 @@ export const commands = {
 
   removeDiarization(): Promise<AiStatus> {
     return safeInvoke<AiStatus>("remove_diarization", {});
+  },
+
+  installPessoas(): Promise<AiStatus> {
+    return safeInvoke<AiStatus>("install_pessoas", {});
+  },
+
+  removePessoas(): Promise<AiStatus> {
+    return safeInvoke<AiStatus>("remove_pessoas", {});
+  },
+
+  // --- Pessoas no vídeo ---
+  pessoasListar(workspacePath: string, mediaHash: string): Promise<PessoasEstado> {
+    return safeInvoke<PessoasEstado>("pessoas_listar", { workspacePath, mediaHash });
+  },
+
+  pessoasRastrear(
+    workspacePath: string,
+    mediaHash: string,
+    opcoes: OpcoesRastreio,
+  ): Promise<PessoasEstado> {
+    return safeInvoke<PessoasEstado>("pessoas_rastrear", { workspacePath, mediaHash, opcoes });
+  },
+
+  pessoasCancelar(): Promise<void> {
+    return safeInvoke<void>("pessoas_cancelar", {});
+  },
+
+  pessoasEditar(workspacePath: string, mediaHash: string, edicao: EdicaoPessoa): Promise<PessoasEstado> {
+    return safeInvoke<PessoasEstado>("pessoas_editar", { workspacePath, mediaHash, edicao });
+  },
+
+  pessoasExportarVideo(
+    workspacePath: string,
+    mediaHash: string,
+    desenho: OpcoesDesenho,
+    comAudio: boolean,
+  ): Promise<ArquivoGerado> {
+    return safeInvoke<ArquivoGerado>("pessoas_exportar_video", { workspacePath, mediaHash, desenho, comAudio });
+  },
+
+  pessoasExportarQuadros(
+    workspacePath: string,
+    mediaHash: string,
+    tempos: number[],
+    desenho: OpcoesDesenho,
+  ): Promise<QuadroPessoas[]> {
+    return safeInvoke<QuadroPessoas[]>("pessoas_exportar_quadros", { workspacePath, mediaHash, tempos, desenho });
+  },
+
+  pessoasExportarTabela(workspacePath: string, mediaHash: string): Promise<TabelaGerada> {
+    return safeInvoke<TabelaGerada>("pessoas_exportar_tabela", { workspacePath, mediaHash });
   },
 
   /** `numSpeakers` null = automático. */

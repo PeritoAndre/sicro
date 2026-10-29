@@ -3,7 +3,7 @@
  * navegação. A verdade pericial (metadados, quadros exatos) vem do Rust+ffmpeg.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { mediaSrc } from "@core/mediaSrc";
 import { formatDuration } from "./format";
 import { loadPosition, savePosition } from "./resume";
@@ -63,6 +63,8 @@ interface Props {
   /** Tela cheia do reprodutor — estado e alternância vêm do VideoAnalysisView. */
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  /** Camada desenhada sobre a imagem (as pessoas), que segue a lupa. */
+  overlay?: (ctx: { wrap: HTMLElement | null; view: { s: number; tx: number; ty: number } }) => ReactNode;
 }
 
 export interface PlayerController {
@@ -120,6 +122,7 @@ export function VideoPlayerPanel({
   hasAudio = true,
   fullscreen = false,
   onToggleFullscreen,
+  overlay,
 }: Props) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -801,6 +804,7 @@ export function VideoPlayerPanel({
         {src && magnifier.scale > 1 && (
           <PixelLoupe wrap={magnifier.el} view={magnifier.view} filter={adjustFilter(adjust)} />
         )}
+        {src && overlay?.({ wrap: magnifier.el, view: magnifier.view })}
         {src ? (
           <video
             ref={videoRef}

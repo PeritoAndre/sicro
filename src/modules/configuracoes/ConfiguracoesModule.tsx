@@ -4,6 +4,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   Archive,
   Cpu,
@@ -155,7 +156,7 @@ const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "perfil", label: "Perfil", sub: "Dados pessoais e profissionais", Icon: User },
   { id: "aparencia", label: "Aparência", sub: "Tema, cores e personalização", Icon: Palette },
   { id: "backup", label: "Backup geral", sub: "Cópia de todos os casos", Icon: Archive },
-  { id: "iaocr", label: "IA (degravação)", sub: "Transcrição e locutores, local", Icon: Cpu },
+  { id: "iaocr", label: "IA (local)", sub: "Degravação, locutores e pessoas", Icon: Cpu },
   { id: "atalhos", label: "Atalhos de teclado", sub: "Customizáveis por ação", Icon: Keyboard },
   { id: "diagnostico", label: "Diagnóstico", sub: "Onde os dados ficam", Icon: Info },
 ];
@@ -166,7 +167,11 @@ export function ConfiguracoesModule() {
   const persist = useSettingsStore((s) => s.persist);
 
   const [draft, setDraft] = useState<AppSettings>(settings);
-  const [activeCat, setActiveCat] = useState<CatId>("perfil");
+  const [params] = useSearchParams();
+  const abaInicial = params.get("aba");
+  const [activeCat, setActiveCat] = useState<CatId>(
+    CATS.some((c) => c.id === abaInicial) ? (abaInicial as CatId) : "perfil",
+  );
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);

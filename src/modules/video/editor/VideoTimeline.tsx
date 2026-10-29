@@ -26,6 +26,10 @@ interface Props {
   onSelectEvent: (id: string) => void;
   /** Itens do botão direito para o instante `t` sob o cursor (ir para, marcar…). */
   contextItems?: (t: number) => MenuItem[];
+  /** Faixa por pessoa (modo Pessoas): onde cada uma aparece. */
+  lanes?: { id: string; numero: number; cor: string; trechos: [number, number][] }[];
+  selectedLane?: string | null;
+  onLane?: (id: string, t: number) => void;
 }
 
 interface View {
@@ -84,6 +88,9 @@ export function VideoTimeline({
   onScrubEnd,
   onSelectEvent,
   contextItems,
+  lanes,
+  selectedLane = null,
+  onLane,
 }: Props) {
   const menu = useContextMenu();
   const railRef = useRef<HTMLDivElement | null>(null);
@@ -250,6 +257,15 @@ export function VideoTimeline({
     [view.start, view.end, railWidth, fps],
   );
 
+  // A faixa da pessoa selecionada aparece na lista.
+  const lanesRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (!selectedLane) return;
+    lanesRef.current
+      ?.querySelector<HTMLElement>(`[data-lane="${selectedLane}"]`)
+      ?.scrollIntoView({ block: "nearest" });
+  }, [selectedLane]);
+
   const pct = (t: number) => `${((t - view.start) / (span || 1)) * 100}%`;
   const inView = (t: number) => t >= view.start - 1e-9 && t <= view.end + 1e-9;
   const pctAll = (t: number) => `${(t / safeDuration) * 100}%`;
@@ -391,6 +407,38 @@ export function VideoTimeline({
         ))}
         {inView(currentTime) && <div className={styles.playhead} style={{ left: pct(currentTime) }} />}
       </div>
+      {lanes && lanes.length > 0 && (
+        <div ref={lanesRef} className={styles.lanes}>
+          {lanes.map((l) => (
+            <div
+              key={l.id}
+              data-lane={l.id}
+              className={`${styles.lane} ${selectedLane === l.id ? styles.laneOn : ""}`}
+              title={`Pessoa ${l.numero} — clique para ir até aqui`}
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                onLane?.(l.id, view.start + ((e.clientX - r.left) / r.width) * span);
+              }}
+            >
+              <span className={styles.laneNum}>{l.numero}</span>
+              {l.trechos
+                .filter(([a, b]) => b >= view.start && a <= view.end)
+                .map(([a, b], i) => {
+                  const a2 = Math.max(a, view.start);
+                  const b2 = Math.min(b, view.end);
+                  return (
+                    <div
+                      key={i}
+                      className={styles.laneSeg}
+                      style={{ left: pct(a2), width: `${((b2 - a2) / (span || 1)) * 100}%`, background: l.cor }}
+                    />
+                  );
+                })}
+              {inView(currentTime) && <div className={styles.lanePlayhead} style={{ left: pct(currentTime) }} />}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

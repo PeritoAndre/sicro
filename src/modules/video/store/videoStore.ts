@@ -58,6 +58,8 @@ interface VideoState {
     workspacePath: string,
     input: CollectFrameInput,
   ) => Promise<VideoStoryboardFrame>;
+  /** Quadros que o backend já gravou por outro caminho (ex.: pessoas no vídeo). */
+  addStoryboardFrames: (frames: VideoStoryboardFrame[]) => void;
   updateStoryboardFrame: (
     workspacePath: string,
     frameId: string,
@@ -230,6 +232,19 @@ export const useVideoStore = create<VideoState>((set) => ({
       set({ isMutating: false, lastError: e });
       throw e;
     }
+  },
+
+  addStoryboardFrames(frames) {
+    set((s) => ({
+      bundle: s.bundle
+        ? {
+            ...s.bundle,
+            storyboard: [...s.bundle.storyboard, ...frames].sort(
+              (a, b) => a.requested_timestamp_s - b.requested_timestamp_s,
+            ),
+          }
+        : s.bundle,
+    }));
   },
 
   async updateStoryboardFrame(workspacePath, frameId, input) {

@@ -1,8 +1,8 @@
 /** Gerenciador de IA: baixa whisper.cpp + modelos sob demanda (opt-in) e auto-configura os caminhos. */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Bot, CheckCircle2, Download, RefreshCw, Trash2, Users } from "lucide-react";
+import { Bot, CheckCircle2, Download, RefreshCw, ScanSearch, Trash2, Users } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
@@ -158,6 +158,38 @@ export function AiManagerCard() {
     }
   };
 
+  const installPessoas = async () => {
+    setBusy(PESSOAS_ID);
+    setError(null);
+    setProgress((p) => ({ ...p, [PESSOAS_ID]: { id: PESSOAS_ID, received: 0, total: 0 } }));
+    try {
+      setStatus(await commands.installPessoas());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setError(toSicroError(e).message);
+    } finally {
+      setBusy(null);
+      setProgress((p) => {
+        const n = { ...p };
+        delete n[PESSOAS_ID];
+        return n;
+      });
+    }
+  };
+
+  const removePessoas = async () => {
+    setBusy(PESSOAS_ID);
+    setError(null);
+    try {
+      setStatus(await commands.removePessoas());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setError(toSicroError(e).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
   const isInstalled = (item: CatalogItem): boolean => {
     if (!status) return false;
     if (item.kind === "build") {
@@ -237,11 +269,46 @@ export function AiManagerCard() {
             <Users size={13} aria-hidden /> Separação de locutores
           </h3>
           <DiarRow
-            status={status}
+            ok={status.diar_ok}
+            version={status.diar_version}
+            note={
+              <>
+                ≈ {status.diar_approx_mb} MB · Diz <strong>quem fala quando</strong> na degravação
+                (segmentação pyannote 3.0 + assinatura de voz WeSpeaker). Arquivos oficiais do
+                k2-fsa/sherpa-onnx com hash conferido; depois de baixado, roda offline. Não
+                identifica pessoas — separa vozes diferentes.
+              </>
+            }
             busy={busy}
             progress={progress[DIAR_ID]}
             onInstall={() => void installDiar()}
             onRemove={() => void removeDiar()}
+          />
+        </>
+      )}
+
+      {status?.pessoas_available && (
+        <>
+          <h3 className={styles.group}>
+            <ScanSearch size={13} aria-hidden /> Pessoas no vídeo
+          </h3>
+          <DiarRow
+            id={PESSOAS_ID}
+            label="Detecção de pessoas — YOLOX-S + onnxruntime"
+            ok={status.pessoas_ok}
+            version={status.pessoas_version}
+            note={
+              <>
+                ≈ {status.pessoas_approx_mb} MB · Numera as pessoas da cena e acompanha cada uma no
+                vídeo (aba Pessoas). Modelo YOLOX (Apache-2.0, Megvii) e onnxruntime (MIT,
+                Microsoft), com hash conferido; depois de baixado, roda offline. Só localiza
+                pessoas — não as identifica.
+              </>
+            }
+            busy={busy}
+            progress={progress[PESSOAS_ID]}
+            onInstall={() => void installPessoas()}
+            onRemove={() => void removePessoas()}
           />
         </>
       )}
@@ -269,39 +336,41 @@ export function AiManagerCard() {
 }
 
 const DIAR_ID = "diarizacao";
+const PESSOAS_ID = "pessoas";
 
-/** Separador de locutores: um pacote só (programa + 2 modelos). */
+/** Pacotes de vários arquivos (separador de locutores, pessoas no vídeo): uma barra só. */
 function DiarRow({
-  status,
+  id = DIAR_ID,
+  label = "Separador de locutores — sherpa-onnx",
+  ok,
+  version,
+  note,
   busy,
   progress,
   onInstall,
   onRemove,
 }: {
-  status: AiStatus;
+  id?: string;
+  label?: string;
+  ok: boolean;
+  version: string;
+  note: ReactNode;
   busy: string | null;
   progress?: AiProgress;
   onInstall: () => void;
   onRemove: () => void;
 }) {
-  const isBusy = busy === DIAR_ID;
+  const isBusy = busy === id;
   const pct =
     progress && progress.total > 0 ? Math.round((progress.received / progress.total) * 100) : null;
   return (
     <div className={styles.row}>
       <div className={styles.rowMain}>
         <div className={styles.rowLabel}>
-          Separador de locutores — sherpa-onnx
-          {status.diar_ok && (
-            <span className={styles.tagOk}>instalado ({status.diar_version || "?"})</span>
-          )}
+          {label}
+          {ok && <span className={styles.tagOk}>instalado ({version || "?"})</span>}
         </div>
-        <div className={styles.rowNote}>
-          ≈ {status.diar_approx_mb} MB · Diz <strong>quem fala quando</strong> na degravação
-          (segmentação pyannote 3.0 + assinatura de voz WeSpeaker). Arquivos oficiais do
-          k2-fsa/sherpa-onnx com hash conferido; depois de baixado, roda offline. Não identifica
-          pessoas — separa vozes diferentes.
-        </div>
+        <div className={styles.rowNote}>{note}</div>
         {isBusy && (
           <div className={styles.progress}>
             <div className={styles.progressFill} style={{ width: `${pct ?? 0}%` }} />
@@ -315,7 +384,7 @@ function DiarRow({
         )}
       </div>
       <div className={styles.rowActions}>
-        {status.diar_ok ? (
+        {ok ? (
           <Button
             variant="ghost"
             size="sm"

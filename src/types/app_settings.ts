@@ -46,6 +46,10 @@ export interface AiSettings {
   diar_segmentation_path: string;
   diar_embedding_path: string;
   diar_version: string;
+  /** Pessoas no vídeo: biblioteca do onnxruntime e modelo YOLOX. */
+  ort_lib_path: string;
+  pessoas_model_path: string;
+  pessoas_version: string;
 }
 
 /** Motor de OCR (Tesseract) + idiomas instalados. */
@@ -116,6 +120,9 @@ export function defaultAppSettings(): AppSettings {
       diar_segmentation_path: "",
       diar_embedding_path: "",
       diar_version: "",
+      ort_lib_path: "",
+      pessoas_model_path: "",
+      pessoas_version: "",
     },
     ocr: {
       engine_bin_path: "",
