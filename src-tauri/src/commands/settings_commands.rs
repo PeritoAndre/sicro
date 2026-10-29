@@ -111,6 +111,13 @@ pub struct AiSettings {
     pub diar_embedding_path: String,
     #[serde(default)]
     pub diar_version: String,
+    /// Pessoas no vídeo: biblioteca do onnxruntime e modelo YOLOX.
+    #[serde(default)]
+    pub ort_lib_path: String,
+    #[serde(default)]
+    pub pessoas_model_path: String,
+    #[serde(default)]
+    pub pessoas_version: String,
 }
 
 /// OCR (Tesseract) instalado pelo gerenciador: `engine_bin_path` é o executável;

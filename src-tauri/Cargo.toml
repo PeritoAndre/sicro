@@ -52,6 +52,7 @@ zip = { version = "0.6", default-features = false, features = ["deflate"] }
 # Pacotes .tar.bz2 do sherpa-onnx (separação de locutores). bzip2 0.6 é Rust puro.
 tar = { version = "0.4", default-features = false }
 bzip2 = "0.6"
+flate2 = "1"
 sha2 = "0.10"
 
 # Spike E — Croqui Engine.
@@ -109,6 +110,10 @@ rustfft = "6"
 ureq = { version = "2", default-features = false, features = ["native-tls", "json", "gzip"] }
 native-tls = "0.2"
 nnnoiseless = { version = "0.5.2", default-features = false }
+
+# Pessoas no vídeo (5.2): YOLOX em ONNX. `load-dynamic` carrega a libonnxruntime que o
+# Gerenciador de IA baixa (sem binário embutido, sem download no build).
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "ndarray"] }
 
 # Linux (WebKitGTK) — o player de mídia (GStreamer) não lê o asset protocol do
 # Tauri; <video>/<audio> vão por file:// e a página precisa ser "local" no

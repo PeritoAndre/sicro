@@ -81,6 +81,11 @@ fn scan_frames(video: &Path, from: f64, to: f64) -> Result<Vec<(f64, bool)>> {
     Ok(v)
 }
 
+/// Instante (s) de todos os quadros de vídeo, em ordem de apresentação.
+pub fn all_frame_times(video: &Path) -> Result<Vec<f64>> {
+    Ok(scan_frames(video, 0.0, f64::INFINITY)?.into_iter().map(|(t, _)| t).collect())
+}
+
 /// O que o trecho vai conter, em tempos do vídeo de origem.
 #[derive(Debug, Clone, Copy)]
 pub struct ClipPlan {

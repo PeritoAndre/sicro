@@ -149,6 +149,11 @@ pub struct AiStatus {
     pub diar_ok: bool,
     pub diar_version: String,
     pub diar_approx_mb: u32,
+    /// Pessoas no vídeo (onnxruntime + YOLOX): pacote para este sistema? instalado?
+    pub pessoas_available: bool,
+    pub pessoas_ok: bool,
+    pub pessoas_version: String,
+    pub pessoas_approx_mb: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -458,6 +463,170 @@ pub async fn remove_diarization(app: AppHandle) -> Result<AiStatus> {
     get_ai_status(app).await
 }
 
+
+// ---------------------------------------------------------------------------
+// Pessoas no vídeo: onnxruntime (MIT, Microsoft) + YOLOX-S (Apache-2.0, Megvii).
+// Tamanho e SHA-256 FIXOS, como na separação de locutores.
+
+const ORT_VERSION: &str = "1.31.1";
+
+fn ort_package() -> Option<DiarFile> {
+    if cfg!(target_os = "windows") {
+        Some(DiarFile {
+            url: "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-win-x64-1.31.1.zip",
+            filename: "onnxruntime.zip",
+            bytes: 82_929_944,
+            sha256: "5869e26bb25314375f2d5ef1877e3ea06b1543d6c710e6e4a1ec2f7177ab4b2c",
+        })
+    } else if cfg!(target_os = "linux") {
+        Some(DiarFile {
+            url: "https://github.com/microsoft/onnxruntime/releases/download/v1.31.1/onnxruntime-linux-x64-1.31.1.tgz",
+            filename: "onnxruntime.tgz",
+            bytes: 11_413_655,
+            sha256: "c849e36a1ef3e22d4ff217b9d1ce4a3cf5b9467b975610913ae959ad5b16bdc9",
+        })
+    } else {
+        None
+    }
+}
+
+const YOLOX_S: DiarFile = DiarFile {
+    url: "https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_s.onnx",
+    filename: "yolox_s.onnx",
+    bytes: 35_858_002,
+    sha256: "c5c2d13e59ae883e6af3b45daea64af4833a4951c92d116ec270d9ddbe998063",
+};
+
+fn pessoas_total_bytes() -> u64 {
+    ort_package().map_or(0, |e| e.bytes) + YOLOX_S.bytes
+}
+
+/// Biblioteca e modelo existem no disco?
+pub fn pessoas_ready(ai: &crate::commands::settings_commands::AiSettings) -> bool {
+    [&ai.ort_lib_path, &ai.pessoas_model_path]
+        .iter()
+        .all(|p| !p.is_empty() && Path::new(p.as_str()).is_file())
+}
+
+/// Extrai um .tar.gz em `dest` (`unpack_in` recusa caminhos que saiam dele).
+fn extract_tar_gz(path: &Path, dest: &Path) -> Result<()> {
+    std::fs::create_dir_all(dest)
+        .map_err(|e| SicroError::Filesystem(format!("criar {}: {e}", dest.display())))?;
+    let file = std::fs::File::open(path)
+        .map_err(|e| SicroError::Filesystem(format!("abrir pacote: {e}")))?;
+    let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(std::io::BufReader::new(file)));
+    let entries = archive
+        .entries()
+        .map_err(|e| SicroError::Validation(format!("pacote inválido: {e}")))?;
+    for entry in entries {
+        let mut entry = entry.map_err(|e| SicroError::Validation(format!("pacote inválido: {e}")))?;
+        entry
+            .unpack_in(dest)
+            .map_err(|e| SicroError::Filesystem(format!("extrair: {e}")))?;
+    }
+    Ok(())
+}
+
+/// A biblioteca do onnxruntime dentro da pasta extraída (arquivo de verdade, não o atalho).
+fn find_ort_lib(dir: &Path) -> Option<PathBuf> {
+    let lib = dir.join("lib");
+    let rd = std::fs::read_dir(&lib).ok()?;
+    let mut best: Option<PathBuf> = None;
+    for e in rd.flatten() {
+        let p = e.path();
+        let name = p.file_name()?.to_str()?.to_lowercase();
+        let meta = std::fs::symlink_metadata(&p).ok()?;
+        let e_lib = name == "onnxruntime.dll"
+            || (name.starts_with("libonnxruntime.so.") && name.matches('.').count() >= 3);
+        if e_lib && meta.is_file() {
+            best = Some(p);
+        }
+    }
+    best
+}
+
+/// Baixa e instala "Pessoas no vídeo" (uma barra para os dois arquivos).
+#[tauri::command]
+pub async fn install_pessoas(app: AppHandle) -> Result<AiStatus> {
+    let pkg = ort_package().ok_or_else(|| {
+        SicroError::Validation("pessoas no vídeo não disponível neste sistema".into())
+    })?;
+    let dir = ai_base_dir(&app)?.join("pessoas");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| SicroError::Filesystem(format!("criar pasta IA: {e}")))?;
+
+    let app2 = app.clone();
+    let dir2 = dir.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || -> Result<(PathBuf, PathBuf)> {
+        let total = pessoas_total_bytes();
+        let mut base = 0u64;
+        let mut fetch = |f: &DiarFile| -> Result<PathBuf> {
+            let tmp = dir2.join(format!("{}.part", f.filename));
+            let sha = download_with_progress(&app2, f.url, &tmp, "pessoas", base, total)?;
+            base += f.bytes;
+            if sha != f.sha256 {
+                let _ = std::fs::remove_file(&tmp);
+                return Err(SicroError::Validation(format!(
+                    "o arquivo baixado ({}) não confere com o hash esperado — download corrompido ou alterado; nada foi instalado",
+                    f.filename
+                )));
+            }
+            let fin = dir2.join(f.filename);
+            std::fs::rename(&tmp, &fin)
+                .map_err(|e| SicroError::Filesystem(format!("finalizar download: {e}")))?;
+            Ok(fin)
+        };
+        let ort_pkg = fetch(&pkg)?;
+        let model = fetch(&YOLOX_S)?;
+        let out = dir2.join("onnxruntime");
+        if pkg.filename.ends_with(".zip") {
+            std::fs::create_dir_all(&out).ok();
+            extract_zip(&ort_pkg, &out)?;
+        } else {
+            extract_tar_gz(&ort_pkg, &out)?;
+        }
+        let _ = std::fs::remove_file(&ort_pkg);
+        // o pacote traz uma pasta com o nome da versão
+        let raiz = std::fs::read_dir(&out)
+            .ok()
+            .and_then(|mut r| r.find_map(|e| e.ok().map(|e| e.path()).filter(|p| p.is_dir())))
+            .unwrap_or(out.clone());
+        let lib = find_ort_lib(&raiz)
+            .ok_or_else(|| SicroError::Validation("biblioteca do onnxruntime não encontrada no pacote".into()))?;
+        Ok((lib, model))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("tarefa de download: {e}")))?;
+
+    let (lib, model) = match result {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Err(e);
+        }
+    };
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.ort_lib_path = lib.to_string_lossy().to_string();
+    s.ai.pessoas_model_path = model.to_string_lossy().to_string();
+    s.ai.pessoas_version = format!("onnxruntime {ORT_VERSION} + YOLOX-S");
+    save_app_settings(app.clone(), s).await?;
+    tracing::info!("pessoas no vídeo instalado: onnxruntime {ORT_VERSION}");
+    get_ai_status(app).await
+}
+
+/// Remove "Pessoas no vídeo" e limpa a configuração (as trilhas dos casos ficam).
+#[tauri::command]
+pub async fn remove_pessoas(app: AppHandle) -> Result<AiStatus> {
+    let _ = std::fs::remove_dir_all(ai_base_dir(&app)?.join("pessoas"));
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.ort_lib_path = String::new();
+    s.ai.pessoas_model_path = String::new();
+    s.ai.pessoas_version = String::new();
+    save_app_settings(app.clone(), s).await?;
+    get_ai_status(app).await
+}
+
 // ---------------------------------------------------------------------------
 // Comandos
 
@@ -501,6 +670,7 @@ pub async fn get_ai_status(app: AppHandle) -> Result<AiStatus> {
     let diar_ok = [&s.ai.diar_bin_path, &s.ai.diar_segmentation_path, &s.ai.diar_embedding_path]
         .iter()
         .all(|p| !p.is_empty() && Path::new(p.as_str()).is_file());
+    let pessoas_ok = pessoas_ready(&s.ai);
     Ok(AiStatus {
         whisper_bin_path,
         whisper_ok,
@@ -512,6 +682,10 @@ pub async fn get_ai_status(app: AppHandle) -> Result<AiStatus> {
         diar_ok,
         diar_version: s.ai.diar_version,
         diar_approx_mb: (diar_total_bytes() / 1_000_000) as u32,
+        pessoas_available: ort_package().is_some(),
+        pessoas_ok,
+        pessoas_version: s.ai.pessoas_version,
+        pessoas_approx_mb: (pessoas_total_bytes() / 1_000_000) as u32,
     })
 }
 
