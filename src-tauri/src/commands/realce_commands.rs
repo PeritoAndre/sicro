@@ -435,7 +435,7 @@ pub async fn realce_media(
     let flag = iniciar_tarefa()?;
     let (app2, hash2) = (app.clone(), media_hash.clone());
     let r = tauri::async_runtime::spawn_blocking(move || {
-        media_blocante(&app2, &workspace_path, &hash2, params, &cache, &flag)
+        media_blocante(&|f, a, b| emitir(&app2, &hash2, f, a, b), &workspace_path, &hash2, params, &cache, &flag)
     })
     .await
     .map_err(|e| SicroError::Workspace(format!("tarefa de realce: {e}")));
@@ -443,8 +443,8 @@ pub async fn realce_media(
     r?
 }
 
-fn media_blocante(
-    app: &AppHandle,
+pub(crate) fn media_blocante(
+    emit: &(dyn Fn(&str, u32, u32) + Sync),
     workspace_path: &str,
     media_hash: &str,
     p: ParamsMedia,
@@ -473,7 +473,7 @@ fn media_blocante(
             "região grande demais para tantos quadros: marque só a placa ou o rosto, ou use menos quadros".into(),
         ));
     }
-    emitir(app, media_hash, "ler", 0, n as u32);
+    emit("ler", 0, n as u32);
     let (tempos, ref_pos) = janela::escolher_janela(&video, t_ref, n)?;
     let lente = if p.com_lente { c.lente()? } else { None };
     let lida = janela::ler_janela(
@@ -498,7 +498,7 @@ fn media_blocante(
             busca,
         },
         flag,
-        &|f, t| emitir(app, media_hash, "alinhar", f as u32, t as u32),
+        &|f, t| emit("alinhar", f as u32, t as u32),
     )
     .map_err(SicroError::Validation)?;
 
@@ -566,6 +566,75 @@ pub struct ResultadoSuperRes {
     pub tempo_s: f64,
 }
 
+pub(crate) fn superres_nucleo(
+    ai: &crate::commands::settings_commands::AiSettings,
+    workspace_path: &str,
+    media_hash: &str,
+    params: ParamsSuperRes,
+    cache: &Path,
+    flag: &AtomicBool,
+    emit: &(dyn Fn(&str, u32, u32) + Sync),
+) -> Result<ResultadoSuperRes> {
+    let inicio = std::time::Instant::now();
+    let c = contexto(workspace_path, media_hash)?;
+    let (entrada, origem) = if let Some(id) = &params.resultado_id {
+        let r = repo::obter_resultado(&c.conn, &c.occ, id)?
+            .ok_or_else(|| SicroError::Validation("resultado não encontrado".into()))?;
+        (c.ws.join(&r.caminho), json!({ "resultado": r.id, "sha256": r.sha256, "tipo": r.tipo }))
+    } else {
+        let (png, w, h, real) = quadro_png(&c, cache, params.t)?;
+        let lente = if params.com_lente { c.lente()? } else { None };
+        let (mut rgb, _, _) = ler_rgb(&png)?;
+        if let Some(l) = &lente {
+            rgb = corrigir_rgb(&rgb, w, h, l.coef, l.cx, l.cy);
+        }
+        let (rgb, w2, h2) = match params.roi {
+            Some(r) if r.x + r.w <= w && r.y + r.h <= h && r.w >= 8 && r.h >= 8 => {
+                let mut o = Vec::with_capacity((r.w * r.h * 3) as usize);
+                for y in r.y..r.y + r.h {
+                    let a = ((y * w + r.x) * 3) as usize;
+                    o.extend_from_slice(&rgb[a..a + (r.w * 3) as usize]);
+                }
+                (o, r.w, r.h)
+            }
+            Some(_) => return Err(SicroError::Validation("região inválida".into())),
+            None => (rgb, w, h),
+        };
+        let tmp = cache.join(format!("sr_entrada_{}.png", Uuid::new_v4()));
+        salvar_rgb(rgb, w2, h2, &tmp)?;
+        (tmp, json!({ "quadro_t": real, "roi": params.roi, "lente": lente.is_some() }))
+    };
+    let (rgb, w, h) = ler_rgb(&entrada)?;
+    let entrada_sha = sha256_file(&entrada)?;
+    let lib = crate::commands::ai_commands::superres_lib(&ai)
+        .ok_or_else(|| SicroError::Validation("superres_nao_instalado".into()))?;
+    let mut sr = SuperRes::load(&lib, Path::new(&ai.sr_model_path))?;
+    let up = sr.ampliar4(&rgb, w as usize, h as usize, flag, &mut |f, t| emit("superres", f as u32, t as u32))?;
+    let (ow, oh, saida) = if params.escala == 4 {
+        (w * 4, h * 4, up)
+    } else {
+        let (nw, nh) = (w * 2, h * 2);
+        (nw, nh, superres::reduzir(&up, (w * 4) as usize, (h * 4) as usize, nw as usize, nh as usize))
+    };
+    let dir = pasta_saida(&c, REALCE_SUBDIR)?;
+    let rel = format!("{REALCE_SUBDIR}/{}_superres{}x_{}.png", c.stem(), params.escala, carimbo());
+    salvar_rgb(saida, ow, oh, &c.ws.join(&rel))?;
+    let original = dir.join(format!("{}_entrada_{}.png", c.stem(), carimbo()));
+    std::fs::copy(&entrada, &original).map_err(|e| SicroError::Filesystem(format!("copiar entrada: {e}")))?;
+    if params.resultado_id.is_none() {
+        let _ = std::fs::remove_file(&entrada);
+    }
+    let tempo_s = inicio.elapsed().as_secs_f64();
+    let pj = json!({
+        "t": params.t, "escala": params.escala, "modelo": "Real-ESRGAN general-x4v3 (BSD-3)",
+        "runtime": ai.sr_version, "ladrilho": 160, "origem": origem,
+        "entrada": { "largura": w, "altura": h, "sha256": entrada_sha },
+        "tempo_de_processamento_s": tempo_s,
+    });
+    let r = registrar(&c, "superres", &rel, pj, superres::AVISO, Some((ow, oh)), true)?;
+    Ok(ResultadoSuperRes { arquivo: arquivo(&c, r), original: original.to_string_lossy().into(), tempo_s })
+}
+
 #[tauri::command]
 pub async fn realce_superres(
     app: AppHandle,
@@ -583,65 +652,8 @@ pub async fn realce_superres(
     let cache = pasta_cache(&app)?;
     let flag = iniciar_tarefa()?;
     let (app2, hash2) = (app.clone(), media_hash.clone());
-    let r = tauri::async_runtime::spawn_blocking(move || -> Result<ResultadoSuperRes> {
-        let inicio = std::time::Instant::now();
-        let c = contexto(&workspace_path, &hash2)?;
-        let (entrada, origem) = if let Some(id) = &params.resultado_id {
-            let r = repo::obter_resultado(&c.conn, &c.occ, id)?
-                .ok_or_else(|| SicroError::Validation("resultado não encontrado".into()))?;
-            (c.ws.join(&r.caminho), json!({ "resultado": r.id, "sha256": r.sha256, "tipo": r.tipo }))
-        } else {
-            let (png, w, h, real) = quadro_png(&c, &cache, params.t)?;
-            let lente = if params.com_lente { c.lente()? } else { None };
-            let (mut rgb, _, _) = ler_rgb(&png)?;
-            if let Some(l) = &lente {
-                rgb = corrigir_rgb(&rgb, w, h, l.coef, l.cx, l.cy);
-            }
-            let (rgb, w2, h2) = match params.roi {
-                Some(r) if r.x + r.w <= w && r.y + r.h <= h && r.w >= 8 && r.h >= 8 => {
-                    let mut o = Vec::with_capacity((r.w * r.h * 3) as usize);
-                    for y in r.y..r.y + r.h {
-                        let a = ((y * w + r.x) * 3) as usize;
-                        o.extend_from_slice(&rgb[a..a + (r.w * 3) as usize]);
-                    }
-                    (o, r.w, r.h)
-                }
-                Some(_) => return Err(SicroError::Validation("região inválida".into())),
-                None => (rgb, w, h),
-            };
-            let tmp = cache.join(format!("sr_entrada_{}.png", Uuid::new_v4()));
-            salvar_rgb(rgb, w2, h2, &tmp)?;
-            (tmp, json!({ "quadro_t": real, "roi": params.roi, "lente": lente.is_some() }))
-        };
-        let (rgb, w, h) = ler_rgb(&entrada)?;
-        let entrada_sha = sha256_file(&entrada)?;
-        let lib = crate::commands::ai_commands::superres_lib(&ai)
-            .ok_or_else(|| SicroError::Validation("superres_nao_instalado".into()))?;
-        let mut sr = SuperRes::load(&lib, Path::new(&ai.sr_model_path))?;
-        let up = sr.ampliar4(&rgb, w as usize, h as usize, &flag, &mut |f, t| emitir(&app2, &hash2, "superres", f as u32, t as u32))?;
-        let (ow, oh, saida) = if params.escala == 4 {
-            (w * 4, h * 4, up)
-        } else {
-            let (nw, nh) = (w * 2, h * 2);
-            (nw, nh, superres::reduzir(&up, (w * 4) as usize, (h * 4) as usize, nw as usize, nh as usize))
-        };
-        let dir = pasta_saida(&c, REALCE_SUBDIR)?;
-        let rel = format!("{REALCE_SUBDIR}/{}_superres{}x_{}.png", c.stem(), params.escala, carimbo());
-        salvar_rgb(saida, ow, oh, &c.ws.join(&rel))?;
-        let original = dir.join(format!("{}_entrada_{}.png", c.stem(), carimbo()));
-        std::fs::copy(&entrada, &original).map_err(|e| SicroError::Filesystem(format!("copiar entrada: {e}")))?;
-        if params.resultado_id.is_none() {
-            let _ = std::fs::remove_file(&entrada);
-        }
-        let tempo_s = inicio.elapsed().as_secs_f64();
-        let pj = json!({
-            "t": params.t, "escala": params.escala, "modelo": "Real-ESRGAN general-x4v3 (BSD-3)",
-            "runtime": ai.sr_version, "ladrilho": 160, "origem": origem,
-            "entrada": { "largura": w, "altura": h, "sha256": entrada_sha },
-            "tempo_de_processamento_s": tempo_s,
-        });
-        let r = registrar(&c, "superres", &rel, pj, superres::AVISO, Some((ow, oh)), true)?;
-        Ok(ResultadoSuperRes { arquivo: arquivo(&c, r), original: original.to_string_lossy().into(), tempo_s })
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        superres_nucleo(&ai, &workspace_path, &hash2, params, &cache, &flag, &|f, a, b| emitir(&app2, &hash2, f, a, b))
     })
     .await
     .map_err(|e| SicroError::Workspace(format!("super-resolução: {e}")));
@@ -903,6 +915,41 @@ pub struct ResultadoPerspectiva {
     pub info: perspective::InfoRetificada,
 }
 
+pub(crate) fn perspectiva_nucleo(
+    workspace_path: &str,
+    media_hash: &str,
+    params: ParamsPerspectiva,
+    cache: &Path,
+) -> Result<ResultadoPerspectiva> {
+    if params.pontos.len() != 4 {
+        return Err(SicroError::Validation("marque os 4 pontos do plano".into()));
+    }
+    let c = contexto(workspace_path, media_hash)?;
+    let (png, w, h, real) = quadro_png(&c, cache, params.t)?;
+    let (mut rgb, _, _) = ler_rgb(&png)?;
+    let lente = if params.com_lente { c.lente()? } else { None };
+    if let Some(l) = &lente {
+        rgb = corrigir_rgb(&rgb, w, h, l.coef, l.cx, l.cy);
+    }
+    let pares: [Par; 4] = std::array::from_fn(|i| {
+        let p = params.pontos[i];
+        Par { px: p.px, py: p.py, mx: p.mx, my: p.my }
+    });
+    let (img, info) = perspective::retificar(&rgb, w, h, &pares, params.margem, params.px_por_m)
+        .map_err(SicroError::Validation)?;
+    pasta_saida(&c, REALCE_SUBDIR)?;
+    let rel = format!("{REALCE_SUBDIR}/{}_vista_de_cima_{}_{}ms.png", c.stem(), carimbo(), ms(real));
+    img.save(c.ws.join(&rel)).map_err(|e| SicroError::Filesystem(format!("gravar retificada: {e}")))?;
+    let pj = json!({
+        "t": real, "pontos": params.pontos, "margem": params.margem, "origem_das_medidas": params.origem,
+        "px_por_m": info.px_por_m, "mundo_m": info.mundo,
+        "lente": lente.as_ref().map(|l| json!({ "k1": l.coef.k1, "k2": l.coef.k2 })),
+        "metodo": "homografia DLT (4 pontos, normalização de Hartley)",
+    });
+    let r = registrar(&c, "retificada", &rel, pj, AVISO_REALCE, Some((info.largura, info.altura)), true)?;
+    Ok(ResultadoPerspectiva { arquivo: arquivo(&c, r), info })
+}
+
 #[tauri::command]
 pub async fn realce_perspectiva(
     app: AppHandle,
@@ -911,35 +958,7 @@ pub async fn realce_perspectiva(
     params: ParamsPerspectiva,
 ) -> Result<ResultadoPerspectiva> {
     let cache = pasta_cache(&app)?;
-    tauri::async_runtime::spawn_blocking(move || -> Result<ResultadoPerspectiva> {
-        if params.pontos.len() != 4 {
-            return Err(SicroError::Validation("marque os 4 pontos do plano".into()));
-        }
-        let c = contexto(&workspace_path, &media_hash)?;
-        let (png, w, h, real) = quadro_png(&c, &cache, params.t)?;
-        let (mut rgb, _, _) = ler_rgb(&png)?;
-        let lente = if params.com_lente { c.lente()? } else { None };
-        if let Some(l) = &lente {
-            rgb = corrigir_rgb(&rgb, w, h, l.coef, l.cx, l.cy);
-        }
-        let pares: [Par; 4] = std::array::from_fn(|i| {
-            let p = params.pontos[i];
-            Par { px: p.px, py: p.py, mx: p.mx, my: p.my }
-        });
-        let (img, info) = perspective::retificar(&rgb, w, h, &pares, params.margem, params.px_por_m)
-            .map_err(SicroError::Validation)?;
-        pasta_saida(&c, REALCE_SUBDIR)?;
-        let rel = format!("{REALCE_SUBDIR}/{}_vista_de_cima_{}_{}ms.png", c.stem(), carimbo(), ms(real));
-        img.save(c.ws.join(&rel)).map_err(|e| SicroError::Filesystem(format!("gravar retificada: {e}")))?;
-        let pj = json!({
-            "t": real, "pontos": params.pontos, "margem": params.margem, "origem_das_medidas": params.origem,
-            "px_por_m": info.px_por_m, "mundo_m": info.mundo,
-            "lente": lente.as_ref().map(|l| json!({ "k1": l.coef.k1, "k2": l.coef.k2 })),
-            "metodo": "homografia DLT (4 pontos, normalização de Hartley)",
-        });
-        let r = registrar(&c, "retificada", &rel, pj, AVISO_REALCE, Some((info.largura, info.altura)), true)?;
-        Ok(ResultadoPerspectiva { arquivo: arquivo(&c, r), info })
-    })
+    tauri::async_runtime::spawn_blocking(move || perspectiva_nucleo(&workspace_path, &media_hash, params, &cache))
     .await
     .map_err(|e| SicroError::Workspace(format!("perspectiva: {e}")))?
 }
@@ -1024,6 +1043,51 @@ pub struct ParamsEstabilizar {
     pub borda: Borda,
 }
 
+pub(crate) fn estabilizar_nucleo(
+    workspace_path: &str,
+    media_hash: &str,
+    params: ParamsEstabilizar,
+    flag: &AtomicBool,
+    emit: &(dyn Fn(&str, u32, u32) + Sync),
+    usar_vidstab: bool,
+) -> Result<VideoDerivado> {
+    let c = contexto(workspace_path, media_hash)?;
+    let video = c.video()?;
+    let dir = pasta_saida(&c, ESTAB_SUBDIR)?;
+    let saida = stabilize::nome_unico(&dir, &format!("{}_estabilizado", c.stem()), "mp4");
+    let rel = format!("{ESTAB_SUBDIR}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
+    let total = c.media.duration_s.unwrap_or(0.0);
+    let tem_audio = tem_audio(&c.media.raw_probe_json);
+    let dims = (c.media.width.unwrap_or(0), c.media.height.unwrap_or(0));
+    let est = stabilize::estabilizar(
+        &video,
+        &saida,
+        OpcoesEstabilizar { suavizar: params.suavizar, borda: params.borda },
+        total,
+        tem_audio,
+        dims,
+        usar_vidstab,
+        flag,
+        &mut |fase, f| emit(if fase == 1 { "estab-analise" } else { "estab-grava" }, (f * 1000.0) as u32, 1000),
+    );
+    let est = match est {
+        Ok(e) => e,
+        Err(e) => {
+            let _ = std::fs::remove_file(&saida);
+            return Err(e);
+        }
+    };
+    let pj = json!({
+        "suavizar": params.suavizar, "borda": params.borda, "motor": est.motor,
+        "comandos": est.comandos, "codec": "H.264 CRF 16 (recomprimido)",
+    });
+    let (media, r) = registrar_video_derivado(
+        &c, &rel, "estabilizado", pj,
+        "Cópia estabilizada e recomprimida: os pixels não são os do original, a borda foi cortada ou preenchida e o movimento da câmera foi alterado. O original está intacto.",
+    )?;
+    Ok(VideoDerivado { arquivo: arquivo(&c, r), media, motor: est.motor.to_string() })
+}
+
 #[tauri::command]
 pub async fn realce_estabilizar(
     app: AppHandle,
@@ -1033,42 +1097,8 @@ pub async fn realce_estabilizar(
 ) -> Result<VideoDerivado> {
     let flag = iniciar_tarefa()?;
     let (app2, hash2) = (app.clone(), media_hash.clone());
-    let r = tauri::async_runtime::spawn_blocking(move || -> Result<VideoDerivado> {
-        let c = contexto(&workspace_path, &hash2)?;
-        let video = c.video()?;
-        let dir = pasta_saida(&c, ESTAB_SUBDIR)?;
-        let saida = stabilize::nome_unico(&dir, &format!("{}_estabilizado", c.stem()), "mp4");
-        let rel = format!("{ESTAB_SUBDIR}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
-        let total = c.media.duration_s.unwrap_or(0.0);
-        let tem_audio = tem_audio(&c.media.raw_probe_json);
-        let dims = (c.media.width.unwrap_or(0), c.media.height.unwrap_or(0));
-        let est = stabilize::estabilizar(
-            &video,
-            &saida,
-            OpcoesEstabilizar { suavizar: params.suavizar, borda: params.borda },
-            total,
-            tem_audio,
-            dims,
-            true,
-            &flag,
-            &mut |fase, f| emitir(&app2, &hash2, if fase == 1 { "estab-analise" } else { "estab-grava" }, (f * 1000.0) as u32, 1000),
-        );
-        let est = match est {
-            Ok(e) => e,
-            Err(e) => {
-                let _ = std::fs::remove_file(&saida);
-                return Err(e);
-            }
-        };
-        let pj = json!({
-            "suavizar": params.suavizar, "borda": params.borda, "motor": est.motor,
-            "comandos": est.comandos, "codec": "H.264 CRF 16 (recomprimido)",
-        });
-        let (media, r) = registrar_video_derivado(
-            &c, &rel, "estabilizado", pj,
-            "Cópia estabilizada e recomprimida: os pixels não são os do original, a borda foi cortada ou preenchida e o movimento da câmera foi alterado. O original está intacto.",
-        )?;
-        Ok(VideoDerivado { arquivo: arquivo(&c, r), media, motor: est.motor.to_string() })
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        estabilizar_nucleo(&workspace_path, &hash2, params, &flag, &|f, a, b| emitir(&app2, &hash2, f, a, b), true)
     })
     .await
     .map_err(|e| SicroError::Workspace(format!("estabilização: {e}")));
@@ -1076,45 +1106,170 @@ pub async fn realce_estabilizar(
     r?
 }
 
+pub(crate) fn lente_video_nucleo(
+    workspace_path: &str,
+    media_hash: &str,
+    flag: &AtomicBool,
+    emit: &(dyn Fn(&str, u32, u32) + Sync),
+) -> Result<VideoDerivado> {
+    let c = contexto(workspace_path, media_hash)?;
+    let video = c.video()?;
+    let l = c.lente()?.ok_or_else(|| SicroError::Validation("este vídeo ainda não tem perfil de lente salvo".into()))?;
+    let (w, h) = (c.media.width.unwrap_or(0), c.media.height.unwrap_or(0));
+    let (k1, k2) = para_ffmpeg(l.coef, w.max(2), h.max(2))
+        .ok_or_else(|| SicroError::Validation("a correção é forte demais para o filtro do ffmpeg (k fora de −1..1)".into()))?;
+    let dir = pasta_saida(&c, ESTAB_SUBDIR)?;
+    let saida = stabilize::nome_unico(&dir, &format!("{}_lente", c.stem()), "mp4");
+    let rel = format!("{ESTAB_SUBDIR}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
+    let tem_audio = tem_audio(&c.media.raw_probe_json);
+    let cmd = stabilize::corrigir_lente(
+        &video, &saida, k1, k2, l.cx as f64, l.cy as f64, c.media.duration_s.unwrap_or(0.0), tem_audio, flag,
+        &mut |f| emit("lente-video", (f * 1000.0) as u32, 1000),
+    );
+    let cmd = match cmd {
+        Ok(x) => x,
+        Err(e) => {
+            let _ = std::fs::remove_file(&saida);
+            return Err(e);
+        }
+    };
+    let pj = json!({
+        "k1": l.coef.k1, "k2": l.coef.k2, "cx": l.cx, "cy": l.cy, "k1_ffmpeg": k1, "k2_ffmpeg": k2,
+        "comando": cmd, "codec": "H.264 CRF 16 (recomprimido)",
+    });
+    let (media, r) = registrar_video_derivado(
+        &c, &rel, "lente_video", pj,
+        "Cópia com a distorção da lente corrigida e recomprimida: os pixels não são os do original. O original está intacto.",
+    )?;
+    Ok(VideoDerivado { arquivo: arquivo(&c, r), media, motor: "lenscorrection".into() })
+}
+
 /// Cópia do vídeo com a lente corrigida (ffmpeg `lenscorrection`), usando o perfil salvo.
 #[tauri::command]
 pub async fn realce_lente_video(app: AppHandle, workspace_path: String, media_hash: String) -> Result<VideoDerivado> {
     let flag = iniciar_tarefa()?;
     let (app2, hash2) = (app.clone(), media_hash.clone());
-    let r = tauri::async_runtime::spawn_blocking(move || -> Result<VideoDerivado> {
-        let c = contexto(&workspace_path, &hash2)?;
-        let video = c.video()?;
-        let l = c.lente()?.ok_or_else(|| SicroError::Validation("este vídeo ainda não tem perfil de lente salvo".into()))?;
-        let (w, h) = (c.media.width.unwrap_or(0), c.media.height.unwrap_or(0));
-        let (k1, k2) = para_ffmpeg(l.coef, w.max(2), h.max(2))
-            .ok_or_else(|| SicroError::Validation("a correção é forte demais para o filtro do ffmpeg (k fora de −1..1)".into()))?;
-        let dir = pasta_saida(&c, ESTAB_SUBDIR)?;
-        let saida = stabilize::nome_unico(&dir, &format!("{}_lente", c.stem()), "mp4");
-        let rel = format!("{ESTAB_SUBDIR}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
-        let tem_audio = tem_audio(&c.media.raw_probe_json);
-        let cmd = stabilize::corrigir_lente(
-            &video, &saida, k1, k2, l.cx as f64, l.cy as f64, c.media.duration_s.unwrap_or(0.0), tem_audio, &flag,
-            &mut |f| emitir(&app2, &hash2, "lente-video", (f * 1000.0) as u32, 1000),
-        );
-        let cmd = match cmd {
-            Ok(x) => x,
-            Err(e) => {
-                let _ = std::fs::remove_file(&saida);
-                return Err(e);
-            }
-        };
-        let pj = json!({
-            "k1": l.coef.k1, "k2": l.coef.k2, "cx": l.cx, "cy": l.cy, "k1_ffmpeg": k1, "k2_ffmpeg": k2,
-            "comando": cmd, "codec": "H.264 CRF 16 (recomprimido)",
-        });
-        let (media, r) = registrar_video_derivado(
-            &c, &rel, "lente_video", pj,
-            "Cópia com a distorção da lente corrigida e recomprimida: os pixels não são os do original. O original está intacto.",
-        )?;
-        Ok(VideoDerivado { arquivo: arquivo(&c, r), media, motor: "lenscorrection".into() })
+    let r = tauri::async_runtime::spawn_blocking(move || {
+        lente_video_nucleo(&workspace_path, &hash2, &flag, &|f, a, b| emitir(&app2, &hash2, f, a, b))
     })
     .await
     .map_err(|e| SicroError::Workspace(format!("cópia com lente: {e}")));
     encerrar_tarefa();
     r?
+}
+
+#[cfg(test)]
+mod testes {
+    //! Fluxo completo sobre um caso de verdade (pasta temporária) com os vídeos sintéticos, quando
+    //! `SICRO_REALCE_DIR` e `SICRO_REALCE_SAIDA` existem. Sem elas, não faz nada.
+    use super::*;
+    use crate::models::{NewOccurrenceInput, RegisterVideoInput};
+
+    #[test]
+    fn fluxo_completo_no_caso() {
+        let (Ok(dir), Ok(saida)) = (std::env::var("SICRO_REALCE_DIR"), std::env::var("SICRO_REALCE_SAIDA")) else { return };
+        let (dir, saida) = (PathBuf::from(dir), PathBuf::from(saida));
+        let pai = std::env::temp_dir().join(format!("sicro-realce-teste-{}", std::process::id()));
+        let criado = crate::workspace::create::create_workspace(
+            NewOccurrenceInput {
+                titulo: Some("teste realce".into()),
+                numero_bo: None, protocolo: None, oficio: None, tipo_pericia: None, municipio: None,
+                peritos: vec![],
+                parent_directory: Some(pai.to_string_lossy().into()),
+            },
+            &pai,
+        )
+        .unwrap();
+        let ws = criado.path.to_string_lossy().to_string();
+        let cache = pai.join("cache_realce");
+        std::fs::create_dir_all(&cache).unwrap();
+        let reg = |nome: &str| {
+            tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(
+                ws.clone(),
+                RegisterVideoInput { source_path: dir.join(nome).to_string_lossy().into() },
+            ))
+            .unwrap()
+        };
+        let ruid = reg("ruidoso_tremido.mp4");
+        let limpo = reg("limpo_tremido.mp4");
+        let flag = AtomicBool::new(false);
+
+        // média: região da placa
+        let r = media_blocante(
+            &|_, _, _| {},
+            &ws,
+            &ruid.sha256,
+            ParamsMedia { t: 3.0, roi: Roi { x: 170, y: 140, w: 300, h: 100 }, quadros: 30, mediana: false, homografia: false, com_lente: false },
+            &cache,
+            &flag,
+        )
+        .unwrap();
+        assert_eq!(r.total, 30);
+        assert!(r.usados >= 28);
+        let sha_disco = sha256_file(Path::new(&r.roi.absoluto)).unwrap();
+        assert_eq!(sha_disco, r.roi.resultado.sha256);
+        assert!(Path::new(&format!("{}.json", r.roi.absoluto)).is_file());
+        println!("média: {} de {} quadros, {:.2}s, SHA {}", r.usados, r.total, r.tempo_s, &r.roi.resultado.sha256[..16]);
+        std::fs::copy(&r.roi.absoluto, saida.join("fluxo_media_roi.png")).unwrap();
+        std::fs::copy(&r.crua, saida.join("fluxo_media_crua.png")).unwrap();
+
+        // storyboard a partir do resultado
+        let f = tauri::async_runtime::block_on(realce_para_storyboard(ws.clone(), ruid.sha256.clone(), r.roi.resultado.id.clone(), None)).unwrap();
+        assert!(f.caption.contains("média"));
+
+        // super-resolução 2x sobre a média (só com o modelo à mão)
+        if let (Ok(lib), Ok(modelo)) = (std::env::var("SICRO_ORT_LIB"), std::env::var("SICRO_SR_MODEL")) {
+            let ai = crate::commands::settings_commands::AiSettings { sr_ort_lib_path: lib, sr_model_path: modelo, sr_version: "teste".into(), ..Default::default() };
+            let sr = superres_nucleo(
+                &ai, &ws, &ruid.sha256,
+                ParamsSuperRes { resultado_id: Some(r.roi.resultado.id.clone()), t: 3.0, roi: None, escala: 2, com_lente: false },
+                &cache, &flag, &|_, _, _| {},
+            )
+            .unwrap();
+            assert_eq!(sr.arquivo.resultado.largura, Some(600));
+            assert!(sr.arquivo.resultado.aviso.contains("inventar"));
+            println!("super-resolução 2x da média: {:.2}s", sr.tempo_s);
+            std::fs::copy(&sr.arquivo.absoluto, saida.join("fluxo_media_superres2x.png")).unwrap();
+        }
+
+        // perspectiva (pontos qualquer: só confere o registro e o arquivo)
+        let persp = perspectiva_nucleo(
+            &ws,
+            &ruid.sha256,
+            ParamsPerspectiva {
+                t: 3.0, com_lente: false, margem: 0.2, px_por_m: None, origem: "manual".into(),
+                pontos: vec![
+                    ParIn { px: 150.0, py: 300.0, mx: 0.0, my: 0.0 },
+                    ParIn { px: 520.0, py: 300.0, mx: 4.0, my: 0.0 },
+                    ParIn { px: 470.0, py: 120.0, mx: 4.0, my: 6.0 },
+                    ParIn { px: 200.0, py: 120.0, mx: 0.0, my: 6.0 },
+                ],
+            },
+            &cache,
+        )
+        .unwrap();
+        assert!(Path::new(&persp.arquivo.absoluto).is_file());
+        std::fs::copy(&persp.arquivo.absoluto, saida.join("fluxo_vista_de_cima.png")).unwrap();
+
+        // lente: perfil, e a cópia do vídeo
+        tauri::async_runtime::block_on(realce_lente_salvar(ws.clone(), limpo.sha256.clone(), PerfilLente { nome: "teste".into(), k1: -0.08, k2: 0.0, cx: 0.5, cy: 0.5 })).unwrap();
+        let lv = lente_video_nucleo(&ws, &limpo.sha256, &flag, &|_, _, _| {}).unwrap();
+        assert_eq!(lv.media.derived_from_hash.as_deref(), Some(limpo.sha256.as_str()));
+
+        // estabilização com os dois motores
+        for vid in [true, false] {
+            let e = estabilizar_nucleo(&ws, &limpo.sha256, ParamsEstabilizar { suavizar: 15, borda: Borda::Preencher }, &flag, &|_, _, _| {}, vid).unwrap();
+            assert_eq!(e.motor, if vid { "vidstab" } else { "deshake" });
+            assert_eq!(e.media.derived_from_hash.as_deref(), Some(limpo.sha256.as_str()));
+            assert_eq!(sha256_file(Path::new(&e.arquivo.absoluto)).unwrap(), e.arquivo.resultado.sha256);
+        }
+
+        // lista e trilha
+        let lista = tauri::async_runtime::block_on(realce_listar(ws.clone(), ruid.sha256.clone())).unwrap();
+        assert!(lista.len() >= 3, "média (2) + vista de cima");
+        let c = contexto(&ws, &limpo.sha256).unwrap();
+        let logs = video_repo::list_logs_for_media(&c.conn, &c.occ, &limpo.sha256, 200).unwrap();
+        assert!(logs.iter().any(|l| l.action == "realce.estabilizado") && logs.iter().any(|l| l.action == "realce.lente_video"));
+        let _ = std::fs::remove_dir_all(&pai);
+    }
 }
