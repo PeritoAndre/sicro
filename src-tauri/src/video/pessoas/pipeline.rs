@@ -13,20 +13,28 @@ use crate::video::frame_export::detect_ffmpeg;
 use super::bytetrack::{ByteTrack, Params};
 use super::decode::{display_size, frame_dur, frame_times, FrameReader};
 use super::render::{desenhar_pessoa, Opcoes, Tela};
-use super::yolox::{scaled_size, Yolox};
+use super::classes::mascara;
+use super::yolox::{recortar_ao_quadro, scaled_size, Yolox};
 use super::{cor_padrao, Amostra, Cadencia, Pessoa};
 
-#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OpcoesRastreio {
     /// Confiança mínima para criar/seguir uma pessoa.
     pub limiar: f32,
     /// Analisar um quadro a cada `passo` (1 = todos).
     pub passo: u32,
+    /// Classes COCO a detectar (padrão: só pessoa).
+    #[serde(default = "classes_padrao")]
+    pub classes: Vec<u16>,
+}
+
+fn classes_padrao() -> Vec<u16> {
+    vec![0]
 }
 
 impl Default for OpcoesRastreio {
     fn default() -> Self {
-        Self { limiar: 0.5, passo: 1 }
+        Self { limiar: 0.5, passo: 1, classes: classes_padrao() }
     }
 }
 
@@ -80,7 +88,16 @@ pub fn rastrear(
     let analisados_esperados = (times.len() as u32).div_ceil(passo);
     // 1 s de oclusão tolerada, em quadros analisados
     let max_lost = ((1.0 / (fdur * passo as f64)).round() as u32).clamp(4, 120);
-    let mut bt = ByteTrack::new(Params { high: op.limiar, max_lost, ..Params::default() });
+    // um ByteTrack por classe (a associação por IoU não mistura carro com pessoa);
+    // o número, depois, é único na cena inteira.
+    let mask = mascara(&op.classes);
+    let mut bts: Vec<(u16, ByteTrack)> = (0..super::classes::N_CLASSES as u16)
+        .filter(|&c| mask[c as usize])
+        .map(|c| (c, ByteTrack::new(Params { high: op.limiar, max_lost, ..Params::default() })))
+        .collect();
+    if bts.is_empty() {
+        return Err(SicroError::Validation("escolha ao menos uma classe para detectar".into()));
+    }
 
     let mut n = 0u32;
     let mut ativos = 0u32;
@@ -91,8 +108,13 @@ pub fn rastrear(
         if (n * passo) as usize >= times.len() {
             break;
         }
-        let dets = yolox.detect(rgb, sw as usize, sh as usize, (rx + ry) / 2.0, 0.1)?;
-        ativos = bt.update(&dets).len() as u32;
+        let dets = yolox.detect(rgb, sw as usize, sh as usize, (rx + ry) / 2.0, 0.1, &mask)?;
+        let dets = recortar_ao_quadro(dets, dw as f32, dh as f32);
+        ativos = 0;
+        for (c, bt) in &mut bts {
+            let da_classe: Vec<_> = dets.iter().filter(|d| d.classe == *c).copied().collect();
+            ativos += bt.update(&da_classe).len() as u32;
+        }
         n += 1;
         if n % 4 == 0 {
             progresso(Andamento { feitos: n, total: analisados_esperados, pessoas: ativos });
@@ -106,13 +128,17 @@ pub fn rastrear(
 
     // Trilhas -> pessoas, numeradas pela ordem de entrada em cena; descarta as muito curtas.
     let min_amostras = if passo > 1 { 3 } else { 5 };
-    let mut trilhas: Vec<_> = bt.history.into_iter().filter(|(_, s)| s.len() >= min_amostras).collect();
-    trilhas.sort_by_key(|(_, s)| s[0].frame);
+    let mut trilhas: Vec<(u16, Vec<_>)> = bts
+        .into_iter()
+        .flat_map(|(c, bt)| bt.history.into_values().map(move |s| (c, s)))
+        .filter(|(_, s)| s.len() >= min_amostras)
+        .collect();
+    trilhas.sort_by_key(|(c, s)| (s[0].frame, *c));
     let (fw, fh) = (dw as f32, dh as f32);
     let pessoas = trilhas
         .into_iter()
         .enumerate()
-        .map(|(i, (_, s))| {
+        .map(|(i, (classe, s))| {
             let numero = i as i64 + 1;
             Pessoa {
                 id: uuid::Uuid::new_v4().to_string(),
@@ -121,6 +147,8 @@ pub fn rastrear(
                 nome: String::new(),
                 cor: cor_padrao(numero),
                 estado: "auto".into(),
+                classe: classe as i32,
+                origem: "auto".into(),
                 amostras: s
                     .iter()
                     .filter_map(|p| {
@@ -157,7 +185,7 @@ pub fn desenhar_quadro(rgb: &mut [u8], w: i32, h: i32, t: f64, pessoas: &[Pessoa
     let mut tela = Tela { buf: rgb, w, h };
     for p in pessoas {
         if let Some(c) = p.caixa_em(t, cad) {
-            desenhar_pessoa(&mut tela, &c, p.numero, &p.cor, op);
+            desenhar_pessoa(&mut tela, &c, p.numero, &p.cor, op, op.classe.then(|| p.rotulo()).as_deref());
         }
     }
 }
@@ -303,14 +331,22 @@ mod testes {
             "teste",
             Path::new(&lib),
             Path::new(&modelo),
-            OpcoesRastreio::default(),
+            OpcoesRastreio {
+                classes: std::env::var("PESSOAS_CLASSES")
+                    .map(|v| v.split(',').filter_map(|x| x.trim().parse().ok()).collect())
+                    .unwrap_or_else(|_| vec![0]),
+                ..OpcoesRastreio::default()
+            },
             &cancel,
             &mut |a| eprintln!("{}/{} ({} ativas)", a.feitos, a.total, a.pessoas),
         )
         .unwrap();
         eprintln!("{:#?}", r.meta);
         for p in &r.pessoas {
-            eprintln!("pessoa {} : {} amostras, {:.2}s -> {:.2}s", p.numero, p.amostras.len(), p.primeiro_s(), p.ultimo_s());
+            eprintln!(
+                "#{} {} : {} amostras, {:.2}s -> {:.2}s",
+                p.numero, p.rotulo(), p.amostras.len(), p.primeiro_s(), p.ultimo_s()
+            );
         }
         if let Ok(dir) = std::env::var("PESSOAS_SAIDA") {
             std::fs::write(Path::new(&dir).join("pessoas.json"), serde_json::to_string(&r.pessoas).unwrap()).unwrap();
@@ -331,7 +367,7 @@ mod testes {
         };
         let pessoas: Vec<Pessoa> = serde_json::from_str(&std::fs::read_to_string(json).unwrap()).unwrap();
         let cad = Cadencia { frame_dur: 1001.0 / 24000.0, passo: 1 };
-        let op = Opcoes::default();
+        let op = Opcoes { classe: true, ..Opcoes::default() };
         let cancel = AtomicBool::new(false);
         let mp4 = Path::new(&saida).join("saida.mp4");
         let t0 = Instant::now();
@@ -348,6 +384,101 @@ mod testes {
             assert!(ok.success());
             let nums = sobrepor_png(&png, t, &pessoas, cad, op).unwrap();
             eprintln!("quadro {t}: {} pessoas", nums.len());
+        }
+    }
+
+    /// Teste manual da mancha: PESSOAS_VIDEO, PESSOAS_JSON (trilhas de `rastreio_real`), PESSOAS_SAIDA.
+    /// Escolhe um objeto que o detector vê por ≥ 90 quadros, marca a caixa dele num quadro, segue 60 quadros
+    /// (e 60 para trás) e mede o erro contra as caixas do detector nos mesmos instantes.
+    #[test]
+    #[ignore]
+    fn mancha_real() {
+        let (Ok(video), Ok(json), Ok(saida)) = (
+            std::env::var("PESSOAS_VIDEO"),
+            std::env::var("PESSOAS_JSON"),
+            std::env::var("PESSOAS_SAIDA"),
+        ) else {
+            return;
+        };
+        let mut pessoas: Vec<Pessoa> = serde_json::from_str(&std::fs::read_to_string(json).unwrap()).unwrap();
+        let video = Path::new(&video);
+        let times = frame_times(video).unwrap();
+        let (dw, dh) = display_size(video).unwrap();
+        let cancel = AtomicBool::new(false);
+        let pular: usize = std::env::var("PESSOAS_ALVO").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
+        // candidatos: trilhas longas e de tamanho razoável, na ordem de numeração
+        let candidatas: Vec<usize> = pessoas
+            .iter()
+            .enumerate()
+            .filter(|(_, p)| p.amostras.len() >= 150 && p.amostras[75].w > 40.0 && p.amostras[75].h > 40.0)
+            .map(|(i, _)| i)
+            .collect();
+        let alvo = candidatas[pular.min(candidatas.len() - 1)];
+        let ref_p = pessoas[alvo].clone();
+        let k0 = ref_p.amostras.len() / 2;
+        let a0 = ref_p.amostras[k0];
+        let idx0 = times.iter().position(|&t| (t - a0.t).abs() < 1e-6).unwrap();
+        eprintln!(
+            "alvo: #{} {} ({} amostras), quadro {idx0} t={:.2}s caixa {:.0},{:.0} {:.0}x{:.0}",
+            ref_p.numero, ref_p.rotulo(), ref_p.amostras.len(), a0.t, a0.x, a0.y, a0.w, a0.h
+        );
+        let mut man = Vec::new();
+        for frente in [true, false] {
+            let t0 = Instant::now();
+            let r = crate::video::pessoas::mancha::seguir(
+                video, &times, dw, dh, idx0, (a0.x, a0.y, a0.w, a0.h), frente,
+                crate::video::pessoas::mancha::OpcoesMancha { max_quadros: 60, ..Default::default() }, &cancel, &mut |_| {},
+            )
+            .unwrap();
+            // erro contra o detector nos mesmos instantes
+            let (mut soma_c, mut max_c, mut soma_iou, mut n) = (0.0f32, 0.0f32, 0.0f32, 0);
+            for a in &r.amostras {
+                if let Some(d) = ref_p.amostras.iter().find(|d| (d.t - a.t).abs() < 1e-6) {
+                    let (cx, cy) = (a.x + a.w / 2.0 - (d.x + d.w / 2.0), a.y + a.h / 2.0 - (d.y + d.h / 2.0));
+                    let e = cx.hypot(cy);
+                    let iou = crate::video::pessoas::yolox::Det { x: a.x, y: a.y, w: a.w, h: a.h, score: 1.0, classe: 0 }
+                        .iou(&crate::video::pessoas::yolox::Det { x: d.x, y: d.y, w: d.w, h: d.h, score: 1.0, classe: 0 });
+                    if std::env::var("PESSOAS_DETALHE").is_ok() {
+                        eprintln!("  t={:.2} tracker({:.0},{:.0}) detector({:.0},{:.0}) erro {:.0}", a.t, a.x, a.y, d.x, d.y, e);
+                    }
+                    soma_c += e;
+                    max_c = max_c.max(e);
+                    soma_iou += iou;
+                    n += 1;
+                }
+            }
+            eprintln!(
+                "{}: {} quadros seguidos em {:.2}s, motivo {:?}, parou_em {:?}, confiança média {:.2} | vs detector: erro de centro médio {:.1}px, máx {:.1}px, IoU médio {:.2} (n={n}, altura da caixa {:.0}px)",
+                if frente { "frente" } else { "trás" },
+                r.amostras.len() - 1, t0.elapsed().as_secs_f64(), r.motivo, r.parou_em, r.conf_media,
+                soma_c / n as f32, max_c, soma_iou / n as f32, a0.h
+            );
+            man.extend(r.amostras);
+        }
+        man.sort_by(|a, b| a.t.total_cmp(&b.t));
+        man.dedup_by(|a, b| (a.t - b.t).abs() < 1e-6);
+        // a mancha entra como trilha manual; o detector vira só contexto (sem o alvo)
+        let numero = pessoas.iter().map(|p| p.numero).max().unwrap_or(0) + 1;
+        pessoas.remove(alvo);
+        pessoas.push(Pessoa {
+            id: "manual".into(), media_hash: "teste".into(), numero, nome: "mancha".into(), cor: cor_padrao(numero),
+            estado: "auto".into(), classe: crate::video::pessoas::classes::CLASSE_MANUAL, origem: "manual".into(), amostras: man.clone(), ajustes: vec![],
+        });
+        let cad = Cadencia { frame_dur: 1001.0 / 24000.0, passo: 1 };
+        let op = Opcoes { classe: true, ..Opcoes::default() };
+        let ff = crate::video::frame_export::detect_ffmpeg().unwrap();
+        for (nome, t) in [("antes", man[0].t), ("marca", a0.t), ("depois", man[man.len() - 1].t)] {
+            let png = Path::new(&saida).join(format!("mancha_{nome}.png"));
+            let ok = crate::tools::command(&ff)
+                .args(["-v", "error", "-y", "-ss", &t.to_string(), "-i"])
+                .arg(video)
+                .args(["-frames:v", "1"])
+                .arg(&png)
+                .status()
+                .unwrap();
+            assert!(ok.success());
+            let nums = sobrepor_png(&png, t, &pessoas, cad, op).unwrap();
+            eprintln!("quadro {nome} t={t:.2}: {nums:?}");
         }
     }
 }

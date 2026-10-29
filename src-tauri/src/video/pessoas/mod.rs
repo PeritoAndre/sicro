@@ -1,8 +1,11 @@
-//! Pessoas no vídeo: detectar (YOLOX), acompanhar (ByteTrack), numerar e desenhar.
+//! Rastreio no vídeo: detectar (YOLOX, 80 classes), acompanhar (ByteTrack), seguir manchas
+//! marcadas à mão (correlação), numerar e desenhar.
 //! Tudo é derivado: o vídeo original nunca é alterado e as trilhas ficam no banco do caso.
 
 pub mod bytetrack;
+pub mod classes;
 pub mod decode;
+pub mod mancha;
 pub mod pipeline;
 pub mod render;
 pub mod yolox;
@@ -54,6 +57,10 @@ impl Cadencia {
     }
 }
 
+fn origem_auto() -> String {
+    "auto".into()
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Pessoa {
     pub id: String,
@@ -63,11 +70,26 @@ pub struct Pessoa {
     pub cor: String,
     /// "auto" | "editado"
     pub estado: String,
+    /// Classe COCO (0 = pessoa); -1 = mancha marcada à mão.
+    #[serde(default)]
+    pub classe: i32,
+    /// "auto" (detector) | "manual" (mancha seguida por correlação).
+    #[serde(default = "origem_auto")]
+    pub origem: String,
     pub amostras: Vec<Amostra>,
     pub ajustes: Vec<Ajuste>,
 }
 
 impl Pessoa {
+    /// Texto da etiqueta de classe: o nome da classe; na mancha, o nome dado pelo perito.
+    pub fn rotulo(&self) -> String {
+        if self.classe == classes::CLASSE_MANUAL && !self.nome.trim().is_empty() {
+            self.nome.trim().to_string()
+        } else {
+            classes::nome(self.classe).to_string()
+        }
+    }
+
     /// Deslocamento da correção manual no instante `t`: interpolado entre duas correções,
     /// constante depois da última, nulo antes da primeira.
     fn deslocamento(&self, t: f64) -> [f32; 4] {
@@ -203,6 +225,8 @@ impl Pessoa {
             nome: String::new(),
             cor: cor_padrao(numero),
             estado: "editado".into(),
+            classe: self.classe,
+            origem: self.origem.clone(),
             amostras: depois_a,
             ajustes: ajustes_depois,
         })
@@ -221,6 +245,8 @@ mod tests {
             nome: String::new(),
             cor: cor_padrao(1),
             estado: "auto".into(),
+            classe: 0,
+            origem: "auto".into(),
             amostras: ts.iter().map(|&t| Amostra { t, x: t as f32 * 10.0, y: 5.0, w: 40.0, h: 100.0 }).collect(),
             ajustes: vec![],
         }

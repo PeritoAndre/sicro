@@ -1,4 +1,4 @@
-/** Espelho TS de `commands/pessoas_commands.rs` (snake_case: o backend serializa assim). */
+/** Espelho TS de `commands/pessoas_commands.rs` (rastreio no vídeo) (snake_case: o backend serializa assim). */
 
 import type { VideoStoryboardFrame } from "./video";
 
@@ -9,6 +9,11 @@ export interface PessoaView {
   cor: string;
   /** "auto" | "editado" */
   estado: "auto" | "editado";
+  /** Classe COCO (0 = pessoa); -1 = mancha marcada à mão. */
+  classe: number;
+  /** Nome da classe (na mancha, o nome dado pelo perito). */
+  classe_nome: string;
+  origem: "auto" | "manual";
   primeiro_s: number;
   ultimo_s: number;
   quadros: number;
@@ -36,11 +41,48 @@ export interface PessoasRun {
 export interface PessoasEstado {
   run: PessoasRun | null;
   pessoas: PessoaView[];
+  /** Tamanho do vídeo exibido, enquanto não há rastreio. */
+  tamanho: { width: number; height: number } | null;
 }
 
 export interface OpcoesRastreio {
   limiar: number;
   passo: number;
+  /** Classes COCO a detectar. */
+  classes: number[];
+}
+
+export interface ClasseInfo {
+  id: number;
+  nome: string;
+  grupo: string;
+}
+
+export const CLASSE_MANUAL = -1;
+
+export interface MarcaMancha {
+  /** Trilha a continuar; ausente = mancha nova. */
+  id?: string;
+  t: number;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  nome: string;
+  direcao: "frente" | "tras" | "ambos";
+}
+
+export interface AvisoMancha {
+  sentido: "frente" | "tras";
+  motivo: "fim_do_video" | "confianca" | "saiu_do_quadro" | "limite";
+  parou_em: number | null;
+  quadros: number;
+}
+
+export interface ResultadoMancha {
+  estado: PessoasEstado;
+  id: string;
+  avisos: AvisoMancha[];
 }
 
 export type ModoDesenho = "numero" | "numero_seta" | "completo";
@@ -48,6 +90,8 @@ export type ModoDesenho = "numero" | "numero_seta" | "completo";
 export interface OpcoesDesenho {
   modo: ModoDesenho;
   fonte: number;
+  /** Escrever o nome da classe ao lado do número. */
+  classe: boolean;
 }
 
 export type EdicaoPessoa =
@@ -82,7 +126,7 @@ export interface TabelaGerada {
 /** Evento Tauri "pessoas-progress". */
 export interface PessoasProgresso {
   media_hash: string;
-  fase: "rastrear" | "exportar";
+  fase: "rastrear" | "exportar" | "mancha";
   feitos: number;
   total: number;
   pessoas: number;

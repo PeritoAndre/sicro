@@ -542,50 +542,78 @@ mudança de faixa…), com título e — se quiser — um frame vinculado.
 
 > ⚠️ **§13:** velocidade e distância são **medições com incerteza**, exibidas de
 > forma descritiva — **não são conclusão pericial**. Você marca cada ponto; o
-> perito interpreta. (O acompanhamento automático da aba **Pessoas** não entra
+> perito interpreta. (O acompanhamento automático da aba **Rastreio** não entra
 > nestas contas.)
 
-### 7.4.1 Pessoas no vídeo
+### 7.4.1 Rastreio (pessoas, veículos e manchas)
 
-Numera as pessoas da cena e desenha um **número**, uma **seta** e uma **caixa fina**
-acompanhando cada uma, quadro a quadro. É apoio para o laudo: o perito confere e
-corrige. O vídeo original nunca é alterado; o que sai é cópia, com SHA-256.
+Numera o que aparece na cena e desenha um **número**, uma **seta** e uma **caixa fina**
+acompanhando cada coisa, quadro a quadro. Duas fontes entram na mesma lista: o
+**detector** (pessoas, veículos e mais 70 tipos de objeto que a rede conhece) e a
+**mancha marcada à mão** (o que a rede não conhece: saco, reflexo, arma pequena). É apoio
+para o laudo: o perito confere e corrige. O vídeo original nunca é alterado; o que sai é
+cópia, com SHA-256.
 
-**Preparar (uma vez).** Em **Configurações → IA (local) → Pessoas no vídeo**, baixe o
+**Preparar (uma vez).** Em **Configurações → IA (local) → Rastreio no vídeo**, baixe o
 pacote (≈ 47 MB: modelo YOLOX-S, Apache-2.0, e onnxruntime, MIT). Depois roda
-offline. Sem o pacote, a aba Pessoas leva a esse botão.
+offline. Sem o pacote, o botão do detector leva ao Gerenciador de IA; a marcação à mão
+funciona sem ele.
 
-**Rastrear.** Abra o vídeo, entre no modo **Pessoas** (trilho da esquerda ou
-**Alt+4**) e clique em **Rastrear**. Escolha antes se analisa todos os quadros (padrão)
-ou um a cada 2 ou 4 (mais rápido, com a caixa interpolada entre os analisados), e a
-**confiança** mínima (0,50 padrão; mais baixa acha mais gente e erra mais). Há barra de
-progresso e **Cancelar**. A análise fica salva no caso; rastrear de novo substitui a
-anterior (com confirmação, se houver edições).
+**O que detectar.** O botão **Detectar** abre o seletor das 80 classes em português, em
+grupos (Pessoas; Veículos; Trânsito e rua; Animais; Objetos de mão; Esporte e lazer;
+Comida; Casa e mobiliário). Há busca por nome, caixa para marcar o grupo inteiro e três
+atalhos: **Só pessoas** (padrão), **Pessoas e veículos** e **Tudo**. A escolha fica
+gravada junto com a análise (parâmetros do relatório) e vira o padrão da próxima. Marcar
+mais classes aumenta os falsos positivos e a lista: comece pelo que importa.
 
-**Na imagem.** Cada pessoa leva a cor do seu número. Em **+ caixa**, desenha número,
-seta e caixa; **+ seta** tira a caixa; **Número** deixa só o número. O cursor **Tamanho**
-muda número e seta. **P** (ou "na imagem") mostra/oculta. A sobreposição acompanha o
-quadro exibido, também pausado e no passo por quadro (**,** e **.**), e segue a lupa.
+**Rastrear.** Abra o vídeo, entre no modo **Rastreio** (trilho da esquerda ou **Alt+4**) e
+clique em **Rastrear**. Escolha antes se analisa todos os quadros (padrão) ou um a cada 2
+ou 4 (mais rápido, com a caixa interpolada entre os analisados), e a **confiança** mínima
+(0,50 padrão; mais baixa acha mais e erra mais). Há barra de progresso e **Cancelar**. A
+análise fica salva no caso; rastrear de novo substitui as trilhas detectadas (com
+confirmação) e **mantém** as manchas marcadas à mão. O número é único na cena inteira
+(não reinicia por classe) e segue a ordem de entrada. Objetos cortados pela borda do
+quadro têm a caixa recortada à imagem e são descartados quando mais da metade fica fora.
 
-**Lista (painel da direita).** Uma linha por pessoa, com o primeiro e o último instante
-e o número de quadros. Clique seleciona (a caixa ganha alças); duplo clique leva ao
-instante em que ela entra. A caixa em destaque mostra quem está na imagem agora.
+**Marcar à mão.** Pause no quadro em que a mancha está bem visível, dê um nome (opcional) e
+escolha o sentido (para a frente, para trás ou os dois). Clique em **Marcar à mão** e
+desenhe a caixa sobre a imagem. O SICRO segue aquele pedaço de pixels (correlação
+cruzada normalizada, com o modelo atualizado devagar) e **para sozinho** quando a
+confiança cai, quando a mancha fica ambígua (algo parecido cruza na frente) ou quando
+sai do quadro, avisando em que instante parou. A trilha entra na lista com número, cor e
+seta, marcada como **manual**. Para continuar depois de uma parada, vá ao quadro onde a
+mancha reaparece, selecione a trilha e use **Recolocar e continuar**: desenhe a caixa de
+novo e o trecho seguinte substitui o que havia nele. O acompanhamento não depende da rede
+neural, então vale para qualquer coisa com textura própria; é conservador de propósito
+(prefere parar a seguir a coisa errada). Caixa lisa demais, ou menor que 8 px, é recusada.
 
-- **Nome:** campo da linha (opcional; não é desenhado no vídeo).
+**Na imagem.** Cada trilha leva a cor do seu número. Em **+ caixa**, desenha número, seta
+e caixa; **+ seta** tira a caixa; **Número** deixa só o número. A marca **classe**
+escreve o nome da classe ao lado do número (na mancha, o nome que você deu); no vídeo
+gravado o texto sai em maiúsculas sem acento. O cursor **Tamanho** muda número, seta e
+texto. **P** (ou "na imagem") mostra/oculta. A sobreposição acompanha o quadro exibido,
+também pausado e no passo por quadro (**,** e **.**), e segue a lupa.
+
+**Lista (painel da direita).** Uma linha por trilha, com o primeiro e o último instante,
+o número de quadros, a **classe** e, nas manchas, a marca **manual**. Quando há mais de
+uma classe, um filtro por classe aparece no topo da lista. Clique seleciona (a caixa
+ganha alças); duplo clique leva ao instante em que entra.
+
+- **Nome:** campo da linha (opcional).
 - **Número:** clique no quadradinho colorido, digite e Enter (quem já tinha esse número
   fica com o seu antigo). **↑ / ↓** sobem e descem um número. **numerar por entrada**
   renumera pela ordem em que entram em cena.
-- **Juntar** (ícone de fusão): "esta pessoa é a mesma que outra". Clique na outra, na
-  lista ou na imagem; fica o número da primeira.
-- **Separar aqui** (ícone de divisão): do instante atual em diante vira outra pessoa,
-  com número novo. Serve para quando o acompanhamento trocou duas pessoas num cruzamento.
+- **Juntar** (ícone de fusão): "este é o mesmo que outro". Clique no outro, na lista ou
+  na imagem; fica o número do primeiro.
+- **Separar aqui** (ícone de divisão): do instante atual em diante vira outro, com número
+  novo. Serve para quando o acompanhamento trocou dois num cruzamento.
 - **Apagar:** falso positivo (poste, sombra). Os outros números não mudam.
-- **Corrigir a caixa:** com a pessoa selecionada, arraste a caixa ou as alças no quadro
+- **Corrigir a caixa:** com a trilha selecionada, arraste a caixa ou as alças no quadro
   desejado. A correção vale dali até a próxima correção, interpolando entre elas (e
-  fica constante depois da última). Cada pessoa mostra quantos ajustes tem.
+  fica constante depois da última). Vale também para as manchas.
 
-**Linha do tempo.** Abaixo da régua, uma faixa por pessoa mostra onde ela aparece;
-clique numa faixa para ir até o instante e selecionar a pessoa.
+**Linha do tempo.** Abaixo da régua, uma faixa por trilha mostra onde ela aparece;
+clique numa faixa para ir até o instante e selecionar.
 
 **Saídas** (todas registradas na trilha de operações, com SHA-256, na pasta
 `videos/pessoas` do caso, sem tempo nem número de quadro queimado na imagem):
@@ -593,18 +621,21 @@ clique numa faixa para ir até o instante e selecionar a pessoa.
 - **Vídeo MP4:** o vídeo inteiro com a sobreposição gravada, no mesmo tamanho e com os
   mesmos quadros (com o som, se marcar). Demora mais que assistir.
 - **Este quadro** (**Ctrl+Shift+P**) e **Eventos:** quadros com a sobreposição que
-  entram no storyboard (legenda "Pessoas: 1, 3, 4").
+  entram no storyboard (legenda "Numerados: 1, 3, 4").
 - **Tabela:** CSV (separador `;`, abre no Excel/LibreOffice) e relatório HTML com
-  número, nome, entra em, sai de e quadros de cada pessoa, os parâmetros da análise e o
-  hash do vídeo.
+  número, **classe**, nome, entra em, sai de, quadros, situação e **origem**
+  (automática ou manual) de cada trilha, os parâmetros da análise (inclusive as classes
+  escolhidas) e o hash do vídeo.
 
-**Atalhos.** **Alt+4** modo Pessoas · **P** mostrar/ocultar · **]** e **[** pessoa
-seguinte/anterior · **Ctrl+Shift+P** quadro com a sobreposição no storyboard. Todos
-mudam em Configurações → Atalhos.
+**Atalhos.** **Alt+4** modo Rastreio · **P** mostrar/ocultar · **]** e **[** próxima e
+anterior · **Ctrl+Shift+P** quadro com a sobreposição no storyboard · **Esc** desiste da
+marcação à mão. Todos (menos o Esc) mudam em Configurações → Atalhos.
 
-> ⚠️ Detecção e numeração são **automáticas**: cruzamentos trocam números, pessoa
-> escondida por mais de ~1 s volta com outro número, e imagem escura ou de baixa
-> resolução perde gente. Confira o vídeo todo antes de usar. Ver Limitações.
+> ⚠️ Detecção, numeração e rastreio de mancha são **automáticos**: cruzamentos trocam
+> números, o que fica escondido por mais de ~1 s volta com outro número, imagem escura ou
+> de baixa resolução perde coisas, e a mancha seguida por pixels para (ou, raramente,
+> escorrega) quando o objeto gira, muda de tamanho, é coberto ou o vídeo está muito
+> comprimido. Confira o vídeo todo antes de usar. Ver Limitações.
 
 ---
 

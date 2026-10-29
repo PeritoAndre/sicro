@@ -18,11 +18,68 @@ pub struct Opcoes {
     pub modo: Modo,
     /// Multiplicador do tamanho do número/seta (1 = padrão).
     pub fonte: f32,
+    /// Escrever o nome da classe ao lado do número.
+    #[serde(default)]
+    pub classe: bool,
 }
 
 impl Default for Opcoes {
     fn default() -> Self {
-        Self { modo: Modo::Completo, fonte: 1.0 }
+        Self { modo: Modo::Completo, fonte: 1.0, classe: false }
+    }
+}
+
+/// Letras e números 5×7 (maiúsculas sem acento) para a etiqueta de classe; mesma tabela do app (`fonteEtiqueta.ts`).
+pub const GLIFOS: [(char, [&str; 7]); 37] = [
+    ('A', ["01110", "10001", "10001", "11111", "10001", "10001", "10001"]),
+    ('B', ["11110", "10001", "10001", "11110", "10001", "10001", "11110"]),
+    ('C', ["01110", "10001", "10000", "10000", "10000", "10001", "01110"]),
+    ('D', ["11110", "10001", "10001", "10001", "10001", "10001", "11110"]),
+    ('E', ["11111", "10000", "10000", "11110", "10000", "10000", "11111"]),
+    ('F', ["11111", "10000", "10000", "11110", "10000", "10000", "10000"]),
+    ('G', ["01110", "10001", "10000", "10111", "10001", "10001", "01111"]),
+    ('H', ["10001", "10001", "10001", "11111", "10001", "10001", "10001"]),
+    ('I', ["01110", "00100", "00100", "00100", "00100", "00100", "01110"]),
+    ('J', ["00111", "00010", "00010", "00010", "00010", "10010", "01100"]),
+    ('K', ["10001", "10010", "10100", "11000", "10100", "10010", "10001"]),
+    ('L', ["10000", "10000", "10000", "10000", "10000", "10000", "11111"]),
+    ('M', ["10001", "11011", "10101", "10101", "10001", "10001", "10001"]),
+    ('N', ["10001", "11001", "10101", "10011", "10001", "10001", "10001"]),
+    ('O', ["01110", "10001", "10001", "10001", "10001", "10001", "01110"]),
+    ('P', ["11110", "10001", "10001", "11110", "10000", "10000", "10000"]),
+    ('Q', ["01110", "10001", "10001", "10001", "10101", "10010", "01101"]),
+    ('R', ["11110", "10001", "10001", "11110", "10100", "10010", "10001"]),
+    ('S', ["01111", "10000", "10000", "01110", "00001", "00001", "11110"]),
+    ('T', ["11111", "00100", "00100", "00100", "00100", "00100", "00100"]),
+    ('U', ["10001", "10001", "10001", "10001", "10001", "10001", "01110"]),
+    ('V', ["10001", "10001", "10001", "10001", "10001", "01010", "00100"]),
+    ('W', ["10001", "10001", "10001", "10101", "10101", "10101", "01010"]),
+    ('X', ["10001", "10001", "01010", "00100", "01010", "10001", "10001"]),
+    ('Y', ["10001", "10001", "01010", "00100", "00100", "00100", "00100"]),
+    ('Z', ["11111", "00001", "00010", "00100", "01000", "10000", "11111"]),
+    ('0', ["01110", "10001", "10011", "10101", "11001", "10001", "01110"]),
+    ('1', ["00100", "01100", "00100", "00100", "00100", "00100", "01110"]),
+    ('2', ["01110", "10001", "00001", "00010", "00100", "01000", "11111"]),
+    ('3', ["11110", "00001", "00001", "01110", "00001", "00001", "11110"]),
+    ('4', ["00010", "00110", "01010", "10010", "11111", "00010", "00010"]),
+    ('5', ["11111", "10000", "11110", "00001", "00001", "10001", "01110"]),
+    ('6', ["00110", "01000", "10000", "11110", "10001", "10001", "01110"]),
+    ('7', ["11111", "00001", "00010", "00100", "01000", "01000", "01000"]),
+    ('8', ["01110", "10001", "10001", "01110", "10001", "10001", "01110"]),
+    ('9', ["01110", "10001", "10001", "01111", "00001", "00010", "01100"]),
+    ('-', ["00000", "00000", "00000", "11111", "00000", "00000", "00000"]),
+];
+
+/// Maiúscula sem acento (só o que a tabela tem; o resto vira espaço).
+fn simplificar(c: char) -> char {
+    match c {
+        'á' | 'à' | 'â' | 'ã' | 'ä' | 'Á' | 'À' | 'Â' | 'Ã' => 'A',
+        'é' | 'ê' | 'è' | 'É' | 'Ê' => 'E',
+        'í' | 'Í' => 'I',
+        'ó' | 'ô' | 'õ' | 'Ó' | 'Ô' | 'Õ' => 'O',
+        'ú' | 'ü' | 'Ú' => 'U',
+        'ç' | 'Ç' => 'C',
+        c => c.to_ascii_uppercase(),
     }
 }
 
@@ -141,6 +198,24 @@ impl Tela<'_> {
         }
     }
 
+    /// Texto 5×7 com o canto superior esquerdo em (`x`, `y`); `p` = lado de cada pixel.
+    fn texto(&mut self, t: &str, x: f32, y: f32, p: f32, cor: [u8; 3]) {
+        let mut cx = x;
+        for ch in t.chars().map(simplificar) {
+            if let Some((_, linhas)) = GLIFOS.iter().find(|(c, _)| *c == ch) {
+                for (ly, linha) in linhas.iter().enumerate() {
+                    for (lx, b) in linha.bytes().enumerate() {
+                        if b == b'1' {
+                            let (px, py) = (cx + lx as f32 * p, y + ly as f32 * p);
+                            self.retangulo(px, py, px + p, py + p, cor, 0.0);
+                        }
+                    }
+                }
+            }
+            cx += 6.0 * p;
+        }
+    }
+
     /// Número centrado em (`cx`, `cy`), altura de `alt` pixels.
     fn numero(&mut self, n: i64, cx: f32, cy: f32, alt: f32, cor: [u8; 3]) {
         let s = alt / 4.0;
@@ -175,7 +250,7 @@ pub fn medidas(altura: i32, fonte: f32) -> Medidas {
 }
 
 /// Desenha uma pessoa: caixa fina, seta e número.
-pub fn desenhar_pessoa(tela: &mut Tela, caixa: &Amostra, numero: i64, cor_hex: &str, op: Opcoes) {
+pub fn desenhar_pessoa(tela: &mut Tela, caixa: &Amostra, numero: i64, cor_hex: &str, op: Opcoes, rotulo: Option<&str>) {
     let cor = parse_hex(cor_hex);
     let m = medidas(tela.h, op.fonte);
     let u = m.u;
@@ -202,6 +277,15 @@ pub fn desenhar_pessoa(tela: &mut Tela, caixa: &Amostra, numero: i64, cor_hex: &
     tela.retangulo(bx0 - u, by0 - u, bx0 + bw + u, by1 + u, [20, 20, 20], 6.0 * u);
     tela.retangulo(bx0, by0, bx0 + bw, by1, cor, 5.0 * u);
     tela.numero(numero, bx0 + bw / 2.0, (by0 + by1) / 2.0, 14.0 * u, contraste(cor));
+    if let Some(r) = rotulo.filter(|r| op.classe && !r.trim().is_empty()) {
+        let n = r.chars().count() as f32;
+        let (p, folga_e) = (2.0 * u, 3.0 * u);
+        let lw = n * 6.0 * p - p + 2.0 * folga_e + 2.0 * p;
+        // à direita do número; sem espaço na tela, à esquerda
+        let lx0 = if bx0 + bw + u + lw <= tela.w as f32 { bx0 + bw + u } else { bx0 - u - lw };
+        tela.retangulo(lx0, by0, lx0 + lw, by1, [20, 20, 20], 5.0 * u);
+        tela.texto(r, lx0 + folga_e + p, (by0 + by1) / 2.0 - 3.5 * p, p, [255, 255, 255]);
+    }
 }
 
 #[cfg(test)]
@@ -213,11 +297,25 @@ mod tests {
         let (w, h) = (640usize, 720usize);
         let mut buf = vec![0u8; w * h * 3];
         let c = Amostra { t: 0.0, x: 300.0, y: 300.0, w: 80.0, h: 300.0 };
-        desenhar_pessoa(&mut Tela { buf: &mut buf, w: w as i32, h: h as i32 }, &c, 12, "#4363d8", Opcoes::default());
+        desenhar_pessoa(&mut Tela { buf: &mut buf, w: w as i32, h: h as i32 }, &c, 12, "#4363d8", Opcoes::default(), None);
         let px = |x: usize, y: usize| &buf[(y * w + x) * 3..(y * w + x) * 3 + 3];
         assert_eq!(px(300, 450), &[0x43, 0x63, 0xd8]); // borda esquerda da caixa
         assert_eq!(px(5, 5), &[0, 0, 0]); // longe: intacto
         assert_eq!(px(340, 450), &[0, 0, 0]); // dentro da caixa: não preenche
         assert!(buf.chunks(3).any(|p| p.iter().all(|&b| b > 200))); // número branco sobre azul
+    }
+
+    #[test]
+    fn etiqueta_de_classe_desenha_texto_ao_lado_do_numero() {
+        let (w, h) = (640usize, 720usize);
+        let c = Amostra { t: 0.0, x: 300.0, y: 300.0, w: 80.0, h: 300.0 };
+        let op = Opcoes { classe: true, ..Opcoes::default() };
+        let conta = |rotulo| {
+            let mut buf = vec![0u8; w * h * 3];
+            desenhar_pessoa(&mut Tela { buf: &mut buf, w: w as i32, h: h as i32 }, &c, 3, "#4363d8", op, rotulo);
+            buf.chunks(3).filter(|p| p[0] != 0 || p[1] != 0 || p[2] != 0).count()
+        };
+        assert!(conta(Some("ônibus")) > conta(None));
+        assert!(conta(Some("")) == conta(None));
     }
 }

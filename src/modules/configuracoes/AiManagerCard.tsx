@@ -290,19 +290,19 @@ export function AiManagerCard() {
       {status?.pessoas_available && (
         <>
           <h3 className={styles.group}>
-            <ScanSearch size={13} aria-hidden /> Pessoas no vídeo
+            <ScanSearch size={13} aria-hidden /> Rastreio no vídeo
           </h3>
           <DiarRow
             id={PESSOAS_ID}
-            label="Detecção de pessoas — YOLOX-S + onnxruntime"
+            label="Detecção de objetos — YOLOX-S + onnxruntime"
             ok={status.pessoas_ok}
             version={status.pessoas_version}
             note={
               <>
-                ≈ {status.pessoas_approx_mb} MB · Numera as pessoas da cena e acompanha cada uma no
-                vídeo (aba Pessoas). Modelo YOLOX (Apache-2.0, Megvii) e onnxruntime (MIT,
-                Microsoft), com hash conferido; depois de baixado, roda offline. Só localiza
-                pessoas — não as identifica.
+                ≈ {status.pessoas_approx_mb} MB · Numera pessoas, veículos e outros objetos da cena e
+                acompanha cada um no vídeo (aba Rastreio). Modelo YOLOX (Apache-2.0, Megvii) e
+                onnxruntime (MIT, Microsoft), com hash conferido; depois de baixado, roda
+                offline. Só localiza — não identifica ninguém.
               </>
             }
             busy={busy}

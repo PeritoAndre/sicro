@@ -65,9 +65,10 @@ pub fn get_run(conn: &Connection, occ: &Uuid, media_hash: &str) -> Result<Option
         .optional()?)
 }
 
-pub fn delete_all(conn: &Connection, occ: &Uuid, media_hash: &str) -> Result<()> {
+/// Apaga as trilhas do detector; as manchas marcadas à mão ficam.
+pub fn delete_auto(conn: &Connection, occ: &Uuid, media_hash: &str) -> Result<()> {
     conn.execute(
-        "DELETE FROM video_people_tracks WHERE occurrence_id = ?1 AND media_hash = ?2",
+        "DELETE FROM video_people_tracks WHERE occurrence_id = ?1 AND media_hash = ?2 AND origem = 'auto'",
         params![occ.to_string(), media_hash],
     )?;
     Ok(())
@@ -78,11 +79,12 @@ pub fn insert(conn: &Connection, occ: &Uuid, p: &Pessoa) -> Result<()> {
     conn.execute(
         "INSERT INTO video_people_tracks
             (id, occurrence_id, media_hash, numero, nome, cor, estado, amostras_json, ajustes_json,
-             created_at, updated_at)
-         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10)",
+             created_at, updated_at, classe, origem)
+         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?10,?11,?12)",
         params![
             p.id, occ.to_string(), p.media_hash, p.numero, p.nome, p.cor, p.estado,
             serde_json::to_string(&p.amostras)?, serde_json::to_string(&p.ajustes)?, now,
+            p.classe, p.origem,
         ],
     )?;
     Ok(())
@@ -110,7 +112,7 @@ pub fn delete(conn: &Connection, id: &str) -> Result<()> {
 
 pub fn list(conn: &Connection, occ: &Uuid, media_hash: &str) -> Result<Vec<Pessoa>> {
     let mut stmt = conn.prepare(
-        "SELECT id, media_hash, numero, nome, cor, estado, amostras_json, ajustes_json
+        "SELECT id, media_hash, numero, nome, cor, estado, amostras_json, ajustes_json, classe, origem
          FROM video_people_tracks WHERE occurrence_id = ?1 AND media_hash = ?2 ORDER BY numero",
     )?;
     let rows = stmt.query_map(params![occ.to_string(), media_hash], |r| {
@@ -123,9 +125,69 @@ pub fn list(conn: &Connection, occ: &Uuid, media_hash: &str) -> Result<Vec<Pesso
             nome: r.get(3)?,
             cor: r.get(4)?,
             estado: r.get(5)?,
+            classe: r.get(8)?,
+            origem: r.get(9)?,
             amostras: serde_json::from_str(&amostras).unwrap_or_default(),
             ajustes: serde_json::from_str(&ajustes).unwrap_or_default(),
         })
     })?;
     Ok(rows.collect::<std::result::Result<Vec<_>, _>>()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::database::migrations::run_migrations;
+    use crate::video::pessoas::Amostra;
+
+    fn pessoa(id: &str, numero: i64, classe: i32, origem: &str) -> Pessoa {
+        Pessoa {
+            id: id.into(),
+            media_hash: "h".into(),
+            numero,
+            nome: String::new(),
+            cor: "#e6194b".into(),
+            estado: "auto".into(),
+            classe,
+            origem: origem.into(),
+            amostras: vec![Amostra { t: 0.0, x: 1.0, y: 2.0, w: 3.0, h: 4.0 }],
+            ajustes: vec![],
+        }
+    }
+
+    #[test]
+    fn classe_e_origem_gravam_e_o_rastreio_novo_poupa_as_manchas() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        run_migrations(&mut conn).unwrap();
+        let occ = Uuid::new_v4();
+        conn.execute("PRAGMA foreign_keys = OFF", []).unwrap();
+        insert(&conn, &occ, &pessoa("a", 1, 0, "auto")).unwrap();
+        insert(&conn, &occ, &pessoa("b", 2, 2, "auto")).unwrap();
+        insert(&conn, &occ, &pessoa("m", 3, -1, "manual")).unwrap();
+        let l = list(&conn, &occ, "h").unwrap();
+        assert_eq!(l.iter().map(|p| (p.classe, p.origem.as_str())).collect::<Vec<_>>(), [(0, "auto"), (2, "auto"), (-1, "manual")]);
+        delete_auto(&conn, &occ, "h").unwrap();
+        let l = list(&conn, &occ, "h").unwrap();
+        assert_eq!(l.len(), 1);
+        assert_eq!(l[0].id, "m");
+    }
+
+    /// Trilhas da 5.2 (sem as colunas novas) viram "pessoa detectada automaticamente".
+    #[test]
+    fn trilhas_antigas_viram_pessoa_automatica() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE occurrences (id TEXT PRIMARY KEY); INSERT INTO occurrences VALUES ('o');").unwrap();
+        conn.execute_batch(include_str!("../../../migrations/023_video_pessoas.sql")).unwrap();
+        conn.execute(
+            "INSERT INTO video_people_tracks (id, occurrence_id, media_hash, numero, cor, amostras_json, created_at, updated_at)
+             VALUES ('x','o','h',1,'#fff','[]','t','t')",
+            [],
+        )
+        .unwrap();
+        conn.execute_batch(include_str!("../../../migrations/024_video_rastreio_classes.sql")).unwrap();
+        let (c, o): (i32, String) = conn
+            .query_row("SELECT classe, origem FROM video_people_tracks WHERE id='x'", [], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap();
+        assert_eq!((c, o.as_str()), (0, "auto"));
+    }
 }

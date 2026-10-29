@@ -1,4 +1,4 @@
-/** Painel da aba Pessoas: rastrear, lista com edição, opções de desenho e saídas. */
+/** Painel da aba Rastreio: o que detectar, marcar à mão, lista com edição, opções de desenho e saídas. */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -9,6 +9,7 @@ import {
   Image as ImageIcon,
   Images,
   Merge,
+  MousePointerSquareDashed,
   Split,
   Table2,
   Trash2,
@@ -26,6 +27,7 @@ import { formatDuration } from "../format";
 import { corContraste } from "./drawPessoa";
 import { visiveisEm } from "./pessoasMath";
 import { cadenciaDe, usePessoasStore } from "./pessoasStore";
+import { ClassesSeletor, resumoClasses } from "./ClassesSeletor";
 import styles from "./PessoasPanel.module.css";
 
 interface Props {
@@ -59,6 +61,10 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
   const addFrames = useVideoStore((s) => s.addStoryboardFrames);
   const [pronto, setPronto] = useState<boolean | null>(null);
   const [soVisiveis, setSoVisiveis] = useState(false);
+  const [filtroClasse, setFiltroClasse] = useState<number | "todas">("todas");
+  const [abrirClasses, setAbrirClasses] = useState(false);
+  const [nomeMancha, setNomeMancha] = useState("");
+  const [direcao, setDirecao] = useState<"frente" | "tras" | "ambos">("frente");
   const [editandoNum, setEditandoNum] = useState<string | null>(null);
   const [comAudio, setComAudio] = useState(true);
   const [saidas, setSaidas] = useState<{ rotulo: string; arq: ArquivoGerado }[]>([]);
@@ -86,7 +92,15 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [pessoas, currentTime, cad?.frameDur, cad?.passo],
   );
-  const lista = soVisiveis ? pessoas.filter((p) => visiveis.has(p.id)) : pessoas;
+  const classesPresentes = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of pessoas) m.set(p.classe, p.classe_nome);
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"));
+  }, [pessoas]);
+  const lista = pessoas.filter(
+    (p) => (!soVisiveis || visiveis.has(p.id)) && (filtroClasse === "todas" || p.classe === filtroClasse),
+  );
+  const selecionada = pessoas.find((p) => p.id === st.selecionada) ?? null;
   const ocupado = st.tarefa != null;
 
   const editar = (e: Parameters<typeof st.editar>[2]) => st.editar(workspacePath, hash, e);
@@ -96,13 +110,12 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
       navigate("/configuracoes?aba=iaocr");
       return;
     }
-    if (pessoas.length > 0) {
-      const editadas = pessoas.some((p) => p.estado === "editado");
+    const automaticas = pessoas.filter((p) => p.origem === "auto");
+    if (automaticas.length > 0) {
+      const editadas = automaticas.some((p) => p.estado === "editado");
       const ok = await askConfirm({
         title: "Rastrear de novo?",
-        message: editadas
-          ? "As pessoas atuais, com as suas edições, serão substituídas."
-          : "As pessoas atuais serão substituídas.",
+        message: `${editadas ? "Os detectados, com as suas edições, serão substituídos." : "Os detectados serão substituídos."} As manchas marcadas à mão ficam.`,
         confirmLabel: "Rastrear",
         danger: editadas,
       });
@@ -114,8 +127,8 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
 
   const apagar = async (p: PessoaView) => {
     const ok = await askConfirm({
-      title: `Apagar a pessoa ${p.numero}?`,
-      message: "Use para falso positivo. As outras mantêm os números.",
+      title: `Apagar o ${p.numero}?`,
+      message: "Use para falso positivo. Os outros mantêm os números.",
       confirmLabel: "Apagar",
       danger: true,
     });
@@ -169,30 +182,24 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
   const pct = tarefa && tarefa.total > 0 ? Math.round((tarefa.feitos / tarefa.total) * 100) : 0;
   const run = estado?.run;
 
-  if (pronto === false && pessoas.length === 0) {
-    return (
-      <div className={styles.panel}>
-        <section className={styles.sec}>
-          <div className={styles.head}>
-            <h3 className={styles.title}>Pessoas</h3>
-          </div>
-          <Button variant="primary" onClick={() => navigate("/configuracoes?aba=iaocr")}>
-            Baixar no Gerenciador de IA
-          </Button>
-        </section>
-      </div>
-    );
-  }
-
   return (
     <div className={styles.panel}>
       <section className={styles.sec}>
         <div className={styles.head}>
-          <h3 className={styles.title}>Pessoas{pessoas.length > 0 ? ` · ${pessoas.length}` : ""}</h3>
+          <h3 className={styles.title}>Rastreio{pessoas.length > 0 ? ` · ${pessoas.length}` : ""}</h3>
           <label className={styles.dim} style={{ display: "inline-flex", gap: 6, alignItems: "center" }} title="Mostrar na imagem (P)">
             <input type="checkbox" checked={st.mostrar} onChange={(e) => st.setMostrar(e.target.checked)} /> na imagem
           </label>
         </div>
+        <div className={styles.line}>
+          <span className={styles.dim}>Detectar</span>
+          <button type="button" className={styles.chip} disabled={ocupado} onClick={() => setAbrirClasses((v) => !v)} title="Escolher o que detectar">
+            {resumoClasses(st.catalogo, st.classes)} {abrirClasses ? "▴" : "▾"}
+          </button>
+        </div>
+        {abrirClasses && (
+          <ClassesSeletor catalogo={st.catalogo} selecionadas={st.classes} onChange={st.setClasses} disabled={ocupado} />
+        )}
         <div className={styles.line}>
           <label>
             Quadros
@@ -232,22 +239,90 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
           </>
         ) : (
           <Button variant="primary" onClick={() => void rastrear()} disabled={ocupado || pronto == null}>
-            {pessoas.length > 0 ? "Rastrear de novo" : "Rastrear"}
+            {pronto === false ? "Baixar no Gerenciador de IA" : pessoas.some((p) => p.origem === "auto") ? "Rastrear de novo" : "Rastrear"}
           </Button>
         )}
-        {run && !tarefa && (
+        {run && !tarefa && run.frames_analyzed > 0 && (
           <span className={styles.dim}>
             {run.frames_analyzed} de {run.frames_total} quadros · <code>{run.elapsed_s.toFixed(0)} s</code> ·{" "}
             {run.model.split(" ")[0]}
           </span>
         )}
         {st.erro && <span className={styles.error}>{st.erro}</span>}
-        {run && !tarefa && !st.erro && pessoas.length === 0 && (
+        {run && !tarefa && !st.erro && run.frames_analyzed > 0 && pessoas.length === 0 && (
           <span className={styles.dim}>
-            Nenhuma pessoa encontrada com confiança {limiarDoRun(run) ?? st.limiar.toFixed(2)}. À noite, de longe ou em
+            Nada encontrado com confiança {limiarDoRun(run) ?? st.limiar.toFixed(2)}. À noite, de longe ou em
             baixa resolução, baixe a confiança (0,25 a 0,35) e rastreie de novo.
           </span>
         )}
+      </section>
+
+      <section className={styles.sec}>
+        <div className={styles.head}>
+          <h3 className={styles.title}>Marcar à mão</h3>
+        </div>
+        <div className={styles.line}>
+          <input
+            className={styles.nameInput}
+            placeholder="nome (saco, reflexo…)"
+            value={nomeMancha}
+            disabled={ocupado}
+            onChange={(e) => setNomeMancha(e.target.value)}
+          />
+          <select value={direcao} disabled={ocupado} onChange={(e) => setDirecao(e.target.value as typeof direcao)}>
+            <option value="frente">para a frente</option>
+            <option value="tras">para trás</option>
+            <option value="ambos">os dois</option>
+          </select>
+        </div>
+        {tarefa?.fase === "mancha" ? (
+          <>
+            <div className={styles.bar}>
+              <div className={styles.barFill} style={{ width: "100%" }} />
+              <span className={styles.barTxt}>seguindo… {tarefa.feitos}</span>
+            </div>
+            <Button variant="secondary" size="sm" leftIcon={<X size={13} />} onClick={st.cancelar}>
+              Cancelar
+            </Button>
+          </>
+        ) : st.marcando ? (
+          <>
+            <span className={styles.dim}>Desenhe a caixa na imagem pausada · Esc cancela</span>
+            <Button variant="secondary" size="sm" leftIcon={<X size={13} />} onClick={() => st.setMarcando(null)}>
+              Desistir
+            </Button>
+          </>
+        ) : (
+          <div className={styles.outBtns}>
+            <Button
+              size="sm"
+              leftIcon={<MousePointerSquareDashed size={13} />}
+              disabled={ocupado}
+              onClick={() => {
+                st.setMostrar(true);
+                st.setMarcando({ nome: nomeMancha, direcao });
+                setNomeMancha("");
+              }}
+              title="Desenhar uma caixa sobre o que a rede não conhece e seguir esses pixels"
+            >
+              Marcar à mão
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={ocupado || !selecionada}
+              onClick={() => {
+                if (!selecionada) return;
+                st.setMostrar(true);
+                st.setMarcando({ nome: selecionada.nome, direcao, id: selecionada.id });
+              }}
+              title="Recolocar a caixa da selecionada neste instante e continuar a seguir"
+            >
+              Recolocar e continuar
+            </Button>
+          </div>
+        )}
+        {st.aviso && <span className={styles.warn}>{st.aviso}</span>}
       </section>
 
       {pessoas.length > 0 && (
@@ -267,6 +342,9 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
                   </button>
                 ))}
               </div>
+              <label title="Escrever o nome da classe ao lado do número">
+                <input type="checkbox" checked={st.desenho.classe} onChange={(e) => st.setDesenho({ classe: e.target.checked })} /> classe
+              </label>
               <label title="Tamanho do número e da seta">
                 Tamanho
                 <input
@@ -284,6 +362,21 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
           <section className={styles.sec}>
             <div className={styles.head}>
               <h3 className={styles.title}>Lista</h3>
+              {classesPresentes.length > 1 && (
+                <select
+                  className={styles.chip}
+                  value={filtroClasse}
+                  onChange={(e) => setFiltroClasse(e.target.value === "todas" ? "todas" : Number(e.target.value))}
+                  title="Filtrar a lista por classe"
+                >
+                  <option value="todas">todas as classes</option>
+                  {classesPresentes.map(([id, nome]) => (
+                    <option key={id} value={id}>
+                      {nome}
+                    </option>
+                  ))}
+                </select>
+              )}
               <label className={styles.dim} style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
                 <input type="checkbox" checked={soVisiveis} onChange={(e) => setSoVisiveis(e.target.checked)} /> só na imagem agora
               </label>
@@ -301,7 +394,7 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
             </div>
             {st.juntando && (
               <div className={styles.line}>
-                <span className={styles.dim}>Clique na pessoa que é a mesma</span>
+                <span className={styles.dim}>Clique no que é o mesmo</span>
                 <button type="button" className={styles.link} onClick={() => st.setJuntando(null)}>
                   cancelar
                 </button>
@@ -369,12 +462,12 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
                     <button type="button" title="Ir para a entrada" onClick={() => onSeek(p.primeiro_s)}>
                       <Crosshair size={13} />
                     </button>
-                    <button type="button" title="É a mesma pessoa que outra…" onClick={() => st.setJuntando(p.id)}>
+                    <button type="button" title="É o mesmo que outro…" onClick={() => st.setJuntando(p.id)}>
                       <Merge size={13} />
                     </button>
                     <button
                       type="button"
-                      title="Separar aqui: do instante atual em diante vira outra pessoa"
+                      title="Separar aqui: do instante atual em diante vira outro"
                       disabled={!(currentTime > p.primeiro_s && currentTime < p.ultimo_s)}
                       onClick={() => void editar({ op: "separar", id: p.id, t: currentTime })}
                     >
@@ -394,6 +487,8 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
                     <span>{formatDuration(p.primeiro_s)}</span>
                     <span>→ {formatDuration(p.ultimo_s)}</span>
                     <span>{p.quadros} q</span>
+                    <span className={styles.tag}>{p.classe_nome}</span>
+                    {p.origem === "manual" && <span className={styles.manual}>manual</span>}
                     {p.estado === "editado" && <span className={styles.edited}>editada</span>}
                     {p.ajustes_t.length > 0 && <span className={styles.edited}>{p.ajustes_t.length} ajuste(s)</span>}
                   </span>

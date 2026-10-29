@@ -80,7 +80,7 @@ impl Kalman {
     fn det(&self, score: f32) -> Det {
         let (cx, cy, a, h) = (self.mean[0], self.mean[1], self.mean[2], self.mean[3]);
         let w = a * h;
-        Det { x: (cx - w / 2.0) as f32, y: (cy - h / 2.0) as f32, w: w as f32, h: h as f32, score }
+        Det { x: (cx - w / 2.0) as f32, y: (cy - h / 2.0) as f32, w: w as f32, h: h as f32, score, classe: 0 }
     }
 }
 
@@ -383,7 +383,7 @@ mod tests {
     use super::*;
 
     fn det(x: f32, y: f32, score: f32) -> Det {
-        Det { x, y, w: 40.0, h: 100.0, score }
+        Det { x, y, w: 40.0, h: 100.0, score, classe: 0 }
     }
 
     #[test]

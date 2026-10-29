@@ -66,6 +66,24 @@ pub struct FrameReader {
 }
 
 impl FrameReader {
+    /// Quadros a partir do instante `inicio_s` (busca exata), no tamanho `w`×`h`.
+    pub fn open_from(path: &Path, inicio_s: f64, w: u32, h: u32) -> Result<Self> {
+        let ffmpeg = detect_ffmpeg()?;
+        let vf = format!("scale={w}:{h}:flags=area,setsar=1");
+        let mut child = crate::tools::command(&ffmpeg)
+            .args(["-v", "error", "-nostdin", "-ss", &format!("{:.4}", inicio_s.max(0.0)), "-i"])
+            .arg(path)
+            .args(["-map", "0:v:0", "-vf", &vf, "-fps_mode", "passthrough"])
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .stdin(Stdio::null())
+            .spawn()
+            .map_err(|e| SicroError::Workspace(format!("could not spawn ffmpeg: {e}")))?;
+        let out = child.stdout.take().ok_or_else(|| SicroError::Workspace("ffmpeg sem saída".into()))?;
+        Ok(Self { child, out, buf: vec![0u8; (w * h * 3) as usize] })
+    }
+
     /// `passo` > 1 entrega só um quadro a cada `passo`; `w`×`h` é o tamanho de saída.
     pub fn open(path: &Path, passo: u32, w: u32, h: u32) -> Result<Self> {
         let ffmpeg = detect_ffmpeg()?;

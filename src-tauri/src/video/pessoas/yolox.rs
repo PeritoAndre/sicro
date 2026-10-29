@@ -1,4 +1,4 @@
-//! YOLOX (Apache-2.0, Megvii) em ONNX: só a classe "pessoa" (COCO 0).
+//! YOLOX (Apache-2.0, Megvii) em ONNX: as 80 classes do COCO, filtradas pela escolha do perito.
 //! O ffmpeg já entrega o quadro reduzido (lado maior = lado do modelo); aqui só se
 //! completa com cinza 114 (letterbox no canto superior esquerdo), BGR 0..255, CHW.
 //! O ONNX oficial sai SEM decodificar: grades e passos (8/16/32) são aplicados aqui.
@@ -8,6 +8,8 @@ use std::sync::OnceLock;
 
 use crate::error::{Result, SicroError};
 
+use super::classes::N_CLASSES;
+
 /// Uma detecção em pixels do quadro ORIGINAL.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Det {
@@ -16,6 +18,8 @@ pub struct Det {
     pub w: f32,
     pub h: f32,
     pub score: f32,
+    /// Classe COCO (0 = pessoa).
+    pub classe: u16,
 }
 
 impl Det {
@@ -55,10 +59,10 @@ pub fn letterbox_bgr_chw(rgb: &[u8], sw: usize, sh: usize, side: usize) -> Vec<f
     out
 }
 
-/// Candidatos (x,y,w,h no espaço do tensor) -> detecções filtradas por pessoa,
-/// limiar e NMS, em pixels do original (`ratio` = reduzido / original).
+/// Candidatos (x,y,w,h no espaço do tensor) -> detecções das classes escolhidas,
+/// com limiar e NMS por classe, em pixels do original (`ratio` = reduzido / original).
 /// `out` tem `n × 85` valores: cx, cy, w, h, obj, 80 classes.
-pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32) -> Vec<Det> {
+pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32, mascara: &[bool; N_CLASSES]) -> Vec<Det> {
     let strides = [8usize, 16, 32];
     let mut dets: Vec<Det> = Vec::new();
     let mut idx = 0usize;
@@ -71,7 +75,18 @@ pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32)
                 if base + 85 > out.len() {
                     break 'outer;
                 }
-                let score = out[base + 4] * out[base + 5]; // objetividade × classe 0 (pessoa)
+                let obj = out[base + 4];
+                if obj < thr {
+                    continue; // classe ≤ 1: já não alcança o limiar
+                }
+                // melhor classe entre as escolhidas
+                let mut melhor = (0u16, 0.0f32);
+                for c in 0..N_CLASSES {
+                    if mascara[c] && out[base + 5 + c] > melhor.1 {
+                        melhor = (c as u16, out[base + 5 + c]);
+                    }
+                }
+                let score = obj * melhor.1;
                 if score < thr {
                     continue;
                 }
@@ -85,6 +100,7 @@ pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32)
                     w: w / ratio,
                     h: h / ratio,
                     score,
+                    classe: melhor.0,
                 });
             }
         }
@@ -92,11 +108,28 @@ pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32)
     nms(dets, nms_thr)
 }
 
+/// Caixas cortadas pela borda do quadro vêm da rede grandes e deslocadas para fora:
+/// recorta ao quadro e descarta as que ficam majoritariamente fora.
+pub fn recortar_ao_quadro(dets: Vec<Det>, w: f32, h: f32) -> Vec<Det> {
+    dets.into_iter()
+        .filter_map(|d| {
+            let (x0, y0) = (d.x.clamp(0.0, w), d.y.clamp(0.0, h));
+            let (x1, y1) = ((d.x + d.w).clamp(0.0, w), (d.y + d.h).clamp(0.0, h));
+            let (cw, ch) = (x1 - x0, y1 - y0);
+            let area = d.w * d.h;
+            if cw < 2.0 || ch < 2.0 || area <= 0.0 || (cw * ch) / area < 0.5 {
+                return None;
+            }
+            Some(Det { x: x0, y: y0, w: cw, h: ch, ..d })
+        })
+        .collect()
+}
+
 pub fn nms(mut dets: Vec<Det>, thr: f32) -> Vec<Det> {
     dets.sort_by(|a, b| b.score.total_cmp(&a.score));
     let mut keep: Vec<Det> = Vec::new();
     for d in dets {
-        if keep.iter().all(|k| k.iou(&d) < thr) {
+        if keep.iter().all(|k| k.classe != d.classe || k.iou(&d) < thr) {
             keep.push(d);
         }
     }
@@ -147,8 +180,8 @@ impl Yolox {
         Ok(Self { session, side, input_name })
     }
 
-    /// Detecta pessoas num quadro RGB reduzido `sw`×`sh`; `ratio` = reduzido / original.
-    pub fn detect(&mut self, rgb: &[u8], sw: usize, sh: usize, ratio: f32, thr: f32) -> Result<Vec<Det>> {
+    /// Detecta as classes da máscara num quadro RGB reduzido `sw`×`sh`; `ratio` = reduzido / original.
+    pub fn detect(&mut self, rgb: &[u8], sw: usize, sh: usize, ratio: f32, thr: f32, mascara: &[bool; N_CLASSES]) -> Result<Vec<Det>> {
         let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
         let side = self.side;
         let data = letterbox_bgr_chw(rgb, sw, sh, side);
@@ -158,13 +191,14 @@ impl Yolox {
             .run(ort::inputs![self.input_name.as_str() => tensor])
             .map_err(|e| err(&e))?;
         let (_, out) = outputs[0].try_extract_tensor::<f32>().map_err(|e| err(&e))?;
-        Ok(postprocess(out, side, ratio, thr, 0.45))
+        Ok(postprocess(out, side, ratio, thr, 0.45, mascara))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::video::pessoas::classes::mascara;
 
     #[test]
     fn tamanho_reduzido_cabe_no_modelo() {
@@ -204,7 +238,7 @@ mod tests {
         set(3 * 8 + 5, 0.5, 0.5, 2.0, 4.0, 0.9, 0.9);
         // vizinha (gx=6) com quase a mesma caixa, mais fraca -> suprimida
         set(3 * 8 + 6, -0.5, 0.5, 2.0, 4.0, 0.6, 0.9);
-        let d = postprocess(&out, side, 0.5, 0.3, 0.45);
+        let d = postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[0]));
         assert_eq!(d.len(), 1);
         let p = d[0];
         // centro (44, 28) no tensor, caixa 16x32 -> original = /0.5
@@ -216,8 +250,57 @@ mod tests {
 
     #[test]
     fn iou_basico() {
-        let a = Det { x: 0.0, y: 0.0, w: 10.0, h: 10.0, score: 1.0 };
-        let b = Det { x: 5.0, y: 0.0, w: 10.0, h: 10.0, score: 1.0 };
+        let a = Det { x: 0.0, y: 0.0, w: 10.0, h: 10.0, score: 1.0, classe: 0 };
+        let b = Det { x: 5.0, y: 0.0, w: 10.0, h: 10.0, score: 1.0, classe: 0 };
         assert!((a.iou(&b) - 50.0 / 150.0).abs() < 1e-6);
+    }
+
+    /// Mesma âncora com carro (2) e pessoa (0): só passa a classe escolhida; "pessoas e veículos" traz as duas.
+    #[test]
+    fn classes_escolhidas_passam_e_as_outras_nao() {
+        let side = 64usize;
+        let mut out = vec![0.0f32; 84 * 85];
+        let mut set = |i: usize, classe: usize| {
+            let b = i * 85;
+            out[b] = 0.5;
+            out[b + 1] = 0.5;
+            out[b + 2] = 2.0f32.ln();
+            out[b + 3] = 4.0f32.ln();
+            out[b + 4] = 0.9;
+            out[b + 5 + classe] = 0.9;
+        };
+        set(3 * 8 + 1, 0); // pessoa
+        set(6 * 8 + 5, 2); // carro, longe
+        assert_eq!(postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[0])).len(), 1);
+        let so_carro = postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[2]));
+        assert_eq!(so_carro.len(), 1);
+        assert_eq!(so_carro[0].classe, 2);
+        let ambos = postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[0, 2]));
+        assert_eq!(ambos.len(), 2);
+        assert!(postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[])).is_empty());
+    }
+
+    #[test]
+    fn nms_nao_funde_classes_diferentes() {
+        let a = Det { x: 0.0, y: 0.0, w: 10.0, h: 10.0, score: 0.9, classe: 0 };
+        let b = Det { classe: 26, score: 0.8, ..a };
+        assert_eq!(nms(vec![a, b], 0.45).len(), 2);
+        assert_eq!(nms(vec![a, Det { score: 0.8, ..a }], 0.45).len(), 1);
+    }
+
+    #[test]
+    fn borda_recorta_e_descarta_o_que_fica_fora() {
+        let d = |x, w| Det { x, y: 100.0, w, h: 200.0, score: 0.9, classe: 0 };
+        // 30% para fora: recorta ao quadro
+        let r = recortar_ao_quadro(vec![d(-30.0, 100.0)], 1000.0, 1000.0);
+        assert_eq!(r.len(), 1);
+        assert_eq!((r[0].x, r[0].w), (0.0, 70.0));
+        // 70% para fora: descarta
+        assert!(recortar_ao_quadro(vec![d(-70.0, 100.0)], 1000.0, 1000.0).is_empty());
+        // dentro: intacta
+        assert_eq!(recortar_ao_quadro(vec![d(10.0, 100.0)], 1000.0, 1000.0)[0].w, 100.0);
+        // direita
+        let r = recortar_ao_quadro(vec![d(950.0, 100.0)], 1000.0, 1000.0);
+        assert_eq!((r[0].x, r[0].w), (950.0, 50.0));
     }
 }

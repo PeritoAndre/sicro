@@ -126,6 +126,8 @@ pub fn run() {
             commands::ai_commands::remove_diarization,
             commands::ai_commands::install_pessoas,
             commands::ai_commands::remove_pessoas,
+            commands::pessoas_commands::pessoas_classes,
+            commands::pessoas_commands::pessoas_seguir_mancha,
             commands::pessoas_commands::pessoas_listar,
             commands::pessoas_commands::pessoas_rastrear,
             commands::pessoas_commands::pessoas_cancelar,

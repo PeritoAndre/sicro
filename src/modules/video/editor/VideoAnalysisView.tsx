@@ -599,7 +599,7 @@ export function VideoAnalysisView() {
     { enabled: playerKeys },
   );
 
-  // Pessoas: mostrar/ocultar, trocar a selecionada, quadro com a sobreposição.
+  // Rastreio: mostrar/ocultar, trocar a selecionada, quadro com a sobreposição.
   const addStoryboardFrames = useVideoStore((s) => s.addStoryboardFrames);
   const pessoasFrame = async () => {
     if (!workspacePath || !media0) return;
@@ -607,7 +607,7 @@ export function VideoAnalysisView() {
     try {
       const r = await commands.pessoasExportarQuadros(workspacePath, media0.sha256, [nowTime()], ps.desenho);
       addStoryboardFrames(r.map((q) => q.frame));
-      flash("Quadro com as pessoas no storyboard.");
+      flash("Quadro com o rastreio no storyboard.");
     } catch (e) {
       flash(`Falha: ${toSicroError(e).message}`, 5000);
     }
@@ -629,7 +629,7 @@ export function VideoAnalysisView() {
     { enabled: playerKeys && modo === "pessoas" },
   );
 
-  // Faixas das pessoas na linha do tempo (uma por pessoa, só no modo Pessoas).
+  // Faixas do rastreio na linha do tempo (uma por trilha, só no modo Rastreio).
   const pessoasEstado = usePessoasStore((s) => s.estado);
   const pessoaSel = usePessoasStore((s) => s.selecionada);
   const pessoasMostrar = usePessoasStore((s) => s.mostrar);
@@ -640,6 +640,7 @@ export function VideoAnalysisView() {
       id: p.id,
       numero: p.numero,
       cor: p.cor,
+      rotulo: p.origem === "manual" ? `${p.classe_nome} (manual)` : p.classe_nome,
       trechos: segmentos(p, cad),
     }));
   }, [modo, pessoasEstado]);

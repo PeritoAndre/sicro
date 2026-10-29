@@ -26,8 +26,8 @@ interface Props {
   onSelectEvent: (id: string) => void;
   /** Itens do botão direito para o instante `t` sob o cursor (ir para, marcar…). */
   contextItems?: (t: number) => MenuItem[];
-  /** Faixa por pessoa (modo Pessoas): onde cada uma aparece. */
-  lanes?: { id: string; numero: number; cor: string; trechos: [number, number][] }[];
+  /** Faixa por trilha (modo Rastreio): onde cada uma aparece. */
+  lanes?: { id: string; numero: number; cor: string; rotulo?: string; trechos: [number, number][] }[];
   selectedLane?: string | null;
   onLane?: (id: string, t: number) => void;
 }
@@ -414,7 +414,7 @@ export function VideoTimeline({
               key={l.id}
               data-lane={l.id}
               className={`${styles.lane} ${selectedLane === l.id ? styles.laneOn : ""}`}
-              title={`Pessoa ${l.numero} — clique para ir até aqui`}
+              title={`${l.rotulo ?? "Item"} ${l.numero} — clique para ir até aqui`}
               onClick={(e) => {
                 const r = e.currentTarget.getBoundingClientRect();
                 onLane?.(l.id, view.start + ((e.clientX - r.left) / r.width) * span);

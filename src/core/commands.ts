@@ -57,7 +57,10 @@ import type {
 } from "@domain/video_distance";
 import type {
   ArquivoGerado,
+  ClasseInfo,
   EdicaoPessoa,
+  MarcaMancha,
+  ResultadoMancha,
   OpcoesDesenho,
   OpcoesRastreio,
   PessoasEstado,
@@ -1116,7 +1119,15 @@ export const commands = {
     return safeInvoke<AiStatus>("remove_pessoas", {});
   },
 
-  // --- Pessoas no vídeo ---
+  // --- Rastreio no vídeo ---
+  pessoasClasses(): Promise<ClasseInfo[]> {
+    return safeInvoke<ClasseInfo[]>("pessoas_classes", {});
+  },
+
+  pessoasSeguirMancha(workspacePath: string, mediaHash: string, marca: MarcaMancha): Promise<ResultadoMancha> {
+    return safeInvoke<ResultadoMancha>("pessoas_seguir_mancha", { workspacePath, mediaHash, marca });
+  },
+
   pessoasListar(workspacePath: string, mediaHash: string): Promise<PessoasEstado> {
     return safeInvoke<PessoasEstado>("pessoas_listar", { workspacePath, mediaHash });
   },

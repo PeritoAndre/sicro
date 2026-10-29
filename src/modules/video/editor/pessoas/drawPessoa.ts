@@ -4,6 +4,7 @@
  */
 import type { ModoDesenho } from "@domain/video_pessoas";
 import { DIGITOS } from "./digitFont";
+import { GLIFOS, textoEtiqueta } from "./fonteEtiqueta";
 import type { Caixa } from "./pessoasMath";
 
 export function corContraste(hex: string): string {
@@ -38,6 +39,7 @@ export function desenharPessoa(
   video: { w: number; h: number },
   fonte: number,
   destaque = false,
+  rotulo: string | null = null,
 ) {
   const alturaVideo = video.h;
   const u = unidade(alturaVideo, fonte);
@@ -104,4 +106,39 @@ export function desenharPessoa(
     x += avanco;
   }
   ctx.lineCap = "butt";
+  if (rotulo && rotulo.trim()) etiqueta(ctx, textoEtiqueta(rotulo), bx0, bw, by0, by1, u, video.w);
+}
+
+/** Nome da classe ao lado do número (à direita; à esquerda se não couber), na mesma fonte 5×7 do vídeo gravado. */
+function etiqueta(
+  ctx: CanvasRenderingContext2D,
+  texto: string,
+  bx0: number,
+  bw: number,
+  by0: number,
+  by1: number,
+  u: number,
+  larguraVideo: number,
+) {
+  const p = 2 * u;
+  const n = [...texto].length;
+  const lw = n * 6 * p - p + 2 * 3 * u + 2 * p;
+  const lx0 = bx0 + bw + u + lw <= larguraVideo ? bx0 + bw + u : bx0 - u - lw;
+  ctx.fillStyle = "#141414";
+  retArredondado(ctx, lx0, by0, lx0 + lw, by1, 5 * u);
+  ctx.fill();
+  ctx.fillStyle = "#ffffff";
+  let x = lx0 + 3 * u + p;
+  const y = (by0 + by1) / 2 - 3.5 * p;
+  for (const ch of texto) {
+    const g = GLIFOS[ch];
+    if (g) {
+      g.forEach((linha, ly) => {
+        for (let lx = 0; lx < linha.length; lx++) {
+          if (linha[lx] === "1") ctx.fillRect(x + lx * p, y + ly * p, p, p);
+        }
+      });
+    }
+    x += 6 * p;
+  }
 }

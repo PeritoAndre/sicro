@@ -1,4 +1,5 @@
-//! Pessoas no vídeo: rastrear (YOLOX + ByteTrack), editar as trilhas, e gerar as
+//! Rastreio no vídeo: detectar (YOLOX, 80 classes + ByteTrack), seguir manchas marcadas à mão,
+//! editar as trilhas, e gerar as
 //! saídas (MP4 com a sobreposição, quadros no storyboard, tabela CSV/HTML).
 //! O vídeo original nunca é tocado; tudo que sai tem SHA-256 e entra na trilha de operações.
 
@@ -22,9 +23,11 @@ use crate::database::repositories::video_repo;
 use crate::error::{Result, SicroError};
 use crate::hashing::sha256::sha256_file;
 use crate::models::{CollectFrameInput, VideoMedia, VideoStoryboardFrame};
+use crate::video::pessoas::classes::{self, ClasseInfo, CLASSE_MANUAL};
+use crate::video::pessoas::mancha::{self, Motivo, OpcoesMancha};
 use crate::video::pessoas::pipeline::{self, OpcoesRastreio};
 use crate::video::pessoas::render::Opcoes as OpcoesDesenho;
-use crate::video::pessoas::{cor_padrao, Cadencia, Pessoa};
+use crate::video::pessoas::{cor_padrao, Amostra, Cadencia, Pessoa};
 use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
 
 const PESSOAS_SUBDIR: &str = "videos/pessoas";
@@ -68,6 +71,11 @@ pub struct PessoaView {
     pub nome: String,
     pub cor: String,
     pub estado: String,
+    /// Classe COCO (0 = pessoa); -1 = mancha à mão.
+    pub classe: i32,
+    pub classe_nome: String,
+    /// "auto" | "manual"
+    pub origem: String,
     pub primeiro_s: f64,
     pub ultimo_s: f64,
     pub quadros: usize,
@@ -81,6 +89,14 @@ pub struct PessoaView {
 pub struct PessoasEstado {
     pub run: Option<Run>,
     pub pessoas: Vec<PessoaView>,
+    /// Tamanho do vídeo exibido, quando ainda não há rastreio (para desenhar a mancha).
+    pub tamanho: Option<TamanhoVideo>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TamanhoVideo {
+    pub width: u32,
+    pub height: u32,
 }
 
 fn view(p: &Pessoa) -> PessoaView {
@@ -90,6 +106,9 @@ fn view(p: &Pessoa) -> PessoaView {
         nome: p.nome.clone(),
         cor: p.cor.clone(),
         estado: p.estado.clone(),
+        classe: p.classe,
+        classe_nome: p.rotulo(),
+        origem: p.origem.clone(),
         primeiro_s: p.primeiro_s(),
         ultimo_s: p.ultimo_s(),
         quadros: p.amostras.len(),
@@ -106,6 +125,7 @@ fn estado(conn: &Connection, occ: &Uuid, hash: &str) -> Result<PessoasEstado> {
     Ok(PessoasEstado {
         run: repo::get_run(conn, occ, hash)?,
         pessoas: repo::list(conn, occ, hash)?.iter().map(view).collect(),
+        tamanho: None,
     })
 }
 
@@ -147,10 +167,23 @@ fn tempo(t: f64) -> String {
 // ---------------------------------------------------------------------------
 // Rastrear
 
+/// As 80 classes (nome em português e grupo) para o seletor.
+#[tauri::command]
+pub async fn pessoas_classes() -> Result<Vec<ClasseInfo>> {
+    Ok(classes::catalogo())
+}
+
 #[tauri::command]
 pub async fn pessoas_listar(workspace_path: String, media_hash: String) -> Result<PessoasEstado> {
     let c = contexto(&workspace_path, &media_hash)?;
-    estado(&c.conn, &c.occ, &media_hash)
+    let mut e = estado(&c.conn, &c.occ, &media_hash)?;
+    if e.run.is_none() {
+        let video = c.ws.join(&c.media.relative_path);
+        if let Ok((width, height)) = crate::video::pessoas::decode::display_size(&video) {
+            e.tamanho = Some(TamanhoVideo { width, height });
+        }
+    }
+    Ok(e)
 }
 
 #[tauri::command]
@@ -170,6 +203,7 @@ pub async fn pessoas_rastrear(
         return Err(SicroError::Filesystem(format!("arquivo de vídeo ausente: {}", c.media.relative_path)));
     }
     let op = opcoes.unwrap_or_default();
+    let op_run = op.clone();
     let flag = iniciar_tarefa()?;
     let (app2, hash2) = (app.clone(), media_hash.clone());
     let (lib, modelo) = (PathBuf::from(&ai.ort_lib_path), PathBuf::from(&ai.pessoas_model_path));
@@ -186,15 +220,26 @@ pub async fn pessoas_rastrear(
     encerrar_tarefa();
     let r = r??;
 
-    repo::delete_all(&c.conn, &c.occ, &media_hash)?;
+    // as manchas marcadas à mão sobrevivem e passam a ter os números seguintes
+    repo::delete_auto(&c.conn, &c.occ, &media_hash)?;
     for p in &r.pessoas {
         repo::insert(&c.conn, &c.occ, p)?;
+    }
+    let mut n = r.pessoas.len() as i64;
+    for mut m in repo::list(&c.conn, &c.occ, &media_hash)?.into_iter().filter(|p| p.origem == "manual") {
+        n += 1;
+        m.numero = n;
+        repo::update(&c.conn, &m)?;
     }
     let run = Run {
         media_hash: media_hash.clone(),
         model: "YOLOX-S (Apache-2.0)".into(),
         runtime: format!("onnxruntime {}", ai.pessoas_version),
-        params_json: json!({ "limiar": op.limiar, "passo": op.passo, "tracker": "ByteTrack" }).to_string(),
+        params_json: json!({
+            "limiar": op_run.limiar, "passo": op_run.passo, "tracker": "ByteTrack",
+            "classes": op_run.classes,
+            "classes_nomes": op_run.classes.iter().map(|&c| classes::nome(c as i32)).collect::<Vec<_>>(),
+        }).to_string(),
         width: r.meta.largura,
         height: r.meta.altura,
         frame_dur_s: r.meta.frame_dur_s,
@@ -405,10 +450,10 @@ fn pasta_saida(c: &Contexto) -> Result<(PathBuf, String)> {
 
 fn carregar(c: &Contexto) -> Result<(Vec<Pessoa>, Run)> {
     let run = repo::get_run(&c.conn, &c.occ, &c.media.sha256)?
-        .ok_or_else(|| SicroError::Validation("este vídeo ainda não foi rastreado".into()))?;
+        .ok_or_else(|| SicroError::Validation("este vídeo ainda não tem rastreio".into()))?;
     let pessoas = repo::list(&c.conn, &c.occ, &c.media.sha256)?;
     if pessoas.is_empty() {
-        return Err(SicroError::Validation("não há pessoas para exportar".into()));
+        return Err(SicroError::Validation("não há nada numerado para exportar".into()));
     }
     Ok((pessoas, run))
 }
@@ -476,7 +521,7 @@ pub async fn pessoas_exportar_quadros(
                 media_hash: media_hash.clone(),
                 timestamp_s: t,
                 event_id: None,
-                title: Some("Pessoas no vídeo".into()),
+                title: Some("Rastreio no vídeo".into()),
                 caption: None,
                 notes: None,
             },
@@ -504,7 +549,7 @@ pub async fn pessoas_exportar_quadros(
         }
         let lista = numeros.iter().map(|n| n.to_string()).collect::<Vec<_>>().join(", ");
         let mut frame = col.storyboard_frame;
-        frame.caption = if lista.is_empty() { "Nenhuma pessoa marcada neste quadro.".into() } else { format!("Pessoas: {lista}.") };
+        frame.caption = if lista.is_empty() { "Nenhum objeto numerado neste quadro.".into() } else { format!("Numerados: {lista}.") };
         frame.updated_at = Utc::now();
         video_repo::update_storyboard_frame(&c.conn, &frame)?;
         video_repo::insert_log(
@@ -533,40 +578,42 @@ pub struct TabelaGerada {
     pub html: ArquivoGerado,
 }
 
-/// Tabela por pessoa (número, nome, entra em, sai de, quadros) em CSV e em relatório HTML.
+/// Tabela por objeto (número, classe, nome, entra em, sai de, quadros) em CSV e em relatório HTML.
 #[tauri::command]
 pub async fn pessoas_exportar_tabela(workspace_path: String, media_hash: String) -> Result<TabelaGerada> {
     let c = contexto(&workspace_path, &media_hash)?;
     let (pessoas, run) = carregar(&c)?;
     let (dir, base) = pasta_saida(&c)?;
 
-    let mut csv = String::from("\u{feff}numero;nome;entra_em;sai_de;entra_s;sai_s;quadros_analisados;situacao\r\n");
+    let mut csv = String::from("\u{feff}numero;classe;nome;entra_em;sai_de;entra_s;sai_s;quadros;situacao;origem\r\n");
     let mut linhas = String::new();
     for p in &pessoas {
         let situ = if p.estado == "editado" { "editada" } else { "automática" };
+        let origem = if p.origem == "manual" { "manual" } else { "automática" };
+        let classe = if p.classe == CLASSE_MANUAL { "mancha".to_string() } else { classes::nome(p.classe).to_string() };
         csv.push_str(&format!(
-            "{};{};{};{};{:.3};{:.3};{};{}\r\n",
-            p.numero, csv_campo(&p.nome), tempo(p.primeiro_s()), tempo(p.ultimo_s()),
-            p.primeiro_s(), p.ultimo_s(), p.amostras.len(), situ
+            "{};{};{};{};{};{:.3};{:.3};{};{};{}\r\n",
+            p.numero, csv_campo(&classe), csv_campo(&p.nome), tempo(p.primeiro_s()), tempo(p.ultimo_s()),
+            p.primeiro_s(), p.ultimo_s(), p.amostras.len(), situ, origem
         ));
         linhas.push_str(&format!(
-            "<tr><td class=n>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=n>{}</td><td>{}</td></tr>\n",
-            p.numero, esc(&p.nome), tempo(p.primeiro_s()), tempo(p.ultimo_s()), p.amostras.len(), situ
+            "<tr><td class=n>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td class=n>{}</td><td>{}</td><td>{}</td></tr>\n",
+            p.numero, esc(&classe), esc(&p.nome), tempo(p.primeiro_s()), tempo(p.ultimo_s()), p.amostras.len(), situ, origem
         ));
     }
     let nome_csv = format!("{base}.csv");
     std::fs::write(dir.join(&nome_csv), csv)?;
     let html = format!(
-        "<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\"><title>Pessoas no vídeo</title>\
+        "<!doctype html><html lang=\"pt-BR\"><meta charset=\"utf-8\"><title>Rastreio no vídeo</title>\
 <style>body{{font:14px system-ui,sans-serif;margin:32px;color:#222}}table{{border-collapse:collapse;margin-top:12px}}\
 td,th{{border:1px solid #bbb;padding:4px 10px;text-align:left}}.n{{text-align:right;font-variant-numeric:tabular-nums}}\
 code{{font-size:12px}}dl{{display:grid;grid-template-columns:max-content 1fr;gap:2px 14px}}dt{{color:#666}}</style>\
-<h1>Pessoas no vídeo</h1><dl>\
+<h1>Rastreio no vídeo</h1><dl>\
 <dt>Vídeo</dt><dd>{}</dd><dt>SHA-256 do vídeo</dt><dd><code>{}</code></dd>\
 <dt>Análise</dt><dd>{} · {} · quadros analisados: {} de {}{}</dd>\
 <dt>Parâmetros</dt><dd><code>{}</code></dd><dt>Gerado em</dt><dd>{}</dd></dl>\
-<table><thead><tr><th>Nº</th><th>Nome</th><th>Entra em</th><th>Sai de</th><th>Quadros</th><th>Situação</th></tr></thead><tbody>\n{}</tbody></table>\
-<p>Detecção e acompanhamento automáticos, conferidos pelo perito. Cruzamentos, oclusões longas e imagens escuras ou de baixa resolução podem trocar ou perder números.</p></html>",
+<table><thead><tr><th>Nº</th><th>Classe</th><th>Nome</th><th>Entra em</th><th>Sai de</th><th>Quadros</th><th>Situação</th><th>Origem</th></tr></thead><tbody>\n{}</tbody></table>\
+<p>Detecção e acompanhamento automáticos (origem automática) e manchas marcadas pelo perito e seguidas por correlação de pixels (origem manual), conferidos pelo perito. Cruzamentos, oclusões longas e imagens escuras ou de baixa resolução podem trocar ou perder números.</p></html>",
         esc(&c.media.filename), c.media.sha256, esc(&run.model), esc(&run.runtime),
         run.frames_analyzed, run.frames_total,
         if run.step > 1 { format!(" (um a cada {})", run.step) } else { String::new() },
@@ -578,4 +625,182 @@ code{{font-size:12px}}dl{{display:grid;grid-template-columns:max-content 1fr;gap
     let csv = registrar_saida(&c, "pessoas_csv", &format!("{PESSOAS_SUBDIR}/{nome_csv}"), &nome_csv, det.clone())?;
     let html = registrar_saida(&c, "pessoas_html", &format!("{PESSOAS_SUBDIR}/{nome_html}"), &nome_html, det)?;
     Ok(TabelaGerada { csv, html })
+}
+
+// ---------------------------------------------------------------------------
+// Mancha marcada à mão
+
+#[derive(Debug, Deserialize)]
+pub struct MarcaMancha {
+    /// Trilha a continuar; ausente = nova mancha.
+    pub id: Option<String>,
+    pub t: f64,
+    pub x: f32,
+    pub y: f32,
+    pub w: f32,
+    pub h: f32,
+    #[serde(default)]
+    pub nome: String,
+    /// "frente" | "tras" | "ambos"
+    pub direcao: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AvisoMancha {
+    /// "frente" | "tras"
+    pub sentido: String,
+    pub motivo: Motivo,
+    /// Instante em que a mancha se perdeu (se parou por isso).
+    pub parou_em: Option<f64>,
+    pub quadros: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ResultadoMancha {
+    pub estado: PessoasEstado,
+    pub id: String,
+    pub avisos: Vec<AvisoMancha>,
+}
+
+#[tauri::command]
+pub async fn pessoas_seguir_mancha(
+    app: AppHandle,
+    workspace_path: String,
+    media_hash: String,
+    marca: MarcaMancha,
+) -> Result<ResultadoMancha> {
+    let c = contexto(&workspace_path, &media_hash)?;
+    let video = c.ws.join(&c.media.relative_path);
+    if !video.is_file() {
+        return Err(SicroError::Filesystem(format!("arquivo de vídeo ausente: {}", c.media.relative_path)));
+    }
+    if marca.w < 8.0 || marca.h < 8.0 {
+        return Err(SicroError::Validation("desenhe uma caixa maior sobre a mancha".into()));
+    }
+    let direcoes: Vec<bool> = match marca.direcao.as_str() {
+        "frente" => vec![true],
+        "tras" => vec![false],
+        "ambos" => vec![true, false],
+        _ => return Err(SicroError::Validation("direção inválida".into())),
+    };
+    let flag = iniciar_tarefa()?;
+    let (app2, hash2) = (app.clone(), media_hash.clone());
+    let (t, caixa0) = (marca.t, (marca.x, marca.y, marca.w, marca.h));
+    let r = tauri::async_runtime::spawn_blocking(move || -> Result<_> {
+        let times = crate::video::pessoas::decode::frame_times(&video)?;
+        let (dw, dh) = crate::video::pessoas::decode::display_size(&video)?;
+        let idx0 = times
+            .iter()
+            .enumerate()
+            .min_by(|a, b| (a.1 - t).abs().total_cmp(&(b.1 - t).abs()))
+            .map_or(0, |(i, _)| i);
+        let (x0, y0) = (caixa0.0.clamp(0.0, dw as f32 - 2.0), caixa0.1.clamp(0.0, dh as f32 - 2.0));
+        let caixa = (x0, y0, caixa0.2.min(dw as f32 - x0), caixa0.3.min(dh as f32 - y0));
+        let mut saidas = Vec::new();
+        for frente in direcoes {
+            let r = mancha::seguir(&video, &times, dw, dh, idx0, caixa, frente, OpcoesMancha::default(), &flag, &mut |n| {
+                let _ = app2.emit(
+                    "pessoas-progress",
+                    Progresso { media_hash: &hash2, fase: "mancha", feitos: n, total: 0, pessoas: 0 },
+                );
+            })?;
+            saidas.push((frente, r));
+        }
+        Ok((saidas, times, dw, dh))
+    })
+    .await
+    .map_err(|e| SicroError::Workspace(format!("tarefa de mancha: {e}")));
+    encerrar_tarefa();
+    let (saidas, times, dw, dh) = r??;
+
+    // união das amostras (o quadro inicial vem nas duas direções)
+    let mut novas: Vec<Amostra> = Vec::new();
+    let mut avisos = Vec::new();
+    let mut conf = 0.0f32;
+    for (frente, r) in &saidas {
+        for a in &r.amostras {
+            if !novas.iter().any(|b| (b.t - a.t).abs() < 1e-6) {
+                novas.push(*a);
+            }
+        }
+        conf = conf.max(r.conf_media);
+        avisos.push(AvisoMancha {
+            sentido: if *frente { "frente" } else { "tras" }.into(),
+            motivo: r.motivo,
+            parou_em: r.parou_em,
+            quadros: r.amostras.len().saturating_sub(1),
+        });
+    }
+    novas.sort_by(|a, b| a.t.total_cmp(&b.t));
+    let (tmin, tmax) = (novas[0].t, novas[novas.len() - 1].t);
+
+    let mut todas = repo::list(&c.conn, &c.occ, &media_hash)?;
+    let id = match &marca.id {
+        Some(id) => {
+            let i = todas
+                .iter()
+                .position(|p| &p.id == id)
+                .ok_or_else(|| SicroError::Validation("trilha não encontrada".into()))?;
+            let p = &mut todas[i];
+            // o trecho refeito substitui o que havia nele
+            p.amostras.retain(|a| a.t < tmin - 1e-6 || a.t > tmax + 1e-6);
+            p.ajustes.retain(|j| j.t < tmin - 1e-6 || j.t > tmax + 1e-6);
+            p.amostras.extend(novas.iter().copied());
+            p.amostras.sort_by(|a, b| a.t.total_cmp(&b.t));
+            if !marca.nome.trim().is_empty() {
+                p.nome = marca.nome.trim().to_string();
+            }
+            p.estado = "editado".into();
+            repo::update(&c.conn, p)?;
+            p.id.clone()
+        }
+        None => {
+            let numero = todas.iter().map(|p| p.numero).max().unwrap_or(0) + 1;
+            let p = Pessoa {
+                id: Uuid::new_v4().to_string(),
+                media_hash: media_hash.clone(),
+                numero,
+                nome: marca.nome.trim().to_string(),
+                cor: cor_padrao(numero),
+                estado: "auto".into(),
+                classe: CLASSE_MANUAL,
+                origem: "manual".into(),
+                amostras: novas.clone(),
+                ajustes: vec![],
+            };
+            repo::insert(&c.conn, &c.occ, &p)?;
+            p.id
+        }
+    };
+    if repo::get_run(&c.conn, &c.occ, &media_hash)?.is_none() {
+        let fdur = crate::video::pessoas::decode::frame_dur(&times);
+        let run = Run {
+            media_hash: media_hash.clone(),
+            model: "Mancha manual (correlação)".into(),
+            runtime: "SICRO".into(),
+            params_json: json!({ "manual": true }).to_string(),
+            width: dw,
+            height: dh,
+            frame_dur_s: fdur,
+            step: 1,
+            frames_total: times.len() as u32,
+            frames_analyzed: 0,
+            elapsed_s: 0.0,
+            created_at: Utc::now().to_rfc3339(),
+        };
+        repo::replace_run(&c.conn, &c.occ, &run)?;
+    }
+    video_repo::insert_log(
+        &c.conn,
+        &c.occ,
+        Some(&media_hash),
+        "rastreio.mancha",
+        &json!({
+            "t": marca.t, "caixa": [marca.x, marca.y, marca.w, marca.h], "direcao": marca.direcao,
+            "quadros": novas.len(), "confianca_media": conf, "continuacao": marca.id.is_some(),
+            "avisos": avisos.iter().map(|a| json!({"sentido": a.sentido, "motivo": a.motivo, "parou_em": a.parou_em})).collect::<Vec<_>>(),
+        })
+        .to_string(),
+    )?;
+    Ok(ResultadoMancha { estado: estado(&c.conn, &c.occ, &media_hash)?, id, avisos })
 }

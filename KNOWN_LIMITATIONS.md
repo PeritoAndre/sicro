@@ -27,10 +27,10 @@ contrato honesto com quem usa.
 - **Esc com um menu aberto em tela cheia** também sai da tela cheia no Linux (o
   WebKit trata o Esc antes da página).
 - **Velocidade e distância são medições com incerteza**: os pontos são marcados
-  pelo perito (o rastreamento da aba Pessoas não alimenta essas contas); o
+  pelo perito (o rastreamento da aba Rastreio não alimenta essas contas); o
   resultado é descritivo, com intervalo de confiança quando as incertezas são
   informadas.
-- **Pessoas no vídeo (detecção e numeração automáticas) é apoio, não conclusão.**
+- **Rastreio no vídeo (detecção, numeração e mancha) é apoio, não conclusão.**
   O perito confere e corrige antes de usar no laudo.
   - **Cruzamentos trocam números:** quando duas pessoas se cruzam ou andam coladas,
     o acompanhamento pode trocar os números ou criar uma pessoa nova ao reaparecer.
@@ -43,6 +43,24 @@ contrato honesto com quem usa.
   - **Vídeo com fps variável:** a caixa de cada quadro usa o tempo real do quadro,
     mas o MP4 exportado sai em taxa constante (duração preservada; pode haver
     pequena diferença de sincronia em relação ao original).
+  - **Outras classes (veículos, objetos):** o YOLOX-S reconhece as 80 classes do COCO,
+    mas objetos pequenos de mão (celular, faca, garrafa) são detectados com pouca
+    confiança e muitos falsos positivos; carro, moto e ônibus vistos de longe ou
+    parcialmente cobertos também falham. Cada classe é acompanhada separadamente
+    (um carro e uma pessoa nunca trocam de número entre si), mas duas classes podem
+    marcar o mesmo objeto (ex.: carro e caminhão). Classes fora do COCO (arma, saco
+    de lixo) não existem na rede: use a marcação à mão.
+  - **Caixas na borda do quadro:** a caixa é recortada ao quadro e descartada se mais
+    da metade dela cai fora; um objeto que acabou de entrar só ganha número depois de
+    aparecer o suficiente.
+  - **Mancha marcada à mão:** é correlação de pixels (sem rede neural). Não acompanha
+    mudança de escala nem de ângulo; para quando algo parecido cruza na frente, quando
+    a imagem fica muito diferente da marcada ou quando sai do quadro, e avisa onde
+    parou, de propósito, em vez de arriscar seguir a coisa errada. Em pessoas andando,
+    de longe e em vídeo comprimido, costuma parar em poucos quadros (recoloque a caixa
+    e continue); veículos e objetos rígidos são seguidos por muito mais tempo. Caixa
+    lisa (céu, parede) não pode ser seguida. Dentro da trilha manual não há rede
+    conferindo: confira quadro a quadro.
   - **Só CPU:** a detecção roda no processador; não há aceleração por placa de vídeo
     nesta versão. O Windows não foi testado nesta versão (compila no Actions).
 - **Degravação por IA é rascunho**: pode errar ou "inventar" texto em ruído e
