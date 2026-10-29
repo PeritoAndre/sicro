@@ -509,7 +509,8 @@ pub fn pessoas_ready(ai: &crate::commands::settings_commands::AiSettings) -> boo
 }
 
 /// Extrai um .tar.gz em `dest` (`unpack_in` recusa caminhos que saiam dele).
-fn extract_tar_gz(path: &Path, dest: &Path) -> Result<()> {
+/// Só entram as entradas de `lib/` (cabeçalhos e cmake do pacote não servem a ninguém).
+fn extract_tar_gz_lib(path: &Path, dest: &Path) -> Result<()> {
     std::fs::create_dir_all(dest)
         .map_err(|e| SicroError::Filesystem(format!("criar {}: {e}", dest.display())))?;
     let file = std::fs::File::open(path)
@@ -520,6 +521,13 @@ fn extract_tar_gz(path: &Path, dest: &Path) -> Result<()> {
         .map_err(|e| SicroError::Validation(format!("pacote inválido: {e}")))?;
     for entry in entries {
         let mut entry = entry.map_err(|e| SicroError::Validation(format!("pacote inválido: {e}")))?;
+        let na_lib = entry
+            .path()
+            .map(|p| p.components().any(|c| c.as_os_str() == "lib"))
+            .unwrap_or(false);
+        if !na_lib || !entry.header().entry_type().is_file() {
+            continue;
+        }
         entry
             .unpack_in(dest)
             .map_err(|e| SicroError::Filesystem(format!("extrair: {e}")))?;
@@ -584,7 +592,7 @@ pub async fn install_pessoas(app: AppHandle) -> Result<AiStatus> {
             std::fs::create_dir_all(&out).ok();
             extract_zip(&ort_pkg, &out)?;
         } else {
-            extract_tar_gz(&ort_pkg, &out)?;
+            extract_tar_gz_lib(&ort_pkg, &out)?;
         }
         let _ = std::fs::remove_file(&ort_pkg);
         // o pacote traz uma pasta com o nome da versão
