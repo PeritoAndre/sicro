@@ -128,6 +128,7 @@ pub fn estabilizar(
     total_s: f64,
     tem_audio: bool,
     dimensoes: (u32, u32),
+    usar_vidstab: bool,
     cancelar: &AtomicBool,
     progresso: &mut dyn FnMut(u8, f64),
 ) -> Result<Estabilizado> {
@@ -139,7 +140,7 @@ pub fn estabilizar(
     } else {
         vec![]
     };
-    if tem_filtro("vidstabdetect") && tem_filtro("vidstabtransform") {
+    if usar_vidstab && tem_filtro("vidstabdetect") && tem_filtro("vidstabtransform") {
         // O arquivo de movimento fica na pasta temporária e é citado só pelo nome (o ":" de um
         // caminho do Windows atrapalha a sintaxe do filtro).
         let a1: Vec<String> = vec![
@@ -165,7 +166,8 @@ pub fn estabilizar(
         return Err(SicroError::Validation("este ffmpeg não tem o vidstab nem o deshake".into()));
     }
     // Sem vidstab: uma passada só, com o deshake (mais simples, só translação).
-    let raio = (suav / 2).clamp(4, 64);
+    // o deshake só aceita raio múltiplo de 16, de 16 a 64
+    let raio = (suav / 2).max(1).div_ceil(16).clamp(1, 4) * 16;
     let vf = match op.borda {
         Borda::Preencher => format!("deshake=rx={raio}:ry={raio}:edge=mirror"),
         Borda::Cortar => {

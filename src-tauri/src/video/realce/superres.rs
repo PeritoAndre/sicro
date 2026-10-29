@@ -173,4 +173,36 @@ mod testes {
         }
         assert!(maior < 12, "degrau {maior}");
     }
+
+    /// Real-ESRGAN num recorte de um quadro de verdade: SICRO_SR_IMG (PNG), SICRO_SR_ROI ("x,y,w,h")
+    /// e SICRO_REALCE_SAIDA (onde gravar). Sem elas, não faz nada.
+    #[test]
+    fn recorte_de_quadro_real() {
+        let (Ok(lib), Ok(modelo), Ok(img), Ok(roi), Ok(saida)) = (
+            std::env::var("SICRO_ORT_LIB"), std::env::var("SICRO_SR_MODEL"), std::env::var("SICRO_SR_IMG"),
+            std::env::var("SICRO_SR_ROI"), std::env::var("SICRO_REALCE_SAIDA"),
+        ) else { return };
+        let r: Vec<u32> = roi.split(',').map(|v| v.trim().parse().unwrap()).collect();
+        let nome = std::env::var("SICRO_SR_NOME").unwrap_or_else(|_| "sr".into());
+        let full = image::open(&img).unwrap().to_rgb8();
+        let crop = image::imageops::crop_imm(&full, r[0], r[1], r[2], r[3]).to_image();
+        let (w, h) = crop.dimensions();
+        let saida = std::path::PathBuf::from(saida);
+        let mut sr = SuperRes::load(Path::new(&lib), Path::new(&modelo)).unwrap();
+        let cancel = AtomicBool::new(false);
+        let ini = std::time::Instant::now();
+        let up = sr.ampliar4(crop.as_raw(), w as usize, h as usize, &cancel, &mut |_, _| {}).unwrap();
+        let t4 = ini.elapsed().as_secs_f64();
+        println!("{nome}: recorte {w}x{h} -> 4x {}x{} em {t4:.2}s ({:.2} Mpx/s de entrada)", w * 4, h * 4, (w * h) as f64 / 1e6 / t4);
+        let up2 = reduzir(&up, (w * 4) as usize, (h * 4) as usize, (w * 2) as usize, (h * 2) as usize);
+        // lado a lado: ampliação comum (bicubic, 4x) | super-resolução 4x
+        let comum = image::imageops::resize(&crop, w * 4, h * 4, image::imageops::FilterType::CatmullRom);
+        let mut par = image::RgbImage::new(w * 8 + 8, h * 4);
+        image::imageops::replace(&mut par, &comum, 0, 0);
+        let sr4 = image::RgbImage::from_raw(w * 4, h * 4, up).unwrap();
+        image::imageops::replace(&mut par, &sr4, (w * 4 + 8) as i64, 0);
+        par.save(saida.join(format!("{nome}_comum_x_superres4x.png"))).unwrap();
+        image::RgbImage::from_raw(w * 2, h * 2, up2).unwrap().save(saida.join(format!("{nome}_superres2x.png"))).unwrap();
+        crop.save(saida.join(format!("{nome}_entrada.png"))).unwrap();
+    }
 }

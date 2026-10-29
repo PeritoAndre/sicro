@@ -94,6 +94,21 @@ pub fn origem(c: LensCoefficients, w: u32, h: u32, cx: f32, cy: f32, x: f32, y: 
     (u * f * n + mx, v * f * n + my)
 }
 
+/// Inverso de `origem`: ponto da saída que vem do ponto `(x, y)` do quadro de entrada
+/// (iteração de ponto fixo; converge para as correções usadas na prática).
+pub fn destino(c: LensCoefficients, w: u32, h: u32, cx: f32, cy: f32, x: f32, y: f32) -> (f32, f32) {
+    let (mx, my) = (w as f32 * cx, h as f32 * cy);
+    let n = norma(w, h);
+    let (su, sv) = ((x - mx) / n, (y - my) / n);
+    let (mut u, mut v) = (su, sv);
+    for _ in 0..40 {
+        let r2 = u * u + v * v;
+        let f = 1.0 + c.k1 * r2 + c.k2 * r2 * r2 + c.k3 * r2 * r2 * r2;
+        (u, v) = (su / f, sv / f);
+    }
+    (u * n + mx, v * n + my)
+}
+
 /// Igual a `apply_radial_correction`, com o centro óptico escolhido.
 pub fn apply_radial_correction_centered(
     img: &DynamicImage,
@@ -245,6 +260,38 @@ mod tests {
         println!("RMS ffmpeg x SICRO: {rms:.2}");
         // sem conversão o erro fica em ~70 (sem correção) ou ~59 (k cru)
         assert!(rms < 30.0, "rms {rms}");
+    }
+
+    /// Corrigir e depois distorcer de volta devolve a imagem (no miolo, longe da borda).
+    #[test]
+    fn lente_ida_e_volta() {
+        let (w, h) = (320u32, 240u32);
+        let mut img = RgbaImage::new(w, h);
+        for y in 0..h {
+            for x in 0..w {
+                let v = (128.0 + 60.0 * ((x as f32) * 0.05).sin() * ((y as f32) * 0.07).cos()) as u8;
+                img.put_pixel(x, y, Rgba([v, v, v, 255]));
+            }
+        }
+        let c = LensCoefficients { k1: -0.18, k2: 0.04, k3: 0.0 };
+        let (cx, cy) = (0.52, 0.48);
+        let corrigida = apply_radial_correction_centered(&DynamicImage::ImageRgba8(img.clone()), c, cx, cy);
+        // volta: cada pixel da saída vem da posição de `destino` na imagem corrigida
+        let mut erro = 0.0f64;
+        let mut n = 0u32;
+        for y in 40..h - 40 {
+            for x in 40..w - 40 {
+                let (xs, ys) = destino(c, w, h, cx, cy, x as f32, y as f32);
+                if xs < 1.0 || ys < 1.0 || xs > (w - 2) as f32 || ys > (h - 2) as f32 {
+                    continue;
+                }
+                let px = sample_bilinear(&corrigida, xs, ys).0[0] as f64;
+                erro += (px - img.get_pixel(x, y).0[0] as f64).abs();
+                n += 1;
+            }
+        }
+        let medio = erro / n as f64;
+        assert!(medio < 1.5, "erro médio {medio}");
     }
 
     #[test]

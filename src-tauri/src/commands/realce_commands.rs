@@ -1046,6 +1046,7 @@ pub async fn realce_estabilizar(
             total,
             tem_audio,
             dims,
+            true,
             &flag,
             &mut |fase, f| emitir(&app2, &hash2, if fase == 1 { "estab-analise" } else { "estab-grava" }, (f * 1000.0) as u32, 1000),
         );

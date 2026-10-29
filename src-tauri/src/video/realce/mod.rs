@@ -81,4 +81,47 @@ mod integracao {
             }
         }
     }
+
+    /// Movimento médio entre quadros vizinhos (px, por correlação de fase): mede o tremor.
+    fn tremor(video: &std::path::Path, w: u32, h: u32, n: usize) -> f64 {
+        use super::align::{correlacao_de_fase, Gray};
+        let cancel = AtomicBool::new(false);
+        let (tempos, _) = escolher_janela(video, 3.0, n).unwrap();
+        let l = ler_janela(video, 0.0, &tempos, w, h, (0, 0, w, h), 0, None, &cancel).unwrap();
+        let g: Vec<Gray> = l.recortes.iter().map(|r| Gray::de_rgb(&r.rgb, r.w, r.h).borrar(1.5)).collect();
+        let mut soma = 0.0;
+        for p in g.windows(2) {
+            let (dx, dy, _) = correlacao_de_fase(&p[0], &p[1], 30);
+            soma += ((dx * dx + dy * dy) as f64).sqrt();
+        }
+        soma / (g.len() - 1) as f64
+    }
+
+    #[test]
+    fn estabiliza_o_video_sintetico() {
+        use super::stabilize::{estabilizar, Borda, OpcoesEstabilizar};
+        let (Ok(dir), Ok(saida)) = (std::env::var("SICRO_REALCE_DIR"), std::env::var("SICRO_REALCE_SAIDA")) else { return };
+        let (dir, saida) = (PathBuf::from(dir), PathBuf::from(saida));
+        let origem = dir.join("limpo_tremido.mp4");
+        let cancel = AtomicBool::new(false);
+        let base = tremor(&origem, 640, 360, 80);
+        println!("tremor original: {base:.2} px/quadro");
+        for (nome, vid, borda) in [("vidstab_cortar", true, Borda::Cortar), ("vidstab_preencher", true, Borda::Preencher), ("deshake_preencher", false, Borda::Preencher), ("deshake_cortar", false, Borda::Cortar)] {
+            let out = dir.join(format!("estab_{nome}.mp4"));
+            let _ = std::fs::remove_file(&out);
+            let ini = std::time::Instant::now();
+            let mut ultimo = (0u8, 0.0f64);
+            let r = estabilizar(&origem, &out, OpcoesEstabilizar { suavizar: 15, borda }, 8.0, false, (640, 360), vid, &cancel, &mut |f, p| ultimo = (f, p)).unwrap();
+            let t = tremor(&out, 640, 360, 80);
+            println!("{nome}: motor {} tremor {t:.2} px/quadro ({:.0}% do original), {:.1}s, último progresso {:?}", r.motor, t / base * 100.0, ini.elapsed().as_secs_f64(), ultimo);
+            assert!(t < base * 0.6, "{nome} não reduziu o tremor");
+            // um quadro de cada para conferir a borda
+            let st = crate::tools::command(crate::tools::find_ffmpeg_tool("ffmpeg").unwrap())
+                .args(["-v", "error", "-y", "-ss", "3", "-i"]).arg(&out).args(["-frames:v", "1"]).arg(saida.join(format!("estab_{nome}.png"))).status().unwrap();
+            assert!(st.success());
+        }
+        let st = crate::tools::command(crate::tools::find_ffmpeg_tool("ffmpeg").unwrap())
+            .args(["-v", "error", "-y", "-ss", "3", "-i"]).arg(&origem).args(["-frames:v", "1"]).arg(saida.join("estab_original.png")).status().unwrap();
+        assert!(st.success());
+    }
 }
