@@ -5,3 +5,4 @@
 pub mod align;
 pub mod average;
 pub mod perspective;
+pub mod superres;
