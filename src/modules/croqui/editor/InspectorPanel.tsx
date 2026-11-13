@@ -70,7 +70,8 @@ import {
   type ParityVestigiosEstilo,
   type ParityAsfaltoTextura,
 } from "../engine/road-parity";
-import { CROQUI_EXPORT_WIDTH_PX_DEFAULT, type SicroCroquiCanvas, type SicroCroquiExportSettings, type SicroCroquiStyle } from "../engine/schema";
+import { CROQUI_EXPORT_WIDTH_PX_DEFAULT, type SicroCroquiBackgroundImage, type SicroCroquiCanvas, type SicroCroquiExportSettings, type SicroCroquiStyle } from "../engine/schema";
+import { BACKGROUND_SELECTION_ID } from "./CanvasStage";
 import { labelDefaults, type LabelFields } from "./labels";
 import { CampoNumero } from "@components/CampoNumero/CampoNumero";
 import { ligarAoObjeto, podeSerAlvo } from "./cotasVivas";
@@ -98,6 +99,20 @@ interface Props {
   onUpdateExportSettings?: (patch: Partial<SicroCroquiExportSettings>) => void;
   onFitSheet?: () => void;
   onCenterSheet?: () => void;
+  /** Imagem de fundo (propriedades quando ela está selecionada). */
+  background?: SicroCroquiBackgroundImage | null;
+  onUpdateBackground?: (patch: Partial<SicroCroquiBackgroundImage>) => void;
+  /** Opacidade sem entrar no desfazer (o slider dispara a cada passo). */
+  onChangeBackgroundOpacity?: (v: number) => void;
+  onCenterBackground?: () => void;
+  onFitBackground?: () => void;
+  onResetBackgroundRotation?: () => void;
+  onRemoveBackground?: () => void;
+  corteAtivo?: boolean;
+  aplicandoCorte?: boolean;
+  onIniciarCorte?: () => void;
+  onAplicarCorte?: () => void;
+  onCancelarCorte?: () => void;
 }
 
 
@@ -119,6 +134,18 @@ export function InspectorPanel({
   onUpdateExportSettings,
   onFitSheet,
   onCenterSheet,
+  background,
+  onUpdateBackground,
+  onChangeBackgroundOpacity,
+  onCenterBackground,
+  onFitBackground,
+  onResetBackgroundRotation,
+  onRemoveBackground,
+  corteAtivo,
+  aplicandoCorte,
+  onIniciarCorte,
+  onAplicarCorte,
+  onCancelarCorte,
 }: Props) {
   const selected = selectedId
     ? objects.find((o) => o.id === selectedId) ?? null
@@ -141,6 +168,31 @@ export function InspectorPanel({
       />
     </section>
   );
+
+  if (selectedId === BACKGROUND_SELECTION_ID && background && onUpdateBackground) {
+    return (
+      <aside className={styles.panel} aria-label="Painel de camadas e propriedades">
+        <section className={styles.section}>
+          <h3 className={styles.sectionTitle}>Imagem de fundo</h3>
+          <BackgroundProps
+            bg={background}
+            onChange={onUpdateBackground}
+            onChangeOpacity={onChangeBackgroundOpacity ?? ((v) => onUpdateBackground({ opacity: v }))}
+            onCenter={onCenterBackground}
+            onFit={onFitBackground}
+            onResetRotation={onResetBackgroundRotation}
+            onRemove={onRemoveBackground}
+            corteAtivo={!!corteAtivo}
+            aplicandoCorte={!!aplicandoCorte}
+            onIniciarCorte={onIniciarCorte}
+            onAplicarCorte={onAplicarCorte}
+            onCancelarCorte={onCancelarCorte}
+          />
+        </section>
+        {objectsSection}
+      </aside>
+    );
+  }
 
   // Uma coisa por vez: com seleção, só o objeto; sem seleção, o croqui.
   if (selected) {
@@ -1634,6 +1686,74 @@ const SHEET_PRESETS_M: [number, number][] = [
   [100, 71],
   [200, 141],
 ];
+
+/** Fundo: trava, opacidade, rotação, ajustes e corte. Destravado, ele se move e redimensiona na cena. */
+function BackgroundProps({
+  bg,
+  onChange,
+  onChangeOpacity,
+  onCenter,
+  onFit,
+  onResetRotation,
+  onRemove,
+  corteAtivo,
+  aplicandoCorte,
+  onIniciarCorte,
+  onAplicarCorte,
+  onCancelarCorte,
+}: {
+  bg: SicroCroquiBackgroundImage;
+  onChange: (patch: Partial<SicroCroquiBackgroundImage>) => void;
+  onChangeOpacity: (v: number) => void;
+  onCenter?: () => void;
+  onFit?: () => void;
+  onResetRotation?: () => void;
+  onRemove?: () => void;
+  corteAtivo: boolean;
+  aplicandoCorte: boolean;
+  onIniciarCorte?: () => void;
+  onAplicarCorte?: () => void;
+  onCancelarCorte?: () => void;
+}) {
+  const rot = bg.rotation ?? 0;
+  return (
+    <>
+      <CheckboxRow label="Bloqueada" checked={bg.locked} onChange={(v) => onChange({ locked: v })} />
+      <RangeRow
+        label="Opacidade"
+        value={bg.opacity}
+        min={0.1}
+        max={1}
+        step={0.05}
+        text={`${Math.round(bg.opacity * 100)}%`}
+        onChange={onChangeOpacity}
+      />
+      <NumberField label="Rotação (°)" value={Math.round(rot * 10) / 10} step={1} casas={1} onChange={(n) => onChange({ rotation: n })} />
+      <Field label="Tamanho" value={`${Math.round(bg.width)} × ${Math.round(bg.height)} px`} readOnly mono />
+      <div className={styles.temaRow}>
+        {onCenter && <button type="button" className={styles.temaBtn} onClick={onCenter} title="Centraliza a imagem na folha">Centralizar na folha</button>}
+        {onFit && <button type="button" className={styles.temaBtn} onClick={onFit} title="1 px da imagem = 1 px do croqui">Tamanho original</button>}
+        {onResetRotation && rot !== 0 && <button type="button" className={styles.temaBtn} onClick={onResetRotation}>Rotação a 0°</button>}
+      </div>
+      <div className={styles.temaRow}>
+        {!corteAtivo && onIniciarCorte && (
+          <button type="button" className={styles.temaBtn} onClick={onIniciarCorte} disabled={rot !== 0} title={rot !== 0 ? "Só com a rotação a 0°" : "Alças sobre a imagem; o que ficar fora é descartado do arquivo"}>
+            Cortar…
+          </button>
+        )}
+        {corteAtivo && onAplicarCorte && (
+          <button type="button" className={styles.temaBtn} onClick={onAplicarCorte} disabled={aplicandoCorte}>
+            {aplicandoCorte ? "Cortando…" : "Aplicar corte"}
+          </button>
+        )}
+        {corteAtivo && onCancelarCorte && (
+          <button type="button" className={styles.temaBtn} onClick={onCancelarCorte} disabled={aplicandoCorte}>Cancelar</button>
+        )}
+        {onRemove && !corteAtivo && <button type="button" className={styles.temaBtn} onClick={onRemove}>Remover fundo</button>}
+      </div>
+    </>
+  );
+}
 
 function SheetProps({
   canvas,

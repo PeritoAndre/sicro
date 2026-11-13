@@ -120,6 +120,49 @@ export const BACKGROUND_SELECTION_ID = "_background";
 /** "Seleção" da folha: clique no vazio. O Inspector mostra a folha e a tela, as alças dela. */
 export const SHEET_SELECTION_ID = "_folha";
 
+/** Retângulo em px de mundo. */
+export interface RetanguloMundo {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Tolerância do ímã, em px de tela. */
+const IMA_PX = 8;
+
+/** Valor mais próximo entre os alvos, se estiver a menos de `tol`; senão o próprio. */
+function imantar(v: number, alvos: number[], tol: number): number {
+  let melhor = v;
+  let dist = tol;
+  for (const a of alvos) {
+    const d = Math.abs(a - v);
+    if (d < dist) {
+      dist = d;
+      melhor = a;
+    }
+  }
+  return melhor;
+}
+
+/** Bordas da folha e do fundo (sem rotação): alvos do ímã em x e em y. */
+function imasDoDoc(doc: SicroCroquiDoc, incluir: { folha: boolean; fundo: boolean }): { xs: number[]; ys: number[] } {
+  const xs: number[] = [];
+  const ys: number[] = [];
+  if (incluir.folha) {
+    const ox = doc.canvas.origin_x ?? 0;
+    const oy = doc.canvas.origin_y ?? 0;
+    xs.push(ox, ox + doc.canvas.width_px);
+    ys.push(oy, oy + doc.canvas.height_px);
+  }
+  const bg = doc.background_image;
+  if (incluir.fundo && bg && !(bg.rotation ?? 0)) {
+    xs.push(bg.x, bg.x + bg.width);
+    ys.push(bg.y, bg.y + bg.height);
+  }
+  return { xs, ys };
+}
+
 interface Props {
   doc: SicroCroquiDoc;
   editor: EditorState;
@@ -140,6 +183,8 @@ interface Props {
   onBackgroundChange?: (patch: Partial<SicroCroquiBackgroundImage>) => void;
   /** Alças da folha (origem e tamanho). */
   onCanvasChange?: (patch: Partial<SicroCroquiCanvas>) => void;
+  /** Corte do fundo em andamento: retângulo com alças (imã na folha e no fundo). */
+  corte?: { rect: RetanguloMundo; onChange: (r: RetanguloMundo) => void } | null;
   onSelect: (id: string | null) => void;
   workspacePath: string;
 }
@@ -156,6 +201,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     onParityObjectChange,
     onBackgroundChange,
     onCanvasChange,
+    corte,
     onSelect,
     workspacePath,
   },
@@ -169,6 +215,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
   // O browser emite `click` depois do mouseup do marquee (cancelBubble não
   // impede); a flag evita que esse click limpe a seleção recém-criada.
   const justFinishedMarqueeRef = useRef(false);
+  // Laço iniciado sobre o fundo travado: o clique curto seleciona o fundo, não a folha.
+  const marqueeNoFundoRef = useRef(false);
   // Ferramenta de dois pontos: pressionar marca o primeiro; arrastar e soltar fecha o segundo.
   const dragDrawRef = useRef<{ x: number; y: number; moved: boolean } | null>(null);
   const suppressClickRef = useRef(false);
@@ -366,8 +414,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       return;
     }
     if (editor.tool !== "select") return;
-    // Só no fundo, não sobre um objeto.
-    if (e.target !== e.target.getStage()) return;
+    // No vazio, ou sobre a imagem de fundo travada (ela cobre a cena): o laço começa ali também.
+    const noVazio = e.target === e.target.getStage();
+    const sobreFundo = !noVazio && !!e.target.findAncestor(`#${BACKGROUND_SELECTION_ID}`, true);
+    if (!noVazio && !(sobreFundo && doc.background_image?.locked)) return;
+    marqueeNoFundoRef.current = sobreFundo;
     if (e.evt.button !== 0) return;
     const stage = stageRef.current;
     if (!stage) return;
@@ -410,7 +461,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     );
     const isTinyClick = rect.width * rect.height < 9;
     if (isTinyClick) {
-      onSelect(SHEET_SELECTION_ID);
+      onSelect(marqueeNoFundoRef.current ? BACKGROUND_SELECTION_ID : SHEET_SELECTION_ID);
       return;
     }
     const pxPerM = resolvePxPerM(doc.scale?.px_per_m);
@@ -559,7 +610,14 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
         workspacePath={workspacePath}
         interativo={editor.tool === "select"}
         selected={editor.selectedIds.includes(BACKGROUND_SELECTION_ID)}
-        onSelect={() => onSelect(BACKGROUND_SELECTION_ID)}
+        onSelect={() => {
+          // O click que segue um laço sobre o fundo travado não pode desfazer a seleção do laço.
+          if (justFinishedMarqueeRef.current) {
+            justFinishedMarqueeRef.current = false;
+            return;
+          }
+          onSelect(BACKGROUND_SELECTION_ID);
+        }}
         onChange={(patch) => onBackgroundChange?.(patch)}
       />
 
@@ -639,14 +697,36 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
         </Layer>
       )}
 
-      {editor.tool === "select" && onCanvasChange && editor.selectedIds.includes(SHEET_SELECTION_ID) && (
+      {editor.tool === "select" && onCanvasChange && editor.selectedIds.includes(SHEET_SELECTION_ID) && !corte && (
         <Layer>
-          <AlcasDaFolha doc={doc} zoom={editor.viewport.scale} onChange={onCanvasChange} />
+          <AlcasDeRetangulo
+            rect={{ x: doc.canvas.origin_x ?? 0, y: doc.canvas.origin_y ?? 0, w: doc.canvas.width_px, h: doc.canvas.height_px }}
+            min={FOLHA_MIN_PX}
+            travada={doc.canvas.proporcao_travada === true}
+            cor="#3b82f6"
+            zoom={editor.viewport.scale}
+            imas={imasDoDoc(doc, { folha: false, fundo: true })}
+            onChange={(n) => onCanvasChange({ origin_x: n.x, origin_y: n.y, width_px: n.w, height_px: n.h })}
+          />
+        </Layer>
+      )}
+      {corte && (
+        <Layer>
+          <VeuFora rect={corte.rect} viewport={editor.viewport} containerWidth={containerWidth} containerHeight={containerHeight} cor="rgba(14, 18, 26, 0.5)" />
+          <AlcasDeRetangulo
+            rect={corte.rect}
+            min={16}
+            travada={false}
+            cor="#f59e0b"
+            zoom={editor.viewport.scale}
+            imas={imasDoDoc(doc, { folha: true, fundo: true })}
+            onChange={corte.onChange}
+          />
         </Layer>
       )}
 
       <Layer listening={false} ref={uiLayerRef}>
-        <PendingTwoClickPreview editor={editor} />
+        <PendingTwoClickPreview editor={editor} fator={fatorDaFolha(doc.canvas)} />
         <RoadDraftPreview editor={editor} />
         <AreaDraftPreview editor={editor} pxPerM={doc.scale?.px_per_m ?? null} />
       </Layer>
@@ -655,26 +735,34 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
 });
 
 // ===========================================================================
-// Alças da folha: 4 cantos + 4 lados, tamanho fixo na tela; o lado oposto fica parado.
-// Com a proporção travada, o outro lado acompanha (lado: centrado; canto: manda o que mais mudou).
+// Alças de retângulo (folha, corte do fundo): 4 cantos + 4 lados, tamanho fixo na tela; o lado
+// oposto fica parado; bordas grudam nos ímãs. Com a proporção travada, o outro lado acompanha
+// (lado: centrado; canto: manda o que mais mudou).
 
 const FOLHA_MIN_PX = 100;
 
-function AlcasDaFolha({
-  doc,
+function AlcasDeRetangulo({
+  rect: base,
+  min,
+  travada,
+  cor,
   zoom,
+  imas,
   onChange,
 }: {
-  doc: SicroCroquiDoc;
+  rect: RetanguloMundo;
+  min: number;
+  travada: boolean;
+  cor: string;
   zoom: number;
-  onChange: (patch: Partial<SicroCroquiCanvas>) => void;
+  imas: { xs: number[]; ys: number[] };
+  onChange: (r: RetanguloMundo) => void;
 }) {
-  const [live, setLive] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
-  const base = { x: doc.canvas.origin_x ?? 0, y: doc.canvas.origin_y ?? 0, w: doc.canvas.width_px, h: doc.canvas.height_px };
+  const [live, setLive] = useState<RetanguloMundo | null>(null);
   const r = live ?? base;
   const k = 1 / Math.max(zoom, 0.0001);
   const meia = 6 * k;
-  const travada = doc.canvas.proporcao_travada === true;
+  const tol = IMA_PX * k;
   const alcas = [
     { ax: 0, ay: 0 }, { ax: 0.5, ay: 0 }, { ax: 1, ay: 0 }, { ax: 1, ay: 0.5 },
     { ax: 1, ay: 1 }, { ax: 0.5, ay: 1 }, { ax: 0, ay: 1 }, { ax: 0, ay: 0.5 },
@@ -686,10 +774,12 @@ function AlcasDaFolha({
     let y0 = base.y;
     let x1 = base.x + base.w;
     let y1 = base.y + base.h;
-    if (ax === 0) x0 = Math.min(px, x1 - FOLHA_MIN_PX);
-    else if (ax === 1) x1 = Math.max(px, x0 + FOLHA_MIN_PX);
-    if (ay === 0) y0 = Math.min(py, y1 - FOLHA_MIN_PX);
-    else if (ay === 1) y1 = Math.max(py, y0 + FOLHA_MIN_PX);
+    const sx = imantar(px, imas.xs, tol);
+    const sy = imantar(py, imas.ys, tol);
+    if (ax === 0) x0 = Math.min(sx, x1 - min);
+    else if (ax === 1) x1 = Math.max(sx, x0 + min);
+    if (ay === 0) y0 = Math.min(sy, y1 - min);
+    else if (ay === 1) y1 = Math.max(sy, y0 + min);
     let w = x1 - x0;
     let h = y1 - y0;
     if (travada && base.w > 0 && base.h > 0) {
@@ -717,7 +807,7 @@ function AlcasDaFolha({
   };
   return (
     <>
-      <Rect x={r.x} y={r.y} width={r.w} height={r.h} stroke="#3b82f6" strokeWidth={1.5 * k} dash={[6 * k, 4 * k]} listening={false} />
+      <Rect x={r.x} y={r.y} width={r.w} height={r.h} stroke={cor} strokeWidth={1.5 * k} dash={[6 * k, 4 * k]} listening={false} />
       {alcas.map(({ ax, ay }) => (
         <Rect
           key={`${ax}-${ay}`}
@@ -728,7 +818,7 @@ function AlcasDaFolha({
           width={2 * meia}
           height={2 * meia}
           fill="#ffffff"
-          stroke="#3b82f6"
+          stroke={cor}
           strokeWidth={1.5 * k}
           draggable
           onMouseEnter={(e) => setCursor(e, cursorDe(ax, ay))}
@@ -747,7 +837,7 @@ function AlcasDaFolha({
             e.cancelBubble = true;
             const n = calcular(ax, ay, e.target.x(), e.target.y());
             setLive(null);
-            onChange({ origin_x: n.x, origin_y: n.y, width_px: n.w, height_px: n.h });
+            onChange(n);
           }}
         />
       ))}
@@ -769,9 +859,24 @@ function VeuForaDaFolha({
   containerWidth: number;
   containerHeight: number;
 }) {
-  const { width_px, height_px } = doc.canvas;
-  const ox = doc.canvas.origin_x ?? 0;
-  const oy = doc.canvas.origin_y ?? 0;
+  const rect = { x: doc.canvas.origin_x ?? 0, y: doc.canvas.origin_y ?? 0, w: doc.canvas.width_px, h: doc.canvas.height_px };
+  return <VeuFora rect={rect} viewport={viewport} containerWidth={containerWidth} containerHeight={containerHeight} cor="rgba(14, 18, 26, 0.62)" />;
+}
+
+function VeuFora({
+  rect,
+  viewport,
+  containerWidth,
+  containerHeight,
+  cor,
+}: {
+  rect: RetanguloMundo;
+  viewport: { x: number; y: number; scale: number };
+  containerWidth: number;
+  containerHeight: number;
+  cor: string;
+}) {
+  const { x: ox, y: oy, w: width_px, h: height_px } = rect;
   // Retângulo da tela em coordenadas de mundo, com folga para o pan não mostrar borda.
   const k = 1 / Math.max(viewport.scale, 0.0001);
   const x0 = -viewport.x * k - containerWidth * k;
@@ -785,7 +890,7 @@ function VeuForaDaFolha({
         ctx.beginPath();
         ctx.rect(x0, y0, w, h);
         ctx.rect(ox, oy, width_px, height_px);
-        ctx.fillStyle = "rgba(14, 18, 26, 0.62)";
+        ctx.fillStyle = cor;
         (ctx as unknown as { _context: CanvasRenderingContext2D })._context.fill("evenodd");
         ctx.fillStrokeShape(shape);
       }}
@@ -910,6 +1015,14 @@ function BackgroundImageLayer({
   const resolvedW = bg.width || image.width;
   const resolvedH = bg.height || image.height;
   const rotation = bg.rotation ?? 0;
+  // Ímã nas bordas da folha (em px de tela), só sem rotação.
+  const imas = rotation ? { xs: [], ys: [] } : imasDoDoc(doc, { folha: true, fundo: false });
+  const paraTela = (stage: Konva.Stage | null, xs: number[], eixo: "x" | "y") => {
+    if (!stage) return [] as number[];
+    const k = stage.scaleX();
+    const o = eixo === "x" ? stage.x() : stage.y();
+    return xs.map((v) => o + v * k);
+  };
 
   // Origem do Group no centro da imagem para a rotação girar em torno dele;
   // a KonvaImage fica em (-w/2, -h/2).
@@ -922,6 +1035,19 @@ function BackgroundImageLayer({
         y={bg.y + resolvedH / 2}
         rotation={rotation}
         draggable={!bg.locked && selected}
+        dragBoundFunc={function (this: Konva.Node, pos) {
+          // Bordas da imagem grudam nas da folha.
+          const stage = this.getStage();
+          if (!stage || rotation) return pos;
+          const k = stage.scaleX();
+          const mw = (resolvedW / 2) * k;
+          const mh = (resolvedH / 2) * k;
+          const xs = paraTela(stage, imas.xs, "x");
+          const ys = paraTela(stage, imas.ys, "y");
+          const dx = [imantar(pos.x - mw, xs, IMA_PX) - (pos.x - mw), imantar(pos.x + mw, xs, IMA_PX) - (pos.x + mw)].find((d) => d !== 0) ?? 0;
+          const dy = [imantar(pos.y - mh, ys, IMA_PX) - (pos.y - mh), imantar(pos.y + mh, ys, IMA_PX) - (pos.y + mh)].find((d) => d !== 0) ?? 0;
+          return { x: pos.x + dx, y: pos.y + dy };
+        }}
         onClick={(e) => {
           // Senão o onClick da Stage chama onSelect(null).
           e.cancelBubble = true;
@@ -979,6 +1105,15 @@ function BackgroundImageLayer({
           "top-center",
           "bottom-center",
         ]}
+        anchorDragBoundFunc={(_old, next) => {
+          // Alça gruda nas bordas da folha.
+          const stage = transformerRef.current?.getStage() ?? null;
+          if (!stage || rotation) return next;
+          return {
+            x: imantar(next.x, paraTela(stage, imas.xs, "x"), IMA_PX),
+            y: imantar(next.y, paraTela(stage, imas.ys, "y"), IMA_PX),
+          };
+        }}
         boundBoxFunc={(_old, next) => {
           // Mínimo de 20 px para a imagem não sumir.
           if (Math.abs(next.width) < 20 || Math.abs(next.height) < 20) return _old;
@@ -1708,7 +1843,7 @@ function PersonNode({
       move: (dx, dy) => ({ x: o.x + dx, y: o.y + dy }),
     };
   };
-  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={5 / zoom} onSelect={onSelect} onChange={onChange} />;
+  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={5 / zoom} fator={fatorDaFolha(doc.canvas)} onSelect={onSelect} onChange={onChange} />;
 }
 
 type Pose = SicroPersonObject["pose"];
@@ -1763,6 +1898,7 @@ function ParamNode<T extends ParamObj>({
   draggable,
   solo,
   handleR,
+  fator,
   onSelect,
   onChange,
 }: {
@@ -1772,6 +1908,8 @@ function ParamNode<T extends ParamObj>({
   solo: boolean;
   /** Raio das alças em px de mundo (o chamador divide pelo zoom). */
   handleR: number;
+  /** Fator da folha, para o rótulo padrão. */
+  fator: number;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
@@ -1840,6 +1978,7 @@ function ParamNode<T extends ParamObj>({
       <ObjectLabel
         obj={o}
         anchor={view.anchor}
+        fator={fator}
         draggable={draggable && !obj.locked && solo}
         onSelect={onSelect}
         onChange={onChange}
@@ -1989,7 +2128,7 @@ function TraceNode({
       move: (dx, dy) => ({ p0: { x: o.p0.x + dx, y: o.p0.y + dy }, p1: { x: o.p1.x + dx, y: o.p1.y + dy } }),
     };
   };
-  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} onSelect={onSelect} onChange={onChange} />;
+  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} fator={fatorDaFolha(doc.canvas)} onSelect={onSelect} onChange={onChange} />;
 }
 
 /** Poça (fluido, sangue): centro em p1 com alça de raio na borda; início e flecha do escorrimento só com ele ligado. */
@@ -2079,7 +2218,7 @@ function FixtureNode({
       move: (dx, dy) => ({ p0: { x: o.p0.x + dx, y: o.p0.y + dy }, p1: { x: o.p1.x + dx, y: o.p1.y + dy } }),
     };
   };
-  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} onSelect={onSelect} onChange={onChange} />;
+  return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} fator={fatorDaFolha(doc.canvas)} onSelect={onSelect} onChange={onChange} />;
 }
 
 const fmtM = (v: number, d = 1) => `${v.toFixed(d).replace(".", ",")} m`;
@@ -2356,6 +2495,7 @@ function ObjectLabel({
   const size = lf.label_size ?? d.size;
   return (
     <KonvaText
+      name={`obj_${obj.id}`}
       text={t}
       x={anchor.x + (lf.label_dx ?? d.dx)}
       y={anchor.y + (lf.label_dy ?? d.dy)}
@@ -3032,6 +3172,7 @@ function MeasurementNode({
         text={text}
         anchor={anchor}
         rotation={labelRot}
+        fator={fator}
         draggable={draggable && !obj.locked && solo}
         onSelect={onSelect}
         onChange={onChange}
@@ -3205,6 +3346,7 @@ function AreaNode({
         obj={obj}
         text={text}
         anchor={polygonLabelPoint(pts)}
+        fator={fator}
         draggable={draggable && !obj.locked && solo}
         onSelect={onSelect}
         onChange={onChange}
@@ -3216,23 +3358,25 @@ function AreaNode({
 // ===========================================================================
 // Previews (camada de UI)
 
-function PendingTwoClickPreview({ editor }: { editor: EditorState }) {
+function PendingTwoClickPreview({ editor, fator }: { editor: EditorState; fator: number }) {
   if (!editor.pending) return null;
   const first = editor.pending.first;
   const cursor = editor.pointerWorld;
+  // Nunca mais fino que 1,5 px de tela, e cresce com a folha (foto de drone).
+  const sw = Math.max(1.5 / Math.max(editor.viewport.scale, 0.0001), 1.5 * fator);
   return (
     <Group listening={false}>
       <Line
         points={[first.x, first.y, cursor.x, cursor.y]}
         stroke="#0ea5e9"
-        strokeWidth={1}
-        dash={[6, 4]}
+        strokeWidth={sw}
+        dash={[4 * sw, 3 * sw]}
       />
       <Rect
-        x={first.x - 3}
-        y={first.y - 3}
-        width={6}
-        height={6}
+        x={first.x - 2 * sw}
+        y={first.y - 2 * sw}
+        width={4 * sw}
+        height={4 * sw}
         fill="#0ea5e9"
       />
     </Group>

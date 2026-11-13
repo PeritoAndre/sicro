@@ -119,15 +119,6 @@ export function DroneAjuste({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [estado, onChange]);
 
-  useEffect(() => {
-    const canvas = previewRef.current;
-    if (!canvas || !loaded) return;
-    // Outra foto (ou outra instância do componente): o cache corrigido não vale.
-    if (correctedPreviewRef.current && correctedPreviewRef.current.fonte !== loaded) correctedPreviewRef.current = null;
-    drawPreview(canvas, loaded, intensity, crop, correctedPreviewRef);
-    if (correctedPreviewRef.current) correctedPreviewRef.current.fonte = loaded;
-  }, [loaded, intensity, crop]);
-
   const previewSize = useMemo(() => {
     if (!loaded) return { width: previewMax, height: previewMax * 0.66 };
     const scale = Math.min(
@@ -140,6 +131,17 @@ export function DroneAjuste({
       height: Math.round(loaded.height * scale),
     };
   }, [loaded, previewMax]);
+
+  useEffect(() => {
+    const canvas = previewRef.current;
+    if (!canvas || !loaded) return;
+    // Outra foto (ou outra instância do componente): o cache corrigido não vale.
+    if (correctedPreviewRef.current && correctedPreviewRef.current.fonte !== loaded) correctedPreviewRef.current = null;
+    drawPreview(canvas, loaded, intensity, crop, correctedPreviewRef);
+    if (correctedPreviewRef.current) correctedPreviewRef.current.fonte = loaded;
+    // previewSize nas deps: trocar width/height do canvas apaga o bitmap (tela cheia, janela redimensionada).
+  }, [loaded, intensity, crop, previewSize.width, previewSize.height]);
+
 
   return (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>

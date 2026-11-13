@@ -7,7 +7,6 @@ import {
   Copy,
   FileImage,
   Image as ImageIcon,
-  Layers,
   MapPin,
   Pin,
   Plus,
@@ -51,15 +50,6 @@ interface Props {
   onImportBackground: () => void;
   onImportDrone?: () => void;
   onImportOsm?: () => void;
-  onCenterBackground?: () => void;
-  onFitBackground?: () => void;
-  onResetBackgroundRotation?: () => void;
-  onRemoveBackground?: () => void;
-  hasBackground: boolean;
-  bgLocked: boolean;
-  onToggleBackgroundLock: () => void;
-  bgOpacity: number;
-  onChangeBackgroundOpacity: (v: number) => void;
   onSave: () => void;
   onExportPng: () => void;
   onExportPngClean?: () => void;
@@ -186,7 +176,12 @@ export function Palette(props: Props) {
               key={e.id}
               type="button"
               className={[styles.entry, active ? styles.entryActive : "", isOpen ? styles.entryOpen : ""].join(" ")}
-              onClick={() => setOpen(isOpen ? null : e.id)}
+              onClick={() => {
+                // Grupo com uma opção só (Cota sem R1/R2): vai direto para ela.
+                const itens = e.kind === "group" ? itensDoGrupo(e, props.cotasRef) : [];
+                if (itens.length === 1) pickDirect(itens[0]!.tool);
+                else setOpen(isOpen ? null : e.id);
+              }}
               aria-expanded={isOpen}
               title={e.kind === "group" && keyOf(e.action) ? `${e.label} (${keyOf(e.action)})` : e.label}
             >
@@ -310,38 +305,6 @@ function ImageActions(p: Props) {
         <button type="button" className={styles.actionBtn} onClick={p.onImportOsm} title="Vias reais do OpenStreetMap, editáveis">
           <MapPin size={13} /> Importar OSM…
         </button>
-      )}
-      {p.hasBackground && (
-        <>
-          <div className={styles.actionsTitle}>Fundo atual</div>
-          <button type="button" className={styles.actionBtn} onClick={p.onToggleBackgroundLock}>
-            <Layers size={13} /> {p.bgLocked ? "Desbloquear fundo" : "Bloquear fundo"}
-          </button>
-          <label className={styles.slider}>
-            <span>Opacidade</span>
-            <input
-              type="range"
-              min={0.1}
-              max={1}
-              step={0.05}
-              value={p.bgOpacity}
-              onChange={(e) => p.onChangeBackgroundOpacity(Number(e.target.value))}
-            />
-            <span>{Math.round(p.bgOpacity * 100)}%</span>
-          </label>
-          {p.onCenterBackground && (
-            <button type="button" className={styles.actionBtn} onClick={p.onCenterBackground}>Centralizar na folha</button>
-          )}
-          {p.onFitBackground && (
-            <button type="button" className={styles.actionBtn} onClick={p.onFitBackground}>Tamanho original</button>
-          )}
-          {p.onResetBackgroundRotation && (
-            <button type="button" className={styles.actionBtn} onClick={p.onResetBackgroundRotation}>Rotação a 0°</button>
-          )}
-          {p.onRemoveBackground && (
-            <button type="button" className={styles.actionBtn} onClick={p.onRemoveBackground}>Remover fundo</button>
-          )}
-        </>
       )}
     </div>
   );

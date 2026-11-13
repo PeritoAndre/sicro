@@ -73,7 +73,9 @@ import {
   CROQUI_ZOOM_MIN,
   SHEET_SELECTION_ID,
   type CanvasStageHandle,
+  type RetanguloMundo,
 } from "./CanvasStage";
+import { commands } from "@core/commands";
 import { DEFAULT_VIEWPORT, useEditorState, type Tool } from "./useEditorState";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { DroneImportModal } from "./DroneImportModal";
@@ -105,6 +107,9 @@ export function CroquiEditor() {
   const [exporting, setExporting] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [showDroneImport, setShowDroneImport] = useState(false);
+  // Corte do fundo: retângulo em px de mundo enquanto as alças laranja estão na tela.
+  const [corte, setCorte] = useState<RetanguloMundo | null>(null);
+  const [aplicandoCorte, setAplicandoCorte] = useState(false);
   const [showOsmImport, setShowOsmImport] = useState(false);
   const editor = useEditorState();
   const canvasRef = useRef<HTMLDivElement | null>(null);
@@ -705,13 +710,75 @@ export function CroquiEditor() {
     }
   };
 
-  const handleToggleBackgroundLock = () => {
-    setDoc((prev) => {
-      if (!prev || !prev.background_image) return prev;
-      editor.pushHistory(prev);
-      return { ...prev, background_image: { ...prev.background_image, locked: !prev.background_image.locked } };
-    });
-  };
+  const iniciarCorte = useCallback(() => {
+    const bg = doc?.background_image;
+    if (!bg) return;
+    setCorte({ x: bg.x, y: bg.y, w: bg.width, h: bg.height });
+    editor.setSelectedId(BACKGROUND_SELECTION_ID);
+  }, [doc, editor]);
+
+  const cancelarCorte = useCallback(() => setCorte(null), []);
+
+  /** Recorta o arquivo do fundo (Rust, mesma rotina do drone, lente a 0) e troca o fundo pelo derivado. */
+  const aplicarCorte = useCallback(async () => {
+    const bg = doc?.background_image;
+    if (!bg || !corte || !activeCroqui || !workspacePath) return;
+    setAplicandoCorte(true);
+    try {
+      const url = resolveBackgroundUrl(bg.source_path);
+      const natural = await new Promise<{ w: number; h: number }>((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+        img.onerror = () => reject(new Error("não foi possível ler a imagem do fundo"));
+        img.src = url;
+      });
+      const kx = natural.w / bg.width;
+      const ky = natural.h / bg.height;
+      const x0 = Math.max(0, Math.round((corte.x - bg.x) * kx));
+      const y0 = Math.max(0, Math.round((corte.y - bg.y) * ky));
+      const x1 = Math.min(natural.w, Math.round((corte.x + corte.w - bg.x) * kx));
+      const y1 = Math.min(natural.h, Math.round((corte.y + corte.h - bg.y) * ky));
+      if (x1 - x0 < 16 || y1 - y0 < 16) throw new Error("o corte precisa ficar sobre a imagem");
+      const looksAbsolute = /^([a-zA-Z]:)?[\\/]/.test(bg.source_path);
+      const sep = workspacePath.includes("\\") ? "\\" : "/";
+      const abs = looksAbsolute ? bg.source_path : `${workspacePath}${sep}${bg.source_path.replace(/\//g, sep)}`;
+      const r = await commands.importDroneImage(workspacePath, {
+        source_absolute_path: abs,
+        intensity: 0,
+        crop: { x: x0, y: y0, width: x1 - x0, height: y1 - y0 },
+        croqui_id: activeCroqui.id,
+        occurrence_id: activeCroqui.occurrence_id,
+      });
+      // O derivado ocupa no mundo exatamente o que as alças mostravam.
+      setDoc((prev) => {
+        if (!prev || !prev.background_image) return prev;
+        editor.pushHistory(prev);
+        return {
+          ...prev,
+          background_image: {
+            ...prev.background_image,
+            source_path: r.output_relative_path,
+            sidecar_path: r.sidecar_relative_path,
+            original_path: prev.background_image.original_path ?? prev.background_image.source_path,
+            x: bg.x + x0 / kx,
+            y: bg.y + y0 / ky,
+            width: (x1 - x0) / kx,
+            height: (y1 - y0) / ky,
+          },
+        };
+      });
+      setCorte(null);
+      setFeedback(`Fundo cortado: ${r.output_width}×${r.output_height} px.`);
+    } catch (e) {
+      setFeedback(`Falha ao cortar: ${(e as Error).message}`);
+    } finally {
+      setAplicandoCorte(false);
+    }
+  }, [doc, corte, activeCroqui, workspacePath, resolveBackgroundUrl, editor]);
+
+  useEffect(() => {
+    if (!doc?.background_image) setCorte(null);
+  }, [doc?.background_image]);
   const handleChangeBackgroundOpacity = (v: number) => {
     setDoc((prev) =>
       prev && prev.background_image
@@ -1052,7 +1119,7 @@ export function CroquiEditor() {
     // Imagem de fundo.
     "croqui.bg.import": () => void handleImportBackground(),
     "croqui.bg.toggleLock": () => {
-      if (doc?.background_image) handleToggleBackgroundLock();
+      if (doc?.background_image) handleBackgroundChange({ locked: !doc.background_image.locked });
     },
     "croqui.bg.fit": () => {
       if (doc?.background_image) handleFitBackground();
@@ -1263,15 +1330,6 @@ export function CroquiEditor() {
         onImportBackground={() => void handleImportBackground()}
         onImportDrone={() => setShowDroneImport(true)}
         onImportOsm={() => setShowOsmImport(true)}
-        onCenterBackground={handleCenterBackground}
-        onFitBackground={handleFitBackground}
-        onResetBackgroundRotation={handleResetBackgroundRotation}
-        onRemoveBackground={handleRemoveBackground}
-        hasBackground={!!doc.background_image}
-        bgLocked={doc.background_image?.locked ?? true}
-        onToggleBackgroundLock={handleToggleBackgroundLock}
-        bgOpacity={doc.background_image?.opacity ?? 0.6}
-        onChangeBackgroundOpacity={handleChangeBackgroundOpacity}
         onSave={() => void handleSave()}
         onExportPng={() => void handleExportPng("tecnico")}
         onExportPngClean={() => void handleExportPng("limpo")}
@@ -1292,6 +1350,7 @@ export function CroquiEditor() {
           onParityObjectChange={handleParityObjectChange}
           onBackgroundChange={handleBackgroundChange}
           onCanvasChange={handleCanvasChange}
+          corte={corte ? { rect: corte, onChange: setCorte } : null}
           onSelect={(id) => editor.setSelectedId(id)}
           workspacePath={workspacePath}
         />
@@ -1347,6 +1406,18 @@ export function CroquiEditor() {
         onUpdateExportSettings={handleExportSettingsChange}
         onFitSheet={handleFitSheet}
         onCenterSheet={handleCenterSheet}
+        background={doc.background_image}
+        onUpdateBackground={handleBackgroundChange}
+        onChangeBackgroundOpacity={handleChangeBackgroundOpacity}
+        onCenterBackground={handleCenterBackground}
+        onFitBackground={handleFitBackground}
+        onResetBackgroundRotation={handleResetBackgroundRotation}
+        onRemoveBackground={handleRemoveBackground}
+        corteAtivo={!!corte}
+        aplicandoCorte={aplicandoCorte}
+        onIniciarCorte={iniciarCorte}
+        onAplicarCorte={() => void aplicarCorte()}
+        onCancelarCorte={cancelarCorte}
       />
 
 
