@@ -125,8 +125,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
-      - name: Artefatos do atualizador
-        run: node -e "const f='src-tauri/tauri.conf.json',fs=require('fs'),c=JSON.parse(fs.readFileSync(f));c.bundle.createUpdaterArtifacts=true;fs.writeFileSync(f,JSON.stringify(c,null,2))"
+      - name: FFmpeg e ExifTool que vão dentro do AppImage
+        run: |
+          scripts/fetch-ffmpeg-linux.sh
+          scripts/fetch-exiftool-linux.sh
+
+      # Recursos só aqui: o .deb/.rpm declaram o ffmpeg/exiftool da distro.
+      - name: Artefatos do atualizador e recursos embutidos
+        run: node -e "const f='src-tauri/tauri.conf.json',fs=require('fs'),c=JSON.parse(fs.readFileSync(f));c.bundle.createUpdaterArtifacts=true;c.bundle.resources={'ffmpeg-linux':'ffmpeg','exiftool-linux':'exiftool'};fs.writeFileSync(f,JSON.stringify(c,null,2))"
 
       - name: Compilar e empacotar
         env:

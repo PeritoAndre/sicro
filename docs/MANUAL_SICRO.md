@@ -400,8 +400,8 @@ original é copiado e "hasheado"; todo o trabalho fica numa pilha por cima.
 - **Metadados** (botão no topo): todos os campos que o **exiftool** lê (numa
   foto de drone, mais de 150), em português, por grupo, com filtro e cópia em
   texto; cartões de resumo de captura, câmera, local, voo (DJI) e integridade
-  (MD5, SHA-1, SHA-256, SHA3-256). O exiftool vem com o SICRO no Windows e é
-  dependência do pacote no Linux.
+  (MD5, SHA-1, SHA-256, SHA3-256). O exiftool vem com o SICRO no Windows e no
+  AppImage; no .deb e no .rpm é dependência do pacote.
 
 ### 6.5 Anotar e medir
 

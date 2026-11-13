@@ -58,6 +58,9 @@
       },
       "deb": {
         "depends": ["ffmpeg", "libimage-exiftool-perl", "gstreamer1.0-plugins-good", "gstreamer1.0-libav"]
+      },
+      "rpm": {
+        "depends": ["/usr/bin/ffmpeg", "/usr/bin/exiftool"]
       }
     },
     "windows": {
