@@ -111,6 +111,9 @@ jobs:
             gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
           rustup default stable
           npm install -g pnpm@9.12.3
+          # gdk-pixbuf 2.44 do Arch não cria a pasta de loaders; o plugin GTK do linuxdeploy exige ela.
+          mkdir -p /usr/lib/gdk-pixbuf-2.0/2.10.0/loaders
+          gdk-pixbuf-query-loaders --update-cache
 
       - uses: actions/checkout@v4
       - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
