@@ -1,4 +1,7 @@
 # Compila o SICRO para Linux e Windows e monta a release como RASCUNHO.
+# Linhas sugeridas para a tabela de Downloads das notas (docs/releases/v<versão>.md):
+#   | **Linux (qualquer distro, AppImage)** | `SICRO-<V>-linux-x86_64.AppImage` | `chmod +x` e execute (compilado no Arch; precisa de FUSE 2 ou rode com `--appimage-extract-and-run`). Atualiza sozinho. |
+#   | **Fedora, openSUSE e derivados (rpm)** | `sicro-<V>.x86_64.rpm` | `sudo dnf install ./sicro-<V>.x86_64.rpm` |
 # Dispara só pelo `scripts/release.sh` (ou Actions → Run workflow): a tag que a
 # publicação cria não deve rodar isto de novo. Publicar: gh release edit v<versão> --draft=false
 name: Release
@@ -25,7 +28,7 @@ jobs:
           - os: ubuntu-22.04
             # AppImage fora por ora: o WebKit/GStreamer do Ubuntu embutido quebra
             # em distros mais novas (EGL_BAD_ALLOC, plugin scanner) — ver notas 3.1.
-            bundles: deb
+            bundles: deb,rpm
           - os: windows-latest
             bundles: nsis
     runs-on: ${{ matrix.os }}
@@ -69,9 +72,17 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # Assinatura do atualizador (Windows): chave em ~/.tauri/sicro-updater.key no PC do André;
+      # segredos TAURI_SIGNING_PRIVATE_KEY e TAURI_SIGNING_PRIVATE_KEY_PASSWORD no repositório.
+      - name: Artefatos do atualizador (Windows)
+        if: runner.os == 'Windows'
+        run: node -e "const f='src-tauri/tauri.conf.json',fs=require('fs'),c=JSON.parse(fs.readFileSync(f));c.bundle.createUpdaterArtifacts=true;fs.writeFileSync(f,JSON.stringify(c,null,2))"
+
       - name: Compilar e empacotar
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm tauri build --bundles ${{ matrix.bundles }}
 
       - uses: actions/upload-artifact@v4
@@ -80,10 +91,58 @@ jobs:
           if-no-files-found: error
           path: |
             src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/rpm/*.rpm
             src-tauri/target/release/bundle/nsis/*-setup.exe
+            src-tauri/target/release/bundle/nsis/*-setup.exe.sig
+
+  # AppImage compilado no Arch (WebKit/GStreamer do Arch, como no PC do dono):
+  # o do Ubuntu embutido quebra fora do Ubuntu. NO_STRIP: sem isso o linuxdeploy falha no Arch.
+  appimage:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      # Antes do checkout: sem git o checkout cai num tarball e perde metadados.
+      - name: Dependências do sistema (Arch)
+        run: |
+          pacman -Syu --noconfirm --needed \
+            base-devel git rustup nodejs npm \
+            webkit2gtk-4.1 gtk3 libayatana-appindicator librsvg openssl dbus xdotool \
+            file patchelf fuse2 \
+            gst-plugins-base gst-plugins-good gst-plugins-bad gst-plugins-ugly gst-libav
+          rustup default stable
+          npm install -g pnpm@9.12.3
+
+      - uses: actions/checkout@v4
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: arch-appimage
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Artefatos do atualizador
+        run: node -e "const f='src-tauri/tauri.conf.json',fs=require('fs'),c=JSON.parse(fs.readFileSync(f));c.bundle.createUpdaterArtifacts=true;fs.writeFileSync(f,JSON.stringify(c,null,2))"
+
+      - name: Compilar e empacotar
+        env:
+          NO_STRIP: "1"
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri build --bundles appimage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pacotes-AppImage
+          if-no-files-found: error
+          path: |
+            src-tauri/target/release/bundle/appimage/*.AppImage
+            src-tauri/target/release/bundle/appimage/*.AppImage.sig
 
   release:
-    needs: build
+    needs: [build, appimage]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -104,8 +163,15 @@ jobs:
 
           mkdir out
           cp "$(find dist -name '*.deb' | head -1)" "out/sicro_${V}_amd64.deb"
+          cp "$(find dist -name '*.rpm' | head -1)" "out/sicro-$V.x86_64.rpm"
+          cp "$(find dist -name '*.AppImage' | head -1)" "out/SICRO-$V-linux-x86_64.AppImage"
+          cp "$(find dist -name '*.AppImage.sig' | head -1)" "out/SICRO-$V-linux-x86_64.AppImage.sig"
           cp "$(find dist -name '*-setup.exe' | head -1)" "out/SICRO-$V-windows-x64-setup.exe"
+          cp "$(find dist -name '*-setup.exe.sig' | head -1)" "out/SICRO-$V-windows-x64-setup.exe.sig"
           (cd out && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          # latest.json do atualizador: o app lê em releases/latest/download/latest.json (só release publicada).
+          node scripts/latest-json.mjs "$V" "$NOTES" out/SICRO-$V-windows-x64-setup.exe.sig out/SICRO-$V-linux-x86_64.AppImage.sig > out/latest.json
+          cat out/latest.json
 
           # Refaz só rascunho; release publicada nunca é tocada.
           if gh release view "$TAG" >/dev/null 2>&1; then

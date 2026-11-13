@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2.0.0",
   "productName": "SICRO",
-  "version": "5.3.0",
+  "version": "6.0.0",
   "identifier": "br.org.sicro.desktop",
   "build": {
     "beforeDevCommand": "pnpm dev",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "SICRO 5.3",
+        "title": "SICRO 6.0",
         "width": 1440,
         "height": 900,
         "minWidth": 1100,
@@ -71,5 +71,13 @@
       }
     }
   },
-  "plugins": {}
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEFBRDI4MDUwOTJGQ0E0NEMKUldSTXBQeVNVSURTcW04ZDB3UkFzRmdCZENZaVVaK09ValVMandKTjlsa3dNMHB3SkFtMmsvVlYK",
+      "endpoints": ["https://github.com/PeritoAndre/sicro/releases/latest/download/latest.json"],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
 }

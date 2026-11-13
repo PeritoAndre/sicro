@@ -6,6 +6,7 @@ import { HelpCircle, Search } from "lucide-react";
 // Fonte única: editar o .md atualiza a Ajuda.
 import manualMd from "../../../docs/MANUAL_SICRO.md?raw";
 import { FeedbackButton } from "./FeedbackButton";
+import { VersaoAtualizacao } from "./VersaoAtualizacao";
 import styles from "./AjudaModule.module.css";
 
 interface TocItem {
@@ -106,6 +107,7 @@ export function AjudaModule() {
         </nav>
         <div className={styles.tocFoot}>
           <FeedbackButton />
+          <VersaoAtualizacao />
         </div>
       </aside>
 

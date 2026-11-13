@@ -12,6 +12,7 @@ import {
   MapContainer,
   Marker,
   Polyline,
+  Rectangle,
   Popup,
   useMap,
   useMapEvents,
@@ -19,6 +20,7 @@ import {
 import L from "leaflet";
 import { commands } from "@core/commands";
 import type { LatLon, OsmDataset } from "../engine";
+import { type MapaBase, urlDoTile } from "../engine/mapasBase";
 
 // Pino em divIcon: os sprites PNG do Leaflet dão 404 em build Vite/Tauri.
 const SITE_PIN_ICON = L.divIcon({
@@ -42,6 +44,14 @@ interface Props {
   onMapPick: (pt: LatLon) => void;
   onToggleWay: (id: number) => void;
   onUnload: () => void;
+  /** Sem a nota do Road Engine nem a barra do Leaflet (tela "Novo croqui"). */
+  enxuto?: boolean;
+  /** Desenha a folha: o quadrado que envolve o círculo do raio. */
+  quadrado?: boolean;
+  /** Só o quadrado, sem o círculo do raio. */
+  semCirculo?: boolean;
+  /** Tiles de outro fornecedor (Google, Esri…); ausente = OpenStreetMap. */
+  mapaBase?: MapaBase | null;
 }
 
 export function OsmMapPanel({
@@ -52,6 +62,10 @@ export function OsmMapPanel({
   onMapPick,
   onToggleWay,
   onUnload,
+  enxuto = false,
+  quadrado = false,
+  semCirculo = false,
+  mapaBase = null,
 }: Props) {
   console.info("[OSM] OsmMapPanel mounting (Leaflet starts now)");
   const [mapReady, setMapReady] = useState(false);
@@ -97,7 +111,7 @@ export function OsmMapPanel({
         style={{ width: "100%", height: "100%" }}
         attributionControl
       >
-        <RustTileLayer />
+        <RustTileLayer mapa={mapaBase} />
         <MapInvalidator
           key={refreshNonce}
           onReady={() => setMapReady(true)}
@@ -118,6 +132,7 @@ export function OsmMapPanel({
             </Marker>
             {/* `Circle` tem raio em metros geográficos (acompanha o zoom);
                 `CircleMarker` seria em pixels. */}
+            {!semCirculo && (
             <Circle
               center={[centre.lat, centre.lon]}
               radius={radius}
@@ -129,8 +144,16 @@ export function OsmMapPanel({
                 dashArray: "6 4",
               }}
             />
+            )}
             {/* Pino em pixels fixos: mantém o centro visível quando o
                 `Circle` ocupa a tela toda em zoom alto. */}
+            {quadrado && (
+              <Rectangle
+                bounds={quadradoDoRaio(centre, radius)}
+                pathOptions={{ color: "#d62828", fillColor: "#d62828", fillOpacity: 0.06, weight: 2 }}
+                interactive={false}
+              />
+            )}
             <CircleMarker
               center={[centre.lat, centre.lon]}
               radius={4}
@@ -158,6 +181,8 @@ export function OsmMapPanel({
           />
         ))}
       </MapContainer>
+      {!enxuto && (
+        <>
 
       <div
         style={{
@@ -248,6 +273,8 @@ export function OsmMapPanel({
           Esconder mapa
         </button>
       </div>
+        </>
+      )}
     </div>
   );
 }
@@ -332,13 +359,15 @@ function MapClickHandler({
 // Tiles vêm pelo Rust (a página não pode carregar imagem de outra origem no
 // Linux); cada tile vira uma data URL.
 const RustTiles = L.TileLayer.extend({
-  createTile(coords: L.Coords, done: L.DoneCallback) {
+  createTile(this: { options: { mapa?: MapaBase | null } }, coords: L.Coords, done: L.DoneCallback) {
     const img = document.createElement("img");
     img.alt = "";
-    commands
-      .fetchOsmTile(coords.z, coords.x, coords.y)
+    const mapa = this.options.mapa ?? null;
+    const url = mapa ? urlDoTile(mapa, coords.z, coords.x, coords.y) : null;
+    const mime = url && !/\.png(\?|$)/i.test(url) ? "image/jpeg" : "image/png";
+    (url ? commands.fetchMapTile(url) : commands.fetchOsmTile(coords.z, coords.x, coords.y))
       .then((b64) => {
-        img.src = `data:image/png;base64,${b64}`;
+        img.src = `data:${mime};base64,${b64}`;
         done(undefined, img);
       })
       .catch((e: unknown) => {
@@ -347,19 +376,28 @@ const RustTiles = L.TileLayer.extend({
       });
     return img;
   },
-}) as unknown as new (url: string, options?: L.TileLayerOptions) => L.TileLayer;
+}) as unknown as new (url: string, options?: L.TileLayerOptions & { mapa?: MapaBase | null }) => L.TileLayer;
 
-function RustTileLayer() {
+/** Caixa da folha em graus (quadrado de lado 2·raio; Terra esférica). */
+function quadradoDoRaio(c: LatLon, raioM: number): [[number, number], [number, number]] {
+  const dLat = (raioM / 6_371_000) * (180 / Math.PI);
+  const dLon = dLat / Math.max(Math.cos((c.lat * Math.PI) / 180), 1e-6);
+  return [[c.lat - dLat, c.lon - dLon], [c.lat + dLat, c.lon + dLon]];
+}
+
+function RustTileLayer({ mapa = null }: { mapa?: MapaBase | null }) {
   const map = useMap();
   useEffect(() => {
     const layer = new RustTiles("", {
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      maxZoom: 19,
+      attribution: mapa ? mapa.atrib : '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+      maxNativeZoom: mapa ? mapa.maxzoom : 19,
+      maxZoom: 20,
+      mapa,
     });
     layer.addTo(map);
     return () => {
       layer.remove();
     };
-  }, [map]);
+  }, [map, mapa]);
   return null;
 }

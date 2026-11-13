@@ -25,6 +25,20 @@ import type { FixtureSubtype, PersonPosicao, TraceSubtype, VehicleBodyType } fro
 import { getVehicleRealDims } from "../../engine/vehicleArt";
 import { FixtureThumb, PersonThumb, SvgThumb, TraceThumb, VehicleThumb, roadThumb } from "./thumbs";
 
+/** Miniatura da cota de um clique: perpendicular saindo do referencial, na cor dele. */
+export const cotaReferencialItem = (qual: "r1" | "r2", cor: string): PaletteItem => ({
+  tool: qual === "r1" ? "measurement_r1" : "measurement_r2",
+  label: `Cota ${qual.toUpperCase()} · um clique`,
+  thumb: (
+    <SvgThumb>
+      <path d="M6 32 58 26" stroke={cor} strokeWidth="3" />
+      <path d="M36 28.5 33 7" stroke={cor} strokeWidth="2" />
+      <circle cx="33" cy="7" r="3" fill={cor} />
+      <text x="46" y="14" textAnchor="middle" fontFamily="Arial" fontSize="9" fill="#111827">{qual.toUpperCase()}</text>
+    </SvgThumb>
+  ),
+});
+
 export interface PaletteItem {
   tool: Tool;
   label: string;
@@ -67,7 +81,15 @@ const amarelaDupla = <path d="M0 18.5H64M0 21.5H64" stroke="#d6a200" strokeWidth
 export const RAIL: RailEntry[] = [
   { kind: "tool", tool: "select", label: "Selecionar", icon: MousePointer2, action: "croqui.tool.select" },
   { kind: "tool", tool: "pan", label: "Pan", icon: Hand, action: "croqui.tool.pan" },
-  { kind: "tool", tool: "measurement", label: "Cota", icon: Ruler, action: "croqui.tool.measure" },
+  {
+    kind: "group",
+    id: "cota",
+    action: "croqui.tool.measure",
+    label: "Cota",
+    icon: Ruler,
+    // Cota R1 / Cota R2 entram aqui em tempo de execução, quando o croqui tem o referencial (Palette).
+    items: [{ tool: "measurement", action: "croqui.tool.measure", label: "Cota · dois pontos", thumb: (<SvgThumb><path d="M8 20h48" stroke="#dc2626" strokeWidth="2" /><path d="M8 13v14M56 13v14" stroke="#dc2626" strokeWidth="2" /><text x="32" y="15" textAnchor="middle" fontFamily="Arial" fontSize="9" fill="#111827">4,20 m</text></SvgThumb>) }],
+  },
   { kind: "tool", tool: "area", label: "Área", icon: Pentagon, action: "croqui.tool.area" },
   { kind: "tool", tool: "set_scale", label: "Escala", icon: Crosshair, action: "croqui.tool.scale" },
   { kind: "tool", tool: "line_r1", label: "R1", icon: Minus, action: "croqui.tool.r1" },
@@ -145,7 +167,9 @@ export const RAIL: RailEntry[] = [
       vestigio("sulcagem", "Sulcagem"),
       vestigio("ranhura", "Ranhuras"),
       vestigio("fluido", "Fluido"),
+      vestigio("sangue", "Sangue"),
       vestigio("fragmentos", "Fragmentos"),
+      vestigio("arma", "Arma de fogo"),
       { ...vestigio("colisao", "Ponto de colisão"), action: "croqui.tool.vestigio" },
     ],
   },
@@ -214,6 +238,7 @@ export const RAIL: RailEntry[] = [
 
 /** Grupo (id) a que a ferramenta pertence, para acender o trilho. */
 export function groupOfTool(tool: Tool): string | null {
+  if (tool === "measurement_r1" || tool === "measurement_r2") return "cota";
   for (const e of RAIL) {
     if (e.kind === "group" && e.items.some((i) => i.tool === tool)) return e.id;
   }

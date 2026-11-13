@@ -23,6 +23,39 @@
   background: #1a2030;
 }
 
+.faixaEscala {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  border-radius: 6px;
+  border: 1px solid var(--sicro-accent);
+  background: var(--sicro-surface-3);
+  color: var(--sicro-fg);
+  font-size: 12.5px;
+}
+.faixaEscalaBtn {
+  padding: 7px 12px;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.faixaEscalaFechar {
+  padding: 4px 10px;
+  border: 0;
+  border-left: 1px solid var(--sicro-divider);
+  background: none;
+  color: var(--sicro-fg-muted);
+  font-size: 16px;
+  cursor: pointer;
+}
+.faixaEscalaFechar:hover { color: var(--sicro-fg); }
+
 /* Konva Stage renders a div container with absolute-positioned canvases.
  * To keep the status bar pinned at the bottom we let the Stage div fill the
  * remaining height via flex. */

@@ -76,6 +76,16 @@
   border-color: rgba(215, 168, 79, 0.25);
   font-weight: 600;
 }
+.entryDestaque {
+  color: var(--sicro-surface-1);
+  background: var(--sicro-accent);
+  font-weight: 700;
+  box-shadow: 0 0 0 3px rgba(215, 168, 79, 0.28), 0 0 16px rgba(215, 168, 79, 0.55);
+}
+.entryDestaque:hover {
+  background: var(--sicro-accent-hover);
+  color: var(--sicro-surface-1);
+}
 .entryOpen::after {
   content: "";
   position: absolute;

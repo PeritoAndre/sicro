@@ -1,0 +1,51 @@
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rotulo {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--sicro-fg-muted);
+}
+.caixa {
+  display: flex;
+  align-items: center;
+  border-radius: 8px;
+  border: 1px solid var(--sicro-border);
+  background: var(--sicro-surface-2);
+  overflow: hidden;
+}
+.caixa:focus-within { border-color: var(--sicro-accent); }
+.caixa input {
+  flex: 1;
+  min-width: 0;
+  width: 44px;
+  padding: 8px 4px;
+  border: 0;
+  background: transparent;
+  color: var(--sicro-fg);
+  font: inherit;
+  font-size: 14px;
+  font-family: var(--sicro-font-mono, monospace);
+  text-align: center;
+  outline: none;
+}
+.unidade { padding-right: 6px; color: var(--sicro-fg-dim); font-size: 12px; }
+.btn {
+  width: 34px;
+  height: 36px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: var(--sicro-surface-3);
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.btn:hover:not(:disabled) { background: var(--sicro-surface-hi); color: var(--sicro-accent); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.desligado { opacity: 0.6; }

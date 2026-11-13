@@ -272,6 +272,23 @@ export const commands = {
   fetchOsmTile(z: number, x: number, y: number): Promise<string> {
     return safeInvoke<string>("fetch_osm_tile", { z, x, y });
   },
+  /** Tile de qualquer fornecedor da lista de mapas base (`mapasBase.ts`), imagem em base64. */
+  fetchMapTile(url: string): Promise<string> {
+    return safeInvoke<string>("fetch_map_tile", { url });
+  },
+  /** Endereço → coordenadas (Nominatim). */
+  geocodePlace(query: string): Promise<{ nome: string; lat: number; lon: number }[]> {
+    return safeInvoke("geocode_place", { query });
+  },
+  /** Grava o PNG do fundo de mapa no caso; devolve o caminho relativo. */
+  saveCroquiBackground(workspacePath: string, pngBase64: string, nome: string): Promise<string> {
+    return safeInvoke<string>("save_croqui_background", { workspacePath, pngBase64, nome });
+  },
+
+  /** ~/SICRO/Casos (ou equivalente): onde os casos nascem. */
+  defaultWorkspaceParent(): Promise<string> {
+    return safeInvoke<string>("default_workspace_parent", {});
+  },
 
   createCroqui(
     workspacePath: string,

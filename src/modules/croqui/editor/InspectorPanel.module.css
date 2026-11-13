@@ -81,10 +81,11 @@
 }
 
 .objectItem {
+  position: relative;
   display: flex;
   gap: 6px;
   align-items: center;
-  padding: 3px 8px 3px 24px;
+  padding: 3px 8px 3px 4px;
   font-size: var(--text-xs);
   color: var(--sicro-fg);
   cursor: pointer;
@@ -95,6 +96,29 @@
 .objectItemActive {
   background: rgba(90, 169, 230, 0.18);
 }
+.objectGrip {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--sicro-fg-faint);
+  cursor: grab;
+  touch-action: none;
+}
+.objectGrip:hover { color: var(--sicro-fg); }
+.objectArrastando { opacity: 0.45; }
+.objectMarcaAcima::before,
+.objectMarcaAbaixo::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: var(--sicro-accent);
+}
+.objectMarcaAcima::before { top: -1px; }
+.objectMarcaAbaixo::after { bottom: -1px; }
 .objectKind {
   font-family: var(--font-mono);
   width: 22px;
@@ -213,6 +237,29 @@
 .objectItemActive {
   background: rgba(90, 169, 230, 0.18);
 }
+.objectGrip {
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  border: 0;
+  background: none;
+  color: var(--sicro-fg-faint);
+  cursor: grab;
+  touch-action: none;
+}
+.objectGrip:hover { color: var(--sicro-fg); }
+.objectArrastando { opacity: 0.45; }
+.objectMarcaAcima::before,
+.objectMarcaAbaixo::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  height: 2px;
+  background: var(--sicro-accent);
+}
+.objectMarcaAcima::before { top: -1px; }
+.objectMarcaAbaixo::after { bottom: -1px; }
 .objectVisBtn,
 .objectAction {
   background: transparent;

@@ -553,10 +553,19 @@ fn osm_agent() -> Result<ureq::Agent> {
 /// O servidor público vive sobrecarregado (504): tenta os três nós oficiais.
 #[tauri::command]
 pub async fn fetch_overpass(query: String) -> Result<String> {
-    const ENDPOINTS: [&str; 3] = [
+    // O público (overpass-api.de) vive saturado em 2026 (502 "at capacity"); os espelhos seguram.
+    // O espelho próprio (Overpass com o Amapá, no TrueNAS do André via Tailscale Funnel) vem primeiro; qualquer
+    // erro nele passa ao seguinte. Ordem dos públicos pelo que respondeu em 13/11/2026: o .fr em 1 s; kumi e
+    // private.coffee nem abriram conexão daqui.
+    const ENDPOINTS: [&str; 8] = [
+        "https://truenas.tail23e061.ts.net/overpass/api/interpreter",
         "https://overpass-api.de/api/interpreter",
+        "https://overpass.openstreetmap.fr/api/interpreter",
         "https://lz4.overpass-api.de/api/interpreter",
         "https://z.overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+        "https://overpass.private.coffee/api/interpreter",
+        "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
     ];
     tauri::async_runtime::spawn_blocking(move || {
         let agent = osm_agent()?;
@@ -572,16 +581,20 @@ pub async fn fetch_overpass(query: String) -> Result<String> {
                     std::io::Read::read_to_string(&mut r.into_reader(), &mut body).map_err(
                         |e| SicroError::Validation(format!("resposta do Overpass ilegível: {e}")),
                     )?;
+                    // O espelho só tem o Amapá: fora dele responde vazio, e aí o mundo inteiro vem do público.
+                    if url == ENDPOINTS[0] && resposta_vazia(&body) {
+                        last = "espelho do Amapá sem dados nessa região".to_string();
+                        continue;
+                    }
                     return Ok(body);
                 }
-                // 429/503/504 = nó cheio; o próximo costuma responder.
-                Err(ureq::Error::Status(code @ (429 | 503 | 504), _)) => {
+                // 429/502/503/504 = nó cheio; o próximo costuma responder.
+                Err(ureq::Error::Status(code @ (429 | 502 | 503 | 504), _)) => {
                     last = format!("Overpass respondeu com status {code}");
                 }
+                // Outro status (400 de consulta inválida, 404 de espelho sem a região…): o próximo pode servir.
                 Err(ureq::Error::Status(code, _)) => {
-                    return Err(SicroError::Validation(format!(
-                        "Overpass respondeu com status {code}. Tente novamente em alguns segundos."
-                    )));
+                    last = format!("Overpass respondeu com status {code}");
                 }
                 Err(ureq::Error::Transport(t)) => {
                     last = format!("falha de rede ao consultar o Overpass: {t}");
@@ -594,6 +607,14 @@ pub async fn fetch_overpass(query: String) -> Result<String> {
     })
     .await
     .map_err(|e| SicroError::Validation(format!("consulta interrompida: {e}")))?
+}
+
+/// `elements` vazio na resposta do Overpass (JSON).
+fn resposta_vazia(body: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(body)
+        .ok()
+        .and_then(|v| v.get("elements").and_then(|e| e.as_array().map(|a| a.is_empty())))
+        .unwrap_or(false)
 }
 
 /// Tile do mapa de referência (OSM) pelo Rust, em PNG base64 — mesmo motivo do
@@ -618,3 +639,111 @@ pub async fn fetch_osm_tile(z: u32, x: u32, y: u32) -> Result<String> {
     .await
     .map_err(|e| SicroError::Validation(format!("consulta interrompida: {e}")))?
 }
+
+// ---------------------------------------------------------------------------
+// Novo croqui a partir de mapa: tiles de qualquer fornecedor da lista, busca de
+// endereço e gravação do fundo montado no frontend.
+
+/// Hosts aceitos em `fetch_map_tile` (a lista é a do `mapasBase.ts`; nada fora dela sai do app).
+const TILE_HOSTS: &[&str] = &[
+    "tile.openstreetmap.org",
+    "google.com",
+    "arcgisonline.com",
+    "arcgis.com",
+    "virtualearth.net",
+    "earthdata.nasa.gov",
+    "maps.eox.at",
+    "opentopomap.org",
+];
+
+#[tauri::command]
+pub async fn fetch_map_tile(url: String) -> Result<String> {
+    let host = url
+        .strip_prefix("https://")
+        .and_then(|r| r.split('/').next())
+        .unwrap_or("");
+    if !TILE_HOSTS.iter().any(|h| host == *h || host.ends_with(&format!(".{h}"))) {
+        return Err(SicroError::Validation(format!("fornecedor de tiles não permitido: {host}")));
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = osm_agent()?;
+        let resp = agent.get(&url).call().map_err(|e| {
+            tracing::warn!("tile {url}: {e}");
+            SicroError::Validation(format!("tile do mapa indisponível: {e}"))
+        })?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut resp.into_reader(), &mut bytes)
+            .map_err(|e| SicroError::Validation(format!("tile do mapa ilegível: {e}")))?;
+        Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("consulta interrompida: {e}")))?
+}
+
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct LugarEncontrado {
+    pub nome: String,
+    pub lat: f64,
+    pub lon: f64,
+}
+
+/// Busca de endereço no Nominatim (OSM); exige User-Agent identificado, que o `osm_agent` já manda.
+#[tauri::command]
+pub async fn geocode_place(query: String) -> Result<Vec<LugarEncontrado>> {
+    let q = query.trim().to_string();
+    if q.len() < 3 {
+        return Ok(Vec::new());
+    }
+    tauri::async_runtime::spawn_blocking(move || {
+        let agent = osm_agent()?;
+        let resp = agent
+            .get("https://nominatim.openstreetmap.org/search")
+            .query("format", "jsonv2")
+            .query("limit", "6")
+            .query("accept-language", "pt-BR")
+            .query("q", &q)
+            .call()
+            .map_err(|e| SicroError::Validation(format!("busca de endereço indisponível: {e}")))?;
+        let body: serde_json::Value = resp
+            .into_json()
+            .map_err(|e| SicroError::Validation(format!("resposta da busca ilegível: {e}")))?;
+        let itens = body.as_array().cloned().unwrap_or_default();
+        Ok(itens
+            .iter()
+            .filter_map(|it| {
+                let lat = it.get("lat")?.as_str()?.parse::<f64>().ok()?;
+                let lon = it.get("lon")?.as_str()?.parse::<f64>().ok()?;
+                let nome = it.get("display_name")?.as_str()?.to_string();
+                Some(LugarEncontrado { nome, lat, lon })
+            })
+            .collect())
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("consulta interrompida: {e}")))?
+}
+
+/// Grava o PNG do fundo de mapa em `croquis/backgrounds/` e devolve o caminho relativo ao workspace.
+#[tauri::command]
+pub async fn save_croqui_background(
+    workspace_path: String,
+    png_base64: String,
+    nome: String,
+) -> Result<String> {
+    let ws = PathBuf::from(&workspace_path);
+    Manifest::read(&ws)?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(png_base64.as_bytes())
+        .map_err(|e| SicroError::Validation(format!("PNG do fundo inválido: {e}")))?;
+    let slug: String = nome
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '_' })
+        .collect();
+    let ts = Utc::now().format("%Y%m%d_%H%M%S").to_string();
+    let filename = format!("mapa_{slug}_{ts}.png");
+    let dir = ws.join(CROQUIS_BACKGROUNDS_SUBDIR);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| SicroError::Filesystem(format!("cannot create backgrounds dir {}: {}", dir.display(), e)))?;
+    atomic_write_bytes(&dir.join(&filename), &bytes)?;
+    Ok(format!("{CROQUIS_BACKGROUNDS_SUBDIR}/{filename}"))
+}
+

@@ -28,6 +28,8 @@ export interface ShortcutAction {
 
 /** Valem em qualquer tela (ligados no AppShell). Shift evita colidir com o Ctrl+=/-/0 dos módulos. */
 const GERAL: ShortcutAction[] = [
+  { id: "geral.trocarCaso", scope: "geral", group: "Geral · Casos", label: "Trocar de caso", defaultBinding: "Ctrl+O" },
+  { id: "geral.novoCaso", scope: "geral", group: "Geral · Casos", label: "Novo caso", defaultBinding: "Ctrl+N" },
   { id: "geral.uiZoomIn", scope: "geral", group: "Geral · Interface", label: "Aumentar a interface", defaultBinding: "Ctrl+Shift+=" },
   { id: "geral.uiZoomOut", scope: "geral", group: "Geral · Interface", label: "Diminuir a interface", defaultBinding: "Ctrl+Shift+-" },
   { id: "geral.uiZoomReset", scope: "geral", group: "Geral · Interface", label: "Interface em 100%", defaultBinding: "Ctrl+Shift+0" },

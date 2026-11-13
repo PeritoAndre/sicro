@@ -77,7 +77,7 @@ import {
   resolvePxPerM,
 } from "../engine/road-parity";
 import { drawTrace, tracePalette, traceHitShape } from "./traceDraw";
-import { drawFixture, fixtureHitShape, fixtureOnGround } from "./fixtureDraw";
+import { drawFixture, fixtureHitShape } from "./fixtureDraw";
 import { drawPerson, hitPerson, setPersonExporting } from "./personDraw";
 import {
   getCachedPessoaArtImage,
@@ -233,17 +233,24 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       const node = e.target;
       const id = typeof node.id === "function" ? node.id() : "";
       const layer = objectsLayerRef.current;
-      if (!id || !layer || !doc.objects.some((o) => o.id === id)) return;
+      const ehFundo = id === BACKGROUND_SELECTION_ID;
+      if (!id || !layer || (!ehFundo && !doc.objects.some((o) => o.id === id))) return;
       const others = editor.selectedIds.includes(id)
         ? editor.selectedIds.filter((s) => s !== id)
         : [];
+      // O fundo mora em outra camada: acompanha pelo nó do Stage.
+      const fundoNode = others.includes(BACKGROUND_SELECTION_ID) ? stage.findOne(`#${BACKGROUND_SELECTION_ID}`) : null;
       dragSessionRef.current = {
         node,
         startX: node.x(),
         startY: node.y(),
         dx: 0,
         dy: 0,
-        parts: [...partsOf(layer, id, node), ...others.flatMap((oid) => partsOf(layer, oid))],
+        parts: [
+          ...(ehFundo ? [] : partsOf(layer, id, node)),
+          ...others.filter((o) => o !== BACKGROUND_SELECTION_ID).flatMap((oid) => partsOf(layer, oid)),
+          ...(fundoNode ? [{ node: fundoNode, x: fundoNode.x(), y: fundoNode.y() }] : []),
+        ],
         others,
       };
     };
@@ -268,6 +275,11 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       // O arrastado é commitado pelo próprio nó; aqui só os outros.
       const pxPerM = resolvePxPerM(doc.scale?.px_per_m);
       for (const oid of s.others) {
+        if (oid === BACKGROUND_SELECTION_ID) {
+          const bg = doc.background_image;
+          if (bg) onBackgroundChange?.({ x: bg.x + s.dx, y: bg.y + s.dy });
+          continue;
+        }
         const obj = doc.objects.find((x) => x.id === oid);
         if (!obj) continue;
         const patch = translateObjectPatch(obj, s.dx, s.dy, pxPerM);
@@ -288,7 +300,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       stage.off("dragmove.group");
       stage.off("dragend.group");
     };
-  }, [editor.selectedIds, doc, onObjectChange, onParityObjectChange]);
+  }, [editor.selectedIds, doc, onObjectChange, onParityObjectChange, onBackgroundChange]);
 
   // Transformer nos nós selecionados (aceita lista → uma caixa em volta de todos).
   useEffect(() => {
@@ -400,6 +412,9 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       const b = getObjectBoundsStagePx(obj, pxPerM);
       if (rectsIntersect(b, rect)) hits.push(obj.id);
     }
+    // Fundo desbloqueado entra no laço: aí o grupo inteiro anda com ele.
+    const bg = doc.background_image;
+    if (bg && !bg.locked && rectsIntersect({ x: bg.x, y: bg.y, width: bg.width, height: bg.height }, rect)) hits.push(BACKGROUND_SELECTION_ID);
     editor.setSelectedIds(hits);
     // O `click` que o browser emite em seguida seria tratado como clique
     // no vazio e apagaria a seleção; ver justFinishedMarqueeRef.
@@ -451,12 +466,8 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       if (isParityObject(o)) parity.push(o);
       else others.push(o);
     }
-    // Pintura no chão, vestígios, elementos de pé e, por cima, veículos e anotações.
-    // Área fica no chão, logo acima das vias: o que está dentro dela continua clicável.
-    const rank = (o: SicroObject) =>
-      o.kind === "area" ? -1 : o.kind === "fixture" ? (fixtureOnGround(o) ? 0 : 2) : o.kind === "trace" ? 1 : 3;
-    const ordered = others.map((o, i) => [rank(o), i, o] as const).sort((a, b) => a[0] - b[0] || a[1] - b[1]).map((x) => x[2]);
-    return { parityObjects: parity, otherObjects: ordered };
+    // Empilhamento = ordem da lista (o painel Objetos reordena arrastando); as vias ficam sempre no chão.
+    return { parityObjects: parity, otherObjects: others };
   }, [doc.objects]);
 
   const handleWheel = (e: Konva.KonvaEventObject<WheelEvent>) => {
@@ -539,7 +550,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       <BackgroundImageLayer
         doc={doc}
         workspacePath={workspacePath}
-        selected={editor.selectedId === BACKGROUND_SELECTION_ID}
+        selected={editor.selectedIds.includes(BACKGROUND_SELECTION_ID)}
         onSelect={() => onSelect(BACKGROUND_SELECTION_ID)}
         onChange={(patch) => onBackgroundChange?.(patch)}
       />
@@ -614,6 +625,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
         })()}
       </Layer>
 
+      {doc.canvas.esmaecer_fora !== false && (
+        <Layer listening={false}>
+          <VeuForaDaFolha doc={doc} viewport={editor.viewport} containerWidth={containerWidth} containerHeight={containerHeight} />
+        </Layer>
+      )}
+
       <Layer listening={false} ref={uiLayerRef}>
         <PendingTwoClickPreview editor={editor} />
         <RoadDraftPreview editor={editor} />
@@ -622,6 +639,44 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     </Stage>
   );
 });
+
+// ===========================================================================
+// Véu fora da folha: a tela inteira escurecida, com a folha recortada (even-odd).
+
+function VeuForaDaFolha({
+  doc,
+  viewport,
+  containerWidth,
+  containerHeight,
+}: {
+  doc: SicroCroquiDoc;
+  viewport: { x: number; y: number; scale: number };
+  containerWidth: number;
+  containerHeight: number;
+}) {
+  const { width_px, height_px } = doc.canvas;
+  const ox = doc.canvas.origin_x ?? 0;
+  const oy = doc.canvas.origin_y ?? 0;
+  // Retângulo da tela em coordenadas de mundo, com folga para o pan não mostrar borda.
+  const k = 1 / Math.max(viewport.scale, 0.0001);
+  const x0 = -viewport.x * k - containerWidth * k;
+  const y0 = -viewport.y * k - containerHeight * k;
+  const w = containerWidth * k * 3;
+  const h = containerHeight * k * 3;
+  return (
+    <Shape
+      listening={false}
+      sceneFunc={(ctx, shape) => {
+        ctx.beginPath();
+        ctx.rect(x0, y0, w, h);
+        ctx.rect(ox, oy, width_px, height_px);
+        ctx.fillStyle = "rgba(14, 18, 26, 0.62)";
+        (ctx as unknown as { _context: CanvasRenderingContext2D })._context.fill("evenodd");
+        ctx.fillStrokeShape(shape);
+      }}
+    />
+  );
+}
 
 // ===========================================================================
 // Fundo (cor + grid)
@@ -1739,13 +1794,13 @@ function bendHandle<T extends PathObj>(o: T): ParamHandle<T> {
   };
 }
 
-/** Alça de raio à direita do ponto (edita `params.raio`). */
-function raioHandle<T extends PathObj>(o: T, raioM: number, ppm: number, k = 1): ParamHandle<T> {
+/** Alça de raio à direita do centro (edita `params.raio`). */
+function raioHandle<T extends PathObj>(o: T, raioM: number, ppm: number, k = 1, c: SicroPoint = o.p0): ParamHandle<T> {
   return {
-    x: o.p0.x + raioM * ppm * k,
-    y: o.p0.y,
+    x: c.x + raioM * ppm * k,
+    y: c.y,
     patch: (x, y) => {
-      const r = Math.hypot(x - o.p0.x, y - o.p0.y) / ppm / k;
+      const r = Math.hypot(x - c.x, y - c.y) / ppm / k;
       return { params: { ...o.params, raio: Math.round(Math.min(8, Math.max(0.2, r)) * 100) / 100 } } as unknown as Partial<T>;
     },
   };
@@ -1787,13 +1842,18 @@ function TraceNode({
       const off = -(traceSpanM(o) + 0.9) * ppm - 8;
       anchor = { x: m.x * ppm + m.nx * off, y: m.y * ppm + m.ny * off };
     }
+    const semFlecha = o.subtype === "fragmentos" || o.subtype === "sulcagem" || (o.subtype === "sangue" && tp(o, "tipo") === "projecao");
     const handles: ParamHandle<SicroTraceObject>[] =
       o.subtype === "colisao"
         ? [
             { x: o.p0.x, y: o.p0.y, patch: (x, y) => ({ p0: { x, y }, p1: { x, y } }) },
             raioHandle(o, tn(o, "raio"), ppm, raioK),
           ]
-        : [...endHandles(o, false), ...(o.subtype !== "fragmentos" && o.subtype !== "sulcagem" ? [bendHandle(o)] : [])];
+        : o.subtype === "arma"
+          ? armaHandles(o)
+          : o.subtype === "fluido" || (o.subtype === "sangue" && tp(o, "tipo") === "poca")
+            ? pocaHandles(o, ppm)
+            : [...endHandles(o, false), ...(semFlecha ? [] : [bendHandle(o)])];
     return {
       draw: (ctx) => drawTrace(ctx, o, opts),
       hit: traceHitShape(o, ppm),
@@ -1804,6 +1864,38 @@ function TraceNode({
     };
   };
   return <ParamNode obj={obj} build={build} draggable={draggable} solo={solo} handleR={7 / zoom} onSelect={onSelect} onChange={onChange} />;
+}
+
+/** Poça (fluido, sangue): centro em p1 com alça de raio na borda; início e flecha do escorrimento só com ele ligado. */
+function pocaHandles(o: SicroTraceObject, ppm: number): ParamHandle<SicroTraceObject>[] {
+  const raio = raioHandle(o, tn(o, "raio"), ppm, 1, o.p1);
+  if (!tp(o, "trilha")) {
+    return [
+      { x: o.p1.x, y: o.p1.y, patch: (x, y) => ({ p0: { x: o.p0.x + x - o.p1.x, y: o.p0.y + y - o.p1.y }, p1: { x, y } }) },
+      raio,
+    ];
+  }
+  return [...endHandles(o, false), bendHandle(o), raio];
+}
+
+/** Arma: alça no centro move; alça na ponta do cano gira em torno do centro, sem mudar o eixo. */
+function armaHandles(o: SicroTraceObject): ParamHandle<SicroTraceObject>[] {
+  const c = { x: (o.p0.x + o.p1.x) / 2, y: (o.p0.y + o.p1.y) / 2 };
+  const half = Math.hypot(o.p1.x - o.p0.x, o.p1.y - o.p0.y) / 2 || 1;
+  return [
+    { x: c.x, y: c.y, patch: (x, y) => ({ p0: { x: o.p0.x + x - c.x, y: o.p0.y + y - c.y }, p1: { x: o.p1.x + x - c.x, y: o.p1.y + y - c.y } }) },
+    {
+      x: o.p1.x,
+      y: o.p1.y,
+      diamond: true,
+      patch: (x, y) => {
+        const d = Math.hypot(x - c.x, y - c.y) || 1;
+        const ux = (x - c.x) / d;
+        const uy = (y - c.y) / d;
+        return { p0: { x: c.x - ux * half, y: c.y - uy * half }, p1: { x: c.x + ux * half, y: c.y + uy * half } };
+      },
+    },
+  ];
 }
 
 /** Recuo da alça de alcance (m, mais o raio da alça em px): fora da cabeça do semáforo e da luminária. */
@@ -1887,7 +1979,8 @@ function TraceCota({ o, ppm, tema }: { o: SicroTraceObject; ppm: number; tema: P
       listening={false}
     />
   );
-  if (o.subtype === "colisao") return null;
+  if (o.subtype === "colisao" || o.subtype === "arma") return null;
+  const leque = o.subtype === "fragmentos" || (o.subtype === "sangue" && tp(o, "tipo") === "projecao");
   if (o.subtype === "derrapagem") {
     const g = traceGeomM(o, ppm);
     const s = (v: number) => v * ppm;
@@ -1905,12 +1998,11 @@ function TraceCota({ o, ppm, tema }: { o: SicroTraceObject; ppm: number; tema: P
       </Group>
     );
   }
-  const g =
-    o.subtype === "fragmentos"
-      ? traceGeom({ x: o.p0.x / ppm, y: o.p0.y / ppm }, { x: o.p1.x / ppm, y: o.p1.y / ppm }, 0)
-      : traceGeomM(o, ppm);
+  const g = leque
+    ? traceGeom({ x: o.p0.x / ppm, y: o.p0.y / ppm }, { x: o.p1.x / ppm, y: o.p1.y / ppm }, 0)
+    : traceGeomM(o, ppm);
   if (g.len < 0.05) return null;
-  const d = o.subtype === "fragmentos" ? 0.6 : traceSpanM(o) + 0.9;
+  const d = leque ? 0.6 : traceSpanM(o) + 0.9;
   const pts: number[] = [];
   const n = 40;
   for (let i = 0; i <= n; i++) {
@@ -1932,7 +2024,7 @@ function TraceCota({ o, ppm, tema }: { o: SicroTraceObject; ppm: number; tema: P
       <Line points={pts} stroke={color} strokeWidth={1} />
       <Line points={tick(a)} stroke={color} strokeWidth={1} />
       <Line points={tick(b)} stroke={color} strokeWidth={1} />
-      {text(fmtM(o.subtype === "fragmentos" ? fanGeom(o, ppm).D : g.len), mx, my)}
+      {text(fmtM(leque ? fanGeom(o, ppm).D : g.len), mx, my)}
     </Group>
   );
 }
@@ -2078,7 +2170,7 @@ function PointHandle({
       x={x}
       y={y}
       radius={diamond ? r * 1.2 : r}
-      fill="#ffffff"
+      fill="rgba(255,255,255,0.4)"
       stroke={color}
       strokeWidth={(2 * r) / 7}
       draggable
@@ -3109,7 +3201,7 @@ function isTwoPointTool(tool: Tool): boolean {
   return (
     tool.startsWith("line_") ||
     tool.startsWith("road_") ||
-    (tool.startsWith("trace_") && tool !== "trace_colisao") ||
+    (tool.startsWith("trace_") && tool !== "trace_colisao" && tool !== "trace_arma") ||
     isLinearFixtureTool(tool) ||
     tool === "measurement" ||
     tool === "set_scale"
@@ -3131,7 +3223,7 @@ function isAddTool(tool: Tool): boolean {
     tool.startsWith("fixture_") ||
     tool.startsWith("person_") ||
     tool === "text" ||
-    tool === "measurement" ||
+    tool.startsWith("measurement") ||
     tool === "area" ||
     tool === "set_scale"
   );

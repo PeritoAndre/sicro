@@ -14,7 +14,7 @@ const AUTO_KEY = "sicro.globalBackup.autoOnClose";
 const LAST_KEY = "sicro.globalBackup.lastAuto";
 
 /** Mesma chave do card de Backup geral. */
-function getBackupDestination(): string | null {
+export function getBackupDestination(): string | null {
   return localStorage.getItem(DEST_KEY);
 }
 
@@ -45,16 +45,16 @@ function caseLabel(e: CaseIndexEntry): string {
 
 let running = false;
 
-/** No-op silencioso se não há destino ou a opção está desligada. */
-async function runAutoBackup(): Promise<void> {
-  if (running) return;
+/** No-op silencioso se não há destino ou a opção está desligada (`forcar` ignora a opção). Devolve se concluiu. */
+async function runAutoBackup(forcar = false): Promise<boolean> {
+  if (running) return false;
   const dest = getBackupDestination();
-  if (!dest || !isAutoBackupOnCloseEnabled()) return;
+  if (!dest || (!forcar && !isAutoBackupOnCloseEnabled())) return false;
   running = true;
   let toastId: number | null = null;
   try {
     const idx = await commands.getCaseIndex();
-    if (idx.length === 0) return;
+    if (idx.length === 0) return false;
     toastId = pushToast("progress", "Backup automático em andamento…", {
       title: "Backup",
     });
@@ -75,14 +75,22 @@ async function runAutoBackup(): Promise<void> {
         : "Backup automático: tudo já estava em dia.",
       { title: "Backup" },
     );
+    return true;
   } catch (e) {
     if (toastId !== null) dismissToast(toastId);
     pushToast("error", `Falha no backup automático: ${String(e)}`, {
       title: "Backup",
     });
+    return false;
   } finally {
     running = false;
   }
+}
+
+/** Backup geral sob demanda; "sem-destino" quando a pasta ainda não foi escolhida. */
+export async function fazerBackupAgora(): Promise<"ok" | "sem-destino" | "falhou"> {
+  if (!getBackupDestination()) return "sem-destino";
+  return (await runAutoBackup(true)) ? "ok" : "falhou";
 }
 
 /** Dispara ao sair de uma ocorrência; devolve o unsubscribe. */

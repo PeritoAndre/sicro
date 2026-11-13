@@ -11,7 +11,7 @@ export type TraceParamValue = number | string | boolean;
 type ParamWhen = { when?: [string, TraceParamValue[]] };
 export type TraceParamSpec = ParamWhen &
   (
-    | { k: string; t: "range"; label: string; min: number; max: number; step: number; u: "m" | "%" | "°" | "" | "/m²" | "km/h" }
+    | { k: string; t: "range"; label: string; min: number; max: number; step: number; u: "m" | "%" | "°" | "" | "/m" | "/m²" | "km/h" | "×" }
     | { k: string; t: "seg"; label: string; opts: [TraceParamValue, string][] }
     | { k: string; t: "chk"; label: string }
     | { k: string; t: "txt"; label: string; max?: number }
@@ -36,8 +36,43 @@ export const TRACE_FLUIDOS: Record<string, [string, string]> = {
   oleo: ["Óleo", "#24272d"],
   arref: ["Arrefecimento", "#2d7a66"],
   comb: ["Combustível", "#6f6230"],
-  sangue: ["Sangue", "#7a1414"],
 };
+
+/** Padrões de mancha de sangue (nomes da perícia, sem jargão de bloodstain pattern analysis). */
+export const SANGUE_TIPOS: [string, string][] = [
+  ["poca", "Poça"],
+  ["gotas", "Gotejamento"],
+  ["projecao", "Projeção"],
+  ["esfregaco", "Esfregaço"],
+];
+
+export interface ArmaModelo {
+  nome: string;
+  /** Comprimento real (m). */
+  len_m: number;
+  /** Altura / comprimento da silhueta deitada. */
+  h: number;
+}
+
+/** A arma deitada mostra o perfil lateral; medidas típicas do que aparece em cena. */
+export const ARMA_MODELOS: Record<string, ArmaModelo> = {
+  pistola: { nome: "Pistola", len_m: 0.19, h: 0.72 },
+  revolver: { nome: "Revólver", len_m: 0.24, h: 0.6 },
+  espingarda: { nome: "Espingarda", len_m: 1.15, h: 0.2 },
+  carabina: { nome: "Carabina", len_m: 1.05, h: 0.2 },
+  fuzil: { nome: "Fuzil", len_m: 0.9, h: 0.32 },
+  estojo: { nome: "Estojo deflagrado", len_m: 0.025, h: 0.4 },
+  projetil: { nome: "Projétil", len_m: 0.015, h: 0.6 },
+};
+
+export function armaModelo(o: SicroTraceObject): ArmaModelo {
+  return ARMA_MODELOS[String(tp(o, "modelo"))] ?? ARMA_MODELOS.pistola!;
+}
+
+/** Comprimento desenhado (m): real × ampliação. */
+export function armaLenM(o: SicroTraceObject): number {
+  return armaModelo(o).len_m * Math.max(1, tn(o, "amp") || 1);
+}
 
 export const TRACE_SPECS: Record<TraceSubtype, TraceSpec> = {
   frenagem: {
@@ -125,6 +160,35 @@ export const TRACE_SPECS: Record<TraceSubtype, TraceSpec> = {
       { k: "raio", t: "range", label: "Raio", min: 0.3, max: 4, step: 0.05, u: "m" },
     ],
     def: { forma: "ponto", raio: 0.6 },
+  },
+  sangue: {
+    nome: "Sangue", sigla: "Sg", len_m: 2, bend_m: 0.2,
+    params: [
+      { k: "tipo", t: "seg", label: "Padrão", opts: SANGUE_TIPOS },
+      { k: "raio", t: "range", label: "Raio da poça", min: 0.1, max: 2.5, step: 0.05, u: "m", when: ["tipo", ["poca"]] },
+      { k: "trilha", t: "chk", label: "Escorrimento até a poça", when: ["tipo", ["poca"]] },
+      { k: "dens", t: "range", label: "Gotas por metro", min: 2, max: 30, step: 1, u: "/m", when: ["tipo", ["gotas"]] },
+      { k: "tam", t: "range", label: "Tamanho das gotas", min: 0.02, max: 0.15, step: 0.005, u: "m", when: ["tipo", ["gotas", "projecao"]] },
+      { k: "movimento", t: "chk", label: "Em movimento (gotas alongadas)", when: ["tipo", ["gotas"]] },
+      { k: "abert", t: "range", label: "Abertura do leque", min: 10, max: 120, step: 1, u: "°", when: ["tipo", ["projecao"]] },
+      { k: "qtd", t: "range", label: "Respingos", min: 10, max: 400, step: 5, u: "", when: ["tipo", ["projecao"]] },
+      { k: "cont", t: "chk", label: "Contorno do leque", when: ["tipo", ["projecao"]] },
+      { k: "larg", t: "range", label: "Largura do esfregaço", min: 0.1, max: 1.5, step: 0.05, u: "m", when: ["tipo", ["esfregaco"]] },
+      { ...BEND("Curvatura (flecha)", 3), when: ["tipo", ["poca", "gotas", "esfregaco"]] },
+      { k: "tom", t: "range", label: "Secagem (fresco → seco)", min: 0, max: 1, step: 0.05, u: "%" },
+      { k: "int", t: "range", label: "Intensidade", min: 0.3, max: 1, step: 0.05, u: "%" },
+    ],
+    def: { tipo: "poca", raio: 0.6, trilha: false, dens: 8, tam: 0.05, movimento: false, abert: 60, qtd: 120, cont: false, larg: 0.5, tom: 0.3, int: 0.9 },
+  },
+  arma: {
+    nome: "Arma de fogo", sigla: "AF", len_m: 0.6, bend_m: 0,
+    params: [
+      { k: "modelo", t: "seg", label: "Modelo", opts: Object.entries(ARMA_MODELOS).map(([k, v]) => [k, v.nome]) },
+      { k: "lado", t: "seg", label: "Lado voltado para cima", opts: [["dir", "Direito"], ["esq", "Esquerdo"]] },
+      { k: "amp", t: "range", label: "Ampliação (fora de escala)", min: 1, max: 8, step: 0.5, u: "×" },
+      { k: "rot", t: "range", label: "Rotação", min: 0, max: 359, step: 1, u: "°" },
+    ],
+    def: { modelo: "pistola", lado: "dir", amp: 1 },
   },
 };
 
@@ -264,9 +328,43 @@ export function traceSpanM(o: SicroTraceObject): number {
       return tn(o, "esp") / 2;
     case "sulcagem":
       return tn(o, "larg");
+    case "sangue":
+      switch (tp(o, "tipo")) {
+        case "esfregaco":
+          return tn(o, "larg") / 2;
+        case "gotas":
+          return 0.25;
+        default:
+          return 0.2;
+      }
+    case "arma":
+      return (armaLenM(o) * armaModelo(o).h) / 2;
     default:
       return 0.2;
   }
+}
+
+/** Centro e eixo da arma (m): ela fica centrada entre p0 e p1, cano voltado para p1. */
+export function armaFrame(o: SicroTraceObject, pxPerM: number): { c: SicroPoint; ux: number; uy: number } {
+  const dx = o.p1.x - o.p0.x;
+  const dy = o.p1.y - o.p0.y;
+  const d = Math.hypot(dx, dy);
+  return {
+    c: { x: (o.p0.x + o.p1.x) / 2 / pxPerM, y: (o.p0.y + o.p1.y) / 2 / pxPerM },
+    ux: d < 1e-6 ? 1 : dx / d,
+    uy: d < 1e-6 ? 0 : dy / d,
+  };
+}
+
+/** Cantos do retângulo da arma em px de mundo. */
+export function armaCornersPx(o: SicroTraceObject, pxPerM: number, k = 1): SicroPoint[] {
+  const f = armaFrame(o, pxPerM);
+  const L = (armaLenM(o) * k) / 2;
+  const H = (armaLenM(o) * armaModelo(o).h * k) / 2;
+  return [[-L, -H], [L, -H], [L, H], [-L, H]].map(([a, b]) => ({
+    x: (f.c.x + f.ux * a! - f.uy * b!) * pxPerM,
+    y: (f.c.y + f.uy * a! + f.ux * b!) * pxPerM,
+  }));
 }
 
 export const ENTRE_EIXOS_M = 2.6;
@@ -309,6 +407,31 @@ export function traceReadouts(o: SicroTraceObject, pxPerM: number): { rows: [str
     const r = tn(o, "raio");
     return { rows: [["Escorrimento", `${fmt(g.len)} m`], ["Área da poça ≈", `${fmt(Math.PI * r * r * 1.1)} m²`]] };
   }
+  if (o.subtype === "sangue") {
+    switch (tp(o, "tipo")) {
+      case "poca": {
+        const r = tn(o, "raio");
+        const rows: [string, string][] = [["Área da poça ≈", `${fmt(Math.PI * r * r * 1.1)} m²`]];
+        if (tp(o, "trilha")) rows.unshift(["Escorrimento", `${fmt(g.len)} m`]);
+        return { rows };
+      }
+      case "gotas":
+        return { rows: [["Trajeto", `${fmt(g.len)} m`], ["Gotas ≈", String(Math.round(g.len * tn(o, "dens")))]] };
+      case "projecao": {
+        const f = fanGeom(o, pxPerM);
+        return { rows: [["Alcance", `${fmt(f.D)} m`], ["Abertura", `${Math.round(tn(o, "abert"))}°`]] };
+      }
+      default:
+        return { rows: [["Comprimento", `${fmt(g.len)} m`]] };
+    }
+  }
+  if (o.subtype === "arma") {
+    const m = armaModelo(o);
+    const amp = Math.max(1, tn(o, "amp") || 1);
+    const rows: [string, string][] = [["Comprimento real", `${fmt(m.len_m, 2)} m`]];
+    if (amp > 1) rows.push(["Desenhada com", `${fmt(amp, 1)}× (${fmt(armaLenM(o), 2)} m)`]);
+    return { rows };
+  }
   return { rows: [["Comprimento", `${fmt(g.len)} m`]] };
 }
 
@@ -328,8 +451,14 @@ export function traceBoundsPx(o: SicroTraceObject, pxPerM: number): { x: number;
     const r = tn(o, "raio") * pxPerM * 1.25;
     return { x: o.p0.x - r, y: o.p0.y - r, width: 2 * r, height: 2 * r };
   }
+  if (o.subtype === "arma") {
+    const f = armaFrame(o, pxPerM);
+    const r = armaLenM(o) * 0.6 * pxPerM;
+    return { x: f.c.x * pxPerM - r, y: f.c.y * pxPerM - r, width: 2 * r, height: 2 * r };
+  }
   const g = traceGeomM(o, pxPerM);
-  const pad = (traceSpanM(o) + (o.subtype === "fluido" ? tn(o, "raio") * 1.3 : 0)) * pxPerM;
+  const poca = o.subtype === "fluido" || (o.subtype === "sangue" && tp(o, "tipo") === "poca");
+  const pad = (traceSpanM(o) + (poca ? tn(o, "raio") * 1.3 : 0)) * pxPerM;
   let x0 = Infinity;
   let y0 = Infinity;
   let x1 = -Infinity;
@@ -340,7 +469,7 @@ export function traceBoundsPx(o: SicroTraceObject, pxPerM: number): { x: number;
     x1 = Math.max(x1, p.x);
     y1 = Math.max(y1, p.y);
   }
-  if (o.subtype === "fragmentos") {
+  if (o.subtype === "fragmentos" || (o.subtype === "sangue" && tp(o, "tipo") === "projecao")) {
     const f = fanGeom(o, pxPerM);
     for (const a of [f.ang - f.half, f.ang, f.ang + f.half]) {
       const x = o.p0.x / pxPerM + Math.cos(a) * f.D;

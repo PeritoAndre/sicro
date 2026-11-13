@@ -12,10 +12,14 @@ export type ParityVestigiosEstilo = "textura" | "traco";
 /** Veículos: contorno em traço ou a arte colorida. */
 export type ParityVeiculosEstilo = "traco" | "arte";
 
+/** Pista chapada (planta) ou com grão na cor escolhida (vai ao PNG também). */
+export type ParityAsfaltoTextura = "liso" | "grao";
+
 export interface ParityStyle {
   tema: ParityTema;
   /** Cor do asfalto. */
   asfalto: string;
+  asfalto_textura: ParityAsfaltoTextura;
   /** Cor do meio-fio (borda da pista). */
   borda: string;
   /** Espessura do meio-fio, em px de canvas. */
@@ -40,6 +44,7 @@ export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
   tecnico: {
     tema: "tecnico",
     asfalto: "#e6e6e6",
+    asfalto_textura: "liso",
     borda: "#111111",
     borda_px: 1.5,
     marcacao_px: 2,
@@ -56,6 +61,7 @@ export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
   pb: {
     tema: "pb",
     asfalto: "#ffffff",
+    asfalto_textura: "liso",
     borda: "#000000",
     borda_px: 1.5,
     marcacao_px: 1.5,
@@ -73,6 +79,7 @@ export const PARITY_TEMAS: Record<ParityTema, ParityStyle> = {
   escuro: {
     tema: "escuro",
     asfalto: "#1c1c1c",
+    asfalto_textura: "liso",
     borda: "#ffffff",
     borda_px: 2,
     marcacao_px: 2,

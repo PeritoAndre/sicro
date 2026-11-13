@@ -1,0 +1,38 @@
+.linha {
+  margin: 0 0 12px;
+  color: var(--sicro-fg-muted);
+  font-size: 13px;
+}
+
+.notas {
+  max-height: 40vh;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  font-size: 12.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.barra {
+  height: 6px;
+  margin: 0 0 12px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+}
+
+.barraCheia {
+  height: 100%;
+  background: var(--sicro-accent);
+  transition: width 0.2s;
+}
+
+.aviso {
+  align-self: center;
+  color: var(--sicro-fg-muted);
+  font-size: 13px;
+}

@@ -103,7 +103,7 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
       if (typeof probe.kind !== "string" || !SUPPORTED_KINDS.has(probe.kind)) {
         continue;
       }
-      const typed = rawObj as SicroObject;
+      const typed = migrateObject(rawObj as SicroObject);
       objects.push({ ...typed, category: typed.category ?? inferCategory(typed) } as SicroObject);
     }
   }
@@ -116,7 +116,7 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
       if (typeof probe.kind !== "string" || !SUPPORTED_KINDS.has(probe.kind)) {
         continue;
       }
-      const typed = rawObj as SicroObject;
+      const typed = migrateObject(rawObj as SicroObject);
       objects.push({ ...typed, category: typed.category ?? inferCategory(typed) } as SicroObject);
     }
   }
@@ -149,7 +149,7 @@ export function coerceCroquiDoc(raw: unknown): SicroCroquiDoc {
 function coerceStyle(raw: unknown): SicroCroquiStyle {
   const o = (raw ?? {}) as Record<string, unknown>;
   const out: Record<string, unknown> = {};
-  const strings = ["tema", "asfalto", "borda", "amarela", "branca", "calcada"];
+  const strings = ["tema", "asfalto", "asfalto_textura", "borda", "amarela", "branca", "calcada", "vestigios", "veiculos"];
   const numbers = ["borda_px", "marcacao_px", "calcada_m", "traco_m", "espaco_m"];
   for (const k of strings) if (typeof o[k] === "string") out[k] = o[k];
   for (const k of numbers) if (typeof o[k] === "number" && Number.isFinite(o[k])) out[k] = o[k];
@@ -253,6 +253,7 @@ function coerceCanvas(raw: unknown): SicroCroquiCanvas {
     height_px: numberField(o, "height_px") ?? DEFAULT_CANVAS.height_px,
     ...(typeof originX === "number" ? { origin_x: originX } : {}),
     ...(typeof originY === "number" ? { origin_y: originY } : {}),
+    ...(o.esmaecer_fora === false ? { esmaecer_fora: false } : {}),
     background_color:
       stringField(o, "background_color") ?? DEFAULT_CANVAS.background_color,
     grid: g
@@ -297,6 +298,15 @@ function coerceBackgroundImage(
     ...(sidecar ? { sidecar_path: sidecar } : {}),
     ...(original ? { original_path: original } : {}),
   };
+}
+
+/** Fluido "sangue" (até a 5.3) virou o vestígio Sangue, padrão poça, com o mesmo raio e escorrimento. */
+function migrateObject(obj: SicroObject): SicroObject {
+  if (obj.kind === "trace" && obj.subtype === "fluido" && obj.params?.tipo === "sangue") {
+    const { tipo: _tipo, gotas: _gotas, ...rest } = obj.params;
+    return { ...obj, subtype: "sangue", params: { ...rest, tipo: "poca", trilha: obj.params.trilha ?? true } };
+  }
+  return obj;
 }
 
 /** Categoria do painel de camadas a partir de `kind`/`subtype`. */

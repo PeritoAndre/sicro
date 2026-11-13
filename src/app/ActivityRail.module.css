@@ -60,6 +60,9 @@
   outline: 2px solid var(--sicro-accent);
   outline-offset: -2px;
 }
+.itemApagado {
+  color: var(--sicro-fg-faint);
+}
 .itemIcon {
   flex-shrink: 0;
   transition: transform var(--t-fast) ease;

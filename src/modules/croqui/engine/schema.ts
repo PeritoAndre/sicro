@@ -17,6 +17,8 @@ export interface SicroCroquiCanvas {
   origin_x?: number;
   origin_y?: number;
   background_color: string;
+  /** Véu sobre o que está fora da folha (só a folha exporta); ausente = ligado. */
+  esmaecer_fora?: boolean;
   grid?: {
     enabled: boolean;
     size_px: number;
@@ -251,6 +253,12 @@ export interface SicroMeasurementObject extends SicroObjectBase {
   p2: SicroPoint;
   /** Quando presente, substitui o rótulo calculado. */
   label_override?: string | null;
+  /** Cota viva: p1 é sempre o pé da perpendicular neste referencial. */
+  ref_linha?: "r1" | "r2" | null;
+  /** Cota viva: p2 segue o centro deste objeto, mais o deslocamento guardado (px de mundo). */
+  alvo_id?: string | null;
+  alvo_dx?: number;
+  alvo_dy?: number;
 }
 
 /** Área: polígono fechado clicado ponto a ponto (px de mundo), com a medida de cada lado. */
@@ -269,14 +277,16 @@ export type TraceSubtype =
   | "ranhura"
   | "fluido"
   | "fragmentos"
-  | "colisao";
+  | "colisao"
+  | "sangue"
+  | "arma";
 
 /** Vestígio paramétrico (ver `traces.ts`): traçado p0 → p1 com flecha, em px de mundo. */
 export interface SicroTraceObject extends SicroObjectBase {
   kind: "trace";
   subtype: TraceSubtype;
   p0: SicroPoint;
-  /** Fim do traçado; no fluido é o centro da poça, nos fragmentos o alcance do leque. */
+  /** Fim do traçado; no fluido e na poça de sangue é o centro da poça, nos fragmentos e na projeção o alcance do leque; na arma, só a direção. */
   p1: SicroPoint;
   /** Flecha (px de mundo) do meio do traçado em relação à corda; + = normal (−dy, dx). */
   bend: number;

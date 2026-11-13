@@ -19,6 +19,12 @@ use crate::state::AppState;
 use crate::workspace::manifest::{MANIFEST_FILENAME, SQLITE_FILENAME};
 use crate::workspace::{create_workspace, open_workspace};
 
+/// Pasta onde os casos nascem (~/SICRO/Casos): o "Abrir pasta .sicro" começa por ela.
+#[tauri::command]
+pub async fn default_workspace_parent(state: State<'_, AppState>) -> Result<String> {
+    path_to_string(state.default_workspace_parent())
+}
+
 /// Cria um workspace `.sicro` novo com a linha inicial da ocorrência.
 #[tauri::command]
 pub async fn create_occurrence(

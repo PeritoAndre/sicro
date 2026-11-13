@@ -8,6 +8,8 @@ import { lastMidiaAba } from "@modules/midia/midiaNav";
 import { ConfiguracoesModule } from "@modules/configuracoes/ConfiguracoesModule";
 import { useSettingsStore } from "@stores/settingsStore";
 import { Toaster } from "@/components/toast/Toaster";
+import { UpdateDialog } from "@/core/updater/UpdateDialog";
+import { verificarAtualizacao } from "@/core/updater/updaterStore";
 import { installAutoBackupWatcher } from "@core/autoBackup";
 import { installContextMenuGuard } from "@components/ContextMenu/ContextMenu";
 
@@ -73,9 +75,17 @@ export function App() {
   // Bloqueia o menu de navegador do WebKit no botão direito; os menus do SICRO continuam.
   useEffect(() => installContextMenuGuard(), []);
 
+  // Versão nova? Pergunta em silêncio alguns segundos depois de abrir (não no dev server).
+  useEffect(() => {
+    if (import.meta.env.DEV) return;
+    const t = setTimeout(() => void verificarAtualizacao(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <WorkspaceProvider>
       <Toaster />
+      <UpdateDialog />
       <HashRouter>
         <AppShell>
           <Suspense fallback={<ModuleLoading />}>

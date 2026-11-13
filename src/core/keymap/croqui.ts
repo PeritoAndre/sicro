@@ -39,6 +39,8 @@ export const CROQUI_ACTIONS: ShortcutAction[] = [
   // Edição.
   { id: "croqui.delete", scope: "croqui", group: "Croqui · Edição", label: "Excluir selecionado(s)", defaultBinding: "Del" },
   { id: "croqui.duplicate", scope: "croqui", group: "Croqui · Edição", label: "Duplicar", defaultBinding: "Ctrl+D" },
+  { id: "croqui.copy", scope: "croqui", group: "Croqui · Edição", label: "Copiar selecionado(s)", defaultBinding: "Ctrl+C" },
+  { id: "croqui.paste", scope: "croqui", group: "Croqui · Edição", label: "Colar", defaultBinding: "Ctrl+V" },
   { id: "croqui.undo", scope: "croqui", group: "Croqui · Edição", label: "Desfazer", defaultBinding: "Ctrl+Z" },
   { id: "croqui.redo", scope: "croqui", group: "Croqui · Edição", label: "Refazer", defaultBinding: "Ctrl+Y" },
   { id: "croqui.save", scope: "croqui", group: "Croqui · Edição", label: "Salvar croqui", defaultBinding: "Ctrl+S" },

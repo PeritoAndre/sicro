@@ -5,6 +5,7 @@
 import { useState } from "react";
 import type { VideoClockCalibration } from "@domain/video";
 import { formatClock, formatDuration, parseClockInput } from "./format";
+import { CampoNumero } from "@components/CampoNumero/CampoNumero";
 import styles from "./AnalysisDialogs.module.css";
 
 // relógio da câmera
@@ -143,35 +144,8 @@ export function SequenceDialog({ startTime, fps, duration, onStart, onClose }: S
           storyboard (com hash e JSON), igual ao "Coletar frame".
         </p>
         <div className={styles.fields}>
-          <label>
-            Quantos quadros
-            <input
-              autoFocus
-              type="number"
-              min={1}
-              max={200}
-              value={count}
-              onChange={(e) => setCount(Number(e.target.value))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") start();
-                if (e.key === "Escape") onClose();
-              }}
-            />
-          </label>
-          <label>
-            De quantos em quantos quadros
-            <input
-              type="number"
-              min={1}
-              max={100}
-              value={step}
-              onChange={(e) => setStep(Number(e.target.value))}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") start();
-                if (e.key === "Escape") onClose();
-              }}
-            />
-          </label>
+          <CampoNumero label="Quantos quadros" value={count} min={1} max={200} autoFocus onChange={setCount} onEnter={start} onEscape={onClose} />
+          <CampoNumero label="De quantos em quantos quadros" value={step} min={1} max={100} onChange={setStep} onEnter={start} onEscape={onClose} />
         </div>
         <p className={styles.tip}>
           Vai de <code>{formatDuration(startTime)}</code> a <code>{formatDuration(end)}</code>

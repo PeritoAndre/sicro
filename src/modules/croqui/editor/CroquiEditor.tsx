@@ -32,6 +32,9 @@ import {
   makeMeasurement,
   makeText,
   makeTrace,
+  acharReferencial,
+  corDoReferencial,
+  peDaPerpendicular,
   makeFixture,
   makePerson,
   PERSON_POSICOES,
@@ -72,9 +75,13 @@ import {
 import { DEFAULT_VIEWPORT, useEditorState, type Tool } from "./useEditorState";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { DroneImportModal } from "./DroneImportModal";
+import { ligarAoObjeto, objetoSob, resolverCotasVivas } from "./cotasVivas";
 import { OsmImportModal, type OsmImportResult } from "./OsmImportModal";
 import styles from "./CroquiEditor.module.css";
 import { askText } from "@components/Dialog/ask";
+
+/** Área de transferência do croqui: dura a sessão, vale entre croquis e casos. */
+let croquiClipboard: SicroObject[] = [];
 
 export function CroquiEditor() {
   useImmersive();
@@ -105,6 +112,14 @@ export function CroquiEditor() {
   // Dirty = JSON do doc difere do snapshot salvo; evita instrumentar
   // cada caminho de mutação.
   const [lastSavedJson, setLastSavedJson] = useState<string | null>(null);
+  // Fundo (drone, foto) sem escala: Escala em destaque até a primeira calibração.
+  const [faixaEscalaFechada, setFaixaEscalaFechada] = useState(false);
+  const cotasRef = useMemo(() => {
+    const r1 = doc ? acharReferencial(doc.objects, "r1") : null;
+    const r2 = doc ? acharReferencial(doc.objects, "r2") : null;
+    return { r1: r1 ? corDoReferencial(r1) : null, r2: r2 ? corDoReferencial(r2) : null };
+  }, [doc]);
+  const escalaPendente = !!doc && !doc.scale && !!doc.background_image;
   const dirty = useMemo(() => {
     if (!doc || !lastSavedJson) return false;
     return JSON.stringify(doc) !== lastSavedJson;
@@ -147,7 +162,8 @@ export function CroquiEditor() {
       setDoc((prev) => {
         if (!prev) return prev;
         editor.pushHistory(prev.objects);
-        return { ...prev, objects: mutator(prev.objects) };
+        const ppm = prev.scale?.px_per_m && prev.scale.px_per_m > 0 ? prev.scale.px_per_m : 10;
+        return { ...prev, objects: resolverCotasVivas(mutator(prev.objects), ppm) };
       });
     },
     [editor],
@@ -287,6 +303,24 @@ export function CroquiEditor() {
     editor.setSelectedId(null);
   }, [editor, mutateObjects]);
 
+  // Só para a prateleira reagir ao Copiar (a área de transferência vive fora do React).
+  const [clipboardN, setClipboardN] = useState(croquiClipboard.length);
+  const handleCopy = useCallback(() => {
+    if (!doc || editor.selectedIds.length === 0) return;
+    const sel = new Set(editor.selectedIds);
+    croquiClipboard = doc.objects.filter((o) => sel.has(o.id)).map((o) => JSON.parse(JSON.stringify(o)) as SicroObject);
+    setClipboardN(croquiClipboard.length);
+  }, [doc, editor.selectedIds]);
+
+  const handlePaste = useCallback(() => {
+    if (!doc || croquiClipboard.length === 0) return;
+    const pasted = croquiClipboard.map((o) => cloneObject(o));
+    // Colar de novo desloca mais um passo.
+    croquiClipboard = pasted;
+    mutateObjects((cur) => [...cur, ...pasted]);
+    editor.setSelectedIds(pasted.map((o) => o.id));
+  }, [doc, editor, mutateObjects]);
+
   const handleDuplicate = useCallback(() => {
     const id = editor.selectedId;
     if (!id || !doc) return;
@@ -315,14 +349,13 @@ export function CroquiEditor() {
     });
   }, [editor]);
 
-  const handleMoveObject = (id: string, direction: "up" | "down") => {
+  const handleReorderObject = (id: string, toIndex: number) => {
     mutateObjects((objs) => {
       const idx = objs.findIndex((o) => o.id === id);
       if (idx < 0) return objs;
-      const swapWith = direction === "up" ? idx + 1 : idx - 1;
-      if (swapWith < 0 || swapWith >= objs.length) return objs;
       const next = [...objs];
-      [next[idx], next[swapWith]] = [next[swapWith]!, next[idx]!];
+      const [obj] = next.splice(idx, 1);
+      next.splice(Math.max(0, Math.min(next.length, toIndex)), 0, obj!);
       return next;
     });
   };
@@ -783,7 +816,7 @@ export function CroquiEditor() {
       const lenPx = TRACE_SPECS[sub].len_m * ppm;
       let pts: [SicroPoint, SicroPoint] | null;
       if (sub === "colisao") pts = [p, p];
-      else if (dropped) pts = [{ x: p.x - lenPx / 2, y: p.y }, { x: p.x + lenPx / 2, y: p.y }];
+      else if (dropped || sub === "arma") pts = [{ x: p.x - lenPx / 2, y: p.y }, { x: p.x + lenPx / 2, y: p.y }];
       else pts = twoPoints();
       if (!pts) return;
       const [a, b0] = pts;
@@ -854,6 +887,25 @@ export function CroquiEditor() {
       const [p1, p2] = pts;
       addObject(makeLine(p1, p2, lineSubtype));
       editor.setTool("select");
+      return;
+    }
+    if (tool === "measurement_r1" || tool === "measurement_r2") {
+      const qual: "r1" | "r2" = tool === "measurement_r1" ? "r1" : "r2";
+      const ref = acharReferencial(doc.objects, qual);
+      if (!ref) {
+        setFeedback(`O croqui não tem ${qual.toUpperCase()}.`);
+        editor.setTool("select");
+        return;
+      }
+      const pe = peDaPerpendicular(ref.points, p);
+      // Viva: perpendicular ao referencial e, se clicou sobre um objeto, presa a ele.
+      const ppmCota = doc.scale?.px_per_m && doc.scale.px_per_m > 0 ? doc.scale.px_per_m : 10;
+      const alvo = objetoSob(doc.objects, p, ppmCota);
+      const base = { ...makeMeasurement(pe, p), color: corDoReferencial(ref), ref_linha: qual };
+      const cota = alvo ? { ...base, ...ligarAoObjeto(base, alvo, ppmCota) } : base;
+      addObject(cota);
+      // Fica na ferramenta: um clique por ponto medido; Esc sai.
+      setFeedback(`Cota ${qual.toUpperCase()}: ${formatMeasurement(distancePx(pe, p), doc.scale?.px_per_m)}`);
       return;
     }
     if (tool === "measurement") {
@@ -983,6 +1035,8 @@ export function CroquiEditor() {
       if (editor.selectedIds.length > 0) handleDelete();
     },
     "croqui.duplicate": handleDuplicate,
+    "croqui.copy": handleCopy,
+    "croqui.paste": handlePaste,
     "croqui.undo": handleUndo,
     "croqui.redo": handleRedo,
     "croqui.save": () => void handleSave(),
@@ -1187,6 +1241,8 @@ export function CroquiEditor() {
         activeTool={editor.tool}
         onSelectTool={handleSelectTool}
         onDropTool={handleDropTool}
+        destacarEscala={escalaPendente}
+        cotasRef={cotasRef}
         canDelete={editor.selectedIds.length > 0}
         onDelete={handleDelete}
         canUndo={editor.history.length > 0}
@@ -1195,6 +1251,10 @@ export function CroquiEditor() {
         onRedo={handleRedo}
         canDuplicate={!!editor.selectedId}
         onDuplicate={handleDuplicate}
+        canCopy={editor.selectedIds.length > 0}
+        onCopy={handleCopy}
+        canPaste={clipboardN > 0}
+        onPaste={handlePaste}
         onImportBackground={() => void handleImportBackground()}
         onImportDrone={() => setShowDroneImport(true)}
         onImportOsm={() => setShowOsmImport(true)}
@@ -1229,6 +1289,16 @@ export function CroquiEditor() {
           onSelect={(id) => editor.setSelectedId(id)}
           workspacePath={workspacePath}
         />
+        {escalaPendente && !faixaEscalaFechada && (
+          <div className={styles.faixaEscala}>
+            <button type="button" className={styles.faixaEscalaBtn} onClick={() => handleSelectTool("set_scale")}>
+              Sem escala · clique em Escala e marque dois pontos de distância conhecida
+            </button>
+            <button type="button" className={styles.faixaEscalaFechar} aria-label="Fechar aviso" onClick={() => setFaixaEscalaFechada(true)}>
+              ×
+            </button>
+          </div>
+        )}
         <StatusBar
           tool={editor.tool}
           pointer={editor.pointerWorld}
@@ -1262,7 +1332,7 @@ export function CroquiEditor() {
           editor.setSelectedId(id);
           handleDelete();
         }}
-        onMoveObject={handleMoveObject}
+        onReorderObject={handleReorderObject}
         style={doc.style}
         onUpdateStyle={handleStyleChange}
         canvas={doc.canvas}

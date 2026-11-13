@@ -26,6 +26,7 @@ import {
   type SicroRoundaboutObject_parity,
 } from "../engine/road-parity";
 import { OsmMapPanel } from "./OsmMapPanel";
+import { CampoNumero } from "@components/CampoNumero/CampoNumero";
 import styles from "./CroquiEditor.module.css";
 
 export interface OsmImportResult {
@@ -499,19 +500,16 @@ function LeftPanel({
           }}
         >
           Custom
-          <input
-            type="number"
+          <CampoNumero
+            value={Number.parseInt(customRadius, 10) || radius}
+            step={5}
             min={10}
             max={2000}
-            step={5}
-            value={customRadius}
-            onChange={(e) => onCustomRadiusChange(e.target.value)}
-            onBlur={() => {
-              const n = Number.parseInt(customRadius, 10);
-              if (Number.isFinite(n) && n >= 10) onRadiusChange(n);
+            unidade="m"
+            onChange={(n) => {
+              onCustomRadiusChange(String(n));
+              onRadiusChange(n);
             }}
-            placeholder="m"
-            style={{ ...inputStyle, width: 80 }}
           />
         </label>
       </div>

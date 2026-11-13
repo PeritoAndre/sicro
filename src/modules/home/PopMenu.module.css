@@ -1,0 +1,66 @@
+.iconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition:
+    background var(--t-fast),
+    color var(--t-fast),
+    border-color var(--t-fast);
+}
+.iconBtn:hover,
+.iconBtn[aria-expanded="true"] {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+  border-color: var(--sicro-divider);
+}
+.menuBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.menu {
+  position: fixed;
+  z-index: 41;
+  min-width: 210px;
+  padding: 4px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  font-family: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.menuItem:hover {
+  background: var(--sicro-surface-2);
+  color: var(--sicro-fg);
+}
+.menuItemDanger {
+  color: var(--sicro-danger);
+}
+.menuItemDanger:hover {
+  background: rgba(229, 72, 77, 0.12);
+  color: var(--sicro-danger);
+}

@@ -13,3 +13,4 @@ export * from "./osm";
 export * from "./traces";
 export * from "./fixtures";
 export * from "./people";
+export * from "./referenciais";

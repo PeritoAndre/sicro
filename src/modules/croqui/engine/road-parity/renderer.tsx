@@ -93,6 +93,56 @@ function surfaceFill(
   return st.asfalto;
 }
 
+/** Ladrilho de grão: 64 px = 2,56 m (4 cm por px), pontos claros e escuros sobre a cor da pista. */
+const GRAO_TILE = 64;
+const GRAO_M_POR_PX = 0.04;
+const graoCache = new Map<string, HTMLCanvasElement>();
+function graoCanvas(cor: string, forte: boolean): HTMLCanvasElement | null {
+  if (typeof document === "undefined") return null;
+  const key = `${cor}|${forte}`;
+  const cached = graoCache.get(key);
+  if (cached) return cached;
+  const c = document.createElement("canvas");
+  c.width = c.height = GRAO_TILE;
+  const g = c.getContext("2d");
+  if (!g) return null;
+  g.fillStyle = cor;
+  g.fillRect(0, 0, GRAO_TILE, GRAO_TILE);
+  // Semente fixa: o grão não "fervilha" a cada redesenho.
+  let seed = 7;
+  const r = () => {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+  const n = forte ? 1100 : 700;
+  for (let i = 0; i < n; i++) {
+    const x = r() * GRAO_TILE;
+    const y = r() * GRAO_TILE;
+    const claro = r() < 0.5;
+    const a = (forte ? 0.16 : 0.1) * (0.4 + r());
+    g.fillStyle = claro ? `rgba(255,255,255,${a.toFixed(3)})` : `rgba(0,0,0,${(a * 1.3).toFixed(3)})`;
+    const sz = 0.7 + r() * 1.6;
+    // Repete nas bordas para o ladrilho emendar sem risca.
+    for (const dx of [0, -GRAO_TILE]) for (const dy of [0, -GRAO_TILE]) g.fillRect(x + dx, y + dy, sz, sz);
+  }
+  graoCache.set(key, c);
+  return c;
+}
+
+function surfaceFillProps(
+  superficie: SicroRoadObject_parity["superficie"],
+  st: ParityStyle,
+  colors: ReturnType<typeof parityTemaColors>,
+  ppm: number,
+): FillProps {
+  const cor = surfaceFill(superficie, st, colors);
+  if (st.asfalto_textura !== "grao" || superficie === "calcada") return { fill: cor };
+  const img = graoCanvas(cor, superficie === "terra");
+  if (!img) return { fill: cor };
+  const k = (GRAO_M_POR_PX * ppm) || 1;
+  return { fill: cor, fillPatternImage: img, fillPatternRepeat: "repeat", fillPatternScaleX: k, fillPatternScaleY: k, fillPriority: "pattern" };
+}
+
 // ---- Malha por via ----
 
 interface RoadMesh {
@@ -340,10 +390,10 @@ export function RoadParityRenderer({
             id={m.road.id}
             points={P(m.pavedPoly)}
             closed
-            fill={surfaceFill(m.road.superficie, st, colors)}
+            {...surfaceFillProps(m.road.superficie, st, colors, ppm)}
             onClick={() => onSelect?.(m.road.id)}
             onTap={() => onSelect?.(m.road.id)}
-            draggable={!!onObjectChange && isSel(m.road.id)}
+            draggable={!!onObjectChange && isSel(m.road.id) && !m.road.locked}
             onDragEnd={(e) => {
               // Arrasto pelo corpo: translada os quatro pontos (metros).
               const dx = e.target.x() / Math.max(ppm, 0.0001);
@@ -365,10 +415,10 @@ export function RoadParityRenderer({
             x={rb.cx * ppm + offsetX}
             y={rb.cy * ppm + offsetY}
             radius={(rb.r_m + rb.largura_m / 2) * ppm}
-            fill={surfaceFill(rb.superficie, st, colors)}
+            {...surfaceFillProps(rb.superficie, st, colors, ppm)}
             onClick={() => onSelect?.(rb.id)}
             onTap={() => onSelect?.(rb.id)}
-            draggable={!!onObjectChange && isSel(rb.id)}
+            draggable={!!onObjectChange && isSel(rb.id) && !rb.locked}
             onDragEnd={(e) => {
               onObjectChange?.(rb.id, { cx: canvasToWorldX(e.target.x()), cy: canvasToWorldY(e.target.y()) });
             }}
@@ -459,7 +509,7 @@ export function RoadParityRenderer({
           const innerR = Math.max(0, rb.r_m - rb.largura_m / 2);
           const els: JSX.Element[] = [];
           els.push(
-            <Circle key="ring" x={cx} y={cy} radius={outerR * ppm + 0.5} fill={surfaceFill(rb.superficie, st, colors)} />,
+            <Circle key="ring" x={cx} y={cy} radius={outerR * ppm + 0.5} {...surfaceFillProps(rb.superficie, st, colors, ppm)} />,
           );
           if (innerR >= 0.5) {
             els.push(
@@ -522,7 +572,7 @@ export function RoadParityRenderer({
               const b = pt(m.road.bx, m.road.by);
               const c1 = pt(m.road.cx1, m.road.cy1);
               const c2 = pt(m.road.cx2, m.road.cy2);
-              const canDrag = onObjectChange !== undefined;
+              const canDrag = onObjectChange !== undefined && !m.road.locked;
               const roadId = m.road.id;
               return (
                 <Group key={`h_${roadId}`} name={`obj_${roadId}`}>
@@ -597,7 +647,7 @@ export function RoadParityRenderer({
           {roundabouts
             .filter((rb) => rb.id === selectedId)
             .map((rb) => {
-              const canDrag = onObjectChange !== undefined;
+              const canDrag = onObjectChange !== undefined && !rb.locked;
               const rbId = rb.id;
               const cx = rb.cx * ppm + offsetX;
               const cy = rb.cy * ppm + offsetY;

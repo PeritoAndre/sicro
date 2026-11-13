@@ -2,6 +2,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useLocation } from "react-router-dom";
 import { useShortcuts } from "@core/useShortcuts";
 import { UI_ZOOM_DEFAULT, getUiZoom, stepUiZoom } from "@core/uiZoom";
+import { normalizeBinding } from "@core/keymap";
+import { resolveBinding, useKeymapStore } from "@stores/keymapStore";
+import { CasosDialogos } from "@modules/home/CasosDialogos";
+import { useDialogosCaso } from "@modules/home/dialogosStore";
 import { useSettingsStore } from "@stores/settingsStore";
 import { useImmersiveStore } from "@stores/immersiveStore";
 import { ActivityRail } from "./ActivityRail";
@@ -28,8 +32,25 @@ export function AppShell({ children }: AppShellProps) {
     { allowInInputs: true },
   );
 
-  // Fora do Início o menu lateral some para sobrar tela; a borda esquerda revela, sair dele esconde.
+  // Ctrl+O / Ctrl+N valem em qualquer tela. No Vídeo o Ctrl+O é "adicionar vídeos" (mesma tecla): lá ele manda.
   const { pathname } = useLocation();
+  const overrides = useKeymapStore((s) => s.overrides);
+  const abrirTrocar = useDialogosCaso((s) => s.abrirTrocar);
+  const abrirNovo = useDialogosCaso((s) => s.abrirNovo);
+  useShortcuts(
+    {
+      "geral.trocarCaso": () => {
+        const doVideo = normalizeBinding(resolveBinding(overrides, "video.addVideo"));
+        const minha = normalizeBinding(resolveBinding(overrides, "geral.trocarCaso"));
+        if (pathname === "/video" && doVideo === minha) return;
+        abrirTrocar();
+      },
+      "geral.novoCaso": () => abrirNovo(),
+    },
+    { allowInInputs: true },
+  );
+
+  // Fora do Início o menu lateral some para sobrar tela; a borda esquerda revela, sair dele esconde.
   const railAuto = useImmersiveStore((s) => s.on);
   const [railOpen, setRailOpen] = useState(false);
   useEffect(() => setRailOpen(false), [pathname, railAuto]);
@@ -65,6 +86,7 @@ export function AppShell({ children }: AppShellProps) {
         <StatusBar />
       </div>
       <AskHost />
+      <CasosDialogos />
     </div>
   );
 }

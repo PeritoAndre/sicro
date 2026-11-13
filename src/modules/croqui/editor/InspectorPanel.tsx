@@ -3,10 +3,9 @@
  * do objeto selecionado.
  */
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
-  ArrowDown,
-  ArrowUp,
+  GripVertical,
   Eye,
   EyeOff,
   Lock,
@@ -21,7 +20,6 @@ import {
   formatMeasurement,
   polygonAreaPx,
   polygonPerimeterPx,
-  inferCategory,
   MARKER_STYLES,
   TRACE_SPECS,
   FIXTURE_SPECS,
@@ -36,7 +34,6 @@ import {
   type SicroFixtureObject,
   type SicroTraceObject,
   type TraceParamSpec,
-  type ObjectCategory,
   type SicroCroquiLayer,
   type SicroCroquiScale,
   type SicroLineObject,
@@ -70,9 +67,13 @@ import {
   type ParityTema,
   type ParityVeiculosEstilo,
   type ParityVestigiosEstilo,
+  type ParityAsfaltoTextura,
 } from "../engine/road-parity";
 import { CROQUI_EXPORT_WIDTH_PX_DEFAULT, type SicroCroquiCanvas, type SicroCroquiExportSettings, type SicroCroquiStyle } from "../engine/schema";
 import { labelDefaults, type LabelFields } from "./labels";
+import { CampoNumero } from "@components/CampoNumero/CampoNumero";
+import { ligarAoObjeto, podeSerAlvo } from "./cotasVivas";
+import { acharReferencial, corDoReferencial } from "../engine/referenciais";
 import styles from "./InspectorPanel.module.css";
 
 interface Props {
@@ -84,7 +85,8 @@ interface Props {
   onToggleLayerVisibility: (layerId: string) => void;
   onUpdateObject: (id: string, patch: Partial<SicroObject>) => void;
   onDeleteObject: (id: string) => void;
-  onMoveObject: (id: string, direction: "up" | "down") => void;
+  /** Nova posição na lista do documento (0 = mais atrás). */
+  onReorderObject: (id: string, toIndex: number) => void;
   /** `doc.style` (parcial) e o patch que o editor aplica nele. */
   style?: SicroCroquiStyle;
   onUpdateStyle?: (patch: Partial<ParityStyle>) => void;
@@ -97,33 +99,6 @@ interface Props {
   onCenterSheet?: () => void;
 }
 
-const CATEGORY_ORDER: ObjectCategory[] = [
-  "vias",
-  "veiculos",
-  "referenciais",
-  "vestigios",
-  "pessoas",
-  "sinalizacao",
-  "entorno",
-  "mobiliario_urbano",
-  "medidas",
-  "anotacoes",
-  "outros",
-];
-
-const CATEGORY_LABEL: Record<ObjectCategory, string> = {
-  vias: "Vias",
-  veiculos: "Veículos",
-  referenciais: "Referenciais (R1/R2)",
-  vestigios: "Vestígios e pessoas",
-  pessoas: "Pessoas",
-  sinalizacao: "Sinalização",
-  entorno: "Entorno",
-  mobiliario_urbano: "Sinalização e entorno (antigos)",
-  medidas: "Medidas",
-  anotacoes: "Anotações",
-  outros: "Outros",
-};
 
 export function InspectorPanel({
   layers,
@@ -134,7 +109,7 @@ export function InspectorPanel({
   onToggleLayerVisibility,
   onUpdateObject,
   onDeleteObject,
-  onMoveObject,
+  onReorderObject,
   style,
   onUpdateStyle,
   canvas,
@@ -148,39 +123,21 @@ export function InspectorPanel({
     ? objects.find((o) => o.id === selectedId) ?? null
     : null;
 
-  const grouped = useMemo(() => {
-    const map = new Map<ObjectCategory, SicroObject[]>();
-    for (const o of objects) {
-      const cat = o.category ?? inferCategory(o);
-      const list = map.get(cat) ?? [];
-      list.push(o);
-      map.set(cat, list);
-    }
-    return CATEGORY_ORDER.filter((c) => (map.get(c) ?? []).length > 0).map(
-      (c) => ({ category: c, items: map.get(c) ?? [] }),
-    );
-  }, [objects]);
 
   const objectsSection = (
     <section className={styles.section}>
-      <h3 className={styles.sectionTitle}>Objetos</h3>
-      {grouped.length === 0 && (
-        <p className={styles.empty}>
-          O canvas está vazio. Use a barra à esquerda para inserir um objeto.
-        </p>
-      )}
-      {grouped.map(({ category, items }) => (
-        <CategoryBlock
-          key={category}
-          category={category}
-          items={items}
-          selectedId={selectedId}
-          onSelectObject={onSelectObject}
-          onUpdateObject={onUpdateObject}
-          onDeleteObject={onDeleteObject}
-          onMoveObject={onMoveObject}
-        />
-      ))}
+      <h3 className={styles.sectionTitle}>
+        Objetos <span className={styles.dim}>({objects.length})</span>
+      </h3>
+      {objects.length === 0 && <p className={styles.empty}>O canvas está vazio. Use a barra à esquerda para inserir um objeto.</p>}
+      <ListaDeObjetos
+        objects={objects}
+        selectedId={selectedId}
+        onSelectObject={onSelectObject}
+        onUpdateObject={onUpdateObject}
+        onDeleteObject={onDeleteObject}
+        onReorderObject={onReorderObject}
+      />
     </section>
   );
 
@@ -194,6 +151,7 @@ export function InspectorPanel({
             object={selected}
             scale={scale}
             style={style}
+            objects={objects}
             onChange={(patch) => onUpdateObject(selected.id, patch)}
           />
         </section>
@@ -275,59 +233,100 @@ export function InspectorPanel({
   );
 }
 
-function CategoryBlock({
-  category,
-  items,
+/** Da frente para trás (o último do documento é o primeiro da lista); a alça arrasta para reordenar. */
+function ListaDeObjetos({
+  objects,
   selectedId,
   onSelectObject,
   onUpdateObject,
   onDeleteObject,
-  onMoveObject,
+  onReorderObject,
 }: {
-  category: ObjectCategory;
-  items: SicroObject[];
+  objects: SicroObject[];
   selectedId: string | null;
   onSelectObject: (id: string | null) => void;
   onUpdateObject: (id: string, patch: Partial<SicroObject>) => void;
   onDeleteObject: (id: string) => void;
-  onMoveObject: (id: string, direction: "up" | "down") => void;
+  onReorderObject: (id: string, toIndex: number) => void;
 }) {
+  const frente = useMemo(() => [...objects].reverse(), [objects]);
+  const listRef = useRef<HTMLUListElement>(null);
+  const [arrasto, setArrasto] = useState<{ id: string; alvo: number } | null>(null);
+
+  const iniciarArrasto = (id: string, e: React.PointerEvent) => {
+    e.preventDefault();
+    const list = listRef.current;
+    if (!list) return;
+    const posicao = (y: number) => {
+      const rows = Array.from(list.querySelectorAll<HTMLElement>("[data-obj]"));
+      let alvo = rows.length;
+      for (let i = 0; i < rows.length; i++) {
+        const r = rows[i]!.getBoundingClientRect();
+        if (y < r.top + r.height / 2) {
+          alvo = i;
+          break;
+        }
+      }
+      return alvo;
+    };
+    setArrasto({ id, alvo: posicao(e.clientY) });
+    const mover = (ev: PointerEvent) => setArrasto({ id, alvo: posicao(ev.clientY) });
+    const soltar = (ev: PointerEvent) => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      const alvoFrente = posicao(ev.clientY);
+      setArrasto(null);
+      // Índice na lista "da frente" → índice no documento (invertido), descontando a própria linha.
+      const atualFrente = frente.findIndex((o) => o.id === id);
+      let destinoFrente = alvoFrente > atualFrente ? alvoFrente - 1 : alvoFrente;
+      destinoFrente = Math.max(0, Math.min(frente.length - 1, destinoFrente));
+      if (destinoFrente === atualFrente) return;
+      onReorderObject(id, frente.length - 1 - destinoFrente);
+    };
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+  };
+
   return (
-    <div className={styles.category}>
-      <div className={styles.categoryTitle}>
-        {CATEGORY_LABEL[category]} <span className={styles.dim}>({items.length})</span>
-      </div>
-      <ul className={styles.objectList}>
-        {items.map((o) => (
-          <ObjectRow
-            key={o.id}
-            obj={o}
-            selected={selectedId === o.id}
-            onSelect={() => onSelectObject(o.id)}
-            onUpdate={(patch) => onUpdateObject(o.id, patch)}
-            onDelete={() => onDeleteObject(o.id)}
-            onMove={(dir) => onMoveObject(o.id, dir)}
-          />
-        ))}
-      </ul>
-    </div>
+    <ul ref={listRef} className={styles.objectList}>
+      {frente.map((o, i) => (
+        <ObjectRow
+          key={o.id}
+          obj={o}
+          selected={selectedId === o.id}
+          arrastando={arrasto?.id === o.id}
+          marcaAcima={arrasto != null && arrasto.alvo === i}
+          marcaAbaixo={arrasto != null && i === frente.length - 1 && arrasto.alvo === frente.length}
+          onSelect={() => onSelectObject(o.id)}
+          onUpdate={(patch) => onUpdateObject(o.id, patch)}
+          onDelete={() => onDeleteObject(o.id)}
+          onGrab={(e) => iniciarArrasto(o.id, e)}
+        />
+      ))}
+    </ul>
   );
 }
 
 function ObjectRow({
   obj,
   selected,
+  arrastando,
+  marcaAcima,
+  marcaAbaixo,
   onSelect,
   onUpdate,
   onDelete,
-  onMove,
+  onGrab,
 }: {
   obj: SicroObject;
   selected: boolean;
+  arrastando: boolean;
+  marcaAcima: boolean;
+  marcaAbaixo: boolean;
   onSelect: () => void;
   onUpdate: (patch: Partial<SicroObject>) => void;
   onDelete: () => void;
-  onMove: (dir: "up" | "down") => void;
+  onGrab: (e: React.PointerEvent) => void;
 }) {
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState(obj.label ?? "");
@@ -345,10 +344,12 @@ function ObjectRow({
 
   return (
     <li
-      className={`${styles.objectItem} ${
-        selected ? styles.objectItemActive : ""
-      }`}
+      data-obj={obj.id}
+      className={`${styles.objectItem} ${selected ? styles.objectItemActive : ""} ${arrastando ? styles.objectArrastando : ""} ${marcaAcima ? styles.objectMarcaAcima : ""} ${marcaAbaixo ? styles.objectMarcaAbaixo : ""}`}
     >
+      <button type="button" className={styles.objectGrip} title="Arrastar para reordenar" aria-label="Reordenar" onPointerDown={onGrab}>
+        <GripVertical size={11} />
+      </button>
       <button
         type="button"
         className={styles.objectVisBtn}
@@ -406,28 +407,6 @@ function ObjectRow({
         }}
       >
         <Pencil size={10} />
-      </button>
-      <button
-        type="button"
-        className={styles.objectAction}
-        title="Para frente"
-        onClick={(e) => {
-          e.stopPropagation();
-          onMove("up");
-        }}
-      >
-        <ArrowUp size={10} />
-      </button>
-      <button
-        type="button"
-        className={styles.objectAction}
-        title="Para trás"
-        onClick={(e) => {
-          e.stopPropagation();
-          onMove("down");
-        }}
-      >
-        <ArrowDown size={10} />
       </button>
       <button
         type="button"
@@ -518,11 +497,13 @@ function ObjectProperties({
   object,
   scale,
   style,
+  objects,
   onChange,
 }: {
   object: SicroObject;
   scale: SicroCroquiScale | null;
   style: SicroCroquiStyle | undefined;
+  objects: SicroObject[];
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const st = resolveParityStyle(style);
@@ -555,7 +536,7 @@ function ObjectProperties({
       )}
 
       {object.kind === "vehicle" && (
-        <VehicleProps object={object} outline={st.veiculos === "traco"} onChange={onChange} />
+        <VehicleProps object={object} outline={st.veiculos === "traco"} scale={scale} onChange={onChange} />
       )}
       {object.kind === "trace" && (
         <TraceProps object={object} scale={scale} onChange={onChange} />
@@ -574,7 +555,7 @@ function ObjectProperties({
         <LineProps object={object} onChange={onChange} />
       )}
       {object.kind === "measurement" && (
-        <MeasurementProps object={object} scale={scale} onChange={onChange} />
+        <MeasurementProps object={object} scale={scale} objects={objects} onChange={onChange} />
       )}
       {object.kind === "area" && (
         <AreaProps object={object} scale={scale} onChange={onChange} />
@@ -692,12 +673,15 @@ function LabelProps({
 function VehicleProps({
   object,
   outline,
+  scale,
   onChange,
 }: {
   object: SicroVehicleObject;
+  scale: SicroCroquiScale | null;
   outline: boolean;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
+  const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : null;
   return (
     <>
       {outline && (
@@ -746,11 +730,22 @@ function VehicleProps({
           onChange({ body_type: v as VehicleBodyType } as Partial<SicroObject>)
         }
       />
-      <NumberField label="X" value={object.x} onChange={(n) => onChange({ x: n } as Partial<SicroObject>)} />
-      <NumberField label="Y" value={object.y} onChange={(n) => onChange({ y: n } as Partial<SicroObject>)} />
-      <NumberField label="Largura" value={object.width} onChange={(n) => onChange({ width: Math.max(4, n) } as Partial<SicroObject>)} />
-      <NumberField label="Altura" value={object.height} onChange={(n) => onChange({ height: Math.max(4, n) } as Partial<SicroObject>)} />
-      <NumberField label="Rotação (°)" value={object.rotation} onChange={(n) => onChange({ rotation: n } as Partial<SicroObject>)} />
+      {ppm ? (
+        <>
+          <NumberField label="X (m)" value={object.x / ppm} step={0.5} casas={2} unidade="m" onChange={(n) => onChange({ x: n * ppm } as Partial<SicroObject>)} />
+          <NumberField label="Y (m)" value={object.y / ppm} step={0.5} casas={2} unidade="m" onChange={(n) => onChange({ y: n * ppm } as Partial<SicroObject>)} />
+          <NumberField label="Comprimento" value={object.width / ppm} step={0.1} min={0.2} casas={2} unidade="m" onChange={(n) => onChange({ width: Math.max(4, n * ppm) } as Partial<SicroObject>)} />
+          <NumberField label="Largura" value={object.height / ppm} step={0.1} min={0.2} casas={2} unidade="m" onChange={(n) => onChange({ height: Math.max(4, n * ppm) } as Partial<SicroObject>)} />
+        </>
+      ) : (
+        <>
+          <NumberField label="X (px)" value={object.x} onChange={(n) => onChange({ x: n } as Partial<SicroObject>)} />
+          <NumberField label="Y (px)" value={object.y} onChange={(n) => onChange({ y: n } as Partial<SicroObject>)} />
+          <NumberField label="Comprimento (px)" value={object.width} onChange={(n) => onChange({ width: Math.max(4, n) } as Partial<SicroObject>)} />
+          <NumberField label="Largura (px)" value={object.height} onChange={(n) => onChange({ height: Math.max(4, n) } as Partial<SicroObject>)} />
+        </>
+      )}
+      <NumberField label="Rotação" value={object.rotation} step={5} unidade="°" onChange={(n) => onChange({ rotation: n } as Partial<SicroObject>)} />
     </>
   );
 }
@@ -828,17 +823,45 @@ function LineProps({
 function MeasurementProps({
   object,
   scale,
+  objects,
   onChange,
 }: {
   object: SicroMeasurementObject;
   scale: SicroCroquiScale | null;
+  objects: SicroObject[];
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const px = distancePx(object.p1, object.p2);
   const label = formatMeasurement(px, scale?.px_per_m);
+  const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : 10;
+  const temR1 = !!acharReferencial(objects, "r1");
+  const temR2 = !!acharReferencial(objects, "r2");
+  const alvos = objects.filter(podeSerAlvo);
   return (
     <>
       <Field label="Distância" value={label} readOnly mono />
+      {(temR1 || temR2) && (
+        <SelectField
+          label="Perpendicular a"
+          value={object.ref_linha ?? ""}
+          options={[{ v: "", l: "Nenhum (cota solta)" }, ...(temR1 ? [{ v: "r1", l: "R1" }] : []), ...(temR2 ? [{ v: "r2", l: "R2" }] : [])]}
+          onChange={(v) => {
+            const ref = v === "r1" || v === "r2" ? acharReferencial(objects, v) : null;
+            onChange({ ref_linha: ref ? v : null, ...(ref ? { color: corDoReferencial(ref) } : {}) } as Partial<SicroObject>);
+          }}
+        />
+      )}
+      {alvos.length > 0 && (
+        <SelectField
+          label="Segue o objeto"
+          value={object.alvo_id ?? ""}
+          options={[{ v: "", l: "Nenhum" }, ...alvos.map((a) => ({ v: a.id, l: summariseObject(a) }))]}
+          onChange={(v) => {
+            const alvo = alvos.find((a) => a.id === v);
+            onChange((alvo ? ligarAoObjeto(object, alvo, ppm) : { alvo_id: null }) as Partial<SicroObject>);
+          }}
+        />
+      )}
       <Field
         label="Texto no lugar da medida"
         value={object.label_override ?? ""}
@@ -1070,6 +1093,7 @@ const pct = (v: number) => `${Math.round(v * 100)}%`;
 function traceValueText(p: Extract<TraceParamSpec, { t: "range" }>, v: number): string {
   if (p.u === "%") return pct(v);
   if (p.u === "°") return `${Math.round(v)}°`;
+  if (p.u === "×") return `${v.toFixed(1).replace(".", ",")}×`;
   if (p.u === "m") return `${v.toFixed(2).replace(".", ",")} m`;
   if (p.u === "") return p.step < 1 ? v.toFixed(2).replace(".", ",") : String(Math.round(v));
   return `${Math.round(v)} ${p.u}`;
@@ -1202,12 +1226,13 @@ function TraceProps({
 }) {
   const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : 10;
   const spec = TRACE_SPECS[object.subtype];
+  const sangueTipo = object.subtype === "sangue" ? String(object.params?.tipo ?? spec.def.tipo) : "";
   const cotaLabel =
-    object.subtype === "colisao" || object.subtype === "fluido"
+    object.subtype === "colisao" || object.subtype === "fluido" || object.subtype === "arma" || sangueTipo === "poca"
       ? undefined
       : object.subtype === "derrapagem"
         ? "Mostrar corda e flecha"
-        : object.subtype === "fragmentos"
+        : object.subtype === "fragmentos" || sangueTipo === "projecao"
           ? "Mostrar cota do alcance"
           : "Mostrar cota do comprimento";
   return (
@@ -1476,27 +1501,21 @@ function NumberField({
   value,
   onChange,
   step,
+  min,
+  max,
+  unidade,
+  casas,
 }: {
   label: string;
   value: number;
   onChange: (n: number) => void;
   step?: number;
+  min?: number;
+  max?: number;
+  unidade?: string;
+  casas?: number;
 }) {
-  return (
-    <label className={styles.field}>
-      <span className={styles.fieldLabel}>{label}</span>
-      <input
-        type="number"
-        step={step ?? 1}
-        value={Number.isFinite(value) ? value : 0}
-        onChange={(e) => {
-          const n = Number(e.target.value.replace(",", "."));
-          if (Number.isFinite(n)) onChange(n);
-        }}
-        className={`${styles.fieldInput} ${styles.mono}`}
-      />
-    </label>
-  );
+  return <CampoNumero label={label} value={Number.isFinite(value) ? value : 0} onChange={onChange} step={step ?? 1} min={min} max={max} unidade={unidade} casas={casas} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -1533,6 +1552,15 @@ function StyleProps({
         ))}
       </div>
       <Field label="Asfalto" type="color" value={st.asfalto} onChange={(v) => onChange({ asfalto: v })} />
+      <SelectField
+        label="Pista"
+        value={st.asfalto_textura ?? "liso"}
+        options={[
+          { v: "liso", l: "Lisa (planta)" },
+          { v: "grao", l: "Com grão" },
+        ]}
+        onChange={(v) => onChange({ asfalto_textura: v as ParityAsfaltoTextura })}
+      />
       <Field label="Meio-fio" type="color" value={st.borda} onChange={(v) => onChange({ borda: v })} />
       <NumberField label="Meio-fio (px)" value={st.borda_px} step={0.5} onChange={(n) => onChange({ borda_px: Math.min(Math.max(n, 0.5), 6) })} />
       <NumberField label="Sinalização (px)" value={st.marcacao_px} step={0.5} onChange={(n) => onChange({ marcacao_px: Math.min(Math.max(n, 0.5), 6) })} />
@@ -1679,6 +1707,11 @@ function SheetProps({
         label="Mostrar grade"
         checked={grid.enabled !== false}
         onChange={(v) => onChange({ grid: { ...grid, enabled: v } })}
+      />
+      <CheckboxRow
+        label="Esmaecer fora da folha"
+        checked={canvas.esmaecer_fora !== false}
+        onChange={(v) => onChange({ esmaecer_fora: v })}
       />
       <div className={styles.temaRow}>
         {onCenter && (

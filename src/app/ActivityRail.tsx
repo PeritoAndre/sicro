@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useSettingsStore } from "@stores/settingsStore";
+import { selectActiveWorkspacePath, useWorkspaceStore } from "@stores/workspaceStore";
 import styles from "./ActivityRail.module.css";
 import { useNavGuard } from "./navGuard";
 import { isMidiaPath, lastMidiaAba } from "@modules/midia/midiaNav";
@@ -55,6 +56,7 @@ function guardedGo(navigate: NavigateFunction, to: string): void {
 
 export function ActivityRail() {
   const navigate = useNavigate();
+  const temCaso = !!useWorkspaceStore(selectActiveWorkspacePath);
   const profile = useSettingsStore((s) => s.settings.profile);
   const name = profile.full_name.trim();
   const role = profile.role.trim();
@@ -76,7 +78,7 @@ export function ActivityRail() {
         <RailLink {...primary} />
         <div className={styles.navLabel}>Módulos</div>
         {modules.map((item) => (
-          <RailLink key={item.to} {...item} />
+          <RailLink key={item.to} {...item} apagado={!temCaso} />
         ))}
         <div className={styles.navSep} aria-hidden />
         <RailLink {...settingsItem} />
@@ -118,7 +120,7 @@ export function ActivityRail() {
   );
 }
 
-function RailLink({ to, label, icon: Icon, activeWhen }: RailItem) {
+function RailLink({ to, label, icon: Icon, activeWhen, apagado }: RailItem & { apagado?: boolean }) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   // /midia aponta direto para a aba usada por último.
@@ -129,7 +131,7 @@ function RailLink({ to, label, icon: Icon, activeWhen }: RailItem) {
       end={to === "/"}
       aria-label={label}
       className={({ isActive }) =>
-        [styles.item, isActive || activeWhen?.(pathname) ? styles.itemActive : null]
+        [styles.item, isActive || activeWhen?.(pathname) ? styles.itemActive : null, apagado ? styles.itemApagado : null]
           .filter(Boolean)
           .join(" ")
       }

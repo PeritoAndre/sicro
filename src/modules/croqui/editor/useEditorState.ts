@@ -69,6 +69,8 @@ export type Tool =
   | "trace_fluido"
   | "trace_fragmentos"
   | "trace_colisao"
+  | "trace_sangue"
+  | "trace_arma"
   // Pessoas articuladas
   | "person_dorsal"
   | "person_ventral"
@@ -114,6 +116,8 @@ export type Tool =
   // Anotação / medição / escala
   | "text"
   | "measurement"
+  | "measurement_r1"
+  | "measurement_r2"
   | "area"
   | "set_scale"
   // Vias multi-click, uma ferramenta por estilo

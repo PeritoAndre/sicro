@@ -69,6 +69,7 @@ export function CroquiListView() {
   const isLoadingList = useCroquiStore((s) => s.isLoadingList);
   const loadList = useCroquiStore((s) => s.loadList);
   const createCroqui = useCroquiStore((s) => s.createCroqui);
+  const abrirNovoViario = useCroquiStore((s) => s.abrirNovoViario);
   const openCroqui = useCroquiStore((s) => s.openCroqui);
   const openCorpo = useCroquiStore((s) => s.openCorpo);
   const openPlanta = useCroquiStore((s) => s.openPlanta);
@@ -172,7 +173,7 @@ export function CroquiListView() {
               <Button
                 variant="secondary"
                 leftIcon={<Plus size={15} />}
-                onClick={() => void handleCreate("viario")}
+                onClick={abrirNovoViario}
                 disabled={busy}
               >
                 Croqui viário
@@ -235,7 +236,7 @@ export function CroquiListView() {
             <Button
               variant="secondary"
               leftIcon={<Plus size={14} />}
-              onClick={() => void handleCreate("viario")}
+              onClick={abrirNovoViario}
               disabled={busy}
             >
               Croqui viário

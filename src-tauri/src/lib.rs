@@ -66,6 +66,8 @@ pub fn run() {
         // Fluxo gov.br: abrir browser + copiar caminho.
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             #[cfg(target_os = "linux")]
             allow_local_media(app);
@@ -74,6 +76,7 @@ pub fn run() {
         .manage(app_state)
         .invoke_handler(tauri::generate_handler![
             // workspace / occurrence
+            commands::workspace_commands::default_workspace_parent,
             commands::workspace_commands::create_occurrence,
             commands::workspace_commands::open_occurrence,
             commands::workspace_commands::get_occurrence,
@@ -97,6 +100,9 @@ pub fn run() {
             commands::croqui_commands::import_drone_image,
             commands::croqui_commands::fetch_overpass,
             commands::croqui_commands::fetch_osm_tile,
+            commands::croqui_commands::fetch_map_tile,
+            commands::croqui_commands::geocode_place,
+            commands::croqui_commands::save_croqui_background,
             // vídeo
             commands::video_commands::register_video_media,
             commands::video_commands::list_video_media,

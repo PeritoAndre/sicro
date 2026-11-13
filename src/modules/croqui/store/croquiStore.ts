@@ -22,6 +22,10 @@ interface CroquiState {
   activeCroquiId: string | null;
   activeCroqui: Croqui | null;
   activeDoc: SicroCroquiDoc | null;
+  /** Tela "Novo croqui viário" aberta (fica aberta até a folha estar pronta, para o editor não piscar). */
+  novoViario: boolean;
+  abrirNovoViario: () => void;
+  fecharNovoViario: () => void;
 
   /**
    * ISO do último export PNG por croqui id. Só em memória: após reload
@@ -64,6 +68,9 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
   isLoadingList: false,
   isMutating: false,
   activeCroquiId: null,
+  novoViario: false,
+  abrirNovoViario: () => set({ novoViario: true }),
+  fecharNovoViario: () => set({ novoViario: false }),
   activeCroqui: null,
   activeDoc: null,
   lastExportedAt: {},

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   ArrowLeft,
+  ClipboardPaste,
+  Copy,
   FileImage,
   Image as ImageIcon,
   Layers,
@@ -15,7 +17,7 @@ import {
   X,
 } from "lucide-react";
 import type { Tool } from "../useEditorState";
-import { RAIL, groupOfTool, type PaletteItem, type RailEntry } from "./catalog";
+import { RAIL, cotaReferencialItem, groupOfTool, type PaletteItem, type RailEntry } from "./catalog";
 import { ACTION_BY_ID } from "@core/keymapActions";
 import { formatBinding } from "@core/keymap";
 import { useKeymapStore } from "@stores/keymapStore";
@@ -36,8 +38,16 @@ interface Props {
   onUndo: () => void;
   canRedo: boolean;
   onRedo: () => void;
+  /** Fundo importado sem escala: a ferramenta Escala fica em destaque. */
+  destacarEscala?: boolean;
+  /** Cor do R1 e do R2 presentes no croqui: liberam Cota R1 / Cota R2 no grupo Cota. */
+  cotasRef?: { r1?: string | null; r2?: string | null };
   canDuplicate: boolean;
   onDuplicate: () => void;
+  canCopy: boolean;
+  onCopy: () => void;
+  canPaste: boolean;
+  onPaste: () => void;
   onImportBackground: () => void;
   onImportDrone?: () => void;
   onImportOsm?: () => void;
@@ -56,6 +66,12 @@ interface Props {
   onBackToList: () => void;
   saving: boolean;
   exporting: boolean;
+}
+
+function itensDoGrupo(e: OpenEntry, cotasRef?: Props["cotasRef"]): PaletteItem[] {
+  if (e.kind !== "group") return [];
+  if (e.id !== "cota") return e.items;
+  return [...e.items, ...(cotasRef?.r1 ? [cotaReferencialItem("r1", cotasRef.r1)] : []), ...(cotasRef?.r2 ? [cotaReferencialItem("r2", cotasRef.r2)] : [])];
 }
 
 export function Palette(props: Props) {
@@ -148,11 +164,12 @@ export function Palette(props: Props) {
           const Icon = e.icon;
           if (e.kind === "tool") {
             const active = activeTool === e.tool;
+            const destaque = props.destacarEscala && e.tool === "set_scale" && !active;
             return (
               <button
                 key={e.tool}
                 type="button"
-                className={`${styles.entry} ${active ? styles.entryActive : ""}`}
+                className={`${styles.entry} ${active ? styles.entryActive : ""} ${destaque ? styles.entryDestaque : ""}`}
                 onClick={() => pickDirect(e.tool)}
                 title={keyOf(e.action) ? `${e.label} (${keyOf(e.action)})` : e.label}
               >
@@ -217,7 +234,7 @@ export function Palette(props: Props) {
           <div className={styles.shelfBody}>
             {openEntry.kind === "group" ? (
               <div className={styles.grid}>
-                {openEntry.items.map((it) => (
+                {itensDoGrupo(openEntry, props.cotasRef).map((it) => (
                   <button
                     key={it.tool}
                     type="button"
@@ -341,6 +358,12 @@ function EditActions(p: Props) {
       </button>
       <button type="button" className={styles.actionBtn} onClick={p.onDuplicate} disabled={!p.canDuplicate}>
         <Plus size={13} /> Duplicar <kbd>Ctrl+D</kbd>
+      </button>
+      <button type="button" className={styles.actionBtn} onClick={p.onCopy} disabled={!p.canCopy}>
+        <Copy size={13} /> Copiar <kbd>Ctrl+C</kbd>
+      </button>
+      <button type="button" className={styles.actionBtn} onClick={p.onPaste} disabled={!p.canPaste}>
+        <ClipboardPaste size={13} /> Colar <kbd>Ctrl+V</kbd>
       </button>
       <button type="button" className={styles.actionBtn} onClick={p.onDelete} disabled={!p.canDelete}>
         <Trash2 size={13} /> Excluir <kbd>Del</kbd>

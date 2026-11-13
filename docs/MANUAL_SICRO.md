@@ -56,8 +56,16 @@ croquis, vídeos, áudios, imagens, exportações, backups e relatórios.
 
 O SICRO funciona **sem internet**. Não há servidor central, login na nuvem nem
 sincronização automática. As únicas coisas que tocam a rede são opcionais e
-explícitas: importar vias do OpenStreetMap (Croqui) e baixar o motor de IA da
-degravação (Configurações), só quando você clica.
+explícitas: importar vias do OpenStreetMap (Croqui), baixar o motor de IA da
+degravação (Configurações) e a verificação de versão nova, descrita abaixo.
+Nenhum dado do caso sai do computador.
+
+**Atualização.** Alguns segundos depois de abrir, o SICRO pergunta ao GitHub se
+há versão nova. Se houver, aparece um aviso com as novidades e o botão
+**Atualizar agora**: no Windows ele baixa o instalador, confere a assinatura,
+instala e reabre sozinho. No Linux (.deb) o aviso abre a página de download e
+você instala por cima. **Depois** adia até a próxima abertura. Para conferir na
+hora: Ajuda → **Verificar atualizações**, no rodapé do índice.
 
 > 💡 **Por que isso importa:** dado pericial fica sob seu controle, no seu disco.
 > A redundância em nuvem é feita por **backup** (um arquivo único), nunca

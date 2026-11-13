@@ -50,6 +50,8 @@ const TRACE_THUMBS: Record<TraceSubtype, { ppm: number; a: [number, number]; b: 
   fluido: { ppm: 14, a: [5, 17], b: [40, 21] },
   fragmentos: { ppm: 24, a: [8, 20], b: [58, 20], params: { dens: 30 } },
   colisao: { ppm: 24, a: [32, 20], b: [32, 20] },
+  sangue: { ppm: 16, a: [6, 16], b: [40, 22], params: { trilha: true, raio: 0.8 } },
+  arma: { ppm: 150, a: [18, 21], b: [46, 21] },
 };
 
 /** O vestígio desenhado pelo mesmo código do canvas, sobre asfalto. */

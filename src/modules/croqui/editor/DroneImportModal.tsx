@@ -20,7 +20,7 @@ interface DroneImportModalProps {
   onCancel: () => void;
 }
 
-interface LoadedImage {
+export interface LoadedImage {
   absolutePath: string;
   width: number;
   height: number;
@@ -30,19 +30,62 @@ interface LoadedImage {
 // Limita o loop JS por pixel do preview.
 const PREVIEW_MAX = 600;
 
-export function DroneImportModal({
-  workspacePath,
-  croquiId,
-  occurrenceId,
-  onConfirm,
-  onCancel,
-}: DroneImportModalProps) {
-  const [intensity, setIntensity] = useState(0.5);
-  const [loaded, setLoaded] = useState<LoadedImage | null>(null);
-  const [busy, setBusy] = useState(false);
+/** Lê a foto (asset protocol do Tauri) e propõe o recorte inicial de 80 % centralizado. */
+export async function carregarImagemDrone(absolutePath: string): Promise<{ loaded: LoadedImage; crop: CropRectInput }> {
+  const img = new window.Image();
+  img.crossOrigin = "anonymous";
+  img.src = convertFileSrc(absolutePath);
+  await new Promise<void>((resolve, reject) => {
+    img.onload = () => resolve();
+    img.onerror = () => reject(new Error("falha ao carregar imagem"));
+  });
+  const c = document.createElement("canvas");
+  c.width = img.width;
+  c.height = img.height;
+  const ctx = c.getContext("2d");
+  if (!ctx) throw new Error("canvas 2D context não disponível");
+  ctx.drawImage(img, 0, 0);
+  const data = ctx.getImageData(0, 0, c.width, c.height);
+  const margin = 0.1;
+  const cw = Math.round(c.width * (1 - 2 * margin));
+  const ch = Math.round(c.height * (1 - 2 * margin));
+  return {
+    loaded: { absolutePath, width: c.width, height: c.height, pixels: data.data },
+    crop: { x: Math.round((c.width - cw) / 2), y: Math.round((c.height - ch) / 2), width: cw, height: ch },
+  };
+}
+
+/** Extensões de imagem aceitas ao arrastar. */
+export const EXTENSOES_DE_FOTO = /\.(png|jpe?g|webp|tiff?)$/i;
+
+/** O que a prévia escolheu; o Rust refaz em resolução cheia. */
+export interface DroneAjusteEstado {
+  loaded: LoadedImage | null;
+  crop: CropRectInput | null;
+  intensity: number;
+}
+
+/** Escolha da foto, prévia com recorte pelas bordas e correção de lente; sem moldura de diálogo. */
+export function DroneAjuste({
+  estado,
+  onChange,
+  busy = false,
+  previewMax = PREVIEW_MAX,
+  partes = "tudo",
+}: {
+  estado: DroneAjusteEstado;
+  onChange: (e: DroneAjusteEstado) => void;
+  busy?: boolean;
+  previewMax?: number;
+  /** A tela "Novo croqui" mostra os controles na coluna e a prévia (com o recorte) na área grande. */
+  partes?: "tudo" | "controles" | "previa";
+}) {
+  const mostraControles = partes !== "previa";
+  const mostraPrevia = partes !== "controles";
+  const { loaded, crop, intensity } = estado;
   const [error, setError] = useState<string | null>(null);
-  // Crop em pixels da resolução cheia (unidade que o Rust espera).
-  const [crop, setCrop] = useState<CropRectInput | null>(null);
+  const setCrop = (c: CropRectInput | null) => onChange({ ...estado, crop: c });
+  const setIntensity = (i: number) => onChange({ ...estado, intensity: i });
 
   const previewRef = useRef<HTMLCanvasElement | null>(null);
   // Preview corrigido em cache: mudar só o crop não recalcula.
@@ -51,6 +94,7 @@ export function DroneImportModal({
     width: number;
     height: number;
     pixels: Uint8ClampedArray;
+    fonte?: LoadedImage;
   } | null>(null);
 
   const handlePick = useCallback(async () => {
@@ -67,113 +111,39 @@ export function DroneImportModal({
         ],
       });
       if (typeof picked !== "string") return;
-      // Asset protocol do Tauri: o WebView não carrega file:// direto.
-      const url = convertFileSrc(picked);
-      const img = new window.Image();
-      img.crossOrigin = "anonymous";
-      img.src = url;
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error("falha ao carregar imagem"));
-      });
-      const c = document.createElement("canvas");
-      c.width = img.width;
-      c.height = img.height;
-      const ctx = c.getContext("2d");
-      if (!ctx) throw new Error("canvas 2D context não disponível");
-      ctx.drawImage(img, 0, 0);
-      const data = ctx.getImageData(0, 0, c.width, c.height);
-      setLoaded({
-        absolutePath: picked,
-        width: c.width,
-        height: c.height,
-        pixels: data.data,
-      });
-      // Crop inicial de 80 % centralizado: imagem inteira ficava invisível
-      // contra a borda do canvas.
-      const margin = 0.1;
-      const cw = Math.round(c.width * (1 - 2 * margin));
-      const ch = Math.round(c.height * (1 - 2 * margin));
-      const cx = Math.round((c.width - cw) / 2);
-      const cy = Math.round((c.height - ch) / 2);
-      setCrop({ x: cx, y: cy, width: cw, height: ch });
       correctedPreviewRef.current = null;
+      onChange({ ...estado, ...(await carregarImagemDrone(picked)) });
     } catch (e) {
       setError(`Falha ao abrir imagem: ${(e as Error).message}`);
     }
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [estado, onChange]);
 
   useEffect(() => {
     const canvas = previewRef.current;
     if (!canvas || !loaded) return;
+    // Outra foto (ou outra instância do componente): o cache corrigido não vale.
+    if (correctedPreviewRef.current && correctedPreviewRef.current.fonte !== loaded) correctedPreviewRef.current = null;
     drawPreview(canvas, loaded, intensity, crop, correctedPreviewRef);
+    if (correctedPreviewRef.current) correctedPreviewRef.current.fonte = loaded;
   }, [loaded, intensity, crop]);
 
-  // Rust refaz o pipeline em resolução cheia.
-  const handleConfirm = useCallback(async () => {
-    if (!loaded || !crop) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const result = await commands.importDroneImage(workspacePath, {
-        source_absolute_path: loaded.absolutePath,
-        intensity,
-        crop,
-        croqui_id: croquiId,
-        occurrence_id: occurrenceId,
-      });
-      onConfirm(result);
-    } catch (e) {
-      setError(`Falha ao processar imagem: ${toSicroError(e).message}`);
-    } finally {
-      setBusy(false);
-    }
-  }, [loaded, crop, intensity, workspacePath, croquiId, occurrenceId, onConfirm]);
-
   const previewSize = useMemo(() => {
-    if (!loaded) return { width: PREVIEW_MAX, height: PREVIEW_MAX * 0.66 };
+    if (!loaded) return { width: previewMax, height: previewMax * 0.66 };
     const scale = Math.min(
-      PREVIEW_MAX / loaded.width,
-      PREVIEW_MAX / loaded.height,
+      previewMax / loaded.width,
+      previewMax / loaded.height,
       1,
     );
     return {
       width: Math.round(loaded.width * scale),
       height: Math.round(loaded.height * scale),
     };
-  }, [loaded]);
+  }, [loaded, previewMax]);
 
   return (
-    <div
-      className={styles.overlay}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="drone-modal-title"
-      onClick={(e) => {
-        if (e.target === e.currentTarget && !busy) onCancel();
-      }}
-    >
-      <div className={styles.dialog} style={{ maxWidth: 760 }}>
-        <header className={styles.dialogHeader}>
-          <strong id="drone-modal-title">Importar imagem de drone</strong>
-          <button
-            type="button"
-            onClick={onCancel}
-            className={styles.dialogClose}
-            disabled={busy}
-          >
-            Fechar
-          </button>
-        </header>
-
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          {!loaded && (
-            <p className={styles.dim}>
-              Escolha uma imagem de drone para começar. A imagem original
-              não será alterada; o SICRO gera um derivado corrigido e
-              recortado dentro do workspace.
-            </p>
-          )}
+          {mostraControles && (
           <div style={{ display: "flex", gap: 8 }}>
             <button
               type="button"
@@ -206,9 +176,9 @@ export function DroneImportModal({
               </button>
             )}
           </div>
+          )}
 
-          {loaded && (
-            <>
+          {loaded && mostraPrevia && (
               <div
                 style={{
                   position: "relative",
@@ -239,20 +209,19 @@ export function DroneImportModal({
                   onChange={(c) => setCrop(c)}
                 />
               </div>
+          )}
 
+          {loaded && mostraControles && (
+            <>
               <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                 <span style={{ fontSize: 12 }}>
-                  Correção de lente —{" "}
-                  <strong>{Math.round(intensity * 100)}%</strong>{" "}
-                  <span style={{ color: "var(--sicro-fg-dim)" }}>
-                    (0% sem correção · 50% moderada · 100% forte)
-                  </span>
+                  Correção de lente — <strong>{Math.round(intensity * 100)}%</strong>
                 </span>
                 <input
                   type="range"
                   min={0}
-                  max={1}
-                  step={0.05}
+                  max={0.5}
+                  step={0.01}
                   value={intensity}
                   onChange={(e) => setIntensity(Number(e.target.value))}
                   disabled={busy}
@@ -278,30 +247,77 @@ export function DroneImportModal({
             </p>
           )}
 
+        </div>
+  );
+}
+
+export function DroneImportModal({
+  workspacePath,
+  croquiId,
+  occurrenceId,
+  onConfirm,
+  onCancel,
+}: DroneImportModalProps) {
+  const [estado, setEstado] = useState<DroneAjusteEstado>({ loaded: null, crop: null, intensity: 0.1 });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { loaded, crop, intensity } = estado;
+
+  // Rust refaz o pipeline em resolução cheia.
+  const handleConfirm = useCallback(async () => {
+    if (!loaded || !crop) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await commands.importDroneImage(workspacePath, {
+        source_absolute_path: loaded.absolutePath,
+        intensity,
+        crop,
+        croqui_id: croquiId,
+        occurrence_id: occurrenceId,
+      });
+      onConfirm(result);
+    } catch (e) {
+      setError(`Falha ao processar imagem: ${toSicroError(e).message}`);
+    } finally {
+      setBusy(false);
+    }
+  }, [loaded, crop, intensity, workspacePath, croquiId, occurrenceId, onConfirm]);
+
+  return (
+    <div
+      className={styles.overlay}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="drone-modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onCancel();
+      }}
+    >
+      <div className={styles.dialog} style={{ maxWidth: 760 }}>
+        <header className={styles.dialogHeader}>
+          <strong id="drone-modal-title">Importar imagem de drone</strong>
+          <button type="button" onClick={onCancel} className={styles.dialogClose} disabled={busy}>
+            Fechar
+          </button>
+        </header>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <DroneAjuste estado={estado} onChange={setEstado} busy={busy} />
+          {error && (
+            <p className={styles.danger} style={{ margin: 0 }}>
+              {error}
+            </p>
+          )}
           <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-            <button
-              type="button"
-              className={styles.dialogClose}
-              onClick={onCancel}
-              disabled={busy}
-            >
+            <button type="button" className={styles.dialogClose} onClick={onCancel} disabled={busy}>
               Cancelar
             </button>
             <button
               type="button"
               className={styles.dialogClose}
-              style={{
-                color: "#5aa9e6",
-                fontWeight: 600,
-                opacity: loaded && crop && !busy ? 1 : 0.5,
-              }}
+              style={{ color: "#5aa9e6", fontWeight: 600, opacity: loaded && crop && !busy ? 1 : 0.5 }}
               onClick={() => void handleConfirm()}
               disabled={!loaded || !crop || busy}
-              title={
-                loaded
-                  ? "Aplica a correção e o crop em alta resolução no backend"
-                  : "Escolha uma imagem primeiro"
-              }
             >
               {busy ? "Processando…" : "Aplicar e usar como fundo"}
             </button>
