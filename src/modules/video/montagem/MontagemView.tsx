@@ -1,34 +1,38 @@
 /** Montagem: sequência de trechos, cartelas e quadros congelados para o vídeo do júri. */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { convertFileSrc } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
   ArrowDown,
   ArrowLeft,
   ArrowUp,
   Clapperboard,
+  Crosshair,
   FolderOpen,
+  GripVertical,
   Play,
   Plus,
   Snowflake,
   Trash2,
   Type,
   X,
+  Zap,
 } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { askConfirm } from "@components/Dialog/ask";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
+import { mediaSrc } from "@core/mediaSrc";
 import { selectActiveWorkspacePath, useWorkspaceStore } from "@stores/workspaceStore";
 import type {
   MontagemItem,
   MontagemTexto,
+  MontagemTrecho,
   RenderMontagemResult,
 } from "@domain/montagem";
 import type { VideoEvent, VideoMedia } from "@domain/video";
 import { useVideoStore } from "../store/videoStore";
-import { formatDuration, parseTimeInput } from "../editor/format";
+import { formatDuration } from "../editor/format";
 import { useSalvamentoAutomatico } from "@modules/croqui/editor/useSalvamentoAutomatico";
 import { useMontagemStore } from "./montagemStore";
 import {
@@ -37,52 +41,18 @@ import {
   novaCartela,
   novoCongelar,
   novoTrecho,
+  inserirQuadro,
   textoPadrao,
   validarItem,
+  validarMontagem,
 } from "./montagemModel";
+import { AudioPainel } from "./AudioPainel";
+import { EfeitosTrecho } from "./EfeitosTrecho";
+import { PalcoPrevia, type PreviaItem } from "./PalcoPrevia";
+import type { AlvoMarcacao, Rascunho } from "./marcacao";
 import styles from "./MontagemView.module.css";
-
-const segFmt = (s: number) => (Number.isInteger(s) ? String(s) : s.toFixed(3).replace(/0+$/, ""));
-
-/** Tempo em segundos ou "1:02.5"; confirma ao sair do campo ou no Enter. */
-function TempoInput({ valor, onChange, fps }: { valor: number; onChange: (v: number) => void; fps?: number | null }) {
-  const [txt, setTxt] = useState(segFmt(valor));
-  const [ruim, setRuim] = useState(false);
-  useEffect(() => setTxt(segFmt(valor)), [valor]);
-  const confirmar = () => {
-    const v = parseTimeInput(txt, fps);
-    if (v == null) {
-      setRuim(true);
-      return;
-    }
-    setRuim(false);
-    if (v !== valor) onChange(v);
-    else setTxt(segFmt(valor));
-  };
-  return (
-    <input
-      className={`${styles.input} ${ruim ? styles.bad : ""}`}
-      value={txt}
-      onChange={(e) => setTxt(e.target.value)}
-      onBlur={confirmar}
-      onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-      inputMode="decimal"
-    />
-  );
-}
-
-function NumInput({ valor, onChange, min }: { valor: number; onChange: (v: number) => void; min?: number }) {
-  return (
-    <input
-      className={styles.input}
-      type="number"
-      step="0.1"
-      min={min}
-      value={valor}
-      onChange={(e) => Number.isFinite(e.target.valueAsNumber) && onChange(e.target.valueAsNumber)}
-    />
-  );
-}
+import { NumInput, TempoInput } from "./campos";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 function TextoEditor({ texto, onChange }: { texto: MontagemTexto | null | undefined; onChange: (t: MontagemTexto) => void }) {
   const t = texto ?? textoPadrao();
@@ -113,9 +83,8 @@ function TextoEditor({ texto, onChange }: { texto: MontagemTexto | null | undefi
   );
 }
 
-type Previa = { src: string; t: number; fim: number | null; vel: number; key: string };
-
-export function MontagemView() {
+/** `embutida`: como sexto modo da análise (sem "Voltar"; sair é trocar de modo). */
+export function MontagemView({ embutida = false }: { embutida?: boolean } = {}) {
   const ws = useWorkspaceStore(selectActiveWorkspacePath);
   const fechar = useVideoStore((s) => s.fecharMontagem);
   const videos = useVideoStore((s) => s.list);
@@ -130,9 +99,16 @@ export function MontagemView() {
   const [fTexto, setFTexto] = useState("");
   const [fDur, setFDur] = useState(3);
   const [eventos, setEventos] = useState<VideoEvent[]>([]);
-  const [previa, setPrevia] = useState<Previa | null>(null);
+  const [previa, setPrevia] = useState<PreviaItem | null>(null);
+  const [previaMont, setPreviaMont] = useState<{ src: string; key: string } | null>(null);
+  const [alvo, setAlvo] = useState<AlvoMarcacao | null>(null);
+  const [rascunho, setRascunho] = useState<Rascunho | null>(null);
+  const [tAtual, setTAtual] = useState(0);
   const [erro, setErro] = useState<string | null>(null);
-  const [render, setRender] = useState<{ pct: number } | null>(null);
+  const [render, setRender] = useState<{ pct: number; previa: boolean } | null>(null);
+  const [arr, setArr] = useState<{ de: number; para: number } | null>(null);
+  const itemRefs = useRef(new Map<string, HTMLLIElement>());
+  const montRef = useRef<HTMLVideoElement | null>(null);
   const [pronto, setPronto] = useState<RenderMontagemResult | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
@@ -175,19 +151,24 @@ export function MontagemView() {
     if (!doc) return;
     let un: (() => void) | null = null;
     void listen<{ montagem_id: string; pct: number }>("montagem:progresso", (e) => {
-      if (e.payload.montagem_id === doc.id) setRender({ pct: e.payload.pct });
+      if (e.payload.montagem_id === doc.id) setRender((r) => ({ pct: e.payload.pct, previa: r?.previa ?? false }));
     }).then((f) => (un = f));
     return () => un?.();
   }, [doc?.id]);
 
   const porId = useMemo(() => new Map(videos.map((v) => [v.id, v])), [videos]);
   const total = doc ? duracaoTotal(doc.itens) : 0;
-  const problema = doc?.itens.map(validarItem).find((p) => p) ?? null;
+  const problema = doc ? validarMontagem(doc) : null;
 
   const sair = async () => {
     if (ws && m.dirty) await m.salvar(ws);
     m.fechar();
     fechar();
+  };
+  // Embutida: "Voltar" vai para a lista de edições, sem sair do modo.
+  const voltarLista = async () => {
+    if (ws && m.dirty) await m.salvar(ws);
+    m.fechar();
   };
 
   const abrirForm = (tipo: "trecho" | "cartela" | "congelar") => {
@@ -212,25 +193,70 @@ export function MontagemView() {
     if (!ws || it.tipo === "cartela") return;
     const v = porId.get(it.media_id);
     if (!v) return;
-    const sep = ws.includes("\\") ? "\\" : "/";
-    const abs = `${ws}${sep}${v.relative_path.replace(/\//g, sep)}`;
+    const abs = caminhoDoCaso(ws, v.relative_path);
+    setPreviaMont(null);
     setPrevia({
-      src: convertFileSrc(abs),
+      src: mediaSrc(abs),
       t: it.tipo === "trecho" ? it.inicio_s : it.instante_s,
       fim: it.tipo === "trecho" ? it.fim_s : null,
       vel: it.tipo === "trecho" ? it.velocidade : 1,
       key: `${it.id}-${Date.now()}`,
+      itemId: it.id,
     });
+    setAlvo(null);
+    setRascunho(null);
   };
 
-  const renderizar = async () => {
+  const marcar = (it: MontagemItem, a: AlvoMarcacao) => {
+    if (it.tipo !== "trecho") return;
+    if (previa?.itemId !== it.id || previaMont) ver(it);
+    setAlvo(a);
+    setRascunho(null);
+  };
+
+  const trechoAlvo = alvo && doc ? doc.itens.find((i) => i.id === alvo.item && i.tipo === "trecho") : null;
+  const rascunhoOk =
+    !!rascunho &&
+    (alvo?.tipo === "destaque" && alvo.ponto ? true : (rascunho.w ?? 0) > 0.005 && (rascunho.h ?? 0) > 0.005);
+
+  /** Grava o rascunho como quadro-chave em t = tempo do player − início do trecho. */
+  const marcarAgora = () => {
+    if (!alvo || !rascunho || !trechoAlvo || trechoAlvo.tipo !== "trecho" || !rascunhoOk) return;
+    const t = Math.max(0, Math.min(tAtual - trechoAlvo.inicio_s, trechoAlvo.fim_s - trechoAlvo.inicio_s));
+    const tr = Math.round(t * 1000) / 1000;
+    if (alvo.tipo === "zoom") {
+      const reg = { x: rascunho.x, y: rascunho.y, w: rascunho.w ?? 1, h: rascunho.h ?? 1 };
+      const z = trechoAlvo.zoom ?? { inicio: { x: 0, y: 0, w: 1, h: 1 }, fim: { x: 0, y: 0, w: 1, h: 1 } };
+      m.alterar(trechoAlvo.id, { zoom: { ...z, [alvo.ponta]: reg } });
+    } else if (alvo.tipo === "destaque") {
+      const q = { t: tr, x: rascunho.x, y: rascunho.y, ...(alvo.ponto ? {} : { w: rascunho.w, h: rascunho.h }) };
+      m.alterar(trechoAlvo.id, {
+        destaques: (trechoAlvo.destaques ?? []).map((d) => (d.id === alvo.id ? { ...d, quadros: inserirQuadro(d.quadros, q) } : d)),
+      });
+    } else {
+      const q = { t: tr, x: rascunho.x, y: rascunho.y, w: rascunho.w, h: rascunho.h };
+      m.alterar(trechoAlvo.id, {
+        desfoques: (trechoAlvo.desfoques ?? []).map((d) => (d.id === alvo.id ? { ...d, quadros: inserirQuadro(d.quadros, q) } : d)),
+      });
+    }
+    setRascunho(null);
+  };
+
+  const renderizar = async (rapida = false) => {
     if (!ws || !doc) return;
     setErro(null);
-    setPronto(null);
-    setRender({ pct: 0 });
+    if (!rapida) setPronto(null);
+    setRender({ pct: 0, previa: rapida });
     try {
       if (!(await m.salvar(ws))) throw new Error("não foi possível salvar a montagem");
-      setPronto(await commands.renderMontagem(ws, doc.id));
+      const r = await commands.renderMontagem(ws, doc.id, rapida);
+      if (rapida) {
+        setPrevia(null);
+        setAlvo(null);
+        setPreviaMont({ src: mediaSrc(caminhoDoCaso(ws, r.output_relative_path)), key: String(Date.now()) });
+      } else {
+        setPronto(r);
+      }
     } catch (e) {
       setErro(toSicroError(e).message);
     } finally {
@@ -238,17 +264,52 @@ export function MontagemView() {
     }
   };
 
+  // Reordenar arrastando a alça (pointer events: o arrastar HTML5 não funciona com dragDrop do Tauri no Windows).
+  const iniciaArrasto = (e: React.PointerEvent, de: number) => {
+    e.preventDefault();
+    setArr({ de, para: de });
+  };
+  useEffect(() => {
+    if (!arr || !doc) return;
+    const ids = doc.itens.map((i) => i.id);
+    const mover = (e: PointerEvent) => {
+      let para = ids.length - 1;
+      for (let i = 0; i < ids.length; i++) {
+        const r = itemRefs.current.get(ids[i] as string)?.getBoundingClientRect();
+        if (r && e.clientY < r.top + r.height / 2) {
+          para = i;
+          break;
+        }
+      }
+      setArr((a) => (a ? { ...a, para } : a));
+    };
+    const soltar = () => {
+      setArr((a) => {
+        if (a && a.de !== a.para) m.moverItem(a.de, a.para);
+        return null;
+      });
+    };
+    window.addEventListener("pointermove", mover);
+    window.addEventListener("pointerup", soltar);
+    window.addEventListener("pointercancel", soltar);
+    return () => {
+      window.removeEventListener("pointermove", mover);
+      window.removeEventListener("pointerup", soltar);
+      window.removeEventListener("pointercancel", soltar);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [arr !== null, doc?.itens.length]);
+
   const abrirPasta = () => {
     if (!ws || !pronto) return;
-    const sep = ws.includes("\\") ? "\\" : "/";
-    void commands.revealPathInExplorer(`${ws}${sep}${pronto.output_relative_path.replace(/\//g, sep)}`).catch((e) =>
+    void commands.revealPathInExplorer(caminhoDoCaso(ws, pronto.output_relative_path)).catch((e) =>
       setErro(toSicroError(e).message),
     );
   };
 
   const excluirMontagem = async (id: string) => {
     if (!ws) return;
-    const ok = await askConfirm({ title: "Excluir montagem", message: "Excluir esta montagem?", confirmLabel: "Excluir", danger: true });
+    const ok = await askConfirm({ title: "Excluir edição", message: "Excluir esta edição?", confirmLabel: "Excluir", danger: true });
     if (ok) await m.excluir(ws, id);
   };
 
@@ -257,12 +318,14 @@ export function MontagemView() {
     return (
       <div className={styles.wrap}>
         <header className={styles.top}>
-          <button type="button" className={styles.back} onClick={() => void sair()}>
-            <ArrowLeft size={14} /> Voltar
-          </button>
-          <h1 className={styles.titulo}>Montagem</h1>
+          {!embutida && (
+            <button type="button" className={styles.back} onClick={() => void sair()}>
+              <ArrowLeft size={14} /> Voltar
+            </button>
+          )}
+          <h1 className={styles.titulo}>Edição</h1>
           <Button variant="primary" leftIcon={<Plus size={14} />} onClick={m.nova} style={{ marginLeft: "auto" }}>
-            Nova montagem
+            Nova edição
           </Button>
         </header>
         {m.erro && <p className={styles.erro}>{m.erro}</p>}
@@ -276,8 +339,8 @@ export function MontagemView() {
               </span>
               <Button
                 variant="ghost"
-                aria-label="Excluir montagem"
-                title="Excluir montagem"
+                aria-label="Excluir edição"
+                title="Excluir edição"
                 style={{ marginLeft: "auto" }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -293,18 +356,22 @@ export function MontagemView() {
     );
   }
 
+  const trechoDaPrevia =
+    previa && !previaMont
+      ? ((doc.itens.find((i) => i.id === previa.itemId && i.tipo === "trecho") as MontagemTrecho | undefined) ?? null)
+      : null;
   const nomeVideo = (id: string) => porId.get(id)?.filename ?? "vídeo removido";
   const fpsDe = (id: string) => porId.get(id)?.fps_declared ?? null;
 
   return (
     <div className={styles.wrap}>
       <header className={styles.top}>
-        <button type="button" className={styles.back} onClick={() => void sair()}>
+        <button type="button" className={styles.back} onClick={() => void (embutida ? voltarLista() : sair())}>
           <ArrowLeft size={14} /> Voltar
         </button>
         <input className={`${styles.input} ${styles.tituloInput}`} value={doc.titulo} onChange={(e) => m.titulo(e.target.value)} />
         <span className={styles.dim}>{m.dirty ? "Alterado" : "Salvo"}</span>
-        <Button variant="ghost" aria-label="Excluir montagem" title="Excluir montagem" onClick={() => void excluirMontagem(doc.id)}>
+        <Button variant="ghost" aria-label="Excluir edição" title="Excluir edição" onClick={() => void excluirMontagem(doc.id)}>
           <Trash2 size={14} />
         </Button>
       </header>
@@ -414,8 +481,25 @@ export function MontagemView() {
             {doc.itens.map((it, i) => {
               const prob = validarItem(it);
               return (
-                <li key={it.id} className={`${styles.item} ${prob ? styles.itemRuim : ""}`}>
+                <li
+                  key={it.id}
+                  ref={(el) => {
+                    if (el) itemRefs.current.set(it.id, el);
+                    else itemRefs.current.delete(it.id);
+                  }}
+                  className={`${styles.item} ${prob ? styles.itemRuim : ""} ${arr?.de === i ? styles.arrastando : ""} ${
+                    arr && arr.para === i && arr.de !== i ? (arr.para > arr.de ? styles.soltarDepois : styles.soltarAntes) : ""
+                  }`}
+                >
                   <div className={styles.itemTopo}>
+                    <span
+                      className={styles.alca}
+                      title="Arrastar para reordenar"
+                      aria-label="Arrastar para reordenar"
+                      onPointerDown={(e) => iniciaArrasto(e, i)}
+                    >
+                      <GripVertical size={14} />
+                    </span>
                     <span className={styles.num}>{i + 1}</span>
                     <strong>{it.tipo === "trecho" ? "Trecho" : it.tipo === "cartela" ? "Cartela" : "Quadro congelado"}</strong>
                     <span className={styles.dim}>
@@ -527,6 +611,9 @@ export function MontagemView() {
                   {it.tipo !== "cartela" && (
                     <TextoEditor texto={it.texto} onChange={(t) => m.alterar(it.id, { texto: t })} />
                   )}
+                  {it.tipo === "trecho" && (
+                    <EfeitosTrecho it={it} alvo={alvo} onAlvo={(a) => marcar(it, a)} onChange={(p) => m.alterar(it.id, p)} />
+                  )}
                 </li>
               );
             })}
@@ -535,25 +622,41 @@ export function MontagemView() {
 
         <aside className={styles.lateral}>
           <div className={styles.previa}>
-            {previa ? (
-              <video
-                key={previa.key}
-                ref={videoRef}
-                src={previa.src}
-                controls
-                autoPlay
-                onLoadedMetadata={(e) => {
-                  e.currentTarget.currentTime = previa.t;
-                  e.currentTarget.playbackRate = previa.vel;
-                }}
-                onTimeUpdate={(e) => {
-                  if (previa.fim != null && e.currentTarget.currentTime >= previa.fim) e.currentTarget.pause();
-                }}
+            {previaMont ? (
+              <video key={previaMont.key} ref={montRef} src={previaMont.src} controls autoPlay />
+            ) : previa ? (
+              <PalcoPrevia
+                previa={previa}
+                trecho={trechoDaPrevia}
+                tRel={trechoDaPrevia ? tAtual - trechoDaPrevia.inicio_s : 0}
+                onTempo={setTAtual}
+                videoRef={videoRef}
+                alvo={alvo}
+                rascunho={rascunho}
+                onRascunho={setRascunho}
+                aspectoSaida={doc.saida.largura / doc.saida.altura}
               />
             ) : (
               <div className={styles.semPrevia} />
             )}
           </div>
+          {previaMont && (
+            <div className={styles.barra}>
+              <Button variant="ghost" leftIcon={<X size={14} />} onClick={() => setPreviaMont(null)}>
+                Fechar prévia
+              </Button>
+            </div>
+          )}
+          {alvo && !previaMont && (
+            <div className={styles.barra}>
+              <Button variant="primary" leftIcon={<Crosshair size={14} />} disabled={!rascunhoOk} onClick={marcarAgora}>
+                Marcar neste instante
+              </Button>
+              <Button variant="ghost" onClick={() => (setAlvo(null), setRascunho(null))}>
+                Concluir
+              </Button>
+            </div>
+          )}
           <div className={styles.saida}>
             <label>
               Largura
@@ -572,6 +675,9 @@ export function MontagemView() {
               Incluir áudio
             </label>
           </div>
+          {ws && doc.saida.incluir_audio && (
+            <AudioPainel ws={ws} doc={doc} inicioAtual={() => montRef.current?.currentTime ?? 0} onErro={setErro} />
+          )}
         </aside>
       </div>
 
@@ -583,7 +689,7 @@ export function MontagemView() {
             <span className={styles.barraProg}>
               <span style={{ width: `${render.pct}%` }} />
             </span>
-            Renderizando… {Math.round(render.pct)}%
+            {render.previa ? "Gerando prévia…" : "Renderizando…"} {Math.round(render.pct)}%
           </span>
         )}
         {pronto && !render && (
@@ -597,8 +703,15 @@ export function MontagemView() {
         )}
         {(erro || m.erro) && <span className={styles.erroLinha}>{erro ?? m.erro}</span>}
         <Button
-          variant="primary"
           style={{ marginLeft: "auto" }}
+          leftIcon={<Zap size={14} />}
+          onClick={() => void renderizar(true)}
+          disabled={!!render || doc.itens.length === 0 || !!problema}
+        >
+          Prévia rápida
+        </Button>
+        <Button
+          variant="primary"
           onClick={() => void renderizar()}
           disabled={!!render || doc.itens.length === 0 || !!problema}
         >

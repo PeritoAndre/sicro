@@ -8,7 +8,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Film, Headphones } from "lucide-react";
 import { useWorkspaceStore } from "@stores/workspaceStore";
 import { occurrenceLabel } from "@domain/occurrence";
-import { isMidiaPath, rememberMidiaAba, rememberWorkModule } from "@modules/midia/midiaNav";
+import { isMidiaPath, rememberMidiaAba, rememberWorkModule, useMidiaCentral } from "@modules/midia/midiaNav";
 import { prepareTabSwitch } from "@modules/midia/midiaLink";
 import { useNavGuard } from "./navGuard";
 import styles from "./TopBar.module.css";
@@ -27,6 +27,7 @@ export function TopBar() {
   const navigate = useNavigate();
   const occurrence = useWorkspaceStore((s) => s.activeOccurrence);
   const midia = isMidiaPath(pathname);
+  const emCentral = useMidiaCentral((s) => s.emCentral);
 
   const caseId = occurrence?.id ?? null;
   useEffect(() => {
@@ -52,7 +53,7 @@ export function TopBar() {
     <header className={styles.bar}>
       <nav className={styles.breadcrumb} aria-label="Localização atual">
         <span className={styles.module}>{moduleLabel}</span>
-        {midia && (
+        {midia && !emCentral && (
           <span className={styles.tabs} role="tablist" aria-label="Vídeo e Áudio">
             <button
               type="button"

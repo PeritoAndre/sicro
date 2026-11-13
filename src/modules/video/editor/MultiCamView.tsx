@@ -49,6 +49,7 @@ import {
   probeStartTime,
 } from "./format";
 import styles from "./MultiCamView.module.css";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 const RATES = [0.1, 0.25, 0.5, 1, 2, 4, 8];
 /** Desvio (s) tolerado no lado que segue antes de corrigir enquanto toca. */
@@ -66,8 +67,7 @@ interface Props {
 }
 
 function srcOf(ws: string, rel: string): string {
-  const sep = ws.includes("\\") ? "\\" : "/";
-  return mediaSrc(`${ws}${sep}${rel.replace(/\//g, sep)}`);
+  return mediaSrc(caminhoDoCaso(ws, rel));
 }
 
 /** Estado e comandos de UM lado (vídeo, tempo, lupa, ajustes). */

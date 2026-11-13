@@ -41,7 +41,20 @@ fn allow_local_media(app: &tauri::App) {
         // console.* da página no stdout: é como se depura o release (sem devtools).
         if let Some(settings) = WebViewExt::settings(&inner) {
             settings.set_enable_write_console_messages_to_stdout(true);
+            // Narração da Montagem: libera só o microfone (nunca câmera nem tela).
+            settings.set_enable_media_stream(true);
         }
+        inner.connect_permission_request(|_, req| {
+            use webkit2gtk::glib::Cast;
+            use webkit2gtk::{PermissionRequestExt, UserMediaPermissionRequest, UserMediaPermissionRequestExt};
+            if let Some(m) = req.downcast_ref::<UserMediaPermissionRequest>() {
+                if m.is_for_audio_device() && !m.is_for_video_device() {
+                    req.allow();
+                    return true;
+                }
+            }
+            false
+        });
     });
     if let Err(e) = result {
         tracing::warn!("não foi possível liberar file:// para mídia: {e}");
@@ -125,6 +138,8 @@ pub fn run() {
             commands::video_commands::save_montagem,
             commands::video_commands::delete_montagem,
             commands::video_commands::render_montagem,
+            commands::video_commands::importar_audio_montagem,
+            commands::video_commands::gravar_audio_montagem,
             // áudio
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,

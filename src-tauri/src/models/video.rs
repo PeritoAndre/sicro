@@ -281,6 +281,63 @@ pub struct MontagemTexto {
     pub carimbo_tempo: bool,
 }
 
+/// Região normalizada (0..1) da imagem.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Regiao {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemZoom {
+    pub inicio: Regiao,
+    pub fim: Regiao,
+}
+
+/// Quadro-chave: `t` em segundos desde o início do trecho; x, y, w, h normalizados.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemQuadro {
+    pub t: f64,
+    pub x: f64,
+    pub y: f64,
+    #[serde(default)]
+    pub w: Option<f64>,
+    #[serde(default)]
+    pub h: Option<f64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemDestaque {
+    pub id: String,
+    /// "circulo" | "seta" | "retangulo"
+    pub forma: String,
+    pub cor: String,
+    pub quadros: Vec<MontagemQuadro>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemDesfoque {
+    pub id: String,
+    pub quadros: Vec<MontagemQuadro>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemNarracao {
+    pub id: String,
+    pub arquivo_relativo: String,
+    /// Início na linha do tempo da montagem.
+    pub inicio_s: f64,
+    /// 0..2
+    pub volume: f64,
+    pub nome: String,
+}
+
+fn um() -> f64 {
+    1.0
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "tipo", rename_all = "snake_case")]
 pub enum MontagemItem {
@@ -295,6 +352,12 @@ pub enum MontagemItem {
         /// "corte" | "fade"
         #[serde(default)]
         transicao_entrada: Option<String>,
+        #[serde(default)]
+        zoom: Option<MontagemZoom>,
+        #[serde(default)]
+        destaques: Vec<MontagemDestaque>,
+        #[serde(default)]
+        desfoques: Vec<MontagemDesfoque>,
     },
     Cartela {
         id: String,
@@ -332,6 +395,11 @@ pub struct Montagem {
     pub updated_at: String,
     pub itens: Vec<MontagemItem>,
     pub saida: MontagemSaida,
+    #[serde(default)]
+    pub narracoes: Vec<MontagemNarracao>,
+    /// Volume do áudio da sequência (0..2).
+    #[serde(default = "um")]
+    pub volume_original: f64,
 }
 
 #[derive(Debug, Clone, Serialize)]

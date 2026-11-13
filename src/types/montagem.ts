@@ -12,6 +12,57 @@ export interface MontagemTexto {
   carimbo_tempo: boolean;
 }
 
+/** Região normalizada (0..1) da imagem. */
+export interface Regiao {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface MontagemZoom {
+  inicio: Regiao;
+  fim: Regiao;
+}
+
+/** Quadro-chave: `t` em segundos desde o início do trecho (tempo do original); w/h só em retângulo e desfoque. */
+export interface MontagemQuadro {
+  t: number;
+  x: number;
+  y: number;
+  w?: number;
+  h?: number;
+}
+
+export type FormaDestaque = "circulo" | "seta" | "retangulo";
+
+export interface MontagemDestaque {
+  id: string;
+  forma: FormaDestaque;
+  cor: string;
+  quadros: MontagemQuadro[];
+}
+
+export interface MontagemDesfoque {
+  id: string;
+  quadros: MontagemQuadro[];
+}
+
+export interface MontagemNarracao {
+  id: string;
+  arquivo_relativo: string;
+  /** Início na linha do tempo da montagem. */
+  inicio_s: number;
+  /** 0..2 */
+  volume: number;
+  nome: string;
+}
+
+export interface AudioMontagem {
+  arquivo_relativo: string;
+  nome: string;
+}
+
 export interface MontagemTrecho {
   tipo: "trecho";
   id: string;
@@ -22,6 +73,9 @@ export interface MontagemTrecho {
   velocidade: number;
   texto?: MontagemTexto | null;
   transicao_entrada?: MontagemTransicao | null;
+  zoom?: MontagemZoom | null;
+  destaques?: MontagemDestaque[];
+  desfoques?: MontagemDesfoque[];
 }
 
 export interface MontagemCartela {
@@ -60,6 +114,9 @@ export interface Montagem {
   updated_at: string;
   itens: MontagemItem[];
   saida: MontagemSaida;
+  narracoes?: MontagemNarracao[];
+  /** Volume do áudio da sequência (0..2); 1 se ausente. */
+  volume_original?: number;
 }
 
 export interface RenderMontagemResult {

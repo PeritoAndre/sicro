@@ -3,7 +3,7 @@
 import { create } from "zustand";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
-import type { Montagem, MontagemItem } from "@domain/montagem";
+import type { Montagem, MontagemItem, MontagemNarracao } from "@domain/montagem";
 import { mover, novaMontagem } from "./montagemModel";
 
 interface State {
@@ -23,6 +23,10 @@ interface State {
   alterar: (id: string, p: Partial<MontagemItem>) => void;
   remover: (id: string) => void;
   moverItem: (de: number, para: number) => void;
+  volumeOriginal: (v: number) => void;
+  adicionarNarracao: (n: MontagemNarracao) => void;
+  alterarNarracao: (id: string, p: Partial<MontagemNarracao>) => void;
+  removerNarracao: (id: string) => void;
 }
 
 export const useMontagemStore = create<State>((set, get) => ({
@@ -88,4 +92,20 @@ export const useMontagemStore = create<State>((set, get) => ({
     set((s) => (s.doc ? { doc: { ...s.doc, itens: s.doc.itens.filter((i) => i.id !== id) }, dirty: true } : s)),
   moverItem: (de, para) =>
     set((s) => (s.doc ? { doc: { ...s.doc, itens: mover(s.doc.itens, de, para) }, dirty: true } : s)),
+  volumeOriginal: (v) => set((s) => (s.doc ? { doc: { ...s.doc, volume_original: v }, dirty: true } : s)),
+  adicionarNarracao: (n) =>
+    set((s) => (s.doc ? { doc: { ...s.doc, narracoes: [...(s.doc.narracoes ?? []), n] }, dirty: true } : s)),
+  alterarNarracao: (id, p) =>
+    set((s) =>
+      s.doc
+        ? {
+            doc: { ...s.doc, narracoes: (s.doc.narracoes ?? []).map((n) => (n.id === id ? { ...n, ...p } : n)) },
+            dirty: true,
+          }
+        : s,
+    ),
+  removerNarracao: (id) =>
+    set((s) =>
+      s.doc ? { doc: { ...s.doc, narracoes: (s.doc.narracoes ?? []).filter((n) => n.id !== id) }, dirty: true } : s,
+    ),
 }));

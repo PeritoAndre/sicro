@@ -101,7 +101,7 @@ export function VideoTabs({ workspacePath, videos, activeId, adding, onOpen, onA
         className={styles.add}
         onClick={onAdd}
         disabled={adding != null}
-        title="Adicionar vídeos ao caso sem sair da análise (Ctrl+O)"
+        title="Adicionar vídeos ao caso sem sair da análise (Ctrl+Shift+O)"
       >
         <Plus size={13} aria-hidden /> {adding ?? "Adicionar"}
       </button>

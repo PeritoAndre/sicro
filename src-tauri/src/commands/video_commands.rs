@@ -20,12 +20,10 @@ use crate::models::{
     VideoStoryboardFrame,
 };
 use crate::video::{extract_frame, probe_media, ExtractFrameOptions};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{REL_MONTAGENS_SAIDA, REL_VIDEOS_FRAMES, REL_VIDEOS_ORIGINAIS, REL_VIDEOS_TRECHOS, dir_montagens_json, dir_montagens_saida, dir_videos_frames, dir_videos_originais, dir_videos_trechos, resolver_relativo, sqlite_path};
 use crate::workspace::open_workspace;
 
-const VIDEOS_SUBDIR: &str = "videos/originais";
-const FRAMES_SUBDIR: &str = "videos/storyboards/frames";
-const CLIPS_SUBDIR: &str = "videos/trechos";
 
 #[tauri::command]
 pub async fn register_video_media(
@@ -36,7 +34,7 @@ pub async fn register_video_media(
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let source = PathBuf::from(&input.source_path);
@@ -62,7 +60,7 @@ pub async fn register_video_media(
         }
     }
 
-    let videos_dir = ws.join(VIDEOS_SUBDIR);
+    let videos_dir = dir_videos_originais(&ws);
     std::fs::create_dir_all(&videos_dir).map_err(|e| {
         SicroError::Filesystem(format!(
             "cannot create {}: {}",
@@ -72,9 +70,9 @@ pub async fn register_video_media(
     })?;
     // Anexo repetido aponta para o arquivo já copiado (mesmo hash): sem segunda cópia.
     let reuse = video_repo::find_media_by_sha256(&conn, &occurrence_id, &sha256)?
-        .filter(|m| ws.join(&m.relative_path).is_file());
+        .filter(|m| resolver_relativo(&ws, &m.relative_path).is_file());
     let (target_name, target_path) = match &reuse {
-        Some(m) => (m.filename.clone(), ws.join(&m.relative_path)),
+        Some(m) => (m.filename.clone(), resolver_relativo(&ws, &m.relative_path)),
         None => {
             let name = pick_unique_filename(&videos_dir, &source);
             let path = videos_dir.join(&name);
@@ -128,7 +126,7 @@ pub async fn register_video_media(
     let now = Utc::now();
     let relative_path = match &reuse {
         Some(m) => m.relative_path.clone(),
-        None => format!("{VIDEOS_SUBDIR}/{}", target_name),
+        None => format!("{REL_VIDEOS_ORIGINAIS}/{}", target_name),
     };
     let warnings_json =
         serde_json::to_string(&warnings).unwrap_or_else(|_| "[]".to_string());
@@ -190,7 +188,7 @@ pub async fn register_video_media(
 pub async fn list_video_media(workspace_path: String) -> Result<Vec<VideoMedia>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     video_repo::list_media_for_occurrence(&conn, &manifest.occurrence_id)
 }
@@ -202,7 +200,7 @@ pub async fn open_video_media(
 ) -> Result<VideoBundle> {
     let ws = PathBuf::from(&workspace_path);
     let _ = open_workspace(&ws)?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
 
     let id = Uuid::parse_str(&media_id)
         .map_err(|e| SicroError::Validation(format!("invalid media_id: {e}")))?;
@@ -231,7 +229,7 @@ pub async fn create_video_event(
 ) -> Result<VideoEvent> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let now = Utc::now();
@@ -280,7 +278,7 @@ pub async fn update_video_event(
 ) -> Result<VideoEvent> {
     let ws = PathBuf::from(&workspace_path);
     let _ = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&event_id)
@@ -330,7 +328,7 @@ pub async fn delete_video_event(
 ) -> Result<()> {
     let ws = PathBuf::from(&workspace_path);
     let _ = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&event_id)
@@ -356,7 +354,7 @@ pub async fn collect_video_frame(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let media = video_repo::find_media_by_sha256(&conn, &occurrence_id, &input.media_hash)?
@@ -366,7 +364,7 @@ pub async fn collect_video_frame(
                 input.media_hash
             ))
         })?;
-    let video_abs = ws.join(&media.relative_path);
+    let video_abs = resolver_relativo(&ws, &media.relative_path);
     if !video_abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "arquivo de vídeo ausente em {}",
@@ -374,7 +372,7 @@ pub async fn collect_video_frame(
         )));
     }
 
-    let frames_dir = ws.join(FRAMES_SUBDIR);
+    let frames_dir = dir_videos_frames(&ws);
     std::fs::create_dir_all(&frames_dir).ok();
     let ts_for_name = ((input.timestamp_s * 1000.0).round() as i64).max(0);
     let stamp = Utc::now().format("%Y%m%d_%H%M%S");
@@ -416,9 +414,9 @@ pub async fn collect_video_frame(
         requested_timestamp_s: extracted.requested_timestamp_s,
         actual_timestamp_s: extracted.actual_timestamp_s,
         delta_s: extracted.delta_s,
-        output_path: format!("{FRAMES_SUBDIR}/{png_name}"),
+        output_path: format!("{REL_VIDEOS_FRAMES}/{png_name}"),
         filename: png_name.clone(),
-        sidecar_json_path: Some(format!("{FRAMES_SUBDIR}/{sidecar_name}")),
+        sidecar_json_path: Some(format!("{REL_VIDEOS_FRAMES}/{sidecar_name}")),
         details_json: serde_json::to_string(&json!({
             "size_bytes": extracted.size_bytes,
             "ffmpeg_version": extracted.ffmpeg_version,
@@ -501,7 +499,7 @@ pub async fn update_storyboard_frame(
 ) -> Result<VideoStoryboardFrame> {
     let ws = PathBuf::from(&workspace_path);
     let _ = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&frame_id)
@@ -533,7 +531,7 @@ pub async fn delete_storyboard_frame(
 ) -> Result<()> {
     let ws = PathBuf::from(&workspace_path);
     let _ = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&frame_id)
@@ -542,10 +540,10 @@ pub async fn delete_storyboard_frame(
         .ok_or_else(|| SicroError::Validation(format!("storyboard frame {} not found", id)))?;
 
     if delete_png.unwrap_or(false) {
-        let png_abs = ws.join(&frame.output_path);
+        let png_abs = resolver_relativo(&ws, &frame.output_path);
         let _ = std::fs::remove_file(&png_abs);
         if let Some(sidecar) = &frame.sidecar_json_path {
-            let _ = std::fs::remove_file(ws.join(sidecar));
+            let _ = std::fs::remove_file(resolver_relativo(&ws, &sidecar));
         }
     }
 
@@ -572,7 +570,7 @@ pub async fn list_video_operation_logs(
 ) -> Result<Vec<VideoOperationLog>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     video_repo::list_logs_for_media(
         &conn,
         &manifest.occurrence_id,
@@ -590,7 +588,7 @@ pub async fn list_video_operation_logs(
 pub async fn list_video_clocks(workspace_path: String) -> Result<Vec<VideoClockCalibration>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     video_repo::list_clocks_for_occurrence(&conn, &manifest.occurrence_id)
 }
@@ -602,7 +600,7 @@ pub async fn set_video_clock(
 ) -> Result<VideoClockCalibration> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     if !input.media_time_s.is_finite() || input.media_time_s < 0.0 {
@@ -663,7 +661,7 @@ pub async fn set_video_clock(
 pub async fn delete_video_clock(workspace_path: String, media_hash: String) -> Result<()> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     if let Some(prev) = video_repo::find_clock(&conn, &manifest.occurrence_id, &media_hash)? {
         video_repo::delete_clock(&conn, &manifest.occurrence_id, &media_hash)?;
@@ -698,7 +696,7 @@ pub async fn export_video_clip(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let mode = match input.mode.as_str() {
@@ -714,12 +712,12 @@ pub async fn export_video_clip(
     }
     let source = video_repo::find_media_by_sha256(&conn, &occurrence_id, &input.media_hash)?
         .ok_or_else(|| SicroError::Validation("vídeo de origem não encontrado nesta ocorrência".into()))?;
-    let source_path = ws.join(&source.relative_path);
+    let source_path = resolver_relativo(&ws, &source.relative_path);
     if !source_path.is_file() {
         return Err(SicroError::Filesystem(format!("vídeo de origem ausente: {}", source.relative_path)));
     }
 
-    let clips_dir = ws.join(CLIPS_SUBDIR);
+    let clips_dir = dir_videos_trechos(&ws);
     std::fs::create_dir_all(&clips_dir)
         .map_err(|e| SicroError::Filesystem(format!("cannot create {}: {e}", clips_dir.display())))?;
     let wanted = clip_filename(&source_path, input.start_s, input.end_s, mode);
@@ -815,7 +813,7 @@ pub async fn export_video_clip(
         id: Uuid::new_v4(),
         occurrence_id,
         original_path: None,
-        relative_path: format!("{CLIPS_SUBDIR}/{target_name}"),
+        relative_path: format!("{REL_VIDEOS_TRECHOS}/{target_name}"),
         filename: target_name.clone(),
         sha256: sha256.clone(),
         size_bytes,
@@ -888,7 +886,7 @@ pub async fn video_thumbnail(
 ) -> Result<String> {
     use tauri::Manager;
     let ws = PathBuf::from(&workspace_path);
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     let id = Uuid::parse_str(&media_id)
         .map_err(|e| SicroError::Validation(format!("invalid media_id: {e}")))?;
     let media = video_repo::find_media_by_id(&conn, &id)?
@@ -899,7 +897,7 @@ pub async fn video_thumbnail(
         .map_err(|e| SicroError::Filesystem(format!("cache dir: {e}")))?;
     let out = cache.join("video_thumbs").join(format!("{}.jpg", media.sha256));
     if !out.is_file() {
-        let video = ws.join(&media.relative_path);
+        let video = resolver_relativo(&ws, &media.relative_path);
         // ~15% do vídeo (máx. 10 s): passa do eventual trecho vazio do início.
         let ts = media.duration_s.map(|d| (d * 0.15).min(10.0)).unwrap_or(1.0);
         tauri::async_runtime::spawn_blocking(move || {
@@ -994,7 +992,7 @@ pub async fn delete_video_media(workspace_path: String, media_id: String) -> Res
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occ = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&media_id)
@@ -1063,7 +1061,7 @@ pub async fn delete_video_media(workspace_path: String, media_id: String) -> Res
         arquivos.push(media.relative_path.clone());
     }
     for rel in arquivos {
-        let p = ws.join(&rel);
+        let p = resolver_relativo(&ws, &rel);
         if rel.contains("..") || !p.is_file() {
             continue;
         }
@@ -1102,7 +1100,6 @@ pub async fn delete_video_media(workspace_path: String, media_id: String) -> Res
 // ---------------------------------------------------------------------------
 // Montagem
 
-const MONTAGENS_SUBDIR: &str = "videos/montagens";
 
 fn id_seguro(id: &str) -> Result<&str> {
     if !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
@@ -1113,12 +1110,12 @@ fn id_seguro(id: &str) -> Result<&str> {
 }
 
 fn montagem_path(ws: &Path, id: &str) -> Result<PathBuf> {
-    Ok(ws.join(MONTAGENS_SUBDIR).join(format!("{}.json", id_seguro(id)?)))
+    Ok(dir_montagens_json(&ws).join(format!("{}.json", id_seguro(id)?)))
 }
 
 #[tauri::command]
 pub async fn list_montagens(workspace_path: String) -> Result<Vec<crate::models::Montagem>> {
-    let dir = PathBuf::from(&workspace_path).join(MONTAGENS_SUBDIR);
+    let dir = dir_montagens_json(Path::new(&workspace_path));
     let Ok(rd) = std::fs::read_dir(&dir) else { return Ok(Vec::new()) };
     let mut v: Vec<crate::models::Montagem> = rd
         .filter_map(|e| e.ok())
@@ -1143,7 +1140,7 @@ pub async fn save_montagem(
     let mut m = montagem;
     m.updated_at = Utc::now().to_rfc3339();
     let path = montagem_path(&ws, &m.id)?;
-    std::fs::create_dir_all(ws.join(MONTAGENS_SUBDIR))?;
+    std::fs::create_dir_all(dir_montagens_json(&ws))?;
     // Grava num temporário e renomeia: queda no meio não deixa o JSON pela metade.
     let tmp = path.with_extension("json.tmp");
     std::fs::write(&tmp, serde_json::to_vec_pretty(&m)?)?;
@@ -1173,6 +1170,7 @@ pub async fn render_montagem(
     app: tauri::AppHandle,
     workspace_path: String,
     montagem_id: String,
+    previa: Option<bool>,
 ) -> Result<crate::models::RenderMontagemResult> {
     use crate::video::montagem::{construir, fonte_padrao, Fonte};
     use std::io::{BufRead, BufReader};
@@ -1182,13 +1180,19 @@ pub async fn render_montagem(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occ = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let mpath = montagem_path(&ws, &montagem_id)?;
-    let montagem: crate::models::Montagem = serde_json::from_slice(
+    let mut montagem: crate::models::Montagem = serde_json::from_slice(
         &std::fs::read(&mpath).map_err(|e| SicroError::Filesystem(format!("montagem não encontrada: {e}")))?,
     )?;
+    // Prévia rápida: mesmo pipeline em 854x480 (a proporção da saída final não é mantida).
+    let previa = previa.unwrap_or(false);
+    if previa {
+        montagem.saida.largura = 854;
+        montagem.saida.altura = 480;
+    }
 
     // Resolve cada vídeo usado (e guarda o hash do original para o relatório).
     let mut usados: std::collections::HashMap<String, VideoMedia> = std::collections::HashMap::new();
@@ -1208,7 +1212,7 @@ pub async fn render_montagem(
     }
     let resolver = |id: &str| -> Result<Fonte> {
         let m = usados.get(id).ok_or_else(|| SicroError::Validation("vídeo da montagem ausente".into()))?;
-        let path = ws.join(&m.relative_path);
+        let path = resolver_relativo(&ws, &m.relative_path);
         if !path.is_file() {
             return Err(SicroError::Filesystem(format!("vídeo ausente: {}", m.relative_path)));
         }
@@ -1224,14 +1228,28 @@ pub async fn render_montagem(
             .is_some();
         Ok(Fonte { path, tem_audio })
     };
-    let plano = construir(&montagem, &fonte_padrao(), &resolver)?;
+    let resolver_audio = |rel: &str| -> Result<PathBuf> {
+        if rel.contains("..") {
+            return Err(SicroError::Validation("caminho de áudio inválido".into()));
+        }
+        let path = resolver_relativo(&ws, rel);
+        if !path.is_file() {
+            return Err(SicroError::Filesystem(format!("áudio ausente: {rel}")));
+        }
+        Ok(path)
+    };
+    let plano = construir(&montagem, &fonte_padrao(), &resolver, &resolver_audio)?;
 
     let ffmpeg = crate::tools::find_ffmpeg_tool("ffmpeg")
         .ok_or_else(|| SicroError::Workspace("ffmpeg não encontrado".into()))?;
-    let dir = ws.join(MONTAGENS_SUBDIR);
+    let dir = if previa { crate::workspace::paths::dir_cache(&ws) } else { dir_montagens_saida(&ws) };
     std::fs::create_dir_all(&dir)?;
     let stamp = Utc::now().format("%Y%m%d-%H%M%S");
-    let out_name = format!("{}_{stamp}.mp4", montagem.id);
+    let out_name = if previa {
+        format!("montagem-previa-{}.mp4", montagem.id)
+    } else {
+        format!("{}_{stamp}.mp4", montagem.id)
+    };
     let out_path = dir.join(&out_name);
 
     // Pasta de trabalho com os textos (o ffmpeg roda nela: nomes simples no filtro).
@@ -1239,6 +1257,9 @@ pub async fn render_montagem(
     std::fs::create_dir_all(&work)?;
     for (nome, conteudo) in &plano.textos {
         std::fs::write(work.join(nome), conteudo)?;
+    }
+    for (nome, bytes) in &plano.imagens {
+        std::fs::write(work.join(nome), bytes)?;
     }
     let log_path = work.join("ffmpeg.log");
 
@@ -1250,9 +1271,10 @@ pub async fn render_montagem(
         args.push("-i".into());
         args.push(i.to_string_lossy().into_owned());
     }
+    let (preset, crf) = if previa { ("ultrafast", "28") } else { ("medium", "18") };
     let fim: Vec<String> = [
         "-filter_complex", plano.filter_complex.as_str(), "-map", "[v]", "-map", "[a]",
-        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-c:v", "libx264", "-preset", preset, "-crf", crf, "-pix_fmt", "yuv420p",
         "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
     ]
     .iter()
@@ -1304,7 +1326,11 @@ pub async fn render_montagem(
 
     let sha256 = sha256_file(&out_path)?;
     let duracao_s = probe_media(&out_path).ok().and_then(|p| p.duration_s).unwrap_or(plano.duracao_s);
-    let relativo = format!("{MONTAGENS_SUBDIR}/{out_name}");
+    if previa {
+        let relativo = format!("{}/{out_name}", crate::workspace::paths::REL_CACHE);
+        return Ok(crate::models::RenderMontagemResult { output_relative_path: relativo, sha256, duracao_s });
+    }
+    let relativo = format!("{REL_MONTAGENS_SAIDA}/{out_name}");
 
     let itens: Vec<serde_json::Value> = montagem
         .itens
@@ -1332,6 +1358,19 @@ pub async fn render_montagem(
             "incluir_audio": montagem.saida.incluir_audio,
         },
         "itens": itens,
+        "volume_original": montagem.volume_original,
+        "narracoes": montagem
+            .narracoes
+            .iter()
+            .map(|n| {
+                let sha = sha256_file(&resolver_relativo(&ws, &n.arquivo_relativo)).ok();
+                let mut v = serde_json::to_value(n).unwrap_or_default();
+                if let Some(o) = v.as_object_mut() {
+                    o.insert("sha256".into(), json!(sha));
+                }
+                v
+            })
+            .collect::<Vec<_>>(),
         "renderizado_em": Utc::now().to_rfc3339(),
         "sicro_versao": env!("CARGO_PKG_VERSION"),
         "ffmpeg_args": args,
@@ -1357,4 +1396,59 @@ pub async fn render_montagem(
     )?;
 
     Ok(crate::models::RenderMontagemResult { output_relative_path: relativo, sha256, duracao_s })
+}
+
+// ---------------------------------------------------------------------------
+// Áudios da montagem (narração gravada ou importada)
+
+#[derive(serde::Serialize)]
+pub struct AudioMontagem {
+    pub arquivo_relativo: String,
+    pub nome: String,
+}
+
+fn guardar_audio_montagem(ws: &Path, nome: &str, ext: &str, escrever: impl FnOnce(&Path) -> Result<()>) -> Result<AudioMontagem> {
+    let ext = ext.to_ascii_lowercase();
+    if !["mp3", "wav", "m4a", "ogg", "webm", "aac", "flac", "opus", "mp4"].contains(&ext.as_str()) {
+        return Err(SicroError::Validation("formato de áudio não suportado".into()));
+    }
+    let dir = dir_montagens_json(ws).join("audios");
+    std::fs::create_dir_all(&dir)?;
+    let arquivo = format!("{}.{ext}", Uuid::new_v4());
+    escrever(&dir.join(&arquivo))?;
+    Ok(AudioMontagem {
+        arquivo_relativo: format!("{}/audios/{arquivo}", crate::workspace::paths::REL_MONTAGENS_JSON),
+        nome: nome.to_string(),
+    })
+}
+
+/// Copia um arquivo de áudio escolhido pelo usuário para a pasta de áudios das montagens.
+#[tauri::command]
+pub async fn importar_audio_montagem(workspace_path: String, origem: String) -> Result<AudioMontagem> {
+    let ws = PathBuf::from(&workspace_path);
+    let _ = Manifest::read(&ws)?;
+    let src = PathBuf::from(&origem);
+    if !src.is_file() {
+        return Err(SicroError::Filesystem("arquivo de áudio não encontrado".into()));
+    }
+    let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("").to_string();
+    let nome = src.file_stem().and_then(|n| n.to_str()).unwrap_or("áudio").to_string();
+    guardar_audio_montagem(&ws, &nome, &ext, |dest| {
+        std::fs::copy(&src, dest)?;
+        Ok(())
+    })
+}
+
+/// Grava os bytes de uma narração captada no microfone (MediaRecorder).
+#[tauri::command]
+pub async fn gravar_audio_montagem(workspace_path: String, dados: Vec<u8>, extensao: String, nome: String) -> Result<AudioMontagem> {
+    let ws = PathBuf::from(&workspace_path);
+    let _ = Manifest::read(&ws)?;
+    if dados.is_empty() {
+        return Err(SicroError::Validation("gravação vazia".into()));
+    }
+    guardar_audio_montagem(&ws, &nome, &extensao, |dest| {
+        std::fs::write(dest, &dados)?;
+        Ok(())
+    })
 }

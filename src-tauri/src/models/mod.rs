@@ -60,7 +60,10 @@ pub use video::{
     VideoClockCalibration, VideoEvent, VideoExport, VideoMedia, VideoOperationLog,
     VideoStoryboardFrame,
 };
-pub use video::{Montagem, MontagemItem, MontagemSaida, MontagemTexto, RenderMontagemResult};
+pub use video::{
+    Montagem, MontagemDesfoque, MontagemDestaque, MontagemItem, MontagemNarracao, MontagemQuadro, MontagemSaida, MontagemTexto,
+    MontagemZoom, Regiao, RenderMontagemResult,
+};
 pub use video_distance::{
     CreateDistanceMeasurementInput, McSigmasDistance, VideoDistanceMeasurement,
 };

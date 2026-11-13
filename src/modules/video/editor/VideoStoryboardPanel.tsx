@@ -10,6 +10,7 @@ import type { VideoEvent, VideoStoryboardFrame } from "@domain/video";
 import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMenu";
 import { formatDuration } from "./format";
 import styles from "./VideoStoryboardPanel.module.css";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 type ThumbSize = "s" | "m" | "l";
 const SIZE_KEY = "sicro.video.storyboardSize.v1";
@@ -25,8 +26,7 @@ function loadSize(): ThumbSize {
 /** URL servível do PNG de um quadro coletado. */
 export function frameSrc(workspacePath: string, frame: VideoStoryboardFrame): string | null {
   try {
-    const sep = workspacePath.includes("\\") ? "\\" : "/";
-    return convertFileSrc(`${workspacePath}${sep}${frame.output_path.replace(/\//g, sep)}`);
+    return convertFileSrc(caminhoDoCaso(workspacePath, frame.output_path));
   } catch {
     return null;
   }

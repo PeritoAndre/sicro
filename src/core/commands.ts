@@ -45,7 +45,7 @@ import type {
   VideoOperationLog,
   VideoStoryboardFrame,
 } from "@domain/video";
-import type { Montagem, RenderMontagemResult } from "@domain/montagem";
+import type { AudioMontagem, Montagem, RenderMontagemResult } from "@domain/montagem";
 import type {
   ComputeSpeedInput,
   CreateSpeedCalibrationInput,
@@ -380,8 +380,16 @@ export const commands = {
   },
 
   /** Progresso no evento `montagem:progresso` ({ montagem_id, pct }). */
-  renderMontagem(workspacePath: string, montagemId: string): Promise<RenderMontagemResult> {
-    return safeInvoke<RenderMontagemResult>("render_montagem", { workspacePath, montagemId });
+  renderMontagem(workspacePath: string, montagemId: string, previa = false): Promise<RenderMontagemResult> {
+    return safeInvoke<RenderMontagemResult>("render_montagem", { workspacePath, montagemId, previa });
+  },
+
+  importarAudioMontagem(workspacePath: string, origem: string): Promise<AudioMontagem> {
+    return safeInvoke<AudioMontagem>("importar_audio_montagem", { workspacePath, origem });
+  },
+
+  gravarAudioMontagem(workspacePath: string, dados: number[], extensao: string, nome: string): Promise<AudioMontagem> {
+    return safeInvoke<AudioMontagem>("gravar_audio_montagem", { workspacePath, dados, extensao, nome });
   },
 
   /** Copia para videos/originais/, calcula SHA-256 e roda ffprobe. */

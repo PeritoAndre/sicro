@@ -279,3 +279,218 @@
 .pronto code {
   font-family: var(--font-mono);
 }
+
+/* Palco da prévia: desenho das regiões e camada de marcação */
+.previa {
+  position: relative;
+}
+.palco {
+  position: relative;
+  width: 100%;
+  height: 100%;
+}
+.desenho,
+.captura {
+  position: absolute;
+}
+.desenho {
+  pointer-events: none;
+  overflow: hidden;
+}
+.captura {
+  cursor: crosshair;
+  touch-action: none;
+}
+.caixa {
+  position: absolute;
+  border-width: 2px;
+  box-sizing: border-box;
+}
+.pontoCirculo {
+  position: absolute;
+  width: 9%;
+  aspect-ratio: 1;
+  border: 3px solid;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-sizing: border-box;
+}
+.pontoSeta {
+  position: absolute;
+  width: 7%;
+  transform: translate(0, -100%);
+}
+
+/* Efeitos do trecho */
+.efeitos {
+  border-top: 1px solid var(--sicro-border);
+  padding-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+.efeitos summary {
+  cursor: pointer;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+}
+.efeitosBarra {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: var(--space-2) 0;
+}
+.mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  padding: 3px 8px;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+.mini:hover {
+  border-color: var(--sicro-accent);
+}
+.marcando {
+  border-color: var(--sicro-accent);
+  background: var(--sicro-accent);
+  color: #fff;
+}
+.efeito {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  margin-bottom: var(--space-2);
+  background: var(--sicro-surface-2);
+  border-radius: var(--radius-sm);
+}
+.efeitoTopo,
+.efeitoLinha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.efeitoTopo .mini:last-child {
+  margin-left: auto;
+}
+.regiao {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(56px, 1fr));
+  gap: var(--space-2);
+  flex: 1;
+}
+.regiao label,
+.quadros label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
+.quadros {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.quadros li {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.quadros li label {
+  flex: 1;
+  min-width: 0;
+}
+.quadros button {
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+  padding: 6px;
+}
+
+/* Reordenar arrastando */
+.alca {
+  display: inline-flex;
+  color: var(--sicro-fg-dim);
+  cursor: grab;
+  touch-action: none;
+}
+.arrastando {
+  opacity: 0.5;
+}
+.soltarAntes {
+  box-shadow: 0 -3px 0 var(--sicro-accent);
+}
+.soltarDepois {
+  box-shadow: 0 3px 0 var(--sicro-accent);
+}
+
+/* Áudio */
+.audio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+}
+.audioTopo {
+  display: flex;
+  align-items: flex-end;
+  gap: var(--space-2);
+}
+.audioTopo label {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
+.narracoes {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.narracoes li {
+  display: grid;
+  grid-template-columns: 1fr 90px 70px auto;
+  gap: var(--space-2);
+  align-items: end;
+}
+.narracoes li strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-sm);
+}
+.narracoes li label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
+.narracoes li button {
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+  padding: 6px;
+}
+.narracoes audio {
+  grid-column: 1 / -1;
+  width: 100%;
+  height: 28px;
+}

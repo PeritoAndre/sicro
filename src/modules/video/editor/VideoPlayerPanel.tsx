@@ -36,6 +36,7 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import styles from "./VideoPlayerPanel.module.css";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 interface Props {
   workspacePath: string;
@@ -171,9 +172,7 @@ export function VideoPlayerPanel({
 
   const src = (() => {
     try {
-      const sep = workspacePath.includes("\\") ? "\\" : "/";
-      const abs = `${workspacePath}${sep}${relativePath.replace(/\//g, sep)}`;
-      return mediaSrc(abs);
+      return mediaSrc(caminhoDoCaso(workspacePath, relativePath));
     } catch {
       return null;
     }

@@ -1,3 +1,5 @@
+import { create } from "zustand";
+
 /**
  * Abas Vídeos/Áudios do módulo Mídia: guarda a última aba usada, para a entrada
  * do trilho voltar a ela; e o último módulo trabalhado em cada caso.
@@ -52,3 +54,16 @@ export function lastWorkModuleOf(caseId: string): string | null {
     return null;
   }
 }
+
+/** Estado da Central de Vídeo e Áudio: some com as abas na lista e leva o pedido de abrir um áudio. */
+export const useMidiaCentral = create<{
+  emCentral: boolean;
+  audioPedido: string | null;
+  setEmCentral: (v: boolean) => void;
+  pedirAudio: (id: string | null) => void;
+}>((set) => ({
+  emCentral: false,
+  audioPedido: null,
+  setEmCentral: (emCentral) => set({ emCentral }),
+  pedirAudio: (audioPedido) => set({ audioPedido }),
+}));

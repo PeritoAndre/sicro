@@ -2,6 +2,7 @@
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { VideoStoryboardFrame } from "@domain/video";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 /** Caminho servível (asset protocol) do PNG de um frame coletado. */
 export function frameAssetSrc(
@@ -9,9 +10,7 @@ export function frameAssetSrc(
   frame: VideoStoryboardFrame,
 ): string | null {
   try {
-    const sep = workspacePath.includes("\\") ? "\\" : "/";
-    const abs = `${workspacePath}${sep}${frame.output_path.replace(/\//g, sep)}`;
-    return convertFileSrc(abs);
+    return convertFileSrc(caminhoDoCaso(workspacePath, frame.output_path));
   } catch {
     return null;
   }
