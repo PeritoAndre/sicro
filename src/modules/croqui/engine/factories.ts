@@ -17,6 +17,7 @@ import type {
   SicroFixtureObject,
   SicroPersonObject,
   SicroVehicleObject,
+  SicroImageObject,
   VehicleBodyType,
 } from "./schema";
 import type { SicroParityObject } from "./road-parity/types";
@@ -235,6 +236,24 @@ export function makeMarker(
   };
 }
 
+export function makeImage(sourcePath: string, x: number, y: number, width: number, height: number): SicroImageObject {
+  return {
+    id: uid("image"),
+    layer_id: OBJECT_LAYER,
+    kind: "image",
+    source_path: sourcePath,
+    x,
+    y,
+    width,
+    height,
+    rotation: 0,
+    opacity: 1,
+    visible: true,
+    locked: false,
+    category: "anotacoes",
+  };
+}
+
 export function makeText(p: SicroPoint, text = "Anotação"): SicroTextObject {
   return {
     id: uid("text"),
@@ -296,7 +315,8 @@ export function nextAreaLabel(objects: SicroObject[]): string {
  * Clone com id novo (Ctrl+D), deslocado para não cobrir o original: 16 px nos
  * objetos em pixels, 1 m nos objetos parity (coordenadas em metros).
  */
-export function cloneObject<T extends SicroVehicleObject
+export function cloneObject<T extends SicroImageObject
+  | SicroVehicleObject
   | SicroLineObject
   | SicroMarkerObject
   | SicroTextObject

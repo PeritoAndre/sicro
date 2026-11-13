@@ -40,6 +40,7 @@ import {
   makePerson,
   PERSON_POSICOES,
   makeVehicle,
+  makeImage,
   isTraceSubtype,
   isFixtureSubtype,
   TRACE_SPECS,
@@ -694,17 +695,37 @@ export function CroquiEditor() {
     setFeedback("Fundo removido.");
   }, [editor]);
 
+  /** Imagens soltas como objetos (várias por croqui). O fundo global é só drone/mapa. */
   const handleImportBackground = async () => {
     try {
       const selected = await openFileDialog({
-        multiple: false,
-        title: "Imagem de fundo do croqui",
+        multiple: true,
+        title: "Imagens para o croqui",
         filters: [
           { name: "Imagens", extensions: ["png", "jpg", "jpeg", "webp"] },
         ],
       });
-      if (typeof selected !== "string") return;
-      setBackgroundFromPath(selected);
+      const lista = Array.isArray(selected) ? selected : typeof selected === "string" ? [selected] : [];
+      if (!doc || lista.length === 0) return;
+      const c = doc.canvas;
+      const ox = c.origin_x ?? 0;
+      const oy = c.origin_y ?? 0;
+      let i = 0;
+      for (const caminho of lista) {
+        const dims = await new Promise<{ w: number; h: number }>((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight });
+          img.onerror = () => reject(new Error(`não foi possível ler ${caminho}`));
+          img.src = convertFileSrc(caminho);
+        });
+        // Cabe em 60% da folha, centrada; várias entram em cascata.
+        const k = Math.min(1, (c.width_px * 0.6) / dims.w, (c.height_px * 0.6) / dims.h);
+        const w = Math.round(dims.w * k);
+        const h = Math.round(dims.h * k);
+        addObject(makeImage(caminho, Math.round(ox + (c.width_px - w) / 2 + i * 24), Math.round(oy + (c.height_px - h) / 2 + i * 24), w, h));
+        i++;
+      }
+      setFeedback(lista.length === 1 ? "Imagem inserida." : `${lista.length} imagens inseridas.`);
     } catch (e) {
       setFeedback(`Falha ao importar imagem: ${toSicroError(e).message}`);
     }
@@ -1262,9 +1283,11 @@ export function CroquiEditor() {
     );
   }, [doc.layers, doc.objects]);
 
+  // Olhinho da camada "Imagem de fundo" esconde o fundo só na tela.
+  const fundoVisivel = doc.layers.find((l) => l.kind === "background")?.visible !== false;
   const docForStage: SicroCroquiDoc = useMemo(
-    () => ({ ...doc, objects: visibleObjects }),
-    [doc, visibleObjects],
+    () => ({ ...doc, objects: visibleObjects, background_image: fundoVisivel ? doc.background_image : null }),
+    [doc, visibleObjects, fundoVisivel],
   );
 
   const totalsByCategory = useMemo(() => {

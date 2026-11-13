@@ -82,6 +82,7 @@ export interface SicroCroquiLayer {
 // ---- Objetos (union discriminada por `kind`) ----
 
 type SicroObjectKind =
+  | "image"
   | "vehicle"
   | "line"
   | "marker"
@@ -240,6 +241,20 @@ export interface SicroMarkerObject extends SicroObjectBase {
   rotation?: number;
 }
 
+/** Imagem solta (foto, recorte, placa): objeto comum, ao contrário do fundo (drone/mapa). */
+export interface SicroImageObject extends SicroObjectBase {
+  kind: "image";
+  /** Caminho relativo ao workspace ou absoluto. */
+  source_path: string;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+  /** 0..1; ausente = 1. */
+  opacity?: number;
+}
+
 export interface SicroTextObject extends SicroObjectBase {
   kind: "text";
   x: number;
@@ -374,6 +389,7 @@ import type { SicroParityObject } from "./road-parity/types";
 import type { ParityStyle } from "./road-parity/style";
 
 export type SicroObject =
+  | SicroImageObject
   | SicroVehicleObject
   | SicroLineObject
   | SicroMarkerObject

@@ -65,6 +65,7 @@ const DEFAULT_LAYERS: SicroCroquiLayer[] = [
 
 /** Objeto com `kind` fora desta lista é descartado (ex.: `road`/`roundabout` de croquis antigos). */
 const SUPPORTED_KINDS = new Set<string>([
+  "image",
   "vehicle",
   "line",
   "marker",
@@ -319,6 +320,7 @@ export function inferCategory(obj: SicroObject): ObjectCategory {
     case "area":
       return "medidas";
     case "text":
+    case "image":
       return "anotacoes";
     case "trace":
       return "vestigios";

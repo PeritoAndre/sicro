@@ -293,7 +293,7 @@ function makeGhost(from: HTMLElement): HTMLElement {
 function ImageActions(p: Props) {
   return (
     <div className={styles.actions}>
-      <button type="button" className={styles.actionBtn} onClick={p.onImportBackground} title="Imagem do disco como fundo">
+      <button type="button" className={styles.actionBtn} onClick={p.onImportBackground} title="Imagem do disco como objeto do croqui (o fundo é a foto de drone ou o mapa)">
         <ImageIcon size={13} /> Importar imagem
       </button>
       {p.onImportDrone && (

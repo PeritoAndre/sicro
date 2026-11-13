@@ -19,6 +19,7 @@ import {
   formatArea,
   formatMeasurement,
   fatorDaFolha,
+  type SicroImageObject,
   polygonAreaPx,
   polygonPerimeterPx,
   MARKER_STYLES,
@@ -207,6 +208,7 @@ export function InspectorPanel({
             objects={objects}
             fator={canvas ? fatorDaFolha(canvas) : 1}
             onChange={(patch) => onUpdateObject(selected.id, patch)}
+            onUpdateStyle={onUpdateStyle}
           />
         </section>
         {objectsSection}
@@ -230,13 +232,6 @@ export function InspectorPanel({
             onFit={onFitSheet}
             onCenter={onCenterSheet}
           />
-        </section>
-      )}
-
-      {onUpdateStyle && (
-        <section className={styles.section}>
-          <h3 className={styles.sectionTitle}>Estilo das vias</h3>
-          <StyleProps style={style} onChange={onUpdateStyle} />
         </section>
       )}
 
@@ -498,6 +493,8 @@ function shortKind(o: SicroObject): string {
       return "·";
     case "text":
       return "T";
+    case "image":
+      return "I";
     case "measurement":
       return "↔";
     case "area":
@@ -528,6 +525,8 @@ function summariseObject(o: SicroObject): string {
       return MARKER_STYLES[o.subtype]?.defaultLabel ?? o.subtype;
     case "text":
       return o.text.slice(0, 32);
+    case "image":
+      return `Imagem ${o.source_path.split(/[\\/]/).pop() ?? ""}`.trim();
     case "measurement":
       return "Medição";
     case "area":
@@ -554,6 +553,7 @@ function ObjectProperties({
   objects,
   fator,
   onChange,
+  onUpdateStyle,
 }: {
   object: SicroObject;
   scale: SicroCroquiScale | null;
@@ -562,6 +562,8 @@ function ObjectProperties({
   /** Fator da folha (fatorDaFolha): padrões de rótulo e cota. */
   fator: number;
   onChange: (patch: Partial<SicroObject>) => void;
+  /** Estilo das vias (vale para todas): mostrado dentro da via selecionada. */
+  onUpdateStyle?: (patch: Partial<ParityStyle>) => void;
 }) {
   const st = resolveParityStyle(style);
   const isParity =
@@ -570,6 +572,7 @@ function ObjectProperties({
   const colorish = object as { color?: string | null; notes?: string | null };
 
   const freeLabel =
+    object.kind === "image" ||
     object.kind === "vehicle" ||
     object.kind === "marker" ||
     object.kind === "line" ||
@@ -620,8 +623,15 @@ function ObjectProperties({
       {object.kind === "road_parity" && (
         <ParityRoadProps object={object} onChange={onChange} />
       )}
+      {object.kind === "image" && <ImageProps object={object} onChange={onChange} />}
       {object.kind === "roundabout_parity" && (
         <ParityRoundaboutProps object={object} onChange={onChange} />
+      )}
+      {(object.kind === "road_parity" || object.kind === "roundabout_parity") && onUpdateStyle && (
+        <>
+          <div className={styles.sectionTitle}>Asfalto e vias <span className={styles.dim}>(todas)</span></div>
+          <StyleProps style={style} onChange={onUpdateStyle} />
+        </>
       )}
 
       {!isParity && (
@@ -1686,6 +1696,27 @@ const SHEET_PRESETS_M: [number, number][] = [
   [100, 71],
   [200, 141],
 ];
+
+function ImageProps({ object, onChange }: { object: SicroImageObject; onChange: (patch: Partial<SicroObject>) => void }) {
+  const prop = object.height > 0 ? object.width / object.height : 1;
+  return (
+    <>
+      <Field label="Arquivo" value={object.source_path} readOnly mono />
+      <RangeRow
+        label="Opacidade"
+        value={object.opacity ?? 1}
+        min={0.1}
+        max={1}
+        step={0.05}
+        text={`${Math.round((object.opacity ?? 1) * 100)}%`}
+        onChange={(v) => onChange({ opacity: v } as Partial<SicroObject>)}
+      />
+      <NumberField label="Largura (px)" value={Math.round(object.width)} step={10} min={8} onChange={(n) => onChange({ width: n, height: Math.round(n / prop) } as Partial<SicroObject>)} />
+      <NumberField label="Altura (px)" value={Math.round(object.height)} step={10} min={8} onChange={(n) => onChange({ height: n, width: Math.round(n * prop) } as Partial<SicroObject>)} />
+      <NumberField label="Rotação (°)" value={Math.round((object.rotation ?? 0) * 10) / 10} step={1} casas={1} onChange={(n) => onChange({ rotation: n } as Partial<SicroObject>)} />
+    </>
+  );
+}
 
 /** Fundo: trava, opacidade, rotação, ajustes e corte. Destravado, ele se move e redimensiona na cena. */
 function BackgroundProps({

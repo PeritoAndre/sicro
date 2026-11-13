@@ -39,6 +39,8 @@ export function getObjectBoundsStagePx(
         height: obj.size,
       };
     }
+    case "image":
+      return { x: obj.x, y: obj.y, width: obj.width, height: obj.height };
     case "text": {
       // Sem canvas não há métrica de texto; ~0.6 × font_size por caractere.
       const fontSize = obj.font_size ?? 16;
@@ -160,6 +162,7 @@ export function translateObjectPatch(
   pxPerM: number,
 ): Partial<SicroObject> | null {
   switch (obj.kind) {
+    case "image":
     case "vehicle":
     case "marker":
     case "text":

@@ -39,6 +39,7 @@ import {
   type SicroCroquiBackgroundImage,
   type SicroCroquiCanvas,
   type SicroCroquiDoc,
+  type SicroImageObject,
   type SicroLineObject,
   type SicroMarkerObject,
   type SicroMeasurementObject,
@@ -645,6 +646,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
             selected={editor.selectedIds.includes(obj.id)}
             solo={editor.selectedIds.length === 1 && editor.selectedIds[0] === obj.id}
             zoom={editor.viewport.scale}
+            workspacePath={workspacePath}
             onSelect={() => onSelect(obj.id)}
             onChange={(patch) => onObjectChange(obj.id, patch)}
           />
@@ -1134,6 +1136,7 @@ function ObjectNode({
   selected,
   solo,
   zoom,
+  workspacePath,
   onSelect,
   onChange,
 }: {
@@ -1145,6 +1148,7 @@ function ObjectNode({
   solo: boolean;
   /** Escala da tela: alças dos objetos paramétricos têm tamanho fixo na tela. */
   zoom: number;
+  workspacePath: string;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
@@ -1197,6 +1201,13 @@ function ObjectNode({
             onSelect={onSelect}
             onChange={onChange}
           />
+          <ObjectLabel obj={obj} anchor={{ x: obj.x, y: obj.y }} {...labelProps} />
+        </>
+      );
+    case "image":
+      return (
+        <>
+          <ImageNode obj={obj} workspacePath={workspacePath} draggable={draggable} onSelect={onSelect} onChange={onChange} />
           <ObjectLabel obj={obj} anchor={{ x: obj.x, y: obj.y }} {...labelProps} />
         </>
       );
@@ -3019,6 +3030,65 @@ function MarkerGlyph({
 
   // Fallback: círculo sólido.
   return <Circle radius={size / 2} fill={color} />;
+}
+
+/** Imagem solta: grupo com origem no centro (a rotação gira em torno dele), caixa do Transformer global. */
+function ImageNode({
+  obj,
+  workspacePath,
+  draggable,
+  onSelect,
+  onChange,
+}: {
+  obj: SicroImageObject;
+  workspacePath: string;
+  draggable: boolean;
+  onSelect: () => void;
+  onChange: (patch: Partial<SicroObject>) => void;
+}) {
+  const [image, setImage] = useState<HTMLImageElement | null>(null);
+  useEffect(() => {
+    const path = resolveAssetPath(workspacePath, obj.source_path);
+    if (!path) return;
+    const img = new window.Image();
+    img.crossOrigin = "anonymous";
+    img.src = path;
+    img.onload = () => setImage(img);
+    img.onerror = () => setImage(null);
+  }, [obj.source_path, workspacePath]);
+  const w = obj.width;
+  const h = obj.height;
+  return (
+    <Group
+      id={obj.id}
+      x={obj.x + w / 2}
+      y={obj.y + h / 2}
+      rotation={obj.rotation ?? 0}
+      draggable={draggable && !obj.locked}
+      onClick={onSelect}
+      onTap={onSelect}
+      onDragEnd={(e) => {
+        if (e.target !== e.currentTarget) return;
+        onChange({ x: e.target.x() - w / 2, y: e.target.y() - h / 2 } as Partial<SicroObject>);
+      }}
+      onTransformEnd={(e) => {
+        const node = e.target;
+        const sx = node.scaleX();
+        const sy = node.scaleY();
+        node.scaleX(1);
+        node.scaleY(1);
+        const nw = Math.max(8, w * sx);
+        const nh = Math.max(8, h * sy);
+        onChange({ x: node.x() - nw / 2, y: node.y() - nh / 2, width: nw, height: nh, rotation: node.rotation() } as Partial<SicroObject>);
+      }}
+    >
+      {image ? (
+        <KonvaImage image={image} x={-w / 2} y={-h / 2} width={w} height={h} opacity={obj.opacity ?? 1} />
+      ) : (
+        <Rect x={-w / 2} y={-h / 2} width={w} height={h} fill="#e5e7eb" stroke="#9ca3af" dash={[6, 4]} />
+      )}
+    </Group>
+  );
 }
 
 function TextNode({
