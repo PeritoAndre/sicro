@@ -18,6 +18,7 @@ import {
   distancePx,
   formatArea,
   formatMeasurement,
+  fatorDaFolha,
   polygonAreaPx,
   polygonPerimeterPx,
   MARKER_STYLES,
@@ -152,6 +153,7 @@ export function InspectorPanel({
             scale={scale}
             style={style}
             objects={objects}
+            fator={canvas ? fatorDaFolha(canvas) : 1}
             onChange={(patch) => onUpdateObject(selected.id, patch)}
           />
         </section>
@@ -498,12 +500,15 @@ function ObjectProperties({
   scale,
   style,
   objects,
+  fator,
   onChange,
 }: {
   object: SicroObject;
   scale: SicroCroquiScale | null;
   style: SicroCroquiStyle | undefined;
   objects: SicroObject[];
+  /** Fator da folha (fatorDaFolha): padrões de rótulo e cota. */
+  fator: number;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const st = resolveParityStyle(style);
@@ -532,7 +537,7 @@ function ObjectProperties({
         />
       )}
       {freeLabel && (
-        <LabelProps object={object} outlineTema={st.veiculos === "traco" ? st.tema : undefined} onChange={onChange} />
+        <LabelProps object={object} outlineTema={st.veiculos === "traco" ? st.tema : undefined} fator={fator} onChange={onChange} />
       )}
 
       {object.kind === "vehicle" && (
@@ -555,7 +560,7 @@ function ObjectProperties({
         <LineProps object={object} onChange={onChange} />
       )}
       {object.kind === "measurement" && (
-        <MeasurementProps object={object} scale={scale} objects={objects} onChange={onChange} />
+        <MeasurementProps object={object} scale={scale} objects={objects} fator={fator} onChange={onChange} />
       )}
       {object.kind === "area" && (
         <AreaProps object={object} scale={scale} onChange={onChange} />
@@ -602,13 +607,15 @@ function ObjectProperties({
 function LabelProps({
   object,
   outlineTema,
+  fator,
   onChange,
 }: {
   object: SicroObject;
   outlineTema?: ParityTema;
+  fator: number;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
-  const d = labelDefaults(object, outlineTema);
+  const d = labelDefaults(object, outlineTema, fator);
   const lf = object as LabelFields;
   const moved = lf.label_dx !== undefined || lf.label_dy !== undefined;
   const isMeasurement = object.kind === "measurement";
@@ -824,14 +831,17 @@ function MeasurementProps({
   object,
   scale,
   objects,
+  fator,
   onChange,
 }: {
   object: SicroMeasurementObject;
   scale: SicroCroquiScale | null;
   objects: SicroObject[];
+  fator: number;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const px = distancePx(object.p1, object.p2);
+  const espessura = object.stroke_width && object.stroke_width > 0 ? object.stroke_width : 1.5 * fator;
   const label = formatMeasurement(px, scale?.px_per_m);
   const ppm = scale?.px_per_m && scale.px_per_m > 0 ? scale.px_per_m : 10;
   const temR1 = !!acharReferencial(objects, "r1");
@@ -840,6 +850,14 @@ function MeasurementProps({
   return (
     <>
       <Field label="Distância" value={label} readOnly mono />
+      <NumberField
+        label="Espessura"
+        value={Math.round(espessura * 10) / 10}
+        step={0.5}
+        min={0.5}
+        casas={1}
+        onChange={(n) => onChange({ stroke_width: Math.max(0.5, n) } as Partial<SicroObject>)}
+      />
       {(temR1 || temR2) && (
         <SelectField
           label="Perpendicular a"
@@ -1643,10 +1661,17 @@ function SheetProps({
     wM != null && hM != null
       ? (SHEET_PRESETS_M.find(([w, h]) => Math.abs(w - wM) < 0.5 && Math.abs(h - hM) < 0.5)?.join("x") ?? "custom")
       : "custom";
+  const travada = canvas.proporcao_travada === true;
+  const prop = canvas.height_px > 0 ? canvas.width_px / canvas.height_px : 1;
   const setSizeM = (w: number, h: number) => {
     if (!ppm) return;
     onChange({ width_px: Math.round(w * ppm), height_px: Math.round(h * ppm) });
   };
+  // Com a proporção travada, mudar um lado arrasta o outro.
+  const setLarguraM = (w: number) => setSizeM(w, travada ? w / prop : (hM ?? 10));
+  const setAlturaM = (h: number) => setSizeM(travada ? h * prop : (wM ?? 10), h);
+  const setLarguraPx = (w: number) => onChange({ width_px: w, ...(travada ? { height_px: Math.max(200, Math.round(w / prop)) } : {}) });
+  const setAlturaPx = (h: number) => onChange({ height_px: h, ...(travada ? { width_px: Math.max(200, Math.round(h * prop)) } : {}) });
   const pngWidth = exportSettings?.png_width_px ?? CROQUI_EXPORT_WIDTH_PX_DEFAULT;
 
   return (
@@ -1669,13 +1694,13 @@ function SheetProps({
             label="Largura (m)"
             value={Number((wM ?? 0).toFixed(1))}
             step={1}
-            onChange={(n) => setSizeM(Math.max(5, n), hM ?? 10)}
+            onChange={(n) => setLarguraM(Math.max(5, n))}
           />
           <NumberField
             label="Altura (m)"
             value={Number((hM ?? 0).toFixed(1))}
             step={1}
-            onChange={(n) => setSizeM(wM ?? 10, Math.max(5, n))}
+            onChange={(n) => setAlturaM(Math.max(5, n))}
           />
           <SelectField
             label="Grade"
@@ -1698,11 +1723,16 @@ function SheetProps({
         </>
       ) : (
         <>
-          <NumberField label="Largura (px)" value={canvas.width_px} step={100} onChange={(n) => onChange({ width_px: Math.max(200, Math.round(n)) })} />
-          <NumberField label="Altura (px)" value={canvas.height_px} step={100} onChange={(n) => onChange({ height_px: Math.max(200, Math.round(n)) })} />
+          <NumberField label="Largura (px)" value={canvas.width_px} step={100} onChange={(n) => setLarguraPx(Math.max(200, Math.round(n)))} />
+          <NumberField label="Altura (px)" value={canvas.height_px} step={100} onChange={(n) => setAlturaPx(Math.max(200, Math.round(n)))} />
           <p className={styles.empty}>Defina a escala para trabalhar em metros.</p>
         </>
       )}
+      <CheckboxRow
+        label="Travar proporção"
+        checked={travada}
+        onChange={(v) => onChange({ proporcao_travada: v })}
+      />
       <CheckboxRow
         label="Mostrar grade"
         checked={grid.enabled !== false}

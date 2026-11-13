@@ -4,9 +4,24 @@
  */
 
 import { useCallback, useRef, useState } from "react";
-import type { SicroObject, SicroPoint } from "../engine";
+import type { SicroCroquiBackgroundImage, SicroCroquiCanvas, SicroObject, SicroPoint } from "../engine";
 
 /** Uma string por ferramenta (em vez de structs) para a toolbar mapear direto. */
+/** O que o desfazer guarda: objetos, imagem de fundo e folha. */
+export interface HistSnap {
+  objects: SicroObject[];
+  background_image: SicroCroquiBackgroundImage | null;
+  canvas: SicroCroquiCanvas;
+}
+
+function tirarSnap(d: HistSnap): HistSnap {
+  return { objects: d.objects, background_image: d.background_image, canvas: d.canvas };
+}
+
+function mesmoSnap(a: HistSnap, b: HistSnap): boolean {
+  return a.objects === b.objects && a.background_image === b.background_image && a.canvas === b.canvas;
+}
+
 export type Tool =
   | "select"
   | "pan"
@@ -174,17 +189,18 @@ export function useEditorState() {
   // Pilhas em refs: o caller lê o pop no mesmo tick. Com useState o updater
   // é enfileirado (React 18) e o undo lia `null`. O `historyTick` só força
   // re-render de quem olha o comprimento (canUndo na Toolbar).
-  const historyRef = useRef<SicroObject[][]>([]);
-  const redoRef = useRef<SicroObject[][]>([]);
+  const historyRef = useRef<HistSnap[]>([]);
+  const redoRef = useRef<HistSnap[]>([]);
   const [, setHistoryTick] = useState(0);
   const bumpTick = useCallback(() => setHistoryTick((v) => v + 1), []);
 
   const pushHistory = useCallback(
-    (snapshot: SicroObject[]) => {
+    (doc: HistSnap) => {
+      const snapshot = tirarSnap(doc);
       const cur = historyRef.current;
       // Dedup por referência: StrictMode roda o updater do setDoc duas vezes
       // e sem isso cada Ctrl+Z desfazia só "metade".
-      if (cur.length > 0 && cur[cur.length - 1] === snapshot) return;
+      if (cur.length > 0 && mesmoSnap(cur[cur.length - 1]!, snapshot)) return;
       const next = [...cur, snapshot];
       if (next.length > 50) next.shift();
       historyRef.current = next;
@@ -195,7 +211,7 @@ export function useEditorState() {
     [bumpTick],
   );
 
-  const popHistory = useCallback((): SicroObject[] | null => {
+  const popHistory = useCallback((): HistSnap | null => {
     const h = historyRef.current;
     if (h.length === 0) return null;
     const popped = h[h.length - 1] ?? null;
@@ -205,15 +221,15 @@ export function useEditorState() {
   }, [bumpTick]);
 
   const pushRedo = useCallback(
-    (snapshot: SicroObject[]) => {
-      const next = [...redoRef.current, snapshot];
+    (doc: HistSnap) => {
+      const next = [...redoRef.current, tirarSnap(doc)];
       if (next.length > 50) next.shift();
       redoRef.current = next;
       bumpTick();
     },
     [bumpTick],
   );
-  const popRedo = useCallback((): SicroObject[] | null => {
+  const popRedo = useCallback((): HistSnap | null => {
     const r = redoRef.current;
     if (r.length === 0) return null;
     const popped = r[r.length - 1] ?? null;

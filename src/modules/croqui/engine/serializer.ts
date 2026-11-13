@@ -254,6 +254,7 @@ function coerceCanvas(raw: unknown): SicroCroquiCanvas {
     ...(typeof originX === "number" ? { origin_x: originX } : {}),
     ...(typeof originY === "number" ? { origin_y: originY } : {}),
     ...(o.esmaecer_fora === false ? { esmaecer_fora: false } : {}),
+    ...(o.proporcao_travada === true ? { proporcao_travada: true } : {}),
     background_color:
       stringField(o, "background_color") ?? DEFAULT_CANVAS.background_color,
     grid: g

@@ -22,6 +22,7 @@ import {
   distancePx,
   formatArea,
   formatMeasurement,
+  fatorDaFolha,
   inferCategory,
   makeArea,
   nextAreaLabel,
@@ -70,6 +71,7 @@ import {
   CanvasStage,
   CROQUI_ZOOM_MAX,
   CROQUI_ZOOM_MIN,
+  SHEET_SELECTION_ID,
   type CanvasStageHandle,
 } from "./CanvasStage";
 import { DEFAULT_VIEWPORT, useEditorState, type Tool } from "./useEditorState";
@@ -161,7 +163,7 @@ export function CroquiEditor() {
     (mutator: (objs: SicroObject[]) => SicroObject[]) => {
       setDoc((prev) => {
         if (!prev) return prev;
-        editor.pushHistory(prev.objects);
+        editor.pushHistory(prev);
         const ppm = prev.scale?.px_per_m && prev.scale.px_per_m > 0 ? prev.scale.px_per_m : 10;
         return { ...prev, objects: resolverCotasVivas(mutator(prev.objects), ppm) };
       });
@@ -176,7 +178,11 @@ export function CroquiEditor() {
 
   /** Folha (tamanho, origem, grade) — `doc.canvas`. */
   const handleCanvasChange = (patch: Partial<SicroCroquiCanvas>) => {
-    setDoc((prev) => (prev ? { ...prev, canvas: { ...prev.canvas, ...patch } } : prev));
+    setDoc((prev) => {
+      if (!prev) return prev;
+      editor.pushHistory(prev);
+      return { ...prev, canvas: { ...prev.canvas, ...patch } };
+    });
   };
 
   const handleExportSettingsChange = (patch: Partial<SicroCroquiExportSettings>) => {
@@ -270,7 +276,7 @@ export function CroquiEditor() {
     ) => {
       setDoc((prev) => {
         if (!prev) return prev;
-        editor.pushHistory(prev.objects);
+        editor.pushHistory(prev);
         const next = prev.objects.map((o) => {
           if (o.id !== id) return o;
           if (o.kind === "road_parity") {
@@ -288,13 +294,15 @@ export function CroquiEditor() {
   );
 
   const handleDelete = useCallback(() => {
-    const ids = editor.selectedIds;
+    const ids = editor.selectedIds.filter((id) => id !== SHEET_SELECTION_ID);
     if (ids.length === 0) return;
     // O sentinela do fundo nunca entra no marquee, então vem sempre sozinho.
     if (ids.length === 1 && ids[0] === BACKGROUND_SELECTION_ID) {
-      setDoc((prev) =>
-        prev ? { ...prev, background_image: null } : prev,
-      );
+      setDoc((prev) => {
+        if (!prev) return prev;
+        editor.pushHistory(prev);
+        return { ...prev, background_image: null };
+      });
       editor.setSelectedId(null);
       return;
     }
@@ -334,9 +342,9 @@ export function CroquiEditor() {
   const handleUndo = useCallback(() => {
     const prev = editor.popHistory();
     setDoc((d) => {
-      if (!d) return d;
-      editor.pushRedo(d.objects);
-      return prev ? { ...d, objects: prev } : d;
+      if (!d || !prev) return d;
+      editor.pushRedo(d);
+      return { ...d, ...prev };
     });
   }, [editor]);
 
@@ -344,8 +352,8 @@ export function CroquiEditor() {
     const next = editor.popRedo();
     setDoc((d) => {
       if (!d || !next) return d;
-      editor.pushHistory(d.objects);
-      return { ...d, objects: next };
+      editor.pushHistory(d);
+      return { ...d, ...next };
     });
   }, [editor]);
 
@@ -555,16 +563,13 @@ export function CroquiEditor() {
 
   const handleBackgroundChange = useCallback(
     (patch: Partial<SicroCroquiBackgroundImage>) => {
-      setDoc((prev) =>
-        prev && prev.background_image
-          ? {
-              ...prev,
-              background_image: { ...prev.background_image, ...patch },
-            }
-          : prev,
-      );
+      setDoc((prev) => {
+        if (!prev || !prev.background_image) return prev;
+        editor.pushHistory(prev);
+        return { ...prev, background_image: { ...prev.background_image, ...patch } };
+      });
     },
-    [],
+    [editor],
   );
 
   const handleCenterBackground = useCallback(() => {
@@ -610,7 +615,7 @@ export function CroquiEditor() {
 
       setDoc((prev) => {
         if (!prev) return prev;
-        editor.pushHistory(prev.objects);
+        editor.pushHistory(prev);
         const nextImports = [
           ...(prev.osm_imports ?? []),
           result.session,
@@ -676,11 +681,13 @@ export function CroquiEditor() {
   );
 
   const handleRemoveBackground = useCallback(() => {
-    setDoc((prev) =>
-      prev ? { ...prev, background_image: null } : prev,
-    );
+    setDoc((prev) => {
+      if (!prev) return prev;
+      editor.pushHistory(prev);
+      return { ...prev, background_image: null };
+    });
     setFeedback("Fundo removido.");
-  }, []);
+  }, [editor]);
 
   const handleImportBackground = async () => {
     try {
@@ -699,17 +706,11 @@ export function CroquiEditor() {
   };
 
   const handleToggleBackgroundLock = () => {
-    setDoc((prev) =>
-      prev && prev.background_image
-        ? {
-            ...prev,
-            background_image: {
-              ...prev.background_image,
-              locked: !prev.background_image.locked,
-            },
-          }
-        : prev,
-    );
+    setDoc((prev) => {
+      if (!prev || !prev.background_image) return prev;
+      editor.pushHistory(prev);
+      return { ...prev, background_image: { ...prev.background_image, locked: !prev.background_image.locked } };
+    });
   };
   const handleChangeBackgroundOpacity = (v: number) => {
     setDoc((prev) =>
@@ -875,7 +876,8 @@ export function CroquiEditor() {
     if (tool === "text") {
       void askText({ title: "Texto", defaultValue: "Anotação", confirmLabel: "Inserir" }).then((text) => {
         if (text == null || text.trim() === "") return;
-        addObject(makeText(p, text.trim()));
+        const txt = makeText(p, text.trim());
+        addObject({ ...txt, font_size: Math.round(txt.font_size * fatorDaFolha(doc.canvas)) });
         editor.setTool("select");
       });
       return;
@@ -885,7 +887,8 @@ export function CroquiEditor() {
       const pts = twoPoints();
       if (!pts) return;
       const [p1, p2] = pts;
-      addObject(makeLine(p1, p2, lineSubtype));
+      const ln = makeLine(p1, p2, lineSubtype);
+      addObject({ ...ln, stroke_width: Math.round(ln.stroke_width * fatorDaFolha(doc.canvas) * 10) / 10 });
       editor.setTool("select");
       return;
     }
@@ -1235,6 +1238,8 @@ export function CroquiEditor() {
     resolve?.(false);
   };
 
+  const temObjetoSelecionado = editor.selectedIds.some((id) => id !== SHEET_SELECTION_ID && id !== BACKGROUND_SELECTION_ID);
+
   return (
     <div className={styles.wrap}>
       <Palette
@@ -1243,15 +1248,15 @@ export function CroquiEditor() {
         onDropTool={handleDropTool}
         destacarEscala={escalaPendente}
         cotasRef={cotasRef}
-        canDelete={editor.selectedIds.length > 0}
+        canDelete={editor.selectedIds.some((id) => id !== SHEET_SELECTION_ID)}
         onDelete={handleDelete}
         canUndo={editor.history.length > 0}
         onUndo={handleUndo}
         canRedo={editor.redoStack.length > 0}
         onRedo={handleRedo}
-        canDuplicate={!!editor.selectedId}
+        canDuplicate={temObjetoSelecionado}
         onDuplicate={handleDuplicate}
-        canCopy={editor.selectedIds.length > 0}
+        canCopy={temObjetoSelecionado}
         onCopy={handleCopy}
         canPaste={clipboardN > 0}
         onPaste={handlePaste}
@@ -1286,6 +1291,7 @@ export function CroquiEditor() {
           onObjectChange={handleObjectChange}
           onParityObjectChange={handleParityObjectChange}
           onBackgroundChange={handleBackgroundChange}
+          onCanvasChange={handleCanvasChange}
           onSelect={(id) => editor.setSelectedId(id)}
           workspacePath={workspacePath}
         />

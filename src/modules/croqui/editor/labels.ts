@@ -21,8 +21,13 @@ export interface LabelDefaults {
   center: boolean;
 }
 
-/** `outlineTema`: veículo em traço (fundo claro, ou escuro no tema escuro). */
-export function labelDefaults(obj: SicroObject, outlineTema?: ParityTema): LabelDefaults {
+/** `outlineTema`: veículo em traço (fundo claro, ou escuro no tema escuro). `fator`: o da folha (fatorDaFolha). */
+export function labelDefaults(obj: SicroObject, outlineTema?: ParityTema, fator = 1): LabelDefaults {
+  const d = labelDefaultsBase(obj, outlineTema);
+  return fator === 1 ? d : { ...d, dx: d.dx * fator, dy: d.dy * fator, size: Math.round(d.size * fator) };
+}
+
+function labelDefaultsBase(obj: SicroObject, outlineTema?: ParityTema): LabelDefaults {
   switch (obj.kind) {
     case "vehicle": {
       const body = obj.body_type ?? "car";

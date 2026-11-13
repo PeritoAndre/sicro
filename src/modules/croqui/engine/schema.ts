@@ -19,6 +19,8 @@ export interface SicroCroquiCanvas {
   background_color: string;
   /** Véu sobre o que está fora da folha (só a folha exporta); ausente = ligado. */
   esmaecer_fora?: boolean;
+  /** Alças e campos mantêm a proporção largura/altura. */
+  proporcao_travada?: boolean;
   grid?: {
     enabled: boolean;
     size_px: number;
@@ -253,6 +255,8 @@ export interface SicroMeasurementObject extends SicroObjectBase {
   p2: SicroPoint;
   /** Quando presente, substitui o rótulo calculado. */
   label_override?: string | null;
+  /** Espessura da linha (px da folha); ausente = 1,5 × fator da folha. */
+  stroke_width?: number;
   /** Cota viva: p1 é sempre o pé da perpendicular neste referencial. */
   ref_linha?: "r1" | "r2" | null;
   /** Cota viva: p2 segue o centro deste objeto, mais o deslocamento guardado (px de mundo). */

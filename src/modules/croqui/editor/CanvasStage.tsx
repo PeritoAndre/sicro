@@ -32,10 +32,12 @@ import {
   distancePx,
   formatArea,
   formatMeasurement,
+  fatorDaFolha,
   midpoint,
   polygonAreaPx,
   polygonLabelPoint,
   type SicroCroquiBackgroundImage,
+  type SicroCroquiCanvas,
   type SicroCroquiDoc,
   type SicroLineObject,
   type SicroMarkerObject,
@@ -115,6 +117,8 @@ const CROQUI_ZOOM_WHEEL_FACTOR_OUT = 0.92;
 
 /** `selectedId` sentinela (não colide com UUID) para a imagem de fundo selecionada. */
 export const BACKGROUND_SELECTION_ID = "_background";
+/** "Seleção" da folha: clique no vazio. O Inspector mostra a folha e a tela, as alças dela. */
+export const SHEET_SELECTION_ID = "_folha";
 
 interface Props {
   doc: SicroCroquiDoc;
@@ -134,6 +138,8 @@ interface Props {
   ) => void;
   /** Fim de drag/transform da imagem de fundo. */
   onBackgroundChange?: (patch: Partial<SicroCroquiBackgroundImage>) => void;
+  /** Alças da folha (origem e tamanho). */
+  onCanvasChange?: (patch: Partial<SicroCroquiCanvas>) => void;
   onSelect: (id: string | null) => void;
   workspacePath: string;
 }
@@ -149,6 +155,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     onObjectChange,
     onParityObjectChange,
     onBackgroundChange,
+    onCanvasChange,
     onSelect,
     workspacePath,
   },
@@ -403,7 +410,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     );
     const isTinyClick = rect.width * rect.height < 9;
     if (isTinyClick) {
-      onSelect(null);
+      onSelect(SHEET_SELECTION_ID);
       return;
     }
     const pxPerM = resolvePxPerM(doc.scale?.px_per_m);
@@ -450,7 +457,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     if (!pos) return;
     const world = toWorld(stage, pos);
     if (editor.tool === "select") {
-      onSelect(null);
+      onSelect(SHEET_SELECTION_ID);
       return;
     }
     if (editor.tool === "pan") {
@@ -550,6 +557,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       <BackgroundImageLayer
         doc={doc}
         workspacePath={workspacePath}
+        interativo={editor.tool === "select"}
         selected={editor.selectedIds.includes(BACKGROUND_SELECTION_ID)}
         onSelect={() => onSelect(BACKGROUND_SELECTION_ID)}
         onChange={(patch) => onBackgroundChange?.(patch)}
@@ -631,6 +639,12 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
         </Layer>
       )}
 
+      {editor.tool === "select" && onCanvasChange && editor.selectedIds.includes(SHEET_SELECTION_ID) && (
+        <Layer>
+          <AlcasDaFolha doc={doc} zoom={editor.viewport.scale} onChange={onCanvasChange} />
+        </Layer>
+      )}
+
       <Layer listening={false} ref={uiLayerRef}>
         <PendingTwoClickPreview editor={editor} />
         <RoadDraftPreview editor={editor} />
@@ -639,6 +653,107 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     </Stage>
   );
 });
+
+// ===========================================================================
+// Alças da folha: 4 cantos + 4 lados, tamanho fixo na tela; o lado oposto fica parado.
+// Com a proporção travada, o outro lado acompanha (lado: centrado; canto: manda o que mais mudou).
+
+const FOLHA_MIN_PX = 100;
+
+function AlcasDaFolha({
+  doc,
+  zoom,
+  onChange,
+}: {
+  doc: SicroCroquiDoc;
+  zoom: number;
+  onChange: (patch: Partial<SicroCroquiCanvas>) => void;
+}) {
+  const [live, setLive] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const base = { x: doc.canvas.origin_x ?? 0, y: doc.canvas.origin_y ?? 0, w: doc.canvas.width_px, h: doc.canvas.height_px };
+  const r = live ?? base;
+  const k = 1 / Math.max(zoom, 0.0001);
+  const meia = 6 * k;
+  const travada = doc.canvas.proporcao_travada === true;
+  const alcas = [
+    { ax: 0, ay: 0 }, { ax: 0.5, ay: 0 }, { ax: 1, ay: 0 }, { ax: 1, ay: 0.5 },
+    { ax: 1, ay: 1 }, { ax: 0.5, ay: 1 }, { ax: 0, ay: 1 }, { ax: 0, ay: 0.5 },
+  ];
+  const cursorDe = (ax: number, ay: number) =>
+    ax === 0.5 ? "ns-resize" : ay === 0.5 ? "ew-resize" : ax === ay ? "nwse-resize" : "nesw-resize";
+  const calcular = (ax: number, ay: number, px: number, py: number) => {
+    let x0 = base.x;
+    let y0 = base.y;
+    let x1 = base.x + base.w;
+    let y1 = base.y + base.h;
+    if (ax === 0) x0 = Math.min(px, x1 - FOLHA_MIN_PX);
+    else if (ax === 1) x1 = Math.max(px, x0 + FOLHA_MIN_PX);
+    if (ay === 0) y0 = Math.min(py, y1 - FOLHA_MIN_PX);
+    else if (ay === 1) y1 = Math.max(py, y0 + FOLHA_MIN_PX);
+    let w = x1 - x0;
+    let h = y1 - y0;
+    if (travada && base.w > 0 && base.h > 0) {
+      const prop = base.w / base.h;
+      if (ax === 0.5) {
+        w = h * prop;
+        const cx = base.x + base.w / 2;
+        x0 = cx - w / 2;
+        x1 = cx + w / 2;
+      } else if (ay === 0.5) {
+        h = w / prop;
+        const cy = base.y + base.h / 2;
+        y0 = cy - h / 2;
+        y1 = cy + h / 2;
+      } else {
+        if (Math.abs(w - base.w) / base.w >= Math.abs(h - base.h) / base.h) h = w / prop;
+        else w = h * prop;
+        if (ax === 0) x0 = x1 - w;
+        else x1 = x0 + w;
+        if (ay === 0) y0 = y1 - h;
+        else y1 = y0 + h;
+      }
+    }
+    return { x: Math.round(x0), y: Math.round(y0), w: Math.round(x1 - x0), h: Math.round(y1 - y0) };
+  };
+  return (
+    <>
+      <Rect x={r.x} y={r.y} width={r.w} height={r.h} stroke="#3b82f6" strokeWidth={1.5 * k} dash={[6 * k, 4 * k]} listening={false} />
+      {alcas.map(({ ax, ay }) => (
+        <Rect
+          key={`${ax}-${ay}`}
+          x={r.x + r.w * ax}
+          y={r.y + r.h * ay}
+          offsetX={meia}
+          offsetY={meia}
+          width={2 * meia}
+          height={2 * meia}
+          fill="#ffffff"
+          stroke="#3b82f6"
+          strokeWidth={1.5 * k}
+          draggable
+          onMouseEnter={(e) => setCursor(e, cursorDe(ax, ay))}
+          onMouseLeave={(e) => setCursor(e, "default")}
+          onClick={(e) => {
+            e.cancelBubble = true;
+          }}
+          onDragStart={(e) => {
+            e.cancelBubble = true;
+          }}
+          onDragMove={(e) => {
+            e.cancelBubble = true;
+            setLive(calcular(ax, ay, e.target.x(), e.target.y()));
+          }}
+          onDragEnd={(e) => {
+            e.cancelBubble = true;
+            const n = calcular(ax, ay, e.target.x(), e.target.y());
+            setLive(null);
+            onChange({ origin_x: n.x, origin_y: n.y, width_px: n.w, height_px: n.h });
+          }}
+        />
+      ))}
+    </>
+  );
+}
 
 // ===========================================================================
 // Véu fora da folha: a tela inteira escurecida, com a folha recortada (even-odd).
@@ -740,12 +855,15 @@ function CanvasBackground({ doc }: { doc: SicroCroquiDoc }) {
 function BackgroundImageLayer({
   doc,
   workspacePath,
+  interativo,
   selected,
   onSelect,
   onChange,
 }: {
   doc: SicroCroquiDoc;
   workspacePath: string;
+  /** Só na ferramenta Selecionar; nas outras o fundo é transparente ao clique. */
+  interativo: boolean;
   selected: boolean;
   onSelect: () => void;
   onChange: (patch: Partial<SicroCroquiBackgroundImage>) => void;
@@ -775,14 +893,14 @@ function BackgroundImageLayer({
     const transformer = transformerRef.current;
     const node = groupRef.current;
     if (!transformer) return;
-    if (!selected || !node || !bg || bg.locked) {
+    if (!selected || !node || !bg || bg.locked || !interativo) {
       transformer.nodes([]);
       transformer.getLayer()?.batchDraw();
       return;
     }
     transformer.nodes([node]);
     transformer.getLayer()?.batchDraw();
-  }, [selected, bg]);
+  }, [selected, bg, interativo]);
 
   if (!bg || !image) {
     return <Layer listening={false} />;
@@ -796,7 +914,7 @@ function BackgroundImageLayer({
   // Origem do Group no centro da imagem para a rotação girar em torno dele;
   // a KonvaImage fica em (-w/2, -h/2).
   return (
-    <Layer listening={!bg.locked}>
+    <Layer listening={!bg.locked && interativo}>
       <Group
         ref={groupRef}
         id={BACKGROUND_SELECTION_ID}
@@ -898,7 +1016,8 @@ function ObjectNode({
   const draggable = tool === "select";
   const st = resolveParityStyle(doc.style);
   const outlineTema = st.veiculos === "traco" ? st.tema : undefined;
-  const labelProps = { draggable: draggable && !obj.locked && solo, onSelect, onChange, outlineTema };
+  const fator = fatorDaFolha(doc.canvas);
+  const labelProps = { draggable: draggable && !obj.locked && solo, onSelect, onChange, outlineTema, fator };
 
   switch (obj.kind) {
     case "vehicle":
@@ -920,6 +1039,7 @@ function ObjectNode({
         <>
           <LineNode
             obj={obj}
+            zoom={zoom}
             draggable={draggable}
             selected={selected}
             onSelect={onSelect}
@@ -960,6 +1080,7 @@ function ObjectNode({
         <MeasurementNode
           obj={obj}
           doc={doc}
+          zoom={zoom}
           draggable={draggable}
           selected={selected}
           solo={solo}
@@ -1440,12 +1561,14 @@ function VehicleSilhouette({
 
 function LineNode({
   obj,
+  zoom,
   draggable,
   selected,
   onSelect,
   onChange,
 }: {
   obj: SicroLineObject;
+  zoom: number;
   draggable: boolean;
   selected: boolean;
   onSelect: () => void;
@@ -1455,6 +1578,8 @@ function LineNode({
   const [live, setLive] = useState<number[] | null>(null);
   const pts = live ?? obj.points;
   const canEdit = draggable && selected && !obj.locked;
+  // Alça com tamanho de tela, e nunca engolida pela linha grossa.
+  const alcaR = Math.max(7 / Math.max(zoom, 0.0001), obj.stroke_width * 0.75);
   const movePoint = (i: number, x: number, y: number) => {
     const next = [...pts];
     next[i * 2] = x;
@@ -1501,6 +1626,7 @@ function LineNode({
             key={i}
             x={pts[i * 2]!}
             y={pts[i * 2 + 1]!}
+            r={alcaR}
             color={obj.color ?? "#1f2937"}
             onMove={(x, y) => setLive(movePoint(i, x, y))}
             onEnd={(x, y) => {
@@ -2208,6 +2334,7 @@ function ObjectLabel({
   rotation = 0,
   draggable,
   outlineTema,
+  fator = 1,
   onSelect,
   onChange,
 }: {
@@ -2217,12 +2344,14 @@ function ObjectLabel({
   rotation?: number;
   draggable: boolean;
   outlineTema?: ParityTema;
+  /** Fator da folha: rótulo padrão cresce com a folha. */
+  fator?: number;
   onSelect: () => void;
   onChange: (patch: Partial<SicroObject>) => void;
 }) {
   const t = text ?? obj.label;
   if (!t) return null;
-  const d = labelDefaults(obj, outlineTema);
+  const d = labelDefaults(obj, outlineTema, fator);
   const lf = obj as LabelFields;
   const size = lf.label_size ?? d.size;
   return (
@@ -2801,6 +2930,7 @@ function TextNode({
 function MeasurementNode({
   obj,
   doc,
+  zoom,
   draggable,
   selected,
   solo,
@@ -2809,6 +2939,7 @@ function MeasurementNode({
 }: {
   obj: SicroMeasurementObject;
   doc: SicroCroquiDoc;
+  zoom: number;
   draggable: boolean;
   selected: boolean;
   solo: boolean;
@@ -2825,7 +2956,9 @@ function MeasurementNode({
   const rot = a > 90 ? a - 180 : a < -90 ? a + 180 : a;
   const text = obj.label_override ?? formatMeasurement(px, doc.scale?.px_per_m);
   const color = obj.color ?? "#dc2626";
-  const size = obj.label_size ?? labelDefaults(obj).size;
+  const fator = fatorDaFolha(doc.canvas);
+  const sw = espessuraDaCota(obj, fator);
+  const size = obj.label_size ?? labelDefaults(obj, undefined, fator).size;
   const rad = (rot * Math.PI) / 180;
   // Reto por padrão; null = acompanha a linha.
   const labelRot = obj.label_rotation === null ? rot : (obj.label_rotation ?? 0);
@@ -2836,11 +2969,12 @@ function MeasurementNode({
   const gap = half + size * 0.4;
   // Rótulo do lado de cima da linha, no sentido de leitura.
   const anchor = { x: mid.x + Math.sin(rad) * gap, y: mid.y - Math.cos(rad) * gap };
-  // Traços de extremidade perpendiculares.
-  const tick = 6;
+  // Traços de extremidade perpendiculares, proporcionais à espessura.
+  const tick = 4 * sw;
   const nx = -Math.sin((a * Math.PI) / 180) * tick;
   const ny = Math.cos((a * Math.PI) / 180) * tick;
   const canEdit = draggable && selected && !obj.locked;
+  const alcaR = Math.max(7 / Math.max(zoom, 0.0001), sw * 0.75);
   const commit = (n1: SicroPoint, n2: SicroPoint) => {
     setLive(null);
     onChange({ p1: n1, p2: n2 } as Partial<SicroObject>);
@@ -2867,16 +3001,17 @@ function MeasurementNode({
         <Line
           points={[p1.x, p1.y, p2.x, p2.y]}
           stroke={color}
-          strokeWidth={selected ? 2 : 1.5}
-          hitStrokeWidth={12}
+          strokeWidth={selected ? sw * 1.3 : sw}
+          hitStrokeWidth={Math.max(12, sw * 3)}
         />
-        <Line points={[p1.x - nx, p1.y - ny, p1.x + nx, p1.y + ny]} stroke={color} strokeWidth={1.5} listening={false} />
-        <Line points={[p2.x - nx, p2.y - ny, p2.x + nx, p2.y + ny]} stroke={color} strokeWidth={1.5} listening={false} />
+        <Line points={[p1.x - nx, p1.y - ny, p1.x + nx, p1.y + ny]} stroke={color} strokeWidth={sw} listening={false} />
+        <Line points={[p2.x - nx, p2.y - ny, p2.x + nx, p2.y + ny]} stroke={color} strokeWidth={sw} listening={false} />
         {canEdit && (
           <>
             <PointHandle
               x={p1.x}
               y={p1.y}
+              r={alcaR}
               color={color}
               onMove={(x, y) => setLive({ p1: { x, y }, p2 })}
               onEnd={(x, y) => commit({ x, y }, p2)}
@@ -2884,6 +3019,7 @@ function MeasurementNode({
             <PointHandle
               x={p2.x}
               y={p2.y}
+              r={alcaR}
               color={color}
               onMove={(x, y) => setLive({ p1, p2: { x, y } })}
               onEnd={(x, y) => commit(p1, { x, y })}
@@ -2902,6 +3038,11 @@ function MeasurementNode({
       />
     </>
   );
+}
+
+/** Espessura da cota: a guardada, senão 1,5 px vezes o fator da folha. */
+export function espessuraDaCota(obj: SicroMeasurementObject, fator: number): number {
+  return obj.stroke_width && obj.stroke_width > 0 ? obj.stroke_width : 1.5 * fator;
 }
 
 /** Ângulo de leitura: texto nunca de cabeça para baixo. */
@@ -2990,7 +3131,8 @@ function AreaNode({
   const flat = pts.flatMap((p) => [p.x, p.y]);
   const area = formatArea(polygonAreaPx(pts), ppm);
   const text = obj.label ? `${obj.label}: ${area}` : area;
-  const size = obj.label_size ?? labelDefaults(obj).size;
+  const fator = fatorDaFolha(doc.canvas);
+  const size = obj.label_size ?? labelDefaults(obj, undefined, fator).size;
   const canEdit = draggable && selected && !obj.locked;
   // Alças com tamanho fixo na tela.
   const r = 6 / Math.max(zoom, 0.0001);
@@ -3021,7 +3163,7 @@ function AreaNode({
           points={flat}
           closed
           stroke={color}
-          strokeWidth={selected ? 2 : 1.5}
+          strokeWidth={(selected ? 2 : 1.5) * fator}
           hitStrokeWidth={12}
           lineJoin="round"
         />
