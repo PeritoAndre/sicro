@@ -20,6 +20,7 @@ import { PlantaInspector } from "./PlantaInspector";
 import { PlantaPalette } from "./PlantaPalette";
 import { stampPlanta, type PlantaLegend } from "./exportPlanta";
 import { usePlanta, type Tool } from "./store";
+import { useSalvamentoAutomatico } from "../../editor/useSalvamentoAutomatico";
 import styles from "./planta.module.css";
 
 const isTyping = (e: KeyboardEvent) => {
@@ -98,7 +99,7 @@ export function PlantaEditor() {
   const dirty = useMemo(() => !!doc && JSON.stringify(doc) !== savedJson, [doc, savedJson]);
 
   // ---------- salvar ----------
-  const save = useCallback(async (): Promise<boolean> => {
+  const save = useCallback(async (silencioso = false): Promise<boolean> => {
     const d = usePlanta.getState().doc;
     if (!workspacePath || !activeCroqui || !d) return false;
     setSaving(true);
@@ -107,7 +108,7 @@ export function PlantaEditor() {
       await commands.saveCroqui(workspacePath, activeCroqui.id, stamped);
       usePlanta.getState().markSaved(usePlanta.getState().doc ?? stamped);
       await loadList(workspacePath);
-      flash("Planta salva.");
+      if (!silencioso) flash("Planta salva.");
       return true;
     } catch (err) {
       flash(`Falha ao salvar: ${toSicroError(err).message}`);
@@ -116,6 +117,8 @@ export function PlantaEditor() {
       setSaving(false);
     }
   }, [workspacePath, activeCroqui, loadList, flash]);
+
+  useSalvamentoAutomatico(dirty, () => save(true), !saving);
 
   // ---------- exportar ----------
   const exportPng = useCallback(

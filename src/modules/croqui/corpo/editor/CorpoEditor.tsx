@@ -42,6 +42,7 @@ import {
   type SicroLesaoMarker,
 } from "../engine";
 import { CorpoCanvas, type CorpoCanvasHandle, type CorpoTool } from "./CorpoCanvas";
+import { useSalvamentoAutomatico } from "../../editor/useSalvamentoAutomatico";
 import { cropCorpoPng, stampCorpoPng } from "./exportCorpo";
 
 export function CorpoEditor() {
@@ -231,7 +232,7 @@ export function CorpoEditor() {
 
   const numbered = doc ? BODY_TEMPLATES[doc.template_id].numbered : false;
 
-  const handleSave = useCallback(async () => {
+  const handleSave = useCallback(async (silencioso = false) => {
     if (!workspacePath || !activeCroqui || !doc) return false;
     setBusy(true);
     try {
@@ -240,7 +241,7 @@ export function CorpoEditor() {
       setDoc(stamped);
       setSavedJson(JSON.stringify(stamped));
       await loadList(workspacePath);
-      setFeedback("Salvo.");
+      if (!silencioso) setFeedback("Salvo.");
       return true;
     } catch (err) {
       setFeedback(`Falha ao salvar: ${toSicroError(err).message}`);
@@ -249,6 +250,8 @@ export function CorpoEditor() {
       setBusy(false);
     }
   }, [workspacePath, activeCroqui, doc, loadList]);
+
+  useSalvamentoAutomatico(dirty, () => handleSave(true), !busy);
 
   const handleExport = useCallback(async (variant: "tecnico" | "limpo") => {
     if (!workspacePath || !activeCroqui || !doc) return;

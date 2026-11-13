@@ -78,6 +78,7 @@ import {
 } from "./CanvasStage";
 import { commands } from "@core/commands";
 import { comUltimoEstilo, lembrarEstilo } from "./ultimoEstilo";
+import { useSalvamentoAutomatico } from "./useSalvamentoAutomatico";
 import { DEFAULT_VIEWPORT, useEditorState, type Tool } from "./useEditorState";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { DroneImportModal } from "./DroneImportModal";
@@ -1160,15 +1161,17 @@ export function CroquiEditor() {
     return <div className={styles.empty}>Sem croqui aberto.</div>;
   }
 
-  const handleSave = async (): Promise<boolean> => {
+  const handleSave = async (opts?: { silencioso?: boolean }): Promise<boolean> => {
     if (!workspacePath || !doc) return false;
     setSaving(true);
-    setFeedback(null);
+    if (!opts?.silencioso) setFeedback(null);
     try {
       await saveCurrent(workspacePath, doc);
       setLastSavedJson(JSON.stringify(doc));
-      setFeedback("Croqui salvo.");
-      setTimeout(() => setFeedback(null), 2500);
+      if (!opts?.silencioso) {
+        setFeedback("Croqui salvo.");
+        setTimeout(() => setFeedback(null), 2500);
+      }
       return true;
     } catch (err) {
       setFeedback(`Falha ao salvar: ${toSicroError(err).message}`);
@@ -1177,6 +1180,9 @@ export function CroquiEditor() {
       setSaving(false);
     }
   };
+
+  // Salva sozinho 3 s depois da última mudança (sem o aviso "Croqui salvo.").
+  useSalvamentoAutomatico(dirty, () => handleSave({ silencioso: true }), !saving && !pendingNav);
 
   // Único ponto de saída do editor: sem dirty executa direto, com dirty
   // guarda o destino e abre o modal.
