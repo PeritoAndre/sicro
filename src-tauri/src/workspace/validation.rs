@@ -3,7 +3,8 @@
 use std::path::Path;
 
 use crate::error::{Result, SicroError};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::sqlite_path;
 
 pub fn ensure_workspace_structure(workspace_dir: &Path) -> Result<Manifest> {
     if !workspace_dir.is_dir() {
@@ -15,7 +16,7 @@ pub fn ensure_workspace_structure(workspace_dir: &Path) -> Result<Manifest> {
 
     let manifest = Manifest::read(workspace_dir)?;
 
-    let db = workspace_dir.join(SQLITE_FILENAME);
+    let db = sqlite_path(workspace_dir);
     if !db.is_file() {
         return Err(SicroError::Workspace(format!(
             "database file missing: {}",

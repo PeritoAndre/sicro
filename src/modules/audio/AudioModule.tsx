@@ -14,6 +14,7 @@ import {
   AlertTriangle,
   Captions,
   FileAudio,
+  Clapperboard,
   Film,
   FolderOpen,
   Headphones,
@@ -53,6 +54,7 @@ import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
 import { AudioAnalysisPanel } from "./AudioAnalysisPanel";
 import { AudioSpectrogram } from "./AudioSpectrogram";
 import styles from "./AudioModule.module.css";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 const AUDIO_EXT = ["opus", "mp3", "m4a", "wav", "amr", "aac", "ogg", "flac", "wma"];
 const VIDEO_EXT = ["mp4", "mov", "avi", "mkv", "webm", "m4v", "mpg", "mpeg", "ts"];
@@ -330,7 +332,7 @@ export function AudioModule() {
     setBusy("extract");
     setError(null);
     void commands
-      .extractAudioFromVideo(ws, `${ws}/${h.relativePath}`, h.sha256)
+      .extractAudioFromVideo(ws, caminhoDoCaso(ws, h.relativePath), h.sha256)
       .then(async (m) => {
         await reload();
         setSeekOnLoad({ id: m.id, t: at });
@@ -393,7 +395,7 @@ export function AudioModule() {
     if (!ws || !pickedVideo) return;
     const video = caseVideos.find((v) => v.id === pickedVideo);
     if (!video) return;
-    await runExtract(`${ws}/${video.relative_path}`, video.sha256);
+    await runExtract(caminhoDoCaso(ws, video.relative_path), video.sha256);
   };
 
   const runExtract = async (videoPath: string, sha: string | null) => {
@@ -449,11 +451,11 @@ export function AudioModule() {
     </div>
   ) : null;
   const fileUrl = useMemo(
-    () => (ws && selected ? convertFileSrc(`${ws}/${selected.relative_path}`) : null),
+    () => (ws && selected ? convertFileSrc(caminhoDoCaso(ws, selected.relative_path)) : null),
     [ws, selected],
   );
   const mediaUrl = useMemo(
-    () => (ws && selected ? mediaSrc(`${ws}/${selected.relative_path}`) : undefined),
+    () => (ws && selected ? mediaSrc(caminhoDoCaso(ws, selected.relative_path)) : undefined),
     [ws, selected],
   );
   const warnings = useMemo(
@@ -587,7 +589,7 @@ export function AudioModule() {
     setError(null);
     try {
       const rel = await commands.audioSpectrogram(ws, selected.id);
-      setSpectro({ id: selected.id, url: convertFileSrc(`${ws}/${rel}`), rel });
+      setSpectro({ id: selected.id, url: convertFileSrc(caminhoDoCaso(ws, rel)), rel });
     } catch (e) {
       setError(toSicroError(e).message);
     } finally {
@@ -598,7 +600,7 @@ export function AudioModule() {
   if (!ws) {
     return (
       <NoOccurrenceState
-        icon={<Headphones size={36} strokeWidth={1.5} />}
+        icon={<Clapperboard size={36} strokeWidth={1.5} />}
         moduleName="Áudio"
       />
     );

@@ -1,8 +1,9 @@
-/** Miniatura da lista: PNG ~480 px em croquis/thumbs/<id>.png. Falha só vai para o console. */
+/** Miniatura da lista: PNG ~480 px em Sistema/croquis/thumbs/<id>.png. Falha só vai para o console. */
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { commands } from "@core/commands";
 import { useCroquiStore } from "./store/croquiStore";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 export const THUMB_LARGURA = 480;
 
@@ -51,6 +52,5 @@ export function salvarMiniatura(
 }
 
 export function urlMiniatura(workspacePath: string, croquiId: string, versao: string): string {
-  const sep = workspacePath.includes("\\") ? "\\" : "/";
-  return `${convertFileSrc(`${workspacePath}${sep}croquis${sep}thumbs${sep}${croquiId}.png`)}?t=${encodeURIComponent(versao)}`;
+  return `${convertFileSrc(caminhoDoCaso(workspacePath, `Sistema/croquis/thumbs/${croquiId}.png`))}?t=${encodeURIComponent(versao)}`;
 }

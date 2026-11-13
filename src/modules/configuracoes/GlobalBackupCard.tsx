@@ -45,6 +45,7 @@ export function GlobalBackupCard() {
   const [progress, setProgress] = useState<GlobalBackupProgress | null>(null);
   const [report, setReport] = useState<GlobalBackupReport | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cfgPath, setCfgPath] = useState("");
   const runningRef = useRef(false);
 
   const [restoring, setRestoring] = useState(false);
@@ -57,6 +58,10 @@ export function GlobalBackupCard() {
 
   const [autoOnClose, setAutoOnClose] = useState(isAutoBackupOnCloseEnabled());
   const lastAuto = getLastAutoBackupAt();
+
+  useEffect(() => {
+    void commands.getSettingsFilePath().then(setCfgPath).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setDest(localStorage.getItem(DEST_KEY));
@@ -187,12 +192,6 @@ export function GlobalBackupCard() {
         <FolderArchive size={15} aria-hidden />
         <h2 className={cfg.cardTitle}>Backup geral</h2>
       </div>
-      <p className={cfg.cardDesc}>
-        Copia <strong>todas as ocorrências</strong> para uma pasta de destino
-        (ex.: HD externo), com um arquivo <code>.sicrobackup</code> por caso.
-        É <strong>incremental</strong>: só recopia os casos que mudaram desde o
-        último backup. Backup completo — inclui fotos, vídeos e drone.
-      </p>
 
       <div className={styles.body}>
         {/* Destino + ação */}
@@ -432,6 +431,9 @@ export function GlobalBackupCard() {
           )}
         </div>
       </div>
+      {cfgPath && (
+        <div className={cfg.mono}>Configurações do app: {cfgPath}</div>
+      )}
     </section>
   );
 }

@@ -19,7 +19,8 @@ use crate::error::Result;
 use crate::filesystem::atomic_write_bytes;
 use crate::models::VerifyOptions;
 use crate::registry;
-use crate::workspace::manifest::{Manifest, APP_VERSION, SQLITE_FILENAME};
+use crate::workspace::manifest::{Manifest, APP_VERSION};
+use crate::workspace::paths::{REL_RELATORIOS, sqlite_path};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DependencyStatus {
@@ -118,7 +119,7 @@ pub fn render_and_save(
 ) -> Result<HealthReportArtifact> {
     let html = render_html(snapshot);
     let stamp = snapshot.generated_at.format("%Y%m%d_%H%M%S");
-    let rel = format!("reports/system_health_{}.html", stamp);
+    let rel = format!("{REL_RELATORIOS}/system_health_{}.html", stamp);
     let dest_root: PathBuf = workspace_path
         .map(|p| p.to_path_buf())
         .unwrap_or_else(std::env::temp_dir);
@@ -146,7 +147,7 @@ pub fn render_and_save(
 
 fn build_workspace_health(workspace_root: &Path) -> Result<WorkspaceHealth> {
     let manifest = Manifest::read(workspace_root)?;
-    let mut conn = open_connection(&workspace_root.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&workspace_root))?;
     run_migrations(&mut conn)?;
 
     let counters = count_entities(&conn, &manifest.occurrence_id)?;
@@ -216,13 +217,13 @@ pub fn count_entities(conn: &Connection, occurrence_id: &Uuid) -> Result<Workspa
 /// Barato o bastante para rodar sempre que um caso fica ativo.
 pub fn count_occurrence_entities(workspace_root: &Path) -> Result<WorkspaceCounters> {
     let manifest = Manifest::read(workspace_root)?;
-    let mut conn = open_connection(&workspace_root.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&workspace_root))?;
     run_migrations(&mut conn)?;
     count_entities(&conn, &manifest.occurrence_id)
 }
 
 fn count_applied_migrations(workspace_root: &Path) -> Result<u32> {
-    let conn = open_connection(&workspace_root.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&workspace_root))?;
     let count: i64 = conn
         .query_row("SELECT COUNT(*) FROM schema_migrations", [], |row| row.get(0))
         .unwrap_or(0);

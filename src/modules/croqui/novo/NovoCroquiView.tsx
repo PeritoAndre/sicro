@@ -11,6 +11,7 @@ import { CampoNumero } from "@components/CampoNumero/CampoNumero";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { selectActiveOccurrence, selectActiveWorkspacePath, useWorkspaceStore } from "@stores/workspaceStore";
+import { useSettingsStore } from "@stores/settingsStore";
 import { useCroquiStore } from "../store/croquiStore";
 import type { SicroCroquiDoc, SicroObject } from "../engine";
 import { parseCoordinates, type LatLon } from "../engine/coordinates";
@@ -71,7 +72,10 @@ export function NovoCroquiView() {
   const chipsCena = [...CENA_PRESETS, ...salvas];
 
   // Mapa ou satélite.
-  const [lugar, setLugar] = useState("");
+  const [lugar, setLugar] = useState(() => {
+    const p = useSettingsStore.getState().settings.profile;
+    return p.municipio_atuacao ? `${p.municipio_atuacao}${p.uf ? `, ${p.uf}` : ""}, Brasil` : "";
+  });
   const [buscando, setBuscando] = useState(false);
   const [achados, setAchados] = useState<{ nome: string; lat: number; lon: number }[]>([]);
   const [centro, setCentro] = useState<LatLon | null>(
@@ -469,7 +473,7 @@ export function NovoCroquiView() {
           {modo === "drone" && (
             <div className={styles.bloco}>
               <span className={styles.rotulo}>FOTO</span>
-              <DroneAjuste estado={drone} onChange={setDrone} busy={busy} partes="controles" />
+              <DroneAjuste estado={drone} onChange={setDrone} busy={busy} partes="controles" botaoClass={styles.botaoCol} />
               <span className={styles.mono}>{linhaFolha}</span>
             </div>
           )}

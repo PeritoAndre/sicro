@@ -1,5 +1,6 @@
 //! Backup do workspace: ZIP (deflate) `.sicrobackup` com manifesto JSON embutido.
-//! O workspace original nunca é modificado; `cache/` e `logs/` ficam de fora;
+//! O workspace original nunca é modificado; `Sistema/cache`, `Sistema/logs` e
+//! `Exportações/Backups` ficam de fora (e os equivalentes do layout antigo);
 //! o SHA-256 do arquivo final é calculado depois da escrita.
 
 use std::fs::File;
@@ -14,10 +15,8 @@ use zip::CompressionMethod;
 
 use crate::error::{Result, SicroError};
 use crate::workspace::manifest::{Manifest, APP_VERSION};
+use crate::workspace::paths::{PASTAS_FORA_DO_BACKUP, dir_backups, fora_do_backup};
 
-/// Pastas efêmeras fora do backup. `pub(crate)` porque o fingerprint do backup
-/// geral precisa usar a mesma regra (senão cache/logs invalidariam o incremental).
-pub(crate) const SKIP_DIRS: &[&str] = &["cache", "logs"];
 
 /// Devolvido por `create_backup`.
 #[derive(Debug, Clone)]
@@ -51,7 +50,7 @@ pub fn create_backup(
 
     let dest_root = dest_dir
         .map(|d| d.to_path_buf())
-        .unwrap_or_else(|| workspace_root.join("backups"));
+        .unwrap_or_else(|| dir_backups(workspace_root));
     std::fs::create_dir_all(&dest_root).map_err(|e| {
         SicroError::Filesystem(format!(
             "cannot create backup dir {}: {}",
@@ -96,7 +95,7 @@ pub fn create_backup(
         "source_workspace_path": workspace_root.to_string_lossy(),
         "file_count": file_count,
         "uncompressed_total_bytes": total_bytes,
-        "skipped_dirs": SKIP_DIRS,
+        "skipped_dirs": PASTAS_FORA_DO_BACKUP,
         "filename": filename,
     });
     zip.start_file("_sicro_backup_manifest.json", options)
@@ -155,16 +154,9 @@ fn walk_into_zip<W: Write + std::io::Seek>(
             SicroError::Filesystem(format!("file_type error: {e}"))
         })?;
 
-        // Só no nível raiz: pastas efêmeras e a própria `backups/`.
-        if file_type.is_dir() && dir == root {
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if SKIP_DIRS.iter().any(|d| *d == name) {
-                    continue;
-                }
-                if name == "backups" {
-                    continue;
-                }
-            }
+        // Pastas efêmeras e a própria pasta de backups.
+        if file_type.is_dir() && fora_do_backup(&rel_de(root, &path)) {
+            continue;
         }
 
         if file_type.is_dir() {
@@ -210,6 +202,14 @@ fn walk_into_zip<W: Write + std::io::Seek>(
     Ok(())
 }
 
+/// Relativo à raiz, com `/`.
+pub(crate) fn rel_de(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .to_string_lossy()
+        .replace('\\', "/")
+}
+
 fn hash_file(path: &Path) -> Result<String> {
     let mut f = File::open(path).map_err(|e| {
         SicroError::Filesystem(format!("cannot reopen {}: {}", path.display(), e))
@@ -248,15 +248,20 @@ mod tests {
     use std::fs;
     use tempfile::TempDir;
 
-    fn fake_workspace(dir: &Path) -> Result<()> {
-        // `.sicro/` mínimo para `Manifest::read` funcionar.
-        fs::create_dir_all(dir.join("imagens").join("originais"))?;
-        fs::create_dir_all(dir.join("laudos"))?;
-        fs::create_dir_all(dir.join("logs"))?;  // should be skipped
-        fs::create_dir_all(dir.join("cache"))?; // should be skipped
-        fs::create_dir_all(dir.join("backups"))?;
+    /// Caso mínimo para `Manifest::read` funcionar; `legacy` = layout antigo.
+    fn fake_workspace(dir: &Path, legacy: bool) -> Result<()> {
+        let (sis, img, lau, bkp) = if legacy {
+            ("", "imagens/originais", "laudos", "backups")
+        } else {
+            ("Sistema/", "Mídias/Imagens", "Sistema/laudos", "Exportações/Backups")
+        };
+        for sub in [img, lau, bkp] {
+            fs::create_dir_all(dir.join(sub))?;
+        }
+        fs::create_dir_all(dir.join(format!("{sis}logs")))?; // should be skipped
+        fs::create_dir_all(dir.join(format!("{sis}cache")))?; // should be skipped
         fs::write(
-            dir.join("manifest.json"),
+            dir.join(format!("{sis}manifest.json")),
             serde_json::to_string_pretty(&serde_json::json!({
                 "format": "sicro-workspace",
                 "version": "2.0.0",
@@ -269,55 +274,67 @@ mod tests {
                 "integrity": {"strategy": "sha256", "manifest_hash": null},
             })).unwrap(),
         )?;
-        fs::write(dir.join("sicro.sqlite"), b"FAKE-DATABASE-BYTES")?;
+        fs::write(dir.join(format!("{sis}sicro.sqlite")), b"FAKE-DATABASE-BYTES")?;
+        fs::write(dir.join(lau).join("laudo-1.sicrodoc"), br#"{"hello":"world"}"#)?;
         fs::write(
-            dir.join("laudos").join("laudo-1.sicrodoc"),
-            br#"{"hello":"world"}"#,
-        )?;
-        fs::write(
-            dir.join("imagens").join("originais").join("img.png"),
+            dir.join(img).join("img.png"),
             &[137, 80, 78, 71, 0xD, 0xA, 0x1A, 0xA, 1, 2, 3],
         )?;
         // Dentro das pastas puladas:
-        fs::write(dir.join("logs").join("app.log"), b"should be skipped")?;
-        fs::write(dir.join("cache").join("scratch.bin"), b"should be skipped")?;
+        fs::write(dir.join(format!("{sis}logs/app.log")), b"should be skipped")?;
+        fs::write(dir.join(format!("{sis}cache/scratch.bin")), b"should be skipped")?;
+        fs::write(dir.join(bkp).join("velho.sicrobackup"), b"should be skipped")?;
         Ok(())
+    }
+
+    fn nomes_do_zip(p: &Path) -> Vec<String> {
+        let mut archive = zip::ZipArchive::new(File::open(p).unwrap()).unwrap();
+        (0..archive.len())
+            .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
+            .collect()
     }
 
     #[test]
     fn backup_zips_workspace_and_excludes_logs_cache() {
         let tmp = TempDir::new().unwrap();
-        fake_workspace(tmp.path()).unwrap();
+        fake_workspace(tmp.path(), false).unwrap();
 
-        let artifact = create_backup(tmp.path(), Some(&tmp.path().to_path_buf().join("backups")), Some("BO-12-2026"))
+        let artifact = create_backup(tmp.path(), Some(&tmp.path().join("Exportações/Backups")), Some("BO-12-2026"))
             .expect("backup ok");
         assert!(artifact.absolute_path.is_file());
         assert!(artifact.filename.starts_with("backup_BO-12-2026_"));
         assert!(artifact.filename.ends_with(".sicrobackup"));
         assert!(artifact.size_bytes > 0);
         assert_eq!(artifact.hash_sha256.len(), 64);
-        // manifest.json + sicro.sqlite + 2 aninhados; logs e cache ficam de fora.
-        assert!(artifact.file_count >= 4, "file_count was {}", artifact.file_count);
+        // manifest.json + sicro.sqlite + 2 aninhados; logs, cache e backups ficam de fora.
+        assert_eq!(artifact.file_count, 4, "file_count was {}", artifact.file_count);
 
-        let zr = File::open(&artifact.absolute_path).unwrap();
-        let mut archive = zip::ZipArchive::new(zr).unwrap();
-        let names: Vec<String> = (0..archive.len())
-            .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
-            .collect();
-        assert!(names.contains(&"manifest.json".to_string()));
-        assert!(names.contains(&"sicro.sqlite".to_string()));
-        assert!(names.contains(&"laudos/laudo-1.sicrodoc".to_string()));
-        assert!(names.contains(&"imagens/originais/img.png".to_string()));
+        let names = nomes_do_zip(&artifact.absolute_path);
+        assert!(names.contains(&"Sistema/manifest.json".to_string()));
+        assert!(names.contains(&"Sistema/sicro.sqlite".to_string()));
+        assert!(names.contains(&"Sistema/laudos/laudo-1.sicrodoc".to_string()));
+        assert!(names.contains(&"Mídias/Imagens/img.png".to_string()));
         assert!(names.contains(&"_sicro_backup_manifest.json".to_string()));
-        assert!(!names.iter().any(|n| n.starts_with("logs/")));
-        assert!(!names.iter().any(|n| n.starts_with("cache/")));
-        assert!(!names.iter().any(|n| n.starts_with("backups/")));
+        assert!(!names.iter().any(|n| n.contains("logs/")));
+        assert!(!names.iter().any(|n| n.contains("cache/")));
+        assert!(!names.iter().any(|n| n.contains("Backups/")));
+    }
+
+    #[test]
+    fn backup_de_caso_antigo_tambem_pula_cache_e_logs() {
+        let tmp = TempDir::new().unwrap();
+        fake_workspace(tmp.path(), true).unwrap();
+        let a = create_backup(tmp.path(), Some(&tmp.path().join("backups")), None).unwrap();
+        let names = nomes_do_zip(&a.absolute_path);
+        assert!(names.contains(&"manifest.json".to_string()));
+        assert!(names.contains(&"imagens/originais/img.png".to_string()));
+        assert!(!names.iter().any(|n| n.starts_with("logs/") || n.starts_with("cache/") || n.starts_with("backups/")));
     }
 
     #[test]
     fn backup_filename_falls_back_when_no_hint() {
         let tmp = TempDir::new().unwrap();
-        fake_workspace(tmp.path()).unwrap();
+        fake_workspace(tmp.path(), false).unwrap();
         let a = create_backup(tmp.path(), None, None).unwrap();
         assert!(a.filename.starts_with("backup_ocorrencia_"));
     }

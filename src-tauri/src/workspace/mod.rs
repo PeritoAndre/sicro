@@ -1,12 +1,13 @@
-//! Workspace = uma pasta `.sicro` com `manifest.json`, `sicro.sqlite` e as
-//! subpastas por módulo (dossie, laudos, croquis, videos, imagens, midias,
-//! exports, logs, cache).
+//! Workspace = uma pasta `.sicro` com três pastas: `Exportações/` (produtos
+//! finais), `Mídias/` (o que o programa recebe) e `Sistema/` (manifest.json,
+//! sicro.sqlite e o resto). Caminhos em `paths.rs`.
 
 pub mod backup;
 pub mod create;
 pub mod global_backup;
 pub mod health;
 pub mod manifest;
+pub mod migracao;
 pub mod open;
 pub mod paths;
 pub mod validation;

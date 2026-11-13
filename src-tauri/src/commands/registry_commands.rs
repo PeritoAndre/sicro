@@ -14,7 +14,8 @@ use crate::models::{
     WorkspaceIntegrityReport,
 };
 use crate::registry;
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::sqlite_path;
 
 /// Registro consolidado, sem verificação de disco: barato para chamar a cada render.
 #[tauri::command]
@@ -23,7 +24,7 @@ pub async fn list_evidence_registry_items(
 ) -> Result<Vec<EvidenceRegistryItem>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     registry::build_registry(&conn, &manifest.occurrence_id)
 }
@@ -35,7 +36,7 @@ pub async fn get_evidence_registry_summary(
 ) -> Result<RegistrySummary> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let report = registry::verify_workspace(
         &conn,
@@ -54,7 +55,7 @@ pub async fn verify_workspace_integrity(
 ) -> Result<WorkspaceIntegrityReport> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     registry::verify_workspace(
         &conn,
@@ -73,7 +74,7 @@ pub async fn list_evidence_links(
     use crate::database::repositories::evidence_link_repo;
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     evidence_link_repo::list_for_occurrence(&conn, &manifest.occurrence_id)
 }
 
@@ -121,7 +122,7 @@ pub async fn generate_workspace_integrity_report(
 ) -> Result<IntegrityReportArtifact> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let report = registry::verify_workspace(
         &conn,
@@ -137,7 +138,7 @@ pub async fn generate_workspace_integrity_report(
     if let Some(parent) = abs.parent() {
         std::fs::create_dir_all(parent).map_err(|e| {
             SicroError::Filesystem(format!(
-                "cannot create reports/ directory: {e}"
+                "cannot create reports directory: {e}"
             ))
         })?;
     }

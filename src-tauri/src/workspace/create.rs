@@ -3,43 +3,15 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use chrono::Utc;
+use chrono::{Local, Utc};
 use uuid::Uuid;
 
 use crate::database::{connection::open_connection, migrations::run_migrations};
 use crate::database::repositories::occurrence_repo;
 use crate::error::{Result, SicroError};
 use crate::models::{NewOccurrenceInput, Occurrence, OccurrenceStatus};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
-use crate::workspace::paths::{derive_workspace_name, unique_workspace_path};
-
-/// Pastas que todo workspace tem.
-const SUBDIRS: &[&str] = &[
-    "dossie",
-    "laudos",
-    "laudos/assets",
-    "croquis",
-    "croquis/exports",
-    "videos",
-    "videos/media",
-    "videos/storyboards",
-    "videos/frames",
-    "imagens",
-    "imagens/originais",
-    "imagens/tratadas",
-    "imagens/anotadas",
-    "midias",
-    "midias/anexos",
-    "exports",
-    "exports/docx",
-    "exports/pdf",
-    "exports/png",
-    "exports/pacotes",
-    "logs",
-    "cache",
-    "cache/thumbnails",
-    "cache/previews",
-];
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{PASTAS_DO_CASO, derive_workspace_name, sqlite_path, unique_workspace_path};
 
 pub struct CreatedWorkspace {
     pub path: PathBuf,
@@ -74,21 +46,16 @@ pub fn create_workspace(
 
     let workspace_id = Uuid::new_v4();
     let occurrence_id = workspace_id; // 1 workspace = 1 ocorrência: mesmo UUID.
-    let short_id = workspace_id.to_string()[..8].to_string();
-    let base_name = derive_workspace_name(
-        input.titulo.as_deref(),
-        input.numero_bo.as_deref(),
-        input.municipio.as_deref(),
-        &short_id,
-    );
+    // Só a pasta ganha o nome do caso; o id interno segue sendo o UUID.
+    let base_name = derive_workspace_name(input.titulo.as_deref(), Local::now().date_naive());
     let workspace_path = unique_workspace_path(&parent, &base_name)?;
 
     fs::create_dir_all(&workspace_path)?;
-    for sub in SUBDIRS {
+    for sub in PASTAS_DO_CASO {
         fs::create_dir_all(workspace_path.join(sub))?;
     }
 
-    let db_path = workspace_path.join(SQLITE_FILENAME);
+    let db_path = sqlite_path(&workspace_path);
     let mut conn = open_connection(&db_path)?;
     run_migrations(&mut conn)?;
 
@@ -153,4 +120,33 @@ pub fn create_workspace(
         manifest,
         occurrence,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn entrada(titulo: Option<&str>) -> NewOccurrenceInput {
+        NewOccurrenceInput {
+            titulo: titulo.map(str::to_string),
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn pasta_leva_o_nome_do_caso_e_o_layout_novo() {
+        let tmp = tempfile::tempdir().unwrap();
+        let a = create_workspace(entrada(Some("Acidente BR-156")), tmp.path()).unwrap();
+        let b = create_workspace(entrada(Some("Acidente BR-156")), tmp.path()).unwrap();
+        let c = create_workspace(entrada(None), tmp.path()).unwrap();
+        let nome = |p: &Path| p.file_name().unwrap().to_string_lossy().into_owned();
+        assert_eq!(nome(&a.path), "Acidente BR-156.sicro");
+        assert_eq!(nome(&b.path), "Acidente BR-156.2.sicro");
+        assert!(nome(&c.path).starts_with("Caso de "), "{}", nome(&c.path));
+        assert!(a.path.join("Sistema/manifest.json").is_file());
+        assert!(a.path.join("Sistema/sicro.sqlite").is_file());
+        assert!(a.path.join("Exportações/Croquis").is_dir());
+        assert!(a.path.join("Mídias/Vídeos").is_dir());
+        assert!(!a.path.join("manifest.json").exists());
+    }
 }

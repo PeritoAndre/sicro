@@ -19,7 +19,7 @@ use sicro_desktop_lib::database::connection::open_connection;
 use sicro_desktop_lib::database::repositories::dossie_repo;
 use sicro_desktop_lib::importer::{rehydrate_workspace, run_import, ImportRegistry};
 use sicro_desktop_lib::models::ImportSicroappInput;
-use sicro_desktop_lib::workspace::manifest::SQLITE_FILENAME;
+use sicro_desktop_lib::workspace::paths::sqlite_path;
 
 const FAKE_JPEG: &[u8] = b"\xff\xd8\xff\xe0FAKE\xff\xd9";
 
@@ -201,7 +201,7 @@ fn build_fixture(target: &Path) -> PathBuf {
 }
 
 fn open_workspace_db(workspace_path: &Path) -> Connection {
-    open_connection(&workspace_path.join(SQLITE_FILENAME)).expect("open sqlite")
+    open_connection(&sqlite_path(workspace_path)).expect("open sqlite")
 }
 
 #[test]

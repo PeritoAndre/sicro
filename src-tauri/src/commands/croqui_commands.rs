@@ -17,12 +17,9 @@ use crate::image_processing::lens_correction::{
     apply_radial_correction, coefficients_for_intensity, crop as crop_image, CropRect,
 };
 use crate::models::{Croqui, CroquiDoc, CroquiStatus, ExportCroquiPngInput, NewCroquiInput};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{REL_CROQUIS_BACKGROUNDS, REL_CROQUIS_DOCS, REL_CROQUIS_EXPORTS, REL_CROQUIS_THUMBS, dir_croquis_backgrounds, dir_croquis_exports, dir_croquis_thumbs, resolver_relativo, sqlite_path};
 
-const CROQUIS_SUBDIR: &str = "croquis";
-const CROQUIS_EXPORT_SUBDIR: &str = "croquis/exports";
-const CROQUIS_BACKGROUNDS_SUBDIR: &str = "croquis/backgrounds";
-const CROQUIS_THUMBS_SUBDIR: &str = "croquis/thumbs";
 const CURRENT_SCHEMA_VERSION: &str = "0.1";
 
 #[tauri::command]
@@ -33,7 +30,7 @@ pub async fn create_croqui(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let now = Utc::now();
@@ -48,15 +45,15 @@ pub async fn create_croqui(
     };
     let (relative_path, default_title) = match kind {
         "corporal" => (
-            format!("{CROQUIS_SUBDIR}/corpo_{}.sicrocorpo", id),
+            format!("{REL_CROQUIS_DOCS}/corpo_{}.sicrocorpo", id),
             format!("Croqui corporal {}", &id.to_string()[..8]),
         ),
         "planta" => (
-            format!("{CROQUIS_SUBDIR}/planta_{}.sicroplanta", id),
+            format!("{REL_CROQUIS_DOCS}/planta_{}.sicroplanta", id),
             format!("Croqui de planta {}", &id.to_string()[..8]),
         ),
         _ => (
-            format!("{CROQUIS_SUBDIR}/croqui_{}.sicrocroqui", id),
+            format!("{REL_CROQUIS_DOCS}/croqui_{}.sicrocroqui", id),
             format!("Croqui {}", &id.to_string()[..8]),
         ),
     };
@@ -99,7 +96,7 @@ pub async fn create_croqui(
         "planta" => empty_planta_envelope(&croqui),
         _ => empty_envelope(&croqui),
     };
-    let target = ws.join(&relative_path);
+    let target = resolver_relativo(&ws, &relative_path);
     write_doc(&target, &envelope)?;
 
     Ok(CroquiDoc {
@@ -113,7 +110,7 @@ pub async fn list_croquis(workspace_path: String) -> Result<Vec<Croqui>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     croqui_repo::list_by_occurrence(&conn, &manifest.occurrence_id)
@@ -125,13 +122,13 @@ pub async fn read_croqui(workspace_path: String, croqui_id: String) -> Result<Cr
     let id = Uuid::parse_str(&croqui_id)
         .map_err(|e| SicroError::Validation(format!("invalid croqui id: {e}")))?;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let croqui = croqui_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("croqui {} not found", id)))?;
 
-    let target = ws.join(&croqui.relative_path);
+    let target = resolver_relativo(&ws, &croqui.relative_path);
     let bytes = std::fs::read(&target).map_err(|e| {
         SicroError::Workspace(format!(
             "could not read croqui at {}: {}",
@@ -154,13 +151,13 @@ pub async fn save_croqui(
     let id = Uuid::parse_str(&croqui_id)
         .map_err(|e| SicroError::Validation(format!("invalid croqui id: {e}")))?;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let mut croqui = croqui_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("croqui {} not found", id)))?;
 
-    let target = ws.join(&croqui.relative_path);
+    let target = resolver_relativo(&ws, &croqui.relative_path);
     write_doc(&target, &doc)?;
 
     let now = Utc::now();
@@ -191,7 +188,7 @@ pub async fn delete_croqui(
     let id = Uuid::parse_str(&croqui_id)
         .map_err(|e| SicroError::Validation(format!("invalid croqui id: {e}")))?;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let croqui = croqui_repo::find_by_id(&conn, &id)?
@@ -209,7 +206,7 @@ pub async fn delete_croqui(
 
     croqui_repo::delete(&conn, &id)?;
 
-    let target = ws.join(&croqui.relative_path);
+    let target = resolver_relativo(&ws, &croqui.relative_path);
     match std::fs::remove_file(&target) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -233,7 +230,7 @@ pub async fn export_croqui_png(
     let id = Uuid::parse_str(&croqui_id)
         .map_err(|e| SicroError::Validation(format!("invalid croqui id: {e}")))?;
 
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let croqui = croqui_repo::find_by_id(&conn, &id)?
@@ -254,7 +251,7 @@ pub async fn export_croqui_png(
         ));
     }
 
-    let exports_dir = ws.join(CROQUIS_EXPORT_SUBDIR);
+    let exports_dir = dir_croquis_exports(&ws);
     std::fs::create_dir_all(&exports_dir).map_err(|e| {
         SicroError::Filesystem(format!(
             "cannot create exports dir {}: {}",
@@ -268,7 +265,7 @@ pub async fn export_croqui_png(
     let target = exports_dir.join(&filename);
     atomic_write_bytes(&target, &bytes)?;
 
-    let relative_path = format!("{CROQUIS_EXPORT_SUBDIR}/{filename}");
+    let relative_path = format!("{REL_CROQUIS_EXPORTS}/{filename}");
     let now = Utc::now();
     croqui_repo::touch(
         &conn,
@@ -388,7 +385,7 @@ pub async fn import_drone_image(
     let png_filename = format!("drone_corrigido_{ts}.png");
     let sidecar_filename = format!("drone_corrigido_{ts}.sidecar.json");
 
-    let backgrounds_dir = ws.join(CROQUIS_BACKGROUNDS_SUBDIR);
+    let backgrounds_dir = dir_croquis_backgrounds(&ws);
     std::fs::create_dir_all(&backgrounds_dir).map_err(|e| {
         SicroError::Filesystem(format!(
             "cannot create backgrounds dir {}: {}",
@@ -415,7 +412,7 @@ pub async fn import_drone_image(
         "original_relative_path": original_relative,
         "original_hash_sha256": original_hash,
         "output_relative_path": format!(
-            "{CROQUIS_BACKGROUNDS_SUBDIR}/{png_filename}"
+            "{REL_CROQUIS_BACKGROUNDS}/{png_filename}"
         ),
         "output_hash_sha256": output_hash,
         "output_width": out_w,
@@ -442,7 +439,7 @@ pub async fn import_drone_image(
 
     if let Some(occ_id) = &input.occurrence_id {
         if let Ok(occ_uuid) = Uuid::parse_str(occ_id) {
-            let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+            let conn = open_connection(&sqlite_path(&ws))?;
             occurrence_repo::record_audit(
                 &conn,
                 Some(&occ_uuid),
@@ -457,10 +454,10 @@ pub async fn import_drone_image(
 
     Ok(DroneImportResult {
         output_relative_path: format!(
-            "{CROQUIS_BACKGROUNDS_SUBDIR}/{png_filename}"
+            "{REL_CROQUIS_BACKGROUNDS}/{png_filename}"
         ),
         sidecar_relative_path: format!(
-            "{CROQUIS_BACKGROUNDS_SUBDIR}/{sidecar_filename}"
+            "{REL_CROQUIS_BACKGROUNDS}/{sidecar_filename}"
         ),
         output_width: out_w,
         output_height: out_h,
@@ -741,11 +738,11 @@ pub async fn save_croqui_background(
         .collect();
     let ts = Utc::now().format("%Y%m%d_%H%M%S").to_string();
     let filename = format!("mapa_{slug}_{ts}.png");
-    let dir = ws.join(CROQUIS_BACKGROUNDS_SUBDIR);
+    let dir = dir_croquis_backgrounds(&ws);
     std::fs::create_dir_all(&dir)
         .map_err(|e| SicroError::Filesystem(format!("cannot create backgrounds dir {}: {}", dir.display(), e)))?;
     atomic_write_bytes(&dir.join(&filename), &bytes)?;
-    Ok(format!("{CROQUIS_BACKGROUNDS_SUBDIR}/{filename}"))
+    Ok(format!("{REL_CROQUIS_BACKGROUNDS}/{filename}"))
 }
 
 
@@ -762,9 +759,9 @@ pub async fn save_croqui_thumbnail(
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(png_base64.as_bytes())
         .map_err(|e| SicroError::Validation(format!("PNG da miniatura inválido: {e}")))?;
-    let dir = ws.join(CROQUIS_THUMBS_SUBDIR);
+    let dir = dir_croquis_thumbs(&ws);
     std::fs::create_dir_all(&dir)
         .map_err(|e| SicroError::Filesystem(format!("cannot create thumbs dir {}: {}", dir.display(), e)))?;
     atomic_write_bytes(&dir.join(format!("{id}.png")), &bytes)?;
-    Ok(format!("{CROQUIS_THUMBS_SUBDIR}/{id}.png"))
+    Ok(format!("{REL_CROQUIS_THUMBS}/{id}.png"))
 }

@@ -5,6 +5,7 @@
 use std::path::{Path, PathBuf};
 
 use crate::error::{Result, SicroError};
+use crate::workspace::paths::resolver_relativo;
 
 /// Resultado de resolver uma referência relativa ao workspace.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -77,7 +78,7 @@ pub fn resolve_workspace_relative(
     relative: &str,
 ) -> Result<PathBuf> {
     let rel = sanitize_relative_path(relative)?;
-    Ok(workspace_root.join(rel))
+    Ok(resolver_relativo(workspace_root, rel.to_string_lossy().as_ref()))
 }
 
 /// Existe? Um `metadata` só — a verificação leve itera milhares de linhas.
@@ -100,7 +101,7 @@ pub fn probe_workspace_relative(
             };
         }
     };
-    let abs = workspace_root.join(&rel);
+    let abs = resolver_relativo(workspace_root, rel.to_string_lossy().as_ref());
     match std::fs::metadata(&abs) {
         Ok(meta) if meta.is_file() => RelativeResolution::Ok {
             absolute: abs,

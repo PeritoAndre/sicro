@@ -15,6 +15,7 @@ use crate::models::{
     WorkspaceIntegrityReport,
 };
 use crate::workspace::manifest::APP_VERSION;
+use crate::workspace::paths::resolver_relativo;
 
 use super::aggregator::{build_registry, build_summary};
 use super::broken_links::detect_broken_laudo_links;
@@ -117,7 +118,7 @@ pub fn verify_one(
         if let (Some(expected_hash), Some(rel)) =
             (item.hash_sha256.as_ref(), item.relative_path.as_ref())
         {
-            let abs = workspace_root.join(rel.replace(
+            let abs = resolver_relativo(workspace_root, rel.replace(
                 '/',
                 std::path::MAIN_SEPARATOR.encode_utf8(&mut [0; 4]),
             ));

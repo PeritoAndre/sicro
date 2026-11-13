@@ -42,9 +42,20 @@ Antes de entrar nos módulos, três ideias explicam **como o SICRO pensa**.
 
 ### 1.1 Ocorrência = workspace `.sicro`
 
-Cada caso é uma **pasta `.sicro`** autocontida no seu computador. Dentro dela
-fica tudo do caso: o banco de dados (SQLite), o manifesto, e subpastas para
-croquis, vídeos, áudios, imagens, exportações, backups e relatórios.
+Cada caso é uma **pasta `.sicro`** autocontida no seu computador. O nome da
+pasta é o nome do caso (`Acidente BR-156.sicro`; sem nome,
+`Caso de 13-11-2026.sicro`; repetido ganha `.2`, `.3`…). Renomear o caso depois
+não renomeia a pasta. Dentro dela há só três pastas:
+
+- **`Exportações/`**: o que o SICRO produziu (PNG dos croquis, vídeos de
+  montagem e trechos, imagens tratadas, laudos, relatórios e backups).
+- **`Mídias/`**: o que você trouxe (vídeos, imagens, áudios e anexos originais).
+- **`Sistema/`**: o resto (banco SQLite, manifesto, croquis, dossiê, cache e logs).
+  Não mexa aqui.
+
+Casos criados em versões antigas (com `cache`, `croquis`, `videos`… soltos na
+raiz) são reorganizados sozinhos na primeira vez que são abertos; nada é apagado.
+Backups antigos também são reorganizados ao restaurar.
 
 - **Autocontido:** mover a pasta `.sicro` move o caso inteiro.
 - **A verdade está no disco:** o app é só a janela que lê e edita esses arquivos.
@@ -464,7 +475,7 @@ vídeo, então vídeo e áudio apontam para o mesmo momento.
 - **Vídeos do caso em abas:** no topo da análise fica uma aba por vídeo (miniatura,
   nome e duração; a do vídeo na tela fica destacada). Um clique troca de vídeo e
   cada um volta ao instante em que estava; **Ctrl + PgUp / PgDn** alternam pelo
-  teclado. **+ Adicionar** (ou **Ctrl + O**) registra um ou vários vídeos sem
+  teclado. **+ Adicionar** (ou **Ctrl + Shift + O**) registra um ou vários vídeos sem
   sair da análise e já abre o novo. Botão direito numa aba → **Comparar lado a
   lado com o atual**. A aba **Áudios** sempre leva ao áudio do vídeo que está na
   tela (7.1).
@@ -914,7 +925,7 @@ ilusões:
 | Termo / extensão | O que é |
 |---|---|
 | **Ocorrência / workspace** | O caso, guardado numa pasta `.sicro` autocontida. |
-| **`.sicro`** | A pasta do caso (banco, manifesto e subpastas). |
+| **`.sicro`** | A pasta do caso (`Exportações`, `Mídias` e `Sistema`). |
 | **`.sicroapp`** | Pacote do SICRO Operacional (campo) para importar no Desktop. |
 | **`.sicrobackup`** | Backup compactado (ZIP) de um caso inteiro, com hash. |
 | **`.sicrocroqui`** | Croqui viário. |

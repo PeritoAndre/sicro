@@ -97,6 +97,7 @@ import {
   translateObjectPatch,
 } from "./bounds";
 import type { EditorState, Tool } from "./useEditorState";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 export interface CanvasStageHandle {
   /**
@@ -3604,12 +3605,11 @@ function resolveAssetPath(workspacePath: string, src: string): string | null {
   // Caminho absoluto vai direto; relativo é juntado ao workspace. Sempre
   // passa pelo asset protocol do Tauri.
   try {
-    const sep = workspacePath.includes("\\") ? "\\" : "/";
     const looksAbsolute =
       /^([a-zA-Z]:)?[\\/]/.test(src) || src.startsWith("file://");
     const abs = looksAbsolute
       ? src.replace(/^file:\/\//, "")
-      : `${workspacePath}${sep}${src.replace(/\//g, sep)}`;
+      : caminhoDoCaso(workspacePath, src);
     return convertFileSrc(abs);
   } catch {
     return null;

@@ -13,8 +13,10 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::error::{Result, SicroError};
-use crate::workspace::backup::{create_backup, SKIP_DIRS};
+use crate::workspace::backup::{create_backup, rel_de};
+use crate::workspace::migracao::migrar_layout_antigo;
 use crate::workspace::manifest::{Manifest, APP_VERSION};
+use crate::workspace::paths::fora_do_backup;
 
 const INDEX_FILENAME: &str = "sicro-backup-index.json";
 /// Os `.sicrobackup` ficam em `casos/`; o índice fica na raiz do conjunto.
@@ -124,13 +126,9 @@ fn collect_fingerprint(root: &Path, dir: &Path, out: &mut Vec<String>) -> Result
             .file_type()
             .map_err(|e| SicroError::Filesystem(format!("file_type error: {e}")))?;
 
-        // Mesma regra de skip do zip, só no nível raiz.
-        if ft.is_dir() && dir == root {
-            if let Some(name) = path.file_name().and_then(|s| s.to_str()) {
-                if SKIP_DIRS.iter().any(|d| *d == name) || name == "backups" {
-                    continue;
-                }
-            }
+        // Mesma regra de skip do zip.
+        if ft.is_dir() && fora_do_backup(&rel_de(root, &path)) {
+            continue;
         }
 
         if ft.is_dir() {
@@ -606,7 +604,11 @@ pub fn run_restore<F: FnMut(RestoreProgress)>(
             continue;
         }
 
-        match extract_sicrobackup(zip_path, &target) {
+        // Backup antigo (layout 1): reorganiza depois de extrair.
+        match extract_sicrobackup(zip_path, &target).and_then(|fc| {
+            migrar_layout_antigo(&target)?;
+            Ok(fc)
+        }) {
             Ok(fc) => {
                 n_ok += 1;
                 cases.push(RestoredCase {
@@ -663,10 +665,20 @@ mod tests {
     use tempfile::TempDir;
 
     fn fake_workspace(dir: &Path, wid: &str, oid: &str) {
-        fs::create_dir_all(dir.join("imagens").join("originais")).unwrap();
-        fs::create_dir_all(dir.join("logs")).unwrap();
+        fake_workspace_layout(dir, wid, oid, false);
+    }
+
+    /// `legacy` = layout antigo (manifest/sqlite/imagens/logs na raiz).
+    fn fake_workspace_layout(dir: &Path, wid: &str, oid: &str, legacy: bool) {
+        let (sis, img) = if legacy {
+            ("", "imagens/originais")
+        } else {
+            ("Sistema/", "Mídias/Imagens")
+        };
+        fs::create_dir_all(dir.join(img)).unwrap();
+        fs::create_dir_all(dir.join(format!("{sis}logs"))).unwrap();
         fs::write(
-            dir.join("manifest.json"),
+            dir.join(format!("{sis}manifest.json")),
             serde_json::to_string_pretty(&serde_json::json!({
                 "format": "sicro-workspace",
                 "version": "2.0.0",
@@ -681,13 +693,9 @@ mod tests {
             .unwrap(),
         )
         .unwrap();
-        fs::write(dir.join("sicro.sqlite"), b"DB-BYTES").unwrap();
-        fs::write(
-            dir.join("imagens").join("originais").join("a.png"),
-            &[1, 2, 3, 4],
-        )
-        .unwrap();
-        fs::write(dir.join("logs").join("app.log"), b"ephemeral").unwrap();
+        fs::write(dir.join(format!("{sis}sicro.sqlite")), b"DB-BYTES").unwrap();
+        fs::write(dir.join(img).join("a.png"), &[1, 2, 3, 4]).unwrap();
+        fs::write(dir.join(format!("{sis}logs/app.log")), b"ephemeral").unwrap();
     }
 
     fn no_progress(_p: GlobalBackupProgress) {}
@@ -699,7 +707,7 @@ mod tests {
         fake_workspace(&ws, "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb");
         let fp1 = workspace_fingerprint(&ws).unwrap();
         // Mexer só em logs/ não muda o fingerprint.
-        fs::write(ws.join("logs").join("app.log"), b"different ephemeral content").unwrap();
+        fs::write(ws.join("Sistema/logs/app.log"), b"different ephemeral content").unwrap();
         let fp2 = workspace_fingerprint(&ws).unwrap();
         assert_eq!(fp1, fp2, "logs/ não deve afetar o fingerprint");
         assert_eq!(fp1.len(), 64);
@@ -730,7 +738,7 @@ mod tests {
         assert_eq!(r2.skipped, 1, "caso inalterado deve ser pulado");
 
         // Mudar um arquivo de conteúdo → re-backup.
-        fs::write(ws.join("imagens").join("originais").join("a.png"), &[9, 9, 9, 9, 9]).unwrap();
+        fs::write(ws.join("Mídias/Imagens/a.png"), &[9, 9, 9, 9, 9]).unwrap();
         let r3 = run_global_backup(&cases, &dest, no_progress).unwrap();
         assert_eq!(r3.backed_up, 1, "mudança real deve re-backupiar");
         assert_eq!(r3.skipped, 0);
@@ -781,27 +789,40 @@ mod tests {
         assert_eq!(rep.errors, 0);
 
         let restored = restore_parent.join("BO-99_Macapa_abcd1234.sicro");
-        assert!(
-            restored.join("manifest.json").is_file(),
-            "manifesto restaurado"
-        );
-        assert!(
-            restored
-                .join("imagens")
-                .join("originais")
-                .join("a.png")
-                .is_file(),
-            "asset restaurado"
-        );
-        // logs/ é pulado no backup → não aparece no restaurado.
-        assert!(
-            !restored.join("logs").join("app.log").is_file(),
-            "logs/ não entra no backup"
-        );
+        assert!(restored.join("Sistema/manifest.json").is_file(), "manifesto restaurado");
+        assert!(restored.join("Mídias/Imagens/a.png").is_file(), "asset restaurado");
+        // logs é pulado no backup → não aparece no restaurado.
+        assert!(!restored.join("Sistema/logs/app.log").is_file(), "logs não entra no backup");
 
         // Sem overwrite, restaurar de novo PULA (preserva o que já existe).
         let rep2 = run_restore(&dest, &restore_parent, false, |_p| {}).unwrap();
         assert_eq!(rep2.skipped, 1);
         assert_eq!(rep2.restored, 0);
+    }
+
+    #[test]
+    fn restore_de_backup_antigo_migra_o_layout() {
+        let tmp = TempDir::new().unwrap();
+        let ws = tmp.path().join("a4d41bc5.sicro");
+        fake_workspace_layout(
+            &ws,
+            "77777777-7777-4777-7777-777777777777",
+            "88888888-8888-4888-8888-888888888888",
+            true,
+        );
+        let dest = tmp.path().join("backup-set");
+        let cases = vec![GlobalCaseInput {
+            workspace_path: ws.to_string_lossy().into_owned(),
+            label: "Antigo".into(),
+        }];
+        assert_eq!(run_global_backup(&cases, &dest, no_progress).unwrap().backed_up, 1);
+
+        let restore_parent = tmp.path().join("restaurado");
+        let rep = run_restore(&dest, &restore_parent, false, |_p| {}).unwrap();
+        assert_eq!((rep.restored, rep.errors), (1, 0));
+        let restored = restore_parent.join("a4d41bc5.sicro");
+        assert!(restored.join("Sistema/manifest.json").is_file());
+        assert!(restored.join("Mídias/Imagens/a.png").is_file());
+        assert!(!restored.join("manifest.json").exists());
     }
 }

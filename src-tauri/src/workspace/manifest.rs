@@ -8,7 +8,9 @@ use uuid::Uuid;
 
 use crate::error::{Result, SicroError};
 use crate::filesystem::atomic_write_bytes;
+use crate::workspace::paths::{manifest_path, LAYOUT_ATUAL};
 
+/// Nomes simples dos dois arquivos; o lugar deles é `paths::{manifest_path, sqlite_path}`.
 pub const MANIFEST_FILENAME: &str = "manifest.json";
 pub const SQLITE_FILENAME: &str = "sicro.sqlite";
 pub const FORMAT_TAG: &str = "sicro-workspace";
@@ -49,6 +51,9 @@ pub struct Manifest {
     /// Vazio → `DEFAULT_SIGDOCS_URL`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sigdocs_url: Option<String>,
+    /// 2 = Exportações/Mídias/Sistema. Ausente = layout antigo.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub layout: Option<u32>,
 }
 
 impl Manifest {
@@ -65,6 +70,7 @@ impl Manifest {
             database: SQLITE_FILENAME.to_string(),
             integrity: Integrity::default(),
             sigdocs_url: None,
+            layout: Some(LAYOUT_ATUAL),
         }
     }
 
@@ -76,7 +82,7 @@ impl Manifest {
     }
 
     pub fn read(workspace_dir: &Path) -> Result<Self> {
-        let path = workspace_dir.join(MANIFEST_FILENAME);
+        let path = manifest_path(workspace_dir);
         let bytes = std::fs::read(&path).map_err(|e| {
             SicroError::Workspace(format!(
                 "failed to read {} at {}: {}",
@@ -97,7 +103,7 @@ impl Manifest {
     }
 
     pub fn write(&self, workspace_dir: &Path) -> Result<()> {
-        let path = workspace_dir.join(MANIFEST_FILENAME);
+        let path = manifest_path(workspace_dir);
         let bytes = serde_json::to_vec_pretty(self)?;
         atomic_write_bytes(&path, &bytes)?;
         Ok(())

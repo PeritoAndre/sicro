@@ -31,6 +31,8 @@ pub struct PeritoProfile {
     pub photo_path: String, // foto do perito (avatar)
     #[serde(default)]
     pub municipio_atuacao: String, // município de atuação/lotação
+    #[serde(default)]
+    pub uf: String,
 }
 
 /// Marca institucional padrão — alimenta o cabeçalho dos laudos.

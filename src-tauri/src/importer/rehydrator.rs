@@ -7,6 +7,7 @@ use rusqlite::Connection;
 use serde_json::Value;
 use uuid::Uuid;
 
+use crate::workspace::paths::dir_imports;
 use crate::database::repositories::import_repo;
 use crate::error::{Result, SicroError};
 use crate::models::RehydrateOutcome;
@@ -31,8 +32,7 @@ pub fn rehydrate_workspace(
         None => return Ok(RehydrateOutcome::default()),
     };
 
-    let staged_pkg = workspace_path
-        .join("imports")
+    let staged_pkg = dir_imports(workspace_path)
         .join(import.id.to_string())
         .join("original_package.sicroapp");
     if !staged_pkg.is_file() {

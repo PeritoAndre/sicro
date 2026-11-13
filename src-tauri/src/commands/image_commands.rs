@@ -25,11 +25,9 @@ use crate::models::{
     ImageAnalysis, ImageAssetBytes, ImageExport, ImageHistogram, ImageMetadata,
     ImageOperationLog, ImageSourceKind, ImportLocalImageInput, MaskSpec,
 };
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{REL_IMAGENS_ANALISES, REL_IMAGENS_CAMADAS, REL_IMAGENS_ORIGINAIS, REL_IMAGENS_RELATORIOS, resolver_relativo, sqlite_path};
 
-const ANALYSES_DIR: &str = "imagens/analises";
-const ORIGINALS_DIR: &str = "imagens/originais";
-const CAMADAS_DIR: &str = "imagens/camadas";
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct SaveImageAnalysisInput {
@@ -47,7 +45,7 @@ pub async fn create_image_analysis_from_evidence(
 ) -> Result<ImageAnalysis> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let abs_src = resolve_workspace_relative(&ws, &input.original_relative_path)?;
@@ -63,7 +61,7 @@ pub async fn create_image_analysis_from_evidence(
     let id = Uuid::new_v4();
     let rel_doc = format!(
         "{}/imagem_{}.sicroimage",
-        ANALYSES_DIR,
+        REL_IMAGENS_ANALISES,
         &id.to_string()[..8],
     );
     write_initial_sicroimage(&ws, &rel_doc, &id, &manifest.occurrence_id, &input, &meta_metadata)?;
@@ -116,7 +114,7 @@ pub async fn create_image_analysis_from_file(
 ) -> Result<ImageAnalysis> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let src = PathBuf::from(&input.source_path);
@@ -145,7 +143,7 @@ pub async fn create_image_analysis_from_file(
         .unwrap_or_else(|| "imagem".into());
     let rel_dest = format!(
         "{}/{}__{}.{}",
-        ORIGINALS_DIR,
+        REL_IMAGENS_ORIGINAIS,
         basename,
         &file_id.to_string()[..8],
         extension,
@@ -180,7 +178,7 @@ pub async fn create_image_analysis_from_file(
     let id = Uuid::new_v4();
     let rel_doc = format!(
         "{}/imagem_{}.sicroimage",
-        ANALYSES_DIR,
+        REL_IMAGENS_ANALISES,
         &id.to_string()[..8],
     );
     write_initial_sicroimage(
@@ -238,7 +236,7 @@ pub async fn list_image_analyses(
 ) -> Result<Vec<ImageAnalysis>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     image_analysis_repo::list_by_occurrence(&conn, &manifest.occurrence_id)
 }
 
@@ -257,7 +255,7 @@ pub async fn read_image_analysis(
     let _ = Manifest::read(&ws)?;
     let id = Uuid::parse_str(&analysis_id)
         .map_err(|e| SicroError::Validation(format!("analysis_id inválido: {e}")))?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     let analysis = image_analysis_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("análise {} não encontrada", id)))?;
     let abs_doc = resolve_workspace_relative(&ws, &analysis.analysis_relative_path)?;
@@ -283,7 +281,7 @@ pub async fn save_image_analysis(
     let _ = Manifest::read(&ws)?;
     let id = Uuid::parse_str(&analysis_id)
         .map_err(|e| SicroError::Validation(format!("analysis_id inválido: {e}")))?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     let mut analysis = image_analysis_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("análise {} não encontrada", id)))?;
 
@@ -336,7 +334,7 @@ pub async fn export_image_derivative(
     let _ = Manifest::read(&ws)?;
     let id = Uuid::parse_str(&analysis_id)
         .map_err(|e| SicroError::Validation(format!("analysis_id inválido: {e}")))?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let analysis = image_analysis_repo::find_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation(format!("análise {} não encontrada", id)))?;
@@ -401,7 +399,7 @@ pub async fn read_image_asset(
     let ws = PathBuf::from(&workspace_path);
     let _ = Manifest::read(&ws)?;
     let safe = sanitize_relative_path(&relative_path)?;
-    let abs = ws.join(&safe);
+    let abs = resolver_relativo(&ws, safe.to_string_lossy());
     if !abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "asset não encontrado em {}",
@@ -465,7 +463,7 @@ pub async fn list_image_operation_logs(
     let _ = Manifest::read(&ws)?;
     let id = Uuid::parse_str(&analysis_id)
         .map_err(|e| SicroError::Validation(format!("analysis_id inválido: {e}")))?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     image_analysis_repo::list_logs_for_analysis(&conn, &id, limit.unwrap_or(200))
 }
 
@@ -774,7 +772,7 @@ pub async fn copy_region_to_layer(
     } else {
         stem
     };
-    let rel_out = format!("{CAMADAS_DIR}/{stem}.png");
+    let rel_out = format!("{REL_IMAGENS_CAMADAS}/{stem}.png");
     let abs_out = resolve_workspace_relative(&ws, &rel_out)?;
 
     // CPU-bound: pool de bloqueantes (ver `apply_operation_stack`).
@@ -935,7 +933,7 @@ pub async fn generate_image_analysis_report(
 ) -> Result<ImageAnalysisReportArtifact> {
     let ws = PathBuf::from(&workspace_path);
     let _manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let analysis_uuid = Uuid::parse_str(&analysis_id)
@@ -1018,7 +1016,7 @@ pub async fn generate_image_analysis_report(
 
     let stamp = chrono::Utc::now().format("%Y%m%d_%H%M%S");
     let rel = format!(
-        "imagens/relatorios/{}_{}.html",
+        "{REL_IMAGENS_RELATORIOS}/{}_{}.html",
         sanitize_slug(&analysis.title),
         stamp
     );

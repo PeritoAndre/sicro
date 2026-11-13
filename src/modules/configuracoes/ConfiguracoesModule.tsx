@@ -8,7 +8,6 @@ import { useSearchParams } from "react-router-dom";
 import {
   Archive,
   Cpu,
-  Info,
   Keyboard,
   Palette,
   Save,
@@ -17,11 +16,10 @@ import {
 } from "lucide-react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { Button } from "@components/Button/Button";
-import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { useSettingsStore } from "@stores/settingsStore";
 import { clampUiZoom } from "@core/uiZoom";
-import { MUNICIPIOS_AP } from "@domain/pericia";
+import { MUNICIPIOS_POR_UF, UFS } from "@domain/pericia";
 import { AiManagerCard } from "./AiManagerCard";
 import { GlobalBackupCard } from "./GlobalBackupCard";
 import type {
@@ -149,8 +147,7 @@ type CatId =
   | "aparencia"
   | "backup"
   | "iaocr"
-  | "atalhos"
-  | "diagnostico";
+  | "atalhos";
 
 const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "perfil", label: "Perfil", sub: "Dados pessoais e profissionais", Icon: User },
@@ -158,7 +155,6 @@ const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "backup", label: "Backup geral", sub: "Cópia de todos os casos", Icon: Archive },
   { id: "iaocr", label: "IA (local)", sub: "Degravação, locutores e pessoas", Icon: Cpu },
   { id: "atalhos", label: "Atalhos de teclado", sub: "Customizáveis por ação", Icon: Keyboard },
-  { id: "diagnostico", label: "Diagnóstico", sub: "Onde os dados ficam", Icon: Info },
 ];
 
 export function ConfiguracoesModule() {
@@ -176,7 +172,6 @@ export function ConfiguracoesModule() {
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const [cfgPath, setCfgPath] = useState("");
 
   useEffect(() => {
     if (!loaded) void useSettingsStore.getState().load();
@@ -186,9 +181,6 @@ export function ConfiguracoesModule() {
     setDraft(settings);
   }, [settings]);
 
-  useEffect(() => {
-    void commands.getSettingsFilePath().then(setCfgPath).catch(() => {});
-  }, []);
 
   const dirty = useMemo(
     () => JSON.stringify(draft) !== JSON.stringify(settings),
@@ -228,9 +220,6 @@ export function ConfiguracoesModule() {
           <h1>
             <Settings size={16} aria-hidden /> Configurações
           </h1>
-          <p className={styles.subtitle}>
-            Preferências do app e do perito — valem em todas as ocorrências.
-          </p>
         </div>
         <div className={styles.headActions}>
           {feedback && <span className={styles.feedback}>{feedback}</span>}
@@ -280,17 +269,12 @@ export function ConfiguracoesModule() {
             <User size={15} aria-hidden />
             <h2 className={styles.cardTitle}>Perfil</h2>
           </div>
-          <p className={styles.cardDesc}>
-            Quem você é no SICRO. O município de atuação já vem preenchido nas
-            ocorrências novas.
-          </p>
           <div className={styles.grid}>
             <Field
               label="Nome completo"
               value={draft.profile.full_name}
               onChange={(v) => setProfile({ full_name: v })}
-              placeholder="André Ricardo Barroso"
-            />
+                    />
             <Field
               label="Matrícula"
               value={draft.profile.registration}
@@ -300,7 +284,6 @@ export function ConfiguracoesModule() {
               label="Cargo"
               value={draft.profile.role}
               onChange={(v) => setProfile({ role: v })}
-              placeholder="Perito Criminal"
             />
             <Field
               label="Formação"
@@ -308,11 +291,18 @@ export function ConfiguracoesModule() {
               onChange={(v) => setProfile({ formation: v })}
             />
             <Field
-              label="Município de atuação"
+              label="Estado"
+              value={draft.profile.uf}
+              onChange={(v) => setProfile({ uf: v, municipio_atuacao: "" })}
+              options={UFS}
+              placeholder="—"
+            />
+            <Field
+              label="Município"
               value={draft.profile.municipio_atuacao}
               onChange={(v) => setProfile({ municipio_atuacao: v })}
-              options={MUNICIPIOS_AP}
-              placeholder="Selecione…"
+              options={MUNICIPIOS_POR_UF[draft.profile.uf] ?? []}
+              placeholder="—"
             />
             <Field
               wide
@@ -333,10 +323,6 @@ export function ConfiguracoesModule() {
             <Palette size={15} aria-hidden />
             <h2 className={styles.cardTitle}>Aparência</h2>
           </div>
-          <p className={styles.cardDesc}>
-            Tema, cor de destaque e tamanho da interface. As mudanças valem na
-            hora e são salvas automaticamente.
-          </p>
           <div className={styles.grid}>
             <div className={styles.field}>
               <label className={styles.label}>Tema</label>
@@ -426,39 +412,8 @@ export function ConfiguracoesModule() {
             <Keyboard size={15} aria-hidden />
             <h2 className={styles.cardTitle}>Atalhos de teclado</h2>
           </div>
-          <p className={styles.cardDesc}>
-            <strong>Todos os atalhos são customizáveis</strong>: clique numa
-            tecla e pressione a combinação que preferir (Esc cancela). Estão
-            organizados na <strong>ordem dos módulos</strong> — Croqui, Vídeo,
-            Áudio e Imagem (e a Integridade). Cada atalho vale na
-            tela do seu módulo, então a mesma tecla pode se repetir entre módulos
-            sem conflito (eles nunca estão ativos ao mesmo tempo).
-          </p>
 
           <ShortcutsEditor />
-        </section>
-          )}
-
-          {/* Diagnóstico */}
-          {activeCat === "diagnostico" && (
-        <section className={styles.card}>
-          <div className={styles.cardHead}>
-            <Info size={15} aria-hidden />
-            <h2 className={styles.cardTitle}>Diagnóstico</h2>
-          </div>
-          <p className={styles.cardDesc}>
-            Onde suas configurações ficam guardadas neste computador (o
-            "cofrinho" global, fora de qualquer ocorrência).
-          </p>
-          {cfgPath ? (
-            <div className={styles.mono}>{cfgPath}</div>
-          ) : (
-            <p className={styles.note}>—</p>
-          )}
-          <p className={styles.note}>
-            Em breve nesta seção: backup automático do trabalho e verificação de
-            dependências (FFmpeg).
-          </p>
         </section>
           )}
         </div>

@@ -111,6 +111,13 @@
   font-size: 12.5px;
   cursor: pointer;
 }
+.botaoCol {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  padding: 8px 12px; border-radius: 999px; border: 1px solid var(--sicro-divider);
+  background: transparent; color: var(--sicro-fg-muted); font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.botaoCol:hover:not(:disabled) { border-color: var(--sicro-accent); color: var(--sicro-fg); }
+.botaoCol:disabled { opacity: 0.5; cursor: default; }
 .chipAtivo { border-color: var(--sicro-accent); background: var(--sicro-surface-3); color: var(--sicro-fg); }
 .chip { display: inline-flex; align-items: center; gap: 4px; padding: 0; }
 .chip:not(.chipSalvar) > .chipBtn { padding: 6px 12px; border: 0; background: none; color: inherit; font: inherit; cursor: pointer; }

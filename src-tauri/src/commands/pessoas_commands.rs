@@ -28,9 +28,9 @@ use crate::video::pessoas::mancha::{self, Motivo, OpcoesMancha};
 use crate::video::pessoas::pipeline::{self, OpcoesRastreio};
 use crate::video::pessoas::render::Opcoes as OpcoesDesenho;
 use crate::video::pessoas::{cor_padrao, Amostra, Cadencia, Pessoa};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{REL_PESSOAS, dir_pessoas, resolver_relativo, sqlite_path};
 
-const PESSOAS_SUBDIR: &str = "videos/pessoas";
 
 /// Só uma tarefa longa de pessoas por vez (rastrear ou gravar o vídeo).
 static TAREFA: Mutex<Option<Arc<AtomicBool>>> = Mutex::new(None);
@@ -148,7 +148,7 @@ struct Contexto {
 fn contexto(workspace_path: &str, media_hash: &str) -> Result<Contexto> {
     let ws = PathBuf::from(workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let media = video_repo::find_media_by_sha256(&conn, &manifest.occurrence_id, media_hash)?
         .ok_or_else(|| SicroError::Validation("vídeo não encontrado nesta ocorrência".into()))?;
@@ -178,7 +178,7 @@ pub async fn pessoas_listar(workspace_path: String, media_hash: String) -> Resul
     let c = contexto(&workspace_path, &media_hash)?;
     let mut e = estado(&c.conn, &c.occ, &media_hash)?;
     if e.run.is_none() {
-        let video = c.ws.join(&c.media.relative_path);
+        let video = resolver_relativo(&c.ws, &c.media.relative_path);
         if let Ok((width, height)) = crate::video::pessoas::decode::display_size(&video) {
             e.tamanho = Some(TamanhoVideo { width, height });
         }
@@ -198,7 +198,7 @@ pub async fn pessoas_rastrear(
         return Err(SicroError::Validation("pessoas_nao_instalado".into()));
     }
     let c = contexto(&workspace_path, &media_hash)?;
-    let video = c.ws.join(&c.media.relative_path);
+    let video = resolver_relativo(&c.ws, &c.media.relative_path);
     if !video.is_file() {
         return Err(SicroError::Filesystem(format!("arquivo de vídeo ausente: {}", c.media.relative_path)));
     }
@@ -404,7 +404,7 @@ pub struct ArquivoGerado {
 }
 
 fn registrar_saida(c: &Contexto, tipo: &str, rel: &str, nome: &str, detalhes: serde_json::Value) -> Result<ArquivoGerado> {
-    let abs = c.ws.join(rel);
+    let abs = resolver_relativo(&c.ws, &rel);
     let sha256 = sha256_file(&abs)?;
     let tamanho = std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(0);
     let mut d = detalhes;
@@ -437,7 +437,7 @@ fn registrar_saida(c: &Contexto, tipo: &str, rel: &str, nome: &str, detalhes: se
 }
 
 fn pasta_saida(c: &Contexto) -> Result<(PathBuf, String)> {
-    let dir = c.ws.join(PESSOAS_SUBDIR);
+    let dir = dir_pessoas(&c.ws);
     std::fs::create_dir_all(&dir)
         .map_err(|e| SicroError::Filesystem(format!("criar {}: {e}", dir.display())))?;
     let stem = std::path::Path::new(&c.media.filename)
@@ -470,7 +470,7 @@ pub async fn pessoas_exportar_video(
     let (pessoas, run) = carregar(&c)?;
     let (dir, base) = pasta_saida(&c)?;
     let nome = format!("{base}.mp4");
-    let video = c.ws.join(&c.media.relative_path);
+    let video = resolver_relativo(&c.ws, &c.media.relative_path);
     let saida = dir.join(&nome);
     let flag = iniciar_tarefa()?;
     let (app2, hash2, saida2) = (app.clone(), media_hash.clone(), saida.clone());
@@ -490,7 +490,7 @@ pub async fn pessoas_exportar_video(
     registrar_saida(
         &c,
         "pessoas_mp4",
-        &format!("{PESSOAS_SUBDIR}/{nome}"),
+        &format!("{REL_PESSOAS}/{nome}"),
         &nome,
         json!({ "quadros": quadros, "desenho": desenho, "com_audio": com_audio, "origem_sha256": c.media.sha256 }),
     )
@@ -527,7 +527,7 @@ pub async fn pessoas_exportar_quadros(
             },
         )
         .await?;
-        let png = c.ws.join(&col.export.output_path);
+        let png = resolver_relativo(&c.ws, &col.export.output_path);
         let t_real = col.export.actual_timestamp_s.unwrap_or(t);
         let (p2, png2) = (pessoas.clone(), png.clone());
         let numeros = tauri::async_runtime::spawn_blocking(move || pipeline::sobrepor_png(&png2, t_real, &p2, cad, desenho))
@@ -536,7 +536,7 @@ pub async fn pessoas_exportar_quadros(
         let sha = sha256_file(&png)?;
         // sidecar e legenda dizem o que está desenhado e o hash do arquivo FINAL
         if let Some(rel) = &col.export.sidecar_json_path {
-            let sp = c.ws.join(rel);
+            let sp = resolver_relativo(&c.ws, &rel);
             if let Ok(txt) = std::fs::read_to_string(&sp) {
                 if let Ok(mut v) = serde_json::from_str::<serde_json::Value>(&txt) {
                     v["sobreposicao_pessoas"] = json!({
@@ -622,8 +622,8 @@ code{{font-size:12px}}dl{{display:grid;grid-template-columns:max-content 1fr;gap
     let nome_html = format!("{base}.html");
     std::fs::write(dir.join(&nome_html), html)?;
     let det = json!({ "pessoas": pessoas.len(), "origem_sha256": c.media.sha256 });
-    let csv = registrar_saida(&c, "pessoas_csv", &format!("{PESSOAS_SUBDIR}/{nome_csv}"), &nome_csv, det.clone())?;
-    let html = registrar_saida(&c, "pessoas_html", &format!("{PESSOAS_SUBDIR}/{nome_html}"), &nome_html, det)?;
+    let csv = registrar_saida(&c, "pessoas_csv", &format!("{REL_PESSOAS}/{nome_csv}"), &nome_csv, det.clone())?;
+    let html = registrar_saida(&c, "pessoas_html", &format!("{REL_PESSOAS}/{nome_html}"), &nome_html, det)?;
     Ok(TabelaGerada { csv, html })
 }
 
@@ -670,7 +670,7 @@ pub async fn pessoas_seguir_mancha(
     marca: MarcaMancha,
 ) -> Result<ResultadoMancha> {
     let c = contexto(&workspace_path, &media_hash)?;
-    let video = c.ws.join(&c.media.relative_path);
+    let video = resolver_relativo(&c.ws, &c.media.relative_path);
     if !video.is_file() {
         return Err(SicroError::Filesystem(format!("arquivo de vídeo ausente: {}", c.media.relative_path)));
     }

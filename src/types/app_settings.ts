@@ -10,6 +10,8 @@ export interface PeritoProfile {
   photo_path: string;
   /** Pré-preenche o município de novas ocorrências. */
   municipio_atuacao: string;
+  /** Sigla do estado do município de atuação. */
+  uf: string;
 }
 
 export interface InstitutionSettings {
@@ -104,6 +106,7 @@ export function defaultAppSettings(): AppSettings {
       signature_image_path: "",
       photo_path: "",
       municipio_atuacao: "",
+      uf: "",
     },
     institution: {
       organization: "",

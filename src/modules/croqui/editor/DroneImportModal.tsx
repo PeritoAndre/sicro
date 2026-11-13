@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Image as ImageIcon } from "lucide-react";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import type { CropRectInput, DroneImportResult } from "@domain/croqui";
@@ -72,6 +73,7 @@ export function DroneAjuste({
   busy = false,
   previewMax = PREVIEW_MAX,
   partes = "tudo",
+  botaoClass,
 }: {
   estado: DroneAjusteEstado;
   onChange: (e: DroneAjusteEstado) => void;
@@ -79,7 +81,10 @@ export function DroneAjuste({
   previewMax?: number;
   /** A tela "Novo croqui" mostra os controles na coluna e a prévia (com o recorte) na área grande. */
   partes?: "tudo" | "controles" | "previa";
+  /** Classe dos botões de controle (Novo croqui: coluna, largura total, com ícone). */
+  botaoClass?: string;
 }) {
+  const classeBotao = botaoClass ?? styles.dialogClose;
   const mostraControles = partes !== "previa";
   const mostraPrevia = partes !== "controles";
   const { loaded, crop, intensity } = estado;
@@ -146,19 +151,20 @@ export function DroneAjuste({
   return (
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {mostraControles && (
-          <div style={{ display: "flex", gap: 8 }}>
+          <div style={{ display: "flex", gap: 8, flexDirection: botaoClass ? "column" : "row" }}>
             <button
               type="button"
-              className={styles.dialogClose}
+              className={classeBotao}
               onClick={() => void handlePick()}
               disabled={busy}
             >
+              {botaoClass && <ImageIcon size={14} aria-hidden />}
               {loaded ? "Trocar imagem…" : "Escolher imagem…"}
             </button>
             {loaded && (
               <button
                 type="button"
-                className={styles.dialogClose}
+                className={classeBotao}
                 onClick={() => {
                   if (!loaded) return;
                   const m = 0.1;

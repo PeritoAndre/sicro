@@ -28,7 +28,8 @@ use crate::video::speed::montecarlo::{
     MonteCarloCrossRatioConfig,
 };
 use crate::video::speed::velocity::{average_velocity, regression_velocity};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::sqlite_path;
 
 const ALLOWED_REFERENCE_SOURCES: &[&str] = &["campo", "norma_viaria", "entre_eixos"];
 const DEFAULT_MC_ITERATIONS: u32 = 10_000;
@@ -44,7 +45,7 @@ pub async fn create_speed_calibration(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     create_speed_calibration_impl(&conn, occurrence_id, input)
 }
@@ -57,7 +58,7 @@ pub async fn compute_speed(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     compute_speed_impl(&conn, occurrence_id, input)
 }
@@ -69,7 +70,7 @@ pub async fn list_speed_calibrations(
 ) -> Result<Vec<VideoSpeedCalibration>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     video_speed_repo::list_calibrations_for_media(&conn, &manifest.occurrence_id, &media_hash)
 }
@@ -81,7 +82,7 @@ pub async fn list_speed_calculations(
 ) -> Result<Vec<VideoSpeedCalculation>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     video_speed_repo::list_calculations_for_media(&conn, &manifest.occurrence_id, &media_hash)
 }
@@ -95,7 +96,7 @@ pub async fn list_speed_calculations_for_occurrence(
 ) -> Result<Vec<VideoSpeedCalculation>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     video_speed_repo::list_calculations_for_occurrence(&conn, &manifest.occurrence_id)
 }
@@ -108,7 +109,7 @@ pub async fn get_speed_calibration(
 ) -> Result<VideoSpeedCalibration> {
     let ws = PathBuf::from(&workspace_path);
     let _ = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let uuid =
         Uuid::parse_str(&id).map_err(|e| SicroError::Validation(format!("id inválido: {e}")))?;

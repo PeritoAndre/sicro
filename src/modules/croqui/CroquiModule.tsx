@@ -5,7 +5,7 @@
 
 import { Component, lazy, Suspense, useEffect } from "react";
 import type { ErrorInfo, ReactNode } from "react";
-import { ListChecks, AlertTriangle, ArrowLeft } from "lucide-react";
+import { Map as MapIcon, AlertTriangle, ArrowLeft } from "lucide-react";
 import {
   selectActiveOccurrence,
   selectActiveWorkspacePath,
@@ -132,7 +132,7 @@ export function CroquiModule() {
   if (!workspacePath || !occurrence) {
     return (
       <NoOccurrenceState
-        icon={<ListChecks size={36} strokeWidth={1.5} />}
+        icon={<MapIcon size={36} strokeWidth={1.5} />}
         moduleName="Croqui"
       />
     );

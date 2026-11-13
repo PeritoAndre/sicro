@@ -11,7 +11,8 @@ use crate::error::{Result, SicroError};
 use crate::importer::{run_import, ImportRegistry};
 use crate::models::{Import, ImportReport, ImportResult, ImportSicroappInput};
 use crate::state::AppState;
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{dir_imports, sqlite_path};
 use crate::workspace::open_workspace;
 
 #[tauri::command]
@@ -37,7 +38,7 @@ pub async fn list_workspace_imports(workspace_path: String) -> Result<Vec<Import
     let ws = PathBuf::from(&workspace_path);
     // `open_workspace` só para validar a estrutura.
     let _ = open_workspace(&ws)?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     import_repo::list_all(&conn)
 }
 
@@ -50,8 +51,7 @@ pub async fn read_import_report(
     let _ = Manifest::read(&ws)?;
     let id = Uuid::parse_str(&import_id)
         .map_err(|e| SicroError::Validation(format!("invalid import_id: {e}")))?;
-    let report_path = ws
-        .join("imports")
+    let report_path = dir_imports(&ws)
         .join(id.to_string())
         .join("import_report.json");
     let bytes = std::fs::read(&report_path).map_err(|e| {

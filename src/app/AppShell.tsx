@@ -32,7 +32,7 @@ export function AppShell({ children }: AppShellProps) {
     { allowInInputs: true },
   );
 
-  // Ctrl+O / Ctrl+N valem em qualquer tela. No Vídeo o Ctrl+O é "adicionar vídeos" (mesma tecla): lá ele manda.
+  // Ctrl+O / Ctrl+N valem em qualquer tela; se o Vídeo remapear "adicionar vídeos" para a mesma tecla, lá ele manda.
   const { pathname } = useLocation();
   const overrides = useKeymapStore((s) => s.overrides);
   const abrirTrocar = useDialogosCaso((s) => s.abrirTrocar);

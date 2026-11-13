@@ -36,6 +36,7 @@ import { AudioPlayer, fmtTime, type AudioPlayerHandle } from "./AudioPlayer";
 import { assignSpeakers, speakerColor, speakerName } from "./speakers";
 import { formatTranscript } from "./transcriptFormat";
 import styles from "./DegravacaoView.module.css";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 interface LocalSeg {
   localId: string;
@@ -301,11 +302,11 @@ export function DegravacaoView() {
   }, [focusId, segments]);
 
   const fileUrl = useMemo(
-    () => (ws && media ? convertFileSrc(`${ws}/${media.relative_path}`) : null),
+    () => (ws && media ? convertFileSrc(caminhoDoCaso(ws, media.relative_path)) : null),
     [ws, media],
   );
   const mediaUrl = useMemo(
-    () => (ws && media ? mediaSrc(`${ws}/${media.relative_path}`) : undefined),
+    () => (ws && media ? mediaSrc(caminhoDoCaso(ws, media.relative_path)) : undefined),
     [ws, media],
   );
 

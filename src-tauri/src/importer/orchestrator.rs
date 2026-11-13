@@ -20,8 +20,8 @@ use crate::models::{
     EvidenceItem, HashMismatch, Import, ImportReport, ImportResult, ImportSicroappInput,
     ImportStatus, MediaAsset, MediaAssetType, Occurrence, OccurrenceStatus,
 };
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
-use crate::workspace::paths::unique_workspace_path;
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::{REL_DOSSIE, REL_FOTOS_IMPORTADAS, REL_IMPORTS, REL_LAUDOS, REL_LAUDOS_ASSETS, REL_LOGS, dir_fotos_importadas, dir_imports, sqlite_path, unique_workspace_path};
 
 use super::manifest_parser::{self, ParsedManifest};
 use super::package_reader::{
@@ -29,16 +29,15 @@ use super::package_reader::{
 };
 use super::registry::{GlobalImportRecord, ImportRegistry};
 
-/// Pastas extras do workspace importado (fora de `workspace::create::SUBDIRS`
-/// para um workspace comum não criar pastas vazias).
+/// Pastas extras do workspace importado (fora das pastas-padrão para um
+/// workspace comum não criar pastas vazias).
 const IMPORT_SUBDIRS: &[&str] = &[
-    "dossie",
-    "laudos",
-    "laudos/assets",
-    "imports",
-    "media",
-    "media/photos",
-    "logs",
+    REL_DOSSIE,
+    REL_LAUDOS,
+    REL_LAUDOS_ASSETS,
+    REL_IMPORTS,
+    REL_FOTOS_IMPORTADAS,
+    REL_LOGS,
 ];
 
 /// JSONs que o importador sempre tenta ler; o resto do ZIP vai para `files_ignored`.
@@ -124,7 +123,7 @@ pub fn run_import(
     for sub in IMPORT_SUBDIRS {
         fs::create_dir_all(workspace_path.join(sub))?;
     }
-    let db_path = workspace_path.join(SQLITE_FILENAME);
+    let db_path = sqlite_path(&workspace_path);
     let mut conn = open_connection(&db_path)?;
     run_migrations(&mut conn)?;
 
@@ -140,9 +139,7 @@ pub fn run_import(
     }
 
     let import_id = Uuid::new_v4();
-    let import_dir = workspace_path
-        .join("imports")
-        .join(import_id.to_string());
+    let import_dir = dir_imports(&workspace_path).join(import_id.to_string());
     fs::create_dir_all(&import_dir)?;
     let staged_pkg = import_dir.join("original_package.sicroapp");
     stage_package(&package_path, &staged_pkg)?;
@@ -172,7 +169,7 @@ pub fn run_import(
     // status e avisos são fechados no fim.
     let initial_import = Import {
         id: import_id,
-        package_relative_path: format!("imports/{}/original_package.sicroapp", import_id),
+        package_relative_path: format!("{REL_IMPORTS}/{}/original_package.sicroapp", import_id),
         original_filename: original_filename.clone(),
         package_sha256: pkg_sha256.clone(),
         format: manifest.format.clone(),
@@ -628,7 +625,7 @@ fn import_photos(
     now: DateTime<Utc>,
     report: &mut ImportReport,
 ) -> Result<()> {
-    let media_dir = workspace_path.join("media").join("photos");
+    let media_dir = dir_fotos_importadas(workspace_path);
     fs::create_dir_all(&media_dir)?;
 
     report.photos_declared = photo_index.len() as u32;
@@ -729,7 +726,7 @@ fn import_photos(
             occurrence_id,
             original_id: if id.is_empty() { None } else { Some(id.clone()) },
             r#type: MediaAssetType::Photo,
-            relative_path: format!("media/photos/{target_filename}"),
+            relative_path: format!("{REL_FOTOS_IMPORTADAS}/{target_filename}"),
             original_package_path: Some(sanitised.clone()),
             original_filename: PathBuf::from(&sanitised)
                 .file_name()

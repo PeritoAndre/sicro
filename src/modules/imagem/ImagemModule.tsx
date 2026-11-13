@@ -12,6 +12,7 @@ import {
   Contrast,
   FolderOpen,
   ImageIcon,
+  ImagePlus,
   Layers,
   Plus,
   Ruler,
@@ -148,7 +149,7 @@ export function ImagemModule() {
   if (!workspacePath || !occurrence) {
     return (
       <NoOccurrenceState
-        icon={<ImageIcon size={36} strokeWidth={1.5} />}
+        icon={<ImagePlus size={36} strokeWidth={1.5} />}
         moduleName="Imagens"
       />
     );

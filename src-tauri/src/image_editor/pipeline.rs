@@ -15,6 +15,7 @@ use crate::filesystem::{atomic_write_bytes, resolve_workspace_relative};
 use crate::hashing::sha256::sha256_bytes;
 use crate::models::{BackendOperation, ExportImageInput, ImageAnalysis};
 use crate::workspace::manifest::APP_VERSION;
+use crate::workspace::paths::REL_IMAGENS_EXPORTS;
 
 use super::processor::{apply_adjustments, apply_operation};
 
@@ -126,7 +127,7 @@ pub fn run_export(
     let stamp = Utc::now().format("%Y%m%d_%H%M%S");
     let export_id = Uuid::new_v4();
     let rel_out = format!(
-        "imagens/exports/{}_{}_{}.{ext}",
+        "{REL_IMAGENS_EXPORTS}/{}_{}_{}.{ext}",
         sanitize_slug(&analysis.title),
         stamp,
         &export_id.to_string()[..8],

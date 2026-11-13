@@ -1,24 +1,14 @@
 /** Listas padrão usadas na criação de ocorrência e no perfil do perito. */
 
-/** Macapá e Santana primeiro; o resto em ordem alfabética. */
-export const MUNICIPIOS_AP: readonly string[] = [
-  "Macapá",
-  "Santana",
-  "Amapá",
-  "Calçoene",
-  "Cutias",
-  "Ferreira Gomes",
-  "Itaubal",
-  "Laranjal do Jari",
-  "Mazagão",
-  "Oiapoque",
-  "Pedra Branca do Amapari",
-  "Porto Grande",
-  "Pracuúba",
-  "Serra do Navio",
-  "Tartarugalzinho",
-  "Vitória do Jari",
-];
+import municipiosBr from "./municipios-br.json";
+
+/** Municípios por UF (IBGE), em ordem alfabética. */
+export const MUNICIPIOS_POR_UF: Readonly<Record<string, readonly string[]>> = municipiosBr;
+
+export const UFS: readonly string[] = Object.keys(municipiosBr);
+
+/** Municípios do Amapá (diálogo de caso). */
+export const MUNICIPIOS_AP: readonly string[] = MUNICIPIOS_POR_UF.AP ?? [];
 
 /** Sugestões do combobox; aceita digitar outro. */
 export const TIPOS_PERICIA: readonly string[] = [

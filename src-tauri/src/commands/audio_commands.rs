@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use uuid::Uuid;
 
+use crate::workspace::paths::{REL_AUDIO_ESPECTROGRAMAS, REL_AUDIO_ORIGINAIS, REL_AUDIO_WAV, dir_audio_espectrogramas, dir_audio_originais, dir_audio_wav, resolver_relativo, sqlite_path};
 use crate::audio::analysis::{self, AudioMeasurements, SpectrumResult};
 use crate::audio::enf::{EnfMatch, EnfResult};
 use crate::audio::{convert_to_wav, extract_audio_to_wav, probe_audio};
@@ -20,11 +21,8 @@ use crate::models::{
     AudioDiarization, AudioEnhancement, AudioMarker, AudioMedia, AudioTranscriptSegment,
     TranscriptSegmentInput,
 };
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
 
-const AUDIO_ORIG_SUBDIR: &str = "audio/originais";
-const AUDIO_WAV_SUBDIR: &str = "audio/wav";
-const AUDIO_SPECTRO_SUBDIR: &str = "audio/espectrogramas";
 
 /// Extrai a trilha de áudio de um vídeo para WAV de análise. `source_video_sha256`
 /// registra a proveniência quando o vídeo já está no caso.
@@ -37,7 +35,7 @@ pub async fn extract_audio_from_video(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let source = PathBuf::from(&video_path);
@@ -56,7 +54,7 @@ pub async fn extract_audio_from_video(
         )));
     }
 
-    let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
+    let wav_dir = dir_audio_wav(&ws);
     create_dir(&wav_dir)?;
     let stem = source
         .file_stem()
@@ -104,7 +102,7 @@ pub async fn import_audio_file(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let source = PathBuf::from(&source_path);
@@ -126,7 +124,7 @@ pub async fn import_audio_file(
         )));
     }
 
-    let orig_dir = ws.join(AUDIO_ORIG_SUBDIR);
+    let orig_dir = dir_audio_originais(&ws);
     create_dir(&orig_dir)?;
     let orig_name = unique_name(
         &orig_dir,
@@ -137,7 +135,7 @@ pub async fn import_audio_file(
         SicroError::Filesystem(format!("não foi possível copiar o original: {e}"))
     })?;
 
-    let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
+    let wav_dir = dir_audio_wav(&ws);
     create_dir(&wav_dir)?;
     let stem = source.file_stem().and_then(|s| s.to_str()).unwrap_or("audio");
     let wav_name = unique_name(&wav_dir, &format!("{stem}.wav"));
@@ -161,7 +159,7 @@ pub async fn import_audio_file(
         occurrence_id,
         "importado",
         Some(source_path),
-        Some(format!("{AUDIO_ORIG_SUBDIR}/{orig_name}")),
+        Some(format!("{REL_AUDIO_ORIGINAIS}/{orig_name}")),
         Some(original_sha256),
         None,
         &wav_path,
@@ -176,7 +174,7 @@ pub async fn import_audio_file(
 pub async fn list_audio_media(workspace_path: String) -> Result<Vec<AudioMedia>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     audio_repo::list_for_occurrence(&conn, &manifest.occurrence_id)
 }
 
@@ -186,7 +184,7 @@ pub async fn open_audio_media(
     audio_id: String,
 ) -> Result<AudioMedia> {
     let ws = PathBuf::from(&workspace_path);
-    let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&ws))?;
     let id = Uuid::parse_str(&audio_id)
         .map_err(|e| SicroError::Validation(format!("id de áudio inválido: {e}")))?;
     audio_repo::find_media_by_id(&conn, &id)?
@@ -206,14 +204,14 @@ pub async fn audio_spectrogram(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&audio_id)
         .map_err(|e| SicroError::Validation(format!("id de áudio inválido: {e}")))?;
     let media = audio_repo::find_media_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation("áudio não encontrado".into()))?;
-    let wav_abs = ws.join(&media.relative_path);
+    let wav_abs = resolver_relativo(&ws, &media.relative_path);
     if !wav_abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "WAV de análise ausente: {}",
@@ -221,7 +219,7 @@ pub async fn audio_spectrogram(
         )));
     }
 
-    let dir = ws.join(AUDIO_SPECTRO_SUBDIR);
+    let dir = dir_audio_espectrogramas(&ws);
     create_dir(&dir)?;
     let stem = Path::new(&media.filename)
         .file_stem()
@@ -238,7 +236,7 @@ pub async fn audio_spectrogram(
         "audio.spectrogram",
         &json!({ "file": out_name }).to_string(),
     )?;
-    Ok(format!("{AUDIO_SPECTRO_SUBDIR}/{out_name}"))
+    Ok(format!("{REL_AUDIO_ESPECTROGRAMAS}/{out_name}"))
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +253,7 @@ fn resolve_wav(
         .map_err(|e| SicroError::Validation(format!("id de áudio inválido: {e}")))?;
     let media = audio_repo::find_media_by_id(conn, &id)?
         .ok_or_else(|| SicroError::Validation("áudio não encontrado".into()))?;
-    let wav_abs = ws.join(&media.relative_path);
+    let wav_abs = resolver_relativo(&ws, &media.relative_path);
     if !wav_abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "WAV de análise ausente: {}",
@@ -273,7 +271,7 @@ pub async fn audio_measure(
 ) -> Result<AudioMeasurements> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
     let (samples, sr, ch) = analysis::read_wav_mono(&wav_abs)?;
@@ -312,7 +310,7 @@ pub async fn audio_spectrogram_data(
     f_max: Option<f32>,
 ) -> Result<crate::audio::spectro::SpectroImage> {
     let ws = PathBuf::from(&workspace_path);
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (_media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
     let req = crate::audio::spectro::Request { t0, t1, width, height, fft_size, log_freq, f_max };
@@ -330,7 +328,7 @@ pub async fn audio_spectrum(
 ) -> Result<SpectrumResult> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
     let (samples, sr, _ch) = analysis::read_wav_mono(&wav_abs)?;
@@ -356,7 +354,7 @@ pub async fn audio_enf(
 ) -> Result<EnfResult> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
     let e = tauri::async_runtime::spawn_blocking(move || -> Result<EnfResult> {
@@ -405,7 +403,7 @@ pub async fn audio_enf_compare(
 ) -> Result<EnfComparison> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (media, wav_q) = resolve_wav(&ws, &conn, &audio_id)?;
     let (ref_media, wav_r) = resolve_wav(&ws, &conn, &reference_audio_id)?;
@@ -448,13 +446,13 @@ pub async fn audio_authenticity(
     use crate::audio::authenticity as au;
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
 
     let mut extra_notes = Vec::new();
     let (kind, file) = match media.kind.as_str() {
-        "importado" => match media.original_relative_path.as_ref().map(|r| ws.join(r)) {
+        "importado" => match media.original_relative_path.as_ref().map(|r| resolver_relativo(&ws, &r)) {
             Some(p) if p.is_file() => ("original importado", p),
             _ => {
                 extra_notes.push("O arquivo original importado não está na pasta do caso; a estrutura examinada é a do WAV de trabalho.".to_string());
@@ -466,7 +464,7 @@ pub async fn audio_authenticity(
                 Some(h) => crate::database::repositories::video_repo::find_media_by_sha256(&conn, &manifest.occurrence_id, h)?,
                 None => None,
             };
-            match video.map(|v| ws.join(&v.relative_path)) {
+            match video.map(|v| resolver_relativo(&ws, &v.relative_path)) {
                 Some(p) if p.is_file() => ("vídeo de origem", p),
                 _ => {
                     extra_notes.push("O vídeo de origem não foi encontrado no caso; a estrutura examinada é a do WAV de trabalho.".to_string());
@@ -549,7 +547,7 @@ pub async fn extract_audio_clip(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     if !(end_s > start_s) || start_s < 0.0 {
@@ -562,7 +560,7 @@ pub async fn extract_audio_clip(
         .map_err(|e| SicroError::Validation(format!("id de áudio inválido: {e}")))?;
     let source = audio_repo::find_media_by_id(&conn, &id)?
         .ok_or_else(|| SicroError::Validation("áudio de origem não encontrado".into()))?;
-    let src_abs = ws.join(&source.relative_path);
+    let src_abs = resolver_relativo(&ws, &source.relative_path);
     if !src_abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "WAV de análise ausente: {}",
@@ -570,7 +568,7 @@ pub async fn extract_audio_clip(
         )));
     }
 
-    let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
+    let wav_dir = dir_audio_wav(&ws);
     create_dir(&wav_dir)?;
     let stem = Path::new(&source.filename)
         .file_stem()
@@ -638,7 +636,7 @@ pub async fn compile_audio_clips(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     if segments.len() < 2 {
@@ -666,7 +664,7 @@ pub async fn compile_audio_clips(
         let m = audio_repo::find_media_by_id(&conn, &id)?.ok_or_else(|| {
             SicroError::Validation(format!("trecho {}: áudio de origem não encontrado.", i + 1))
         })?;
-        let src = ws.join(&m.relative_path);
+        let src = resolver_relativo(&ws, &m.relative_path);
         if !src.is_file() {
             return Err(SicroError::Filesystem(format!(
                 "WAV de análise ausente: {}",
@@ -683,7 +681,7 @@ pub async fn compile_audio_clips(
         });
     }
 
-    let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
+    let wav_dir = dir_audio_wav(&ws);
     create_dir(&wav_dir)?;
     let out_name = unique_name(&wav_dir, "compilacao-rotulada.wav");
     let out_path = wav_dir.join(&out_name);
@@ -779,7 +777,7 @@ pub async fn add_audio_marker(
 ) -> Result<AudioMarker> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let marker = AudioMarker {
         id: Uuid::new_v4(),
@@ -800,7 +798,7 @@ pub async fn list_audio_markers(
 ) -> Result<Vec<AudioMarker>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     audio_repo::list_markers_for_audio(&conn, &manifest.occurrence_id, &audio_sha256)
 }
@@ -808,7 +806,7 @@ pub async fn list_audio_markers(
 #[tauri::command]
 pub async fn delete_audio_marker(workspace_path: String, marker_id: String) -> Result<()> {
     let ws = PathBuf::from(&workspace_path);
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let id = Uuid::parse_str(&marker_id)
         .map_err(|e| SicroError::Validation(format!("id de marcador inválido: {e}")))?;
@@ -837,7 +835,7 @@ pub async fn enhance_audio(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&source_audio_id)
@@ -846,7 +844,7 @@ pub async fn enhance_audio(
         .ok_or_else(|| SicroError::Validation("áudio de origem não encontrado".into()))?;
 
 
-    let src_abs = ws.join(&source.relative_path);
+    let src_abs = resolver_relativo(&ws, &source.relative_path);
     if !src_abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "WAV de análise ausente: {}",
@@ -854,7 +852,7 @@ pub async fn enhance_audio(
         )));
     }
 
-    let wav_dir = ws.join(AUDIO_WAV_SUBDIR);
+    let wav_dir = dir_audio_wav(&ws);
     create_dir(&wav_dir)?;
     let stem = Path::new(&source.filename)
         .file_stem()
@@ -914,7 +912,7 @@ pub async fn list_audio_transcript(
 ) -> Result<Vec<AudioTranscriptSegment>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     audio_repo::list_segments(&conn, &manifest.occurrence_id, &audio_sha256)
 }
@@ -930,7 +928,7 @@ pub async fn save_audio_transcript(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     audio_repo::replace_segments(&mut conn, &occurrence_id, &audio_sha256, &segments)?;
@@ -1018,7 +1016,7 @@ pub async fn transcribe_audio(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
 
     let id = Uuid::parse_str(&audio_id)
@@ -1034,7 +1032,7 @@ pub async fn transcribe_audio(
             model.display()
         )));
     }
-    let wav_abs = ws.join(&media.relative_path);
+    let wav_abs = resolver_relativo(&ws, &media.relative_path);
     if !wav_abs.is_file() {
         return Err(SicroError::Filesystem(format!(
             "WAV de análise ausente: {}",
@@ -1116,7 +1114,7 @@ pub async fn diarize_audio(
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let (media, wav_abs) = resolve_wav(&ws, &conn, &audio_id)?;
 
@@ -1172,7 +1170,7 @@ pub async fn get_audio_diarization(
 ) -> Result<Option<AudioDiarization>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     audio_repo::get_diarization(&conn, &manifest.occurrence_id, &audio_sha256)
 }
@@ -1186,7 +1184,7 @@ pub async fn save_diarization_names(
 ) -> Result<()> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     audio_repo::set_diarization_names(&conn, &manifest.occurrence_id, &audio_sha256, &names)
 }
@@ -1219,7 +1217,7 @@ fn build_and_persist(
         kind: kind.to_string(),
         original_path,
         original_relative_path,
-        relative_path: format!("{AUDIO_WAV_SUBDIR}/{wav_name}"),
+        relative_path: format!("{REL_AUDIO_WAV}/{wav_name}"),
         filename: wav_name.to_string(),
         sha256,
         original_sha256,

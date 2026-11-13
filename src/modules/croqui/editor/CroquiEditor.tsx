@@ -87,6 +87,7 @@ import { ligarAoObjeto, objetoSob, resolverCotasVivas } from "./cotasVivas";
 import { OsmImportModal, type OsmImportResult } from "./OsmImportModal";
 import styles from "./CroquiEditor.module.css";
 import { askText } from "@components/Dialog/ask";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 /** Área de transferência do croqui: dura a sessão, vale entre croquis e casos. */
 let croquiClipboard: SicroObject[] = [];
@@ -479,8 +480,7 @@ export function CroquiEditor() {
         /^([a-zA-Z]:)?[\\/]/.test(sourcePath) ||
         sourcePath.startsWith("file://");
       if (!looksAbsolute && workspacePath) {
-        const sep = workspacePath.includes("\\") ? "\\" : "/";
-        const abs = `${workspacePath}${sep}${sourcePath.replace(/\//g, sep)}`;
+        const abs = caminhoDoCaso(workspacePath, sourcePath);
         return convertFileSrc(abs.replace(/^file:\/\//, ""));
       }
       return convertFileSrc(sourcePath.replace(/^file:\/\//, ""));
@@ -778,8 +778,7 @@ export function CroquiEditor() {
       const y1 = Math.min(natural.h, Math.round((rc.y + rc.h - bg.y) * ky));
       if (x1 - x0 < 16 || y1 - y0 < 16) throw new Error("o corte precisa ficar sobre a imagem");
       const looksAbsolute = /^([a-zA-Z]:)?[\\/]/.test(bg.source_path);
-      const sep = workspacePath.includes("\\") ? "\\" : "/";
-      const abs = looksAbsolute ? bg.source_path : `${workspacePath}${sep}${bg.source_path.replace(/\//g, sep)}`;
+      const abs = looksAbsolute ? bg.source_path : caminhoDoCaso(workspacePath, bg.source_path);
       const r = await commands.importDroneImage(workspacePath, {
         source_absolute_path: abs,
         intensity: 0,

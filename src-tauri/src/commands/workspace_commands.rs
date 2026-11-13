@@ -16,7 +16,7 @@ use crate::models::{
     RecentOccurrence,
 };
 use crate::state::AppState;
-use crate::workspace::manifest::{MANIFEST_FILENAME, SQLITE_FILENAME};
+use crate::workspace::paths::{manifest_path, sqlite_path};
 use crate::workspace::{create_workspace, open_workspace};
 
 /// Pasta onde os casos nascem (~/SICRO/Casos): o "Abrir pasta .sicro" começa por ela.
@@ -109,7 +109,7 @@ pub async fn update_occurrence(
     }
     occ.updated_at = Utc::now();
 
-    let conn = open_connection(&path.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&path))?;
     occurrence_repo::update_full(&conn, &occ)?;
     let _ = occurrence_repo::record_audit(
         &conn,
@@ -171,7 +171,7 @@ pub async fn set_occurrence_status(
     apply_status_side_effects(&mut occ);
     occ.updated_at = Utc::now();
 
-    let conn = open_connection(&path.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&path))?;
     occurrence_repo::update_full(&conn, &occ)?;
     let _ = occurrence_repo::record_audit(
         &conn,
@@ -214,8 +214,8 @@ fn delete_occurrence_impl(workspace_path: &str) -> Result<()> {
             ws.display()
         )));
     }
-    let has_manifest = ws.join(MANIFEST_FILENAME).is_file();
-    let has_db = ws.join(SQLITE_FILENAME).is_file();
+    let has_manifest = manifest_path(&ws).is_file();
+    let has_db = sqlite_path(&ws).is_file();
     if !(has_manifest && has_db) {
         return Err(SicroError::Validation(format!(
             "a pasta não é um workspace .sicro válido (manifesto/banco ausentes): {}",
@@ -247,12 +247,12 @@ fn path_to_string(path: &std::path::Path) -> Result<String> {
 // Ainda sem uso; reservado para um futuro comando de renomear/mover workspace.
 #[allow(dead_code)]
 fn workspace_db_path(workspace_dir: &std::path::Path) -> PathBuf {
-    workspace_dir.join(SQLITE_FILENAME)
+    sqlite_path(&workspace_dir)
 }
 
 #[allow(dead_code)]
 fn touch_audit_open(workspace_dir: &std::path::Path, occurrence_id: &Uuid) -> Result<()> {
-    let conn = open_connection(&workspace_dir.join(SQLITE_FILENAME))?;
+    let conn = open_connection(&sqlite_path(&workspace_dir))?;
     occurrence_repo::record_audit(
         &conn,
         Some(occurrence_id),
@@ -291,8 +291,9 @@ mod tests {
         let base = std::env::temp_dir()
             .join(format!("sicro-del-ok-{}", std::process::id()));
         std::fs::create_dir_all(&base).unwrap();
-        std::fs::write(base.join(MANIFEST_FILENAME), b"{}").unwrap();
-        std::fs::write(base.join(SQLITE_FILENAME), b"x").unwrap();
+        std::fs::create_dir_all(base.join("Sistema")).unwrap();
+        std::fs::write(base.join("Sistema/manifest.json"), b"{}").unwrap();
+        std::fs::write(base.join("Sistema/sicro.sqlite"), b"x").unwrap();
         delete_occurrence_impl(&base.to_string_lossy()).expect("deve excluir");
         assert!(!base.exists());
     }

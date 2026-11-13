@@ -31,10 +31,9 @@ use crate::video::realce::perspective::{self, Par};
 use crate::video::realce::stabilize::{self, Borda, OpcoesEstabilizar};
 use crate::video::realce::superres::{self, SuperRes};
 use crate::video::{extract_frame, ExtractFrameOptions};
-use crate::workspace::manifest::{Manifest, APP_VERSION, SQLITE_FILENAME};
+use crate::workspace::manifest::{Manifest, APP_VERSION};
+use crate::workspace::paths::{REL_ESTABILIZADOS, REL_IMAGENS_REALCE, REL_REALCE, resolver_relativo, sqlite_path};
 
-const REALCE_SUBDIR: &str = "videos/realce";
-const ESTAB_SUBDIR: &str = "videos/estabilizados";
 
 const AVISO_REALCE: &str = "Realce de imagem para leitura: não substitui o original e não é prova por si só.";
 
@@ -94,7 +93,7 @@ struct Contexto {
 fn contexto(workspace_path: &str, media_hash: &str) -> Result<Contexto> {
     let ws = PathBuf::from(workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let media = video_repo::find_media_by_sha256(&conn, &manifest.occurrence_id, media_hash)?
         .ok_or_else(|| SicroError::Validation("vídeo não encontrado nesta ocorrência".into()))?;
@@ -103,7 +102,7 @@ fn contexto(workspace_path: &str, media_hash: &str) -> Result<Contexto> {
 
 impl Contexto {
     fn video(&self) -> Result<PathBuf> {
-        let v = self.ws.join(&self.media.relative_path);
+        let v = resolver_relativo(&self.ws, &self.media.relative_path);
         if !v.is_file() {
             return Err(SicroError::Filesystem(format!("arquivo de vídeo ausente: {}", self.media.relative_path)));
         }
@@ -143,7 +142,7 @@ fn pasta_cache(app: &AppHandle) -> Result<PathBuf> {
 }
 
 fn pasta_saida(c: &Contexto, sub: &str) -> Result<PathBuf> {
-    let d = c.ws.join(sub);
+    let d = resolver_relativo(&c.ws, &sub);
     std::fs::create_dir_all(&d).map_err(|e| SicroError::Filesystem(format!("criar {}: {e}", d.display())))?;
     Ok(d)
 }
@@ -206,7 +205,7 @@ fn registrar(
     dims: Option<(u32, u32)>,
     com_export: bool,
 ) -> Result<Resultado> {
-    let abs = c.ws.join(rel);
+    let abs = resolver_relativo(&c.ws, &rel);
     let sha256 = sha256_file(&abs)?;
     let tamanho = std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(0);
     let id = Uuid::new_v4();
@@ -218,7 +217,7 @@ fn registrar(
         "parametros": params, "aviso": aviso, "aplicativo": format!("SICRO {APP_VERSION}"),
         "criado_em": agora.to_rfc3339(),
     });
-    std::fs::write(c.ws.join(&sidecar_rel), serde_json::to_vec_pretty(&doc).unwrap_or_default())
+    std::fs::write(resolver_relativo(&c.ws, &sidecar_rel), serde_json::to_vec_pretty(&doc).unwrap_or_default())
         .map_err(|e| SicroError::Filesystem(format!("gravar {sidecar_rel}: {e}")))?;
     let nome = Path::new(rel).file_name().and_then(|s| s.to_str()).unwrap_or(rel).to_string();
     if com_export {
@@ -279,7 +278,7 @@ pub struct Arquivo {
 }
 
 fn arquivo(c: &Contexto, r: Resultado) -> Arquivo {
-    let absoluto = c.ws.join(&r.caminho).to_string_lossy().to_string();
+    let absoluto = resolver_relativo(&c.ws, &r.caminho).to_string_lossy().to_string();
     Arquivo { resultado: r, absoluto }
 }
 
@@ -502,7 +501,7 @@ pub(crate) fn media_blocante(
     )
     .map_err(SicroError::Validation)?;
 
-    let dir = pasta_saida(&c, REALCE_SUBDIR)?;
+    let dir = pasta_saida(&c, REL_REALCE)?;
     let base = format!("{}_media_{}_{}ms", c.stem(), carimbo(), ms(t_ref));
     let (rw, rh) = (roi.w, roi.h);
     // quadro inteiro: o de referência com a região trocada pela média
@@ -514,10 +513,10 @@ pub(crate) fn media_blocante(
     }
     let crua_abs = dir.join(format!("{base}_crua.png"));
     salvar_rgb(comb.rgb_ref.clone(), rw, rh, &crua_abs)?;
-    let roi_rel = format!("{REALCE_SUBDIR}/{base}_roi.png");
-    let full_rel = format!("{REALCE_SUBDIR}/{base}_quadro.png");
-    salvar_rgb(comb.rgb.clone(), rw, rh, &c.ws.join(&roi_rel))?;
-    salvar_rgb(inteiro, w, h, &c.ws.join(&full_rel))?;
+    let roi_rel = format!("{REL_REALCE}/{base}_roi.png");
+    let full_rel = format!("{REL_REALCE}/{base}_quadro.png");
+    salvar_rgb(comb.rgb.clone(), rw, rh, &resolver_relativo(&c.ws, &roi_rel))?;
+    salvar_rgb(inteiro, w, h, &resolver_relativo(&c.ws, &full_rel))?;
 
     let tempo_s = inicio.elapsed().as_secs_f64();
     let params_json = json!({
@@ -580,7 +579,7 @@ pub(crate) fn superres_nucleo(
     let (entrada, origem) = if let Some(id) = &params.resultado_id {
         let r = repo::obter_resultado(&c.conn, &c.occ, id)?
             .ok_or_else(|| SicroError::Validation("resultado não encontrado".into()))?;
-        (c.ws.join(&r.caminho), json!({ "resultado": r.id, "sha256": r.sha256, "tipo": r.tipo }))
+        (resolver_relativo(&c.ws, &r.caminho), json!({ "resultado": r.id, "sha256": r.sha256, "tipo": r.tipo }))
     } else {
         let (png, w, h, real) = quadro_png(&c, cache, params.t)?;
         let lente = if params.com_lente { c.lente()? } else { None };
@@ -616,9 +615,9 @@ pub(crate) fn superres_nucleo(
         let (nw, nh) = (w * 2, h * 2);
         (nw, nh, superres::reduzir(&up, (w * 4) as usize, (h * 4) as usize, nw as usize, nh as usize))
     };
-    let dir = pasta_saida(&c, REALCE_SUBDIR)?;
-    let rel = format!("{REALCE_SUBDIR}/{}_superres{}x_{}.png", c.stem(), params.escala, carimbo());
-    salvar_rgb(saida, ow, oh, &c.ws.join(&rel))?;
+    let dir = pasta_saida(&c, REL_REALCE)?;
+    let rel = format!("{REL_REALCE}/{}_superres{}x_{}.png", c.stem(), params.escala, carimbo());
+    salvar_rgb(saida, ow, oh, &resolver_relativo(&c.ws, &rel))?;
     let original = dir.join(format!("{}_entrada_{}.png", c.stem(), carimbo()));
     std::fs::copy(&entrada, &original).map_err(|e| SicroError::Filesystem(format!("copiar entrada: {e}")))?;
     if params.resultado_id.is_none() {
@@ -725,8 +724,8 @@ pub async fn realce_superres_imagem(
             (nw, nh, superres::reduzir(&up, (w * 4) as usize, (h * 4) as usize, nw as usize, nh as usize))
         };
         let stem = origem.file_stem().and_then(|s| s.to_str()).map(crate::filesystem::sanitize_folder_name).unwrap_or_else(|| "imagem".into());
-        let rel = format!("imagens/realce/{stem}_superres{}x_{}.png", params.escala, carimbo());
-        let destino = ws.join(&rel);
+        let rel = format!("{REL_IMAGENS_REALCE}/{stem}_superres{}x_{}.png", params.escala, carimbo());
+        let destino = resolver_relativo(&ws, &rel);
         if let Some(p) = destino.parent() {
             std::fs::create_dir_all(p).map_err(|e| SicroError::Filesystem(format!("criar {}: {e}", p.display())))?;
         }
@@ -744,7 +743,7 @@ pub async fn realce_superres_imagem(
             .unwrap_or_default(),
         )
         .map_err(|e| SicroError::Filesystem(format!("gravar sidecar: {e}")))?;
-        let conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+        let conn = open_connection(&sqlite_path(&ws))?;
         occurrence_repo::record_audit(
             &conn,
             Some(&manifest.occurrence_id),
@@ -808,7 +807,7 @@ pub struct PerfilDeVideo {
 pub async fn realce_lente_listar(workspace_path: String) -> Result<Vec<PerfilDeVideo>> {
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
-    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    let mut conn = open_connection(&sqlite_path(&ws))?;
     run_migrations(&mut conn)?;
     let medias = video_repo::list_media_for_occurrence(&conn, &manifest.occurrence_id)?;
     Ok(repo::listar_perfis(&conn, &manifest.occurrence_id)?
@@ -874,9 +873,9 @@ pub async fn realce_quadro_corrigido(
         let l = c.lente()?.ok_or_else(|| SicroError::Validation("este vídeo ainda não tem perfil de lente salvo".into()))?;
         let (png, w, h, real) = quadro_png(&c, &cache, t)?;
         let (rgb, _, _) = ler_rgb(&png)?;
-        let rel = format!("{REALCE_SUBDIR}/{}_lente_{}_{}ms.png", c.stem(), carimbo(), ms(real));
-        pasta_saida(&c, REALCE_SUBDIR)?;
-        salvar_rgb(corrigir_rgb(&rgb, w, h, l.coef, l.cx, l.cy), w, h, &c.ws.join(&rel))?;
+        let rel = format!("{REL_REALCE}/{}_lente_{}_{}ms.png", c.stem(), carimbo(), ms(real));
+        pasta_saida(&c, REL_REALCE)?;
+        salvar_rgb(corrigir_rgb(&rgb, w, h, l.coef, l.cx, l.cy), w, h, &resolver_relativo(&c.ws, &rel))?;
         let pj = json!({ "t": real, "k1": l.coef.k1, "k2": l.coef.k2, "cx": l.cx, "cy": l.cy, "modelo": "radial k1/k2 (Brown-Conrady)" });
         let r = registrar(&c, "quadro_lente", &rel, pj, AVISO_REALCE, Some((w, h)), true)?;
         Ok(arquivo(&c, r))
@@ -937,9 +936,9 @@ pub(crate) fn perspectiva_nucleo(
     });
     let (img, info) = perspective::retificar(&rgb, w, h, &pares, params.margem, params.px_por_m)
         .map_err(SicroError::Validation)?;
-    pasta_saida(&c, REALCE_SUBDIR)?;
-    let rel = format!("{REALCE_SUBDIR}/{}_vista_de_cima_{}_{}ms.png", c.stem(), carimbo(), ms(real));
-    img.save(c.ws.join(&rel)).map_err(|e| SicroError::Filesystem(format!("gravar retificada: {e}")))?;
+    pasta_saida(&c, REL_REALCE)?;
+    let rel = format!("{REL_REALCE}/{}_vista_de_cima_{}_{}ms.png", c.stem(), carimbo(), ms(real));
+    img.save(resolver_relativo(&c.ws, &rel)).map_err(|e| SicroError::Filesystem(format!("gravar retificada: {e}")))?;
     let pj = json!({
         "t": real, "pontos": params.pontos, "margem": params.margem, "origem_das_medidas": params.origem,
         "px_por_m": info.px_por_m, "mundo_m": info.mundo,
@@ -991,7 +990,7 @@ pub async fn realce_estabilizacao_disponivel() -> Result<EstadoEstabilizacao> {
 
 /// Registra o arquivo gravado como vídeo do caso, ligado à origem (como o trecho exportado).
 fn registrar_video_derivado(c: &Contexto, rel: &str, tipo: &str, derivacao: Value, aviso: &str) -> Result<(VideoMedia, Resultado)> {
-    let abs = c.ws.join(rel);
+    let abs = resolver_relativo(&c.ws, &rel);
     let sha256 = sha256_file(&abs)?;
     if let Some(existente) = video_repo::find_media_by_sha256(&c.conn, &c.occ, &sha256)? {
         return Err(SicroError::Validation(format!("este resultado já existe no caso ({})", existente.filename)));
@@ -1053,9 +1052,9 @@ pub(crate) fn estabilizar_nucleo(
 ) -> Result<VideoDerivado> {
     let c = contexto(workspace_path, media_hash)?;
     let video = c.video()?;
-    let dir = pasta_saida(&c, ESTAB_SUBDIR)?;
+    let dir = pasta_saida(&c, REL_ESTABILIZADOS)?;
     let saida = stabilize::nome_unico(&dir, &format!("{}_estabilizado", c.stem()), "mp4");
-    let rel = format!("{ESTAB_SUBDIR}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
+    let rel = format!("{REL_ESTABILIZADOS}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
     let total = c.media.duration_s.unwrap_or(0.0);
     let tem_audio = tem_audio(&c.media.raw_probe_json);
     let dims = (c.media.width.unwrap_or(0), c.media.height.unwrap_or(0));
@@ -1118,9 +1117,9 @@ pub(crate) fn lente_video_nucleo(
     let (w, h) = (c.media.width.unwrap_or(0), c.media.height.unwrap_or(0));
     let (k1, k2) = para_ffmpeg(l.coef, w.max(2), h.max(2))
         .ok_or_else(|| SicroError::Validation("a correção é forte demais para o filtro do ffmpeg (k fora de −1..1)".into()))?;
-    let dir = pasta_saida(&c, ESTAB_SUBDIR)?;
+    let dir = pasta_saida(&c, REL_ESTABILIZADOS)?;
     let saida = stabilize::nome_unico(&dir, &format!("{}_lente", c.stem()), "mp4");
-    let rel = format!("{ESTAB_SUBDIR}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
+    let rel = format!("{REL_ESTABILIZADOS}/{}", saida.file_name().and_then(|s| s.to_str()).unwrap_or("saida.mp4"));
     let tem_audio = tem_audio(&c.media.raw_probe_json);
     let cmd = stabilize::corrigir_lente(
         &video, &saida, k1, k2, l.cx as f64, l.cy as f64, c.media.duration_s.unwrap_or(0.0), tem_audio, flag,

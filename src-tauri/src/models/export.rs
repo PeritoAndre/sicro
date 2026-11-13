@@ -32,9 +32,9 @@ impl ExportKind {
 
     pub fn subdir(&self) -> &'static str {
         match self {
-            Self::Html => "exports/html",
-            Self::Pdf => "exports/pdf",
-            Self::Docx => "exports/docx",
+            Self::Html => "Exportações/Laudos/html",
+            Self::Pdf => "Exportações/Laudos/pdf",
+            Self::Docx => "Exportações/Laudos/docx",
         }
     }
 

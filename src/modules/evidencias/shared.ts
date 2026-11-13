@@ -2,6 +2,7 @@
 
 import { convertFileSrc } from "@tauri-apps/api/core";
 import type { IntegrityStatus } from "@domain/evidence_registry";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 export function statusClass(
   status: IntegrityStatus,
@@ -47,13 +48,8 @@ export function assetUrl(
   relativePath: string,
 ): string | null {
   if (!workspacePath || !relativePath) return null;
-  const sep = workspacePath.includes("\\") ? "\\" : "/";
-  const trimmed = workspacePath.replace(/[\\/]+$/, "");
-  const normRel = sep === "\\"
-    ? relativePath.replace(/\//g, "\\")
-    : relativePath.replace(/\\/g, "/");
   try {
-    return convertFileSrc(`${trimmed}${sep}${normRel}`);
+    return convertFileSrc(caminhoDoCaso(workspacePath, relativePath));
   } catch {
     return null;
   }

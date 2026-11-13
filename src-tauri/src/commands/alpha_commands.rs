@@ -16,7 +16,8 @@ use crate::workspace::{
     SystemHealthSnapshot, WorkspaceCounters,
 };
 use crate::workspace::{build_snapshot, count_occurrence_entities, render_and_save};
-use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
+use crate::workspace::manifest::Manifest;
+use crate::workspace::paths::sqlite_path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BackupArtifactJson {
@@ -55,7 +56,7 @@ pub async fn generate_workspace_backup(
 
     let artifact = create_backup(&ws, dest.as_deref(), bo_label.as_deref())?;
 
-    if let Ok(conn) = open_connection(&ws.join(SQLITE_FILENAME)) {
+    if let Ok(conn) = open_connection(&sqlite_path(&ws)) {
         let _ = occurrence_repo::record_audit(
             &conn,
             Some(&manifest.occurrence_id),
@@ -185,7 +186,7 @@ pub async fn generate_system_health_report(
 
     if let Some(path) = ws.as_deref() {
         if let Ok(manifest) = Manifest::read(path) {
-            if let Ok(mut conn) = open_connection(&path.join(SQLITE_FILENAME)) {
+            if let Ok(mut conn) = open_connection(&sqlite_path(&path)) {
                 let _ = run_migrations(&mut conn);
                 let _ = occurrence_repo::record_audit(
                     &conn,

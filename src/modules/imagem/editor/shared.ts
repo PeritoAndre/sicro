@@ -1,19 +1,15 @@
 /** Helpers compartilhados do editor de imagem. */
 
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 export function assetUrl(
   workspacePath: string,
   relativePath: string,
 ): string | null {
   if (!workspacePath || !relativePath) return null;
-  const sep = workspacePath.includes("\\") ? "\\" : "/";
-  const trimmed = workspacePath.replace(/[\\/]+$/, "");
-  const normRel = sep === "\\"
-    ? relativePath.replace(/\//g, "\\")
-    : relativePath.replace(/\\/g, "/");
   try {
-    return convertFileSrc(`${trimmed}${sep}${normRel}`);
+    return convertFileSrc(caminhoDoCaso(workspacePath, relativePath));
   } catch {
     return null;
   }

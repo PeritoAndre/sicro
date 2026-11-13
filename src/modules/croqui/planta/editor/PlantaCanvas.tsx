@@ -35,6 +35,7 @@ import {
 } from "./PlanShapes";
 import { askText } from "@components/Dialog/ask";
 import styles from "./planta.module.css";
+import { caminhoDoCaso } from "@core/caminhoDoCaso";
 
 const W = (v: number) => v * M;
 const ZMIN = 0.03;
@@ -172,7 +173,7 @@ export const PlantaCanvas = forwardRef<PlantaCanvasHandle, Props>(function Plant
     const img = new window.Image();
     img.crossOrigin = "anonymous";
     img.onload = () => setBgImg(img);
-    const abs = /^([a-zA-Z]:)?[\\/]/.test(bg.asset) ? bg.asset : `${workspacePath.replace(/[\\/]+$/, "")}/${bg.asset}`;
+    const abs = /^([a-zA-Z]:)?[\\/]/.test(bg.asset) ? bg.asset : caminhoDoCaso(workspacePath, bg.asset);
     img.src = convertFileSrc(abs);
   }, [doc.background?.asset, workspacePath]); // eslint-disable-line react-hooks/exhaustive-deps
 

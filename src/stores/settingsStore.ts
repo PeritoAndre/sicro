@@ -77,6 +77,8 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
   async load() {
     try {
       const s = await commands.getAppSettings();
+      // Perfil antigo tinha só o município (Amapá).
+      if (s.profile.municipio_atuacao && !s.profile.uf) s.profile.uf = "AP";
       applyAppearance(s.appearance);
       set({ settings: s, loaded: true });
     } catch {

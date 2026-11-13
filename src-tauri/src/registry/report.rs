@@ -8,10 +8,12 @@ use crate::models::{
     BrokenLaudoLink, EvidenceRegistryItem, IntegrityStatus, RegistrySummary,
     WorkspaceIntegrityReport,
 };
+use crate::workspace::paths::REL_RELATORIOS;
 
 pub fn report_filename(generated_at: &DateTime<Utc>) -> String {
     format!(
-        "reports/workspace_integrity_{}.html",
+        "{}/workspace_integrity_{}.html",
+        REL_RELATORIOS,
         generated_at.format("%Y%m%d_%H%M%S")
     )
 }
@@ -366,7 +368,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             report_filename(&dt),
-            "reports/workspace_integrity_20260525_143012.html",
+            "Exportações/Relatórios/workspace_integrity_20260525_143012.html",
         );
     }
 }

@@ -225,20 +225,20 @@ fn imports_v0_6_transito_package_happy_path() {
 
     // Files on disk.
     let ws = PathBuf::from(&result.workspace_path);
-    assert!(ws.join("sicro.sqlite").is_file());
+    assert!(ws.join("Sistema").join("sicro.sqlite").is_file());
     assert!(ws
-        .join("imports")
+        .join("Sistema").join("imports")
         .join(result.import.id.to_string())
         .join("original_package.sicroapp")
         .is_file());
     assert!(ws
-        .join("imports")
+        .join("Sistema").join("imports")
         .join(result.import.id.to_string())
         .join("import_report.json")
         .is_file());
 
     // Both photos extracted.
-    let media_dir = ws.join("media").join("photos");
+    let media_dir = ws.join("Mídias").join("Fotos");
     let mut extracted: Vec<_> = fs::read_dir(&media_dir)
         .unwrap()
         .map(|e| e.unwrap().file_name().into_string().unwrap())
