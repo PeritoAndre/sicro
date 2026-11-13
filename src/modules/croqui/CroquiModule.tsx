@@ -14,6 +14,8 @@ import {
 import { NoOccurrenceState } from "@components/NoOccurrenceState/NoOccurrenceState";
 import { CroquiListView } from "./CroquiListView";
 import { NovoCroquiView } from "./novo/NovoCroquiView";
+import { NovoCorporalView } from "./novo/NovoCorporalView";
+import { NovoPlantaView } from "./novo/NovoPlantaView";
 import { CroquiEditor } from "./editor/CroquiEditor";
 import { CorpoEditor } from "./corpo/editor/CorpoEditor";
 import { useCroquiStore } from "./store/croquiStore";
@@ -116,6 +118,8 @@ export function CroquiModule() {
   const activeCroqui = useCroquiStore((s) => s.activeCroqui);
   const clearCurrent = useCroquiStore((s) => s.clearCurrent);
   const novoViario = useCroquiStore((s) => s.novoViario);
+  const novoCorporal = useCroquiStore((s) => s.novoCorporal);
+  const novoPlanta = useCroquiStore((s) => s.novoPlanta);
 
   // Solta o croqui aberto ao trocar de ocorrência, pra não mostrar o croqui de
   // um workspace sobre os dados de outro.
@@ -139,6 +143,10 @@ export function CroquiModule() {
     <div className={styles.wrap}>
       {novoViario ? (
         <NovoCroquiView />
+      ) : novoCorporal ? (
+        <NovoCorporalView />
+      ) : novoPlanta ? (
+        <NovoPlantaView />
       ) : activeCroquiId == null ? (
         <CroquiListView />
       ) : kind === "corporal" ? (

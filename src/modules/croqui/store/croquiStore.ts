@@ -26,6 +26,15 @@ interface CroquiState {
   novoViario: boolean;
   abrirNovoViario: () => void;
   fecharNovoViario: () => void;
+  novoCorporal: boolean;
+  abrirNovoCorporal: () => void;
+  fecharNovoCorporal: () => void;
+  novoPlanta: boolean;
+  abrirNovoPlanta: () => void;
+  fecharNovoPlanta: () => void;
+  /** Contador por croqui: sobe quando a miniatura é regravada (fura o cache da lista). */
+  thumbRev: Record<string, number>;
+  bumpThumb: (croquiId: string) => void;
 
   /**
    * ISO do último export PNG por croqui id. Só em memória: após reload
@@ -71,6 +80,14 @@ export const useCroquiStore = create<CroquiState>((set, get) => ({
   novoViario: false,
   abrirNovoViario: () => set({ novoViario: true }),
   fecharNovoViario: () => set({ novoViario: false }),
+  novoCorporal: false,
+  abrirNovoCorporal: () => set({ novoCorporal: true }),
+  fecharNovoCorporal: () => set({ novoCorporal: false }),
+  novoPlanta: false,
+  abrirNovoPlanta: () => set({ novoPlanta: true }),
+  fecharNovoPlanta: () => set({ novoPlanta: false }),
+  thumbRev: {},
+  bumpThumb: (id) => set((s) => ({ thumbRev: { ...s.thumbRev, [id]: (s.thumbRev[id] ?? 0) + 1 } })),
   activeCroqui: null,
   activeDoc: null,
   lastExportedAt: {},

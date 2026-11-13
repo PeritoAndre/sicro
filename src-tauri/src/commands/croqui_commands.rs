@@ -22,6 +22,7 @@ use crate::workspace::manifest::{Manifest, SQLITE_FILENAME};
 const CROQUIS_SUBDIR: &str = "croquis";
 const CROQUIS_EXPORT_SUBDIR: &str = "croquis/exports";
 const CROQUIS_BACKGROUNDS_SUBDIR: &str = "croquis/backgrounds";
+const CROQUIS_THUMBS_SUBDIR: &str = "croquis/thumbs";
 const CURRENT_SCHEMA_VERSION: &str = "0.1";
 
 #[tauri::command]
@@ -747,3 +748,23 @@ pub async fn save_croqui_background(
     Ok(format!("{CROQUIS_BACKGROUNDS_SUBDIR}/{filename}"))
 }
 
+
+/// Grava a miniatura PNG da lista em `croquis/thumbs/<croqui_id>.png`; devolve o caminho relativo.
+#[tauri::command]
+pub async fn save_croqui_thumbnail(
+    workspace_path: String,
+    croqui_id: String,
+    png_base64: String,
+) -> Result<String> {
+    let ws = PathBuf::from(&workspace_path);
+    let id = Uuid::parse_str(&croqui_id)
+        .map_err(|e| SicroError::Validation(format!("invalid croqui id: {e}")))?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(png_base64.as_bytes())
+        .map_err(|e| SicroError::Validation(format!("PNG da miniatura inválido: {e}")))?;
+    let dir = ws.join(CROQUIS_THUMBS_SUBDIR);
+    std::fs::create_dir_all(&dir)
+        .map_err(|e| SicroError::Filesystem(format!("cannot create thumbs dir {}: {}", dir.display(), e)))?;
+    atomic_write_bytes(&dir.join(format!("{id}.png")), &bytes)?;
+    Ok(format!("{CROQUIS_THUMBS_SUBDIR}/{id}.png"))
+}

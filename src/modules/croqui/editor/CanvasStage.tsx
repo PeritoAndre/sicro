@@ -244,16 +244,20 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
       const ui = uiLayerRef.current;
       const trVisible = tr?.visible() ?? false;
       const uiVisible = ui?.visible() ?? false;
+      // Alças de ponto, Transformer do fundo e alças de folha/corte não vão para o PNG nem para a miniatura.
+      const escondidos = [...stage.find(".alca"), ...stage.find("Transformer"), ...stage.find(".alcaRetangulo")].filter((n) => n !== tr && n.visible());
       stage.scale({ x: 1, y: 1 });
       stage.position({ x: 0, y: 0 });
       tr?.visible(false);
       ui?.visible(false);
+      for (const n of escondidos) n.visible(false);
       setPersonExporting(true);
       try {
         const pixelRatio = Math.min(targetWidthPx, 8000) / rect.width;
         return stage.toDataURL({ ...rect, pixelRatio, mimeType: "image/png" });
       } finally {
         setPersonExporting(false);
+        for (const n of escondidos) n.visible(true);
         tr?.visible(trVisible);
         ui?.visible(uiVisible);
         stage.scale({ x: prev.scale, y: prev.scale });
@@ -814,9 +818,10 @@ function AlcasDeRetangulo({
   };
   return (
     <>
-      <Rect x={r.x} y={r.y} width={r.w} height={r.h} stroke={cor} strokeWidth={1.5 * k} dash={[6 * k, 4 * k]} listening={false} />
+      <Rect name="alcaRetangulo" x={r.x} y={r.y} width={r.w} height={r.h} stroke={cor} strokeWidth={1.5 * k} dash={[6 * k, 4 * k]} listening={false} />
       {alcas.map(({ ax, ay }) => (
         <Rect
+          name="alcaRetangulo"
           key={`${ax}-${ay}`}
           x={r.x + r.w * ax}
           y={r.y + r.h * ay}
@@ -2447,6 +2452,7 @@ function PointHandle({
   const Node = diamond ? RegularPolygon : Circle;
   return (
     <Node
+      name="alca"
       sides={4}
       x={x}
       y={y}

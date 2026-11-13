@@ -1,28 +1,18 @@
-/** Landing do módulo Croqui: criar, abrir e excluir croquis. */
+/** Central de Croquis: três lâminas para criar e a lista dos croquis do caso. */
 
 import { useEffect, useState } from "react";
 import type { MouseEvent } from "react";
-import {
-  Car,
-  FileImage,
-  Map,
-  Plus,
-  Route,
-  Ruler,
-  Shapes,
-  Trash2,
-} from "lucide-react";
-import { Button } from "@components/Button/Button";
+import { Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@components/Dialog/ConfirmDialog";
-import {
-  ModuleLanding,
-  type ModuleLandingFeature,
-} from "@components/ModuleLanding/ModuleLanding";
 import { formatDateTime } from "@core/formatters";
 import { toSicroError } from "@core/errors";
 import type { CroquiKind } from "@domain/croqui";
 import { selectActiveWorkspacePath, useWorkspaceStore } from "@stores/workspaceStore";
 import { useCroquiStore } from "./store/croquiStore";
+import { urlMiniatura } from "./thumb";
+import viarioImg from "./assets/central/viario.webp";
+import corporalImg from "./assets/central/corporal.webp";
+import plantaImg from "./assets/central/planta.webp";
 import styles from "./CroquiListView.module.css";
 
 interface PendingDeleteCroqui {
@@ -30,77 +20,33 @@ interface PendingDeleteCroqui {
   title: string;
 }
 
-const CROQUI_FEATURES: ModuleLandingFeature[] = [
-  {
-    icon: <Route size={18} />,
-    title: "Vias e rotatórias",
-    desc: "Traçado paramétrico com marcações, cruzamentos e interseções limpas.",
-  },
-  {
-    icon: <Car size={18} />,
-    title: "Veículos e vestígios",
-    desc: "Silhuetas técnicas, mobiliário urbano, setas e pontos de impacto.",
-  },
-  {
-    icon: <Map size={18} />,
-    title: "Importar do OpenStreetMap",
-    desc: "Puxe o traçado real por coordenada/raio e ajuste sobre a cena.",
-  },
-  {
-    icon: <FileImage size={18} />,
-    title: "Foto / drone de fundo",
-    desc: "Use uma foto do caso (ou de drone) como referência, com opacidade e bloqueio.",
-  },
-  {
-    icon: <Ruler size={18} />,
-    title: "Escala e medições",
-    desc: "Calibre a escala e meça distâncias em unidade real.",
-  },
-  {
-    icon: <FileImage size={18} />,
-    title: "Export técnico",
-    desc: "PNG com cabeçalho, escala e carimbo — pronto para o laudo.",
-  },
-];
+const ARTE: Record<CroquiKind, string> = { viario: viarioImg, corporal: corporalImg, planta: plantaImg };
+const TIPO: Record<CroquiKind, string> = { viario: "viário", corporal: "corporal", planta: "planta" };
+const STATUS: Record<string, string> = { draft: "rascunho", final: "final", exported: "exportado" };
 
 export function CroquiListView() {
   const workspacePath = useWorkspaceStore(selectActiveWorkspacePath);
   const list = useCroquiStore((s) => s.list);
   const isLoadingList = useCroquiStore((s) => s.isLoadingList);
   const loadList = useCroquiStore((s) => s.loadList);
-  const createCroqui = useCroquiStore((s) => s.createCroqui);
   const abrirNovoViario = useCroquiStore((s) => s.abrirNovoViario);
+  const abrirNovoCorporal = useCroquiStore((s) => s.abrirNovoCorporal);
+  const abrirNovoPlanta = useCroquiStore((s) => s.abrirNovoPlanta);
   const openCroqui = useCroquiStore((s) => s.openCroqui);
   const openCorpo = useCroquiStore((s) => s.openCorpo);
   const openPlanta = useCroquiStore((s) => s.openPlanta);
   const deleteCroqui = useCroquiStore((s) => s.deleteCroqui);
+  const thumbRev = useCroquiStore((s) => s.thumbRev);
 
-  const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [semThumb, setSemThumb] = useState<Record<string, boolean>>({});
   const [pendingDelete, setPendingDelete] =
     useState<PendingDeleteCroqui | null>(null);
 
   useEffect(() => {
     if (workspacePath) void loadList(workspacePath);
   }, [workspacePath, loadList]);
-
-  const handleCreate = async (kind: CroquiKind = "viario") => {
-    if (!workspacePath) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const created = await createCroqui(workspacePath, title.trim(), kind);
-      setTitle("");
-      // Viário já abre pelo store (activeDoc setado); corporal/planta abrem aqui.
-      if (kind === "corporal") openCorpo(created.id);
-      else if (kind === "planta") openPlanta(created.id);
-    } catch (err) {
-      setError(toSicroError(err).message);
-    } finally {
-      setBusy(false);
-    }
-  };
 
   const handleOpen = async (croquiId: string, kind: CroquiKind) => {
     if (!workspacePath) return;
@@ -148,184 +94,92 @@ export function CroquiListView() {
     }
   };
 
-  const isEmpty = !isLoadingList && list.length === 0;
+  const vazio = !isLoadingList && list.length === 0;
 
-  if (isEmpty) {
-    return (
-      <div className={styles.wrap}>
-        <ModuleLanding
-          icon={<Shapes size={44} strokeWidth={1.2} />}
-          title="Croqui — Reconstrução de Cena"
-          subtitle="Desenhe o croqui técnico do sinistro: vias, veículos, vestígios e medidas em escala real. Importe o traçado do OpenStreetMap ou use foto/drone como fundo. Exporta PNG para o laudo."
-          actions={
-            <div
-              className={styles.createRow}
-              style={{ width: "100%", maxWidth: 480 }}
-            >
-              <input
-                type="text"
-                placeholder="Título (ex.: Sinistro Av. FAB)"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                disabled={busy}
-                className={styles.titleInput}
-              />
-              <Button
-                variant="secondary"
-                leftIcon={<Plus size={15} />}
-                onClick={abrirNovoViario}
-                disabled={busy}
-              >
-                Croqui viário
-              </Button>
-              <Button
-                variant="secondary"
-                leftIcon={<Plus size={15} />}
-                onClick={() => void handleCreate("corporal")}
-                disabled={busy}
-              >
-                Croqui corporal
-              </Button>
-              <Button
-                variant="secondary"
-                leftIcon={<Plus size={15} />}
-                onClick={() => void handleCreate("planta")}
-                disabled={busy}
-              >
-                Croqui de planta
-              </Button>
-            </div>
-          }
-          features={CROQUI_FEATURES}
-          note="O croqui é representação técnica de apoio. Medidas e posições refletem o levantamento do perito; os dados de origem (OSM, foto) ficam registrados."
-        />
-        {error && (
-          <p className={styles.error} style={{ textAlign: "center" }}>
-            {error}
-          </p>
-        )}
-      </div>
-    );
-  }
+  const laminas = (
+    <div className={styles.laminas}>
+      {([
+        ["viario", "Croqui viário", abrirNovoViario],
+        ["corporal", "Croqui corporal", abrirNovoCorporal],
+        ["planta", "Croqui de planta", abrirNovoPlanta],
+      ] as const).map(([kind, nome, abrir]) => (
+        <button key={kind} type="button" className={styles.lamina} onClick={abrir} disabled={busy}>
+          <span className={styles.arte}>
+            <img src={ARTE[kind]} alt="" />
+          </span>
+          <span className={styles.nome}>
+            {nome}
+            <Plus size={20} />
+          </span>
+        </button>
+      ))}
+    </div>
+  );
 
   return (
-    <div className={styles.wrap}>
+    <div className={`${styles.wrap} ${vazio ? styles.vazio : ""}`}>
       <div className={styles.container}>
-        <header className={styles.header}>
-          <div>
-            <h1 className={styles.title}>Croqui</h1>
-            <p className={styles.subtitle}>
-              Representação técnica de apoio — croqui viário, corporal ou planta
-              baixa. Cada croqui é um arquivo no workspace; o PNG técnico é
-              derivado para uso avulso ou no laudo.
-            </p>
-          </div>
-        </header>
+        <h1 className={styles.title}>Central de Croquis</h1>
+        {laminas}
+        {error && <p className={styles.error}>{error}</p>}
 
-        <section className={styles.createCard}>
-          <h2 className={styles.sectionTitle}>Novo croqui</h2>
-          <div className={styles.createRow}>
-            <input
-              type="text"
-              placeholder="Título (ex.: Sinistro Av. FAB)"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              disabled={busy}
-              className={styles.titleInput}
-            />
-            <Button
-              variant="secondary"
-              leftIcon={<Plus size={14} />}
-              onClick={abrirNovoViario}
-              disabled={busy}
-            >
-              Croqui viário
-            </Button>
-            <Button
-              variant="secondary"
-              leftIcon={<Plus size={14} />}
-              onClick={() => void handleCreate("corporal")}
-              disabled={busy}
-            >
-              Croqui corporal
-            </Button>
-            <Button
-              variant="secondary"
-              leftIcon={<Plus size={14} />}
-              onClick={() => void handleCreate("planta")}
-              disabled={busy}
-            >
-              Croqui de planta
-            </Button>
-          </div>
-          {error && <p className={styles.error}>{error}</p>}
-        </section>
-
-        <section>
-          <h2 className={styles.sectionTitle}>
-            Croquis desta ocorrência ({list.length})
-          </h2>
-          {isLoadingList && list.length === 0 ? (
-            <p className={styles.dim}>Carregando…</p>
-          ) : (
-            <ul className={styles.list}>
-              {list.map((c) => (
-                <li key={c.id} className={styles.row}>
-                  <div className={styles.rowMain}>
-                    <strong className={styles.rowTitle}>{c.title}</strong>
-                    <span className={styles.rowMeta}>
-                      <span
-                        className={styles.chip}
-                        style={
-                          c.kind === "corporal"
-                            ? { background: "#7c3aed", color: "#fff" }
-                            : c.kind === "planta"
-                              ? { background: "#0e7490", color: "#fff" }
-                              : undefined
-                        }
+        {!vazio && (
+          <section className={styles.lista}>
+            <h2 className={styles.sectionTitle}>Neste caso</h2>
+            {isLoadingList && list.length === 0 ? (
+              <p className={styles.dim}>Carregando…</p>
+            ) : (
+              <ul className={styles.list}>
+                {list.map((c) => {
+                  const versao = `${thumbRev[c.id] ?? 0}-${c.updated_at}`;
+                  return (
+                    <li key={c.id} className={styles.row}>
+                      <button
+                        type="button"
+                        className={styles.rowBtn}
+                        onClick={() => void handleOpen(c.id, c.kind)}
+                        disabled={busy}
+                        aria-label={`Abrir ${c.title}`}
                       >
-                        {c.kind === "corporal"
-                          ? "Corporal"
-                          : c.kind === "planta"
-                            ? "Planta"
-                            : "Viário"}
-                      </span>
-                      <span className={styles.chip}>{c.status}</span>
-                      <span>v{c.schema_version}</span>
-                      <span>atualizado {formatDateTime(c.updated_at)}</span>
-                      {c.last_export_relative_path && (
-                        <span title={c.last_export_relative_path}>
-                          <FileImage
-                            size={11}
-                            style={{ verticalAlign: "-1px", marginRight: 3 }}
+                        <span className={styles.mini}>
+                          <img
+                            key={versao}
+                            src={
+                              workspacePath && !semThumb[c.id]
+                                ? urlMiniatura(workspacePath, c.id, versao)
+                                : ARTE[c.kind]
+                            }
+                            alt=""
+                            onError={() => setSemThumb((m) => ({ ...m, [c.id]: true }))}
                           />
-                          PNG exportado
                         </span>
-                      )}
-                    </span>
-                  </div>
-                  <Button
-                    variant="secondary"
-                    onClick={() => void handleOpen(c.id, c.kind)}
-                    disabled={busy}
-                  >
-                    Abrir
-                  </Button>
-                  <button
-                    type="button"
-                    className={styles.deleteBtn}
-                    title="Excluir croqui"
-                    aria-label={`Excluir croqui ${c.title}`}
-                    disabled={busy}
-                    onClick={(e) => handleDeleteClick(e, c.id, c.title)}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+                        <span className={styles.rowMain}>
+                          <strong className={styles.rowTitle}>{c.title}</strong>
+                          <span className={styles.rowMeta}>
+                            <span className={styles.chip}>{TIPO[c.kind]}</span>
+                            {STATUS[c.status] ?? c.status}
+                            {c.last_export_relative_path ? " · PNG exportado" : ""}
+                          </span>
+                        </span>
+                        <span className={styles.quando}>{formatDateTime(c.updated_at)}</span>
+                      </button>
+                      <button
+                        type="button"
+                        className={styles.deleteBtn}
+                        title="Excluir croqui"
+                        aria-label={`Excluir croqui ${c.title}`}
+                        disabled={busy}
+                        onClick={(e) => handleDeleteClick(e, c.id, c.title)}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
       </div>
 
       <ConfirmDialog

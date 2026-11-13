@@ -42,6 +42,7 @@ import {
   type SicroLesaoMarker,
 } from "../engine";
 import { CorpoCanvas, type CorpoCanvasHandle, type CorpoTool } from "./CorpoCanvas";
+import { salvarMiniatura } from "../../thumb";
 import { useSalvamentoAutomatico } from "../../editor/useSalvamentoAutomatico";
 import { cropCorpoPng, stampCorpoPng } from "./exportCorpo";
 
@@ -241,6 +242,10 @@ export function CorpoEditor() {
       setDoc(stamped);
       setSavedJson(JSON.stringify(stamped));
       await loadList(workspacePath);
+      salvarMiniatura(workspacePath, activeCroqui.id, async () => {
+        const png = canvasRef.current?.toPng(1, { clean: true });
+        return png ? cropCorpoPng(png) : null;
+      });
       if (!silencioso) setFeedback("Salvo.");
       return true;
     } catch (err) {

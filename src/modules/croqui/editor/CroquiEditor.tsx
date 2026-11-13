@@ -79,6 +79,7 @@ import {
 import { commands } from "@core/commands";
 import { comUltimoEstilo, lembrarEstilo } from "./ultimoEstilo";
 import { useSalvamentoAutomatico } from "./useSalvamentoAutomatico";
+import { salvarMiniatura, THUMB_LARGURA } from "../thumb";
 import { DEFAULT_VIEWPORT, useEditorState, type Tool } from "./useEditorState";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { DroneImportModal } from "./DroneImportModal";
@@ -1186,6 +1187,13 @@ export function CroquiEditor() {
     try {
       await saveCurrent(workspacePath, doc);
       setLastSavedJson(JSON.stringify(doc));
+      const folha = {
+        x: doc.canvas.origin_x ?? 0,
+        y: doc.canvas.origin_y ?? 0,
+        width: doc.canvas.width_px,
+        height: doc.canvas.height_px,
+      };
+      salvarMiniatura(workspacePath, activeCroqui.id, () => stageRef.current?.toPng(folha, THUMB_LARGURA) ?? null);
       if (!opts?.silencioso) {
         setFeedback("Croqui salvo.");
         setTimeout(() => setFeedback(null), 2500);

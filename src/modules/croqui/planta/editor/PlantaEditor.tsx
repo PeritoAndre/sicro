@@ -20,6 +20,7 @@ import { PlantaInspector } from "./PlantaInspector";
 import { PlantaPalette } from "./PlantaPalette";
 import { stampPlanta, type PlantaLegend } from "./exportPlanta";
 import { usePlanta, type Tool } from "./store";
+import { salvarMiniatura } from "../../thumb";
 import { useSalvamentoAutomatico } from "../../editor/useSalvamentoAutomatico";
 import styles from "./planta.module.css";
 
@@ -108,6 +109,7 @@ export function PlantaEditor() {
       await commands.saveCroqui(workspacePath, activeCroqui.id, stamped);
       usePlanta.getState().markSaved(usePlanta.getState().doc ?? stamped);
       await loadList(workspacePath);
+      salvarMiniatura(workspacePath, activeCroqui.id, () => canvasRef.current?.capture("limpo", 480) ?? null);
       if (!silencioso) flash("Planta salva.");
       return true;
     } catch (err) {

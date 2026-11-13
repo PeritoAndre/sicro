@@ -41,7 +41,7 @@ const ZMIN = 0.03;
 const ZMAX = 40;
 
 export interface PlantaCanvasHandle {
-  capture(variant: "tecnico" | "limpo"): string | null;
+  capture(variant: "tecnico" | "limpo", larguraPx?: number): string | null;
   fit(): void;
   dropTool(tool: Tool, clientX: number, clientY: number): void;
 }
@@ -758,7 +758,7 @@ export const PlantaCanvas = forwardRef<PlantaCanvasHandle, Props>(function Plant
 
   // ---------- captura do PNG ----------
   useImperativeHandle(ref, () => ({
-    capture(variant) {
+    capture(variant, larguraPx) {
       const stage = stageRef.current;
       if (!stage) return null;
       flushSync(() => setExportMode(variant));
@@ -769,7 +769,7 @@ export const PlantaCanvas = forwardRef<PlantaCanvasHandle, Props>(function Plant
       const ui = uiRef.current;
       ui?.visible(false);
       try {
-        const pixelRatio = Math.min(s.png_width, 8000) / W(s.w);
+        const pixelRatio = Math.min(larguraPx ?? s.png_width, 8000) / W(s.w);
         return stage.toDataURL({ x: W(s.x), y: W(s.y), width: W(s.w), height: W(s.h), pixelRatio, mimeType: "image/png" });
       } finally {
         ui?.visible(true);
