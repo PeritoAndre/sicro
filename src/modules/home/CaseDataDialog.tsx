@@ -16,7 +16,8 @@ import {
   selectActiveWorkspacePath,
   useWorkspaceStore,
 } from "@stores/workspaceStore";
-import { MUNICIPIOS_AP, TIPOS_PERICIA } from "@domain/pericia";
+import { MUNICIPIOS_POR_UF, TIPOS_PERICIA, UFS } from "@domain/pericia";
+import { useSettingsStore } from "@stores/settingsStore";
 import { editFromOccurrence, type Occurrence } from "@domain/occurrence";
 import styles from "./CaseDataDialog.module.css";
 
@@ -63,6 +64,11 @@ export function CaseDataDialog({ open, onClose }: Props) {
   const update = useWorkspaceStore((s) => s.updateActiveOccurrence);
   const isMutating = useWorkspaceStore((s) => s.isMutating);
   const [form, setForm] = useState<FormState>(empty);
+  // UF só filtra a lista; a ocorrência guarda o município. Nasce do perfil, ou da UF do município já gravado.
+  const ufPerfil = useSettingsStore((st) => st.settings.profile.uf) || "AP";
+  const [uf, setUf] = useState(ufPerfil);
+  const ufDoMunicipio = (m: string) => UFS.find((u) => MUNICIPIOS_POR_UF[u]?.includes(m));
+  const ufAtual = (form.municipio && !MUNICIPIOS_POR_UF[uf]?.includes(form.municipio) && ufDoMunicipio(form.municipio)) || uf;
   const [error, setError] = useState<string | null>(null);
 
   // Cada abertura parte do caso como está gravado.
@@ -216,6 +222,26 @@ export function CaseDataDialog({ open, onClose }: Props) {
 
         <div className={styles.row}>
           <div className={styles.field}>
+            <label htmlFor="cd-uf" className={styles.label}>
+              Estado
+            </label>
+            <select
+              id="cd-uf"
+              className={styles.input}
+              value={ufAtual}
+              onChange={(e) => {
+                setUf(e.target.value);
+                setField("municipio", "");
+              }}
+            >
+              {UFS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className={styles.field}>
             <label htmlFor="cd-municipio" className={styles.label}>
               Município
             </label>
@@ -226,10 +252,10 @@ export function CaseDataDialog({ open, onClose }: Props) {
               onChange={(e) => setField("municipio", e.target.value)}
             >
               <option value="">—</option>
-              {form.municipio && !MUNICIPIOS_AP.includes(form.municipio) && (
+              {form.municipio && !(MUNICIPIOS_POR_UF[ufAtual] ?? []).includes(form.municipio) && (
                 <option value={form.municipio}>{form.municipio}</option>
               )}
-              {MUNICIPIOS_AP.map((m) => (
+              {(MUNICIPIOS_POR_UF[ufAtual] ?? []).map((m) => (
                 <option key={m} value={m}>
                   {m}
                 </option>
