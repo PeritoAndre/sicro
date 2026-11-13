@@ -15,6 +15,7 @@ import {
 } from "@stores/workspaceStore";
 import { NoOccurrenceState } from "@components/NoOccurrenceState/NoOccurrenceState";
 import { VideoListView } from "./VideoListView";
+import { MontagemView } from "./montagem/MontagemView";
 import { VideoAnalysisView } from "./editor/VideoAnalysisView";
 import { useVideoStore } from "./store/videoStore";
 import styles from "./VideoModule.module.css";
@@ -28,6 +29,7 @@ export function VideoModule() {
   const activeMediaId = useVideoStore((s) => s.activeMediaId);
   const closeMedia = useVideoStore((s) => s.closeMedia);
   const openMedia = useVideoStore((s) => s.openMedia);
+  const montagemAberta = useVideoStore((s) => s.montagemAberta);
 
   // Fecha o vídeo aberto só quando a ocorrência muda.
   useEffect(() => {
@@ -66,7 +68,13 @@ export function VideoModule() {
   return (
     <div className={styles.wrap}>
       {/* key: cada vídeo começa com o estado limpo (trecho, lupa, comparação…) */}
-      {activeMediaId == null ? <VideoListView /> : <VideoAnalysisView key={activeMediaId} />}
+      {activeMediaId != null ? (
+        <VideoAnalysisView key={activeMediaId} />
+      ) : montagemAberta ? (
+        <MontagemView />
+      ) : (
+        <VideoListView />
+      )}
     </div>
   );
 }

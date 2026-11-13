@@ -9,7 +9,7 @@ import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Clock, Columns2, Copy, Repeat, Scissors, Wand2, X } from "lucide-react";
+import { ArrowLeft, Clock, Columns2, Copy, Repeat, Scissors, Trash2, Wand2, X } from "lucide-react";
 import type {
   ClipMode,
   ExportClipResult,
@@ -233,6 +233,21 @@ export function VideoAnalysisView() {
     const i = mediaList.findIndex((m) => m.id === bundle.media.id);
     const next = mediaList[(i + dir + mediaList.length) % mediaList.length];
     if (next) switchVideo(next.id);
+  };
+  const excluirVideo = async () => {
+    if (!workspacePath || !bundle) return;
+    const ok = await askConfirm({
+      title: "Excluir vídeo",
+      message: "Excluir este vídeo e tudo que foi marcado nele?",
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await useVideoStore.getState().deleteMedia(workspacePath, bundle.media.id);
+    } catch (e) {
+      flash(`Falha: ${toSicroError(e).message}`, 5000);
+    }
   };
   const addVideos = async () => {
     if (!workspacePath || adding) return;
@@ -857,6 +872,14 @@ export function VideoAnalysisView() {
             </ul>
           )}
         </div>
+        <button
+          type="button"
+          className={styles.compareBtn}
+          onClick={() => void excluirVideo()}
+          title="Excluir este vídeo do caso"
+        >
+          <Trash2 size={13} /> Excluir vídeo
+        </button>
       </header>
       {derivation && (
         <div className={styles.derivedBar}>

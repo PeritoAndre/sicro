@@ -45,6 +45,7 @@ import type {
   VideoOperationLog,
   VideoStoryboardFrame,
 } from "@domain/video";
+import type { Montagem, RenderMontagemResult } from "@domain/montagem";
 import type {
   ComputeSpeedInput,
   CreateSpeedCalibrationInput,
@@ -285,6 +286,10 @@ export const commands = {
     return safeInvoke<string>("save_croqui_background", { workspacePath, pngBase64, nome });
   },
 
+  saveCroquiThumbnail(workspacePath: string, croquiId: string, pngBase64: string): Promise<string> {
+    return safeInvoke<string>("save_croqui_thumbnail", { workspacePath, croquiId, pngBase64 });
+  },
+
   /** ~/SICRO/Casos (ou equivalente): onde os casos nascem. */
   defaultWorkspaceParent(): Promise<string> {
     return safeInvoke<string>("default_workspace_parent", {});
@@ -356,6 +361,28 @@ export const commands = {
   },
 
   // ----- Vídeo -----
+
+  /** Remove o vídeo e o que foi marcado nele (o log de operações fica). */
+  deleteVideoMedia(workspacePath: string, mediaId: string): Promise<void> {
+    return safeInvoke<void>("delete_video_media", { workspacePath, mediaId });
+  },
+
+  listMontagens(workspacePath: string): Promise<Montagem[]> {
+    return safeInvoke<Montagem[]>("list_montagens", { workspacePath });
+  },
+
+  saveMontagem(workspacePath: string, montagem: Montagem): Promise<Montagem> {
+    return safeInvoke<Montagem>("save_montagem", { workspacePath, montagem });
+  },
+
+  deleteMontagem(workspacePath: string, montagemId: string): Promise<void> {
+    return safeInvoke<void>("delete_montagem", { workspacePath, montagemId });
+  },
+
+  /** Progresso no evento `montagem:progresso` ({ montagem_id, pct }). */
+  renderMontagem(workspacePath: string, montagemId: string): Promise<RenderMontagemResult> {
+    return safeInvoke<RenderMontagemResult>("render_montagem", { workspacePath, montagemId });
+  },
 
   /** Copia para videos/originais/, calcula SHA-256 e roda ffprobe. */
   registerVideoMedia(

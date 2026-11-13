@@ -53,10 +53,13 @@ pub async fn register_video_media(
     if let Some(existing) =
         video_repo::find_media_by_sha256(&conn, &occurrence_id, &sha256)?
     {
-        return Err(SicroError::Validation(format!(
-            "video já registrado nesta ocorrência (id {}). Abra a mídia existente em vez de duplicar.",
-            existing.id
-        )));
+        if !input.allow_duplicate {
+            // O front reconhece o prefixo e pergunta se anexa de novo.
+            return Err(SicroError::Validation(format!(
+                "VIDEO_DUPLICADO:{}: vídeo já registrado nesta ocorrência.",
+                existing.id
+            )));
+        }
     }
 
     let videos_dir = ws.join(VIDEOS_SUBDIR);
@@ -67,15 +70,20 @@ pub async fn register_video_media(
             e
         ))
     })?;
-    let target_name = pick_unique_filename(&videos_dir, &source);
-    let target_path = videos_dir.join(&target_name);
-    std::fs::copy(&source, &target_path).map_err(|e| {
-        SicroError::Filesystem(format!(
-            "could not copy video to {}: {}",
-            target_path.display(),
-            e
-        ))
-    })?;
+    // Anexo repetido aponta para o arquivo já copiado (mesmo hash): sem segunda cópia.
+    let reuse = video_repo::find_media_by_sha256(&conn, &occurrence_id, &sha256)?
+        .filter(|m| ws.join(&m.relative_path).is_file());
+    let (target_name, target_path) = match &reuse {
+        Some(m) => (m.filename.clone(), ws.join(&m.relative_path)),
+        None => {
+            let name = pick_unique_filename(&videos_dir, &source);
+            let path = videos_dir.join(&name);
+            std::fs::copy(&source, &path).map_err(|e| {
+                SicroError::Filesystem(format!("could not copy video to {}: {}", path.display(), e))
+            })?;
+            (name, path)
+        }
+    };
 
     let size_bytes = std::fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
 
@@ -118,7 +126,10 @@ pub async fn register_video_media(
 
     let id = Uuid::new_v4();
     let now = Utc::now();
-    let relative_path = format!("{VIDEOS_SUBDIR}/{}", target_name);
+    let relative_path = match &reuse {
+        Some(m) => m.relative_path.clone(),
+        None => format!("{VIDEOS_SUBDIR}/{}", target_name),
+    };
     let warnings_json =
         serde_json::to_string(&warnings).unwrap_or_else(|_| "[]".to_string());
     let media = VideoMedia {
@@ -157,6 +168,7 @@ pub async fn register_video_media(
             "media_id": media.id.to_string(),
             "filename": media.filename,
             "size_bytes": media.size_bytes,
+            "anexo_repetido": reuse.is_some(),
             "warnings": warnings,
         })
         .to_string(),
@@ -970,4 +982,379 @@ fn estimate_frame_index(ts: f64, fps: Option<f64>) -> Option<i64> {
         return None;
     }
     Some((ts * fps).round() as i64)
+}
+
+// ---------------------------------------------------------------------------
+// Excluir vídeo
+
+/// Remove o registro e, se nenhum outro registro tiver o mesmo hash, tudo que foi
+/// marcado nele (eventos, quadros, medições…) e o arquivo copiado. O log fica.
+#[tauri::command]
+pub async fn delete_video_media(workspace_path: String, media_id: String) -> Result<()> {
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let occ = manifest.occurrence_id;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    let id = Uuid::parse_str(&media_id)
+        .map_err(|e| SicroError::Validation(format!("invalid media_id: {e}")))?;
+    let media = video_repo::find_media_by_id(&conn, &id)?
+        .ok_or_else(|| SicroError::Validation("vídeo não encontrado".into()))?;
+    let outros: Vec<VideoMedia> = video_repo::list_media_for_occurrence(&conn, &occ)?
+        .into_iter()
+        .filter(|m| m.id != id)
+        .collect();
+    let hash_em_uso = outros.iter().any(|m| m.sha256 == media.sha256);
+    let arquivo_em_uso = outros.iter().any(|m| m.relative_path == media.relative_path);
+
+    // Arquivos dos quadros/exportações antes de apagar as linhas que os apontam.
+    let mut arquivos: Vec<String> = Vec::new();
+    if !hash_em_uso {
+        for tabela in ["video_exports", "video_storyboard_frames"] {
+            let mut st = conn.prepare(&format!(
+                "SELECT output_path, sidecar_json_path FROM {tabela} WHERE occurrence_id = ?1 AND media_hash = ?2"
+            ))?;
+            let linhas = st.query_map([occ.to_string(), media.sha256.clone()], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?))
+            })?;
+            for l in linhas {
+                let (a, b) = l?;
+                arquivos.push(a);
+                arquivos.extend(b);
+            }
+        }
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    let mut apagados: Vec<String> = Vec::new();
+    if !hash_em_uso {
+        // Toda tabela com media_hash + occurrence_id, menos o log de operações.
+        let nomes: Vec<String> = {
+            let mut st = tx.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")?;
+            let r = st.query_map([], |r| r.get::<_, String>(0))?;
+            r.collect::<std::result::Result<_, _>>()?
+        };
+        for nome in nomes {
+            if nome == "video_operation_logs" {
+                continue;
+            }
+            let colunas: Vec<String> = {
+                let mut st = tx.prepare("SELECT name FROM pragma_table_info(?1)")?;
+                let r = st.query_map([&nome], |r| r.get::<_, String>(0))?;
+                r.collect::<std::result::Result<_, _>>()?
+            };
+            if colunas.iter().any(|c| c == "media_hash") && colunas.iter().any(|c| c == "occurrence_id") {
+                let n = tx.execute(
+                    &format!("DELETE FROM \"{nome}\" WHERE occurrence_id = ?1 AND media_hash = ?2"),
+                    [occ.to_string(), media.sha256.clone()],
+                )?;
+                if n > 0 {
+                    apagados.push(format!("{nome}: {n}"));
+                }
+            }
+        }
+    }
+    tx.execute("DELETE FROM video_media WHERE id = ?1", [id.to_string()])?;
+    tx.commit()?;
+
+    let mut arquivos_removidos = 0;
+    if !arquivo_em_uso {
+        arquivos.push(media.relative_path.clone());
+    }
+    for rel in arquivos {
+        let p = ws.join(&rel);
+        if rel.contains("..") || !p.is_file() {
+            continue;
+        }
+        if std::fs::remove_file(&p).is_ok() {
+            arquivos_removidos += 1;
+        }
+    }
+
+    video_repo::insert_log(
+        &conn,
+        &occ,
+        Some(&media.sha256),
+        "media.delete",
+        &json!({
+            "media_id": media.id.to_string(),
+            "filename": media.filename,
+            "relative_path": media.relative_path,
+            "dados_removidos": !hash_em_uso,
+            "linhas_removidas": apagados,
+            "arquivos_removidos": arquivos_removidos,
+        })
+        .to_string(),
+    )?;
+    occurrence_repo::record_audit(
+        &conn,
+        Some(&occ),
+        "video.media.deleted",
+        Some("video"),
+        Some("video_media"),
+        Some(&media.id),
+        Some(&media.sha256),
+    )?;
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Montagem
+
+const MONTAGENS_SUBDIR: &str = "videos/montagens";
+
+fn id_seguro(id: &str) -> Result<&str> {
+    if !id.is_empty() && id.len() <= 80 && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+        Ok(id)
+    } else {
+        Err(SicroError::Validation("id de montagem inválido".into()))
+    }
+}
+
+fn montagem_path(ws: &Path, id: &str) -> Result<PathBuf> {
+    Ok(ws.join(MONTAGENS_SUBDIR).join(format!("{}.json", id_seguro(id)?)))
+}
+
+#[tauri::command]
+pub async fn list_montagens(workspace_path: String) -> Result<Vec<crate::models::Montagem>> {
+    let dir = PathBuf::from(&workspace_path).join(MONTAGENS_SUBDIR);
+    let Ok(rd) = std::fs::read_dir(&dir) else { return Ok(Vec::new()) };
+    let mut v: Vec<crate::models::Montagem> = rd
+        .filter_map(|e| e.ok())
+        .map(|e| e.path())
+        .filter(|p| {
+            let n = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            n.ends_with(".json") && !n.contains(".relatorio.")
+        })
+        .filter_map(|p| serde_json::from_slice(&std::fs::read(p).ok()?).ok())
+        .collect();
+    v.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    Ok(v)
+}
+
+#[tauri::command]
+pub async fn save_montagem(
+    workspace_path: String,
+    montagem: crate::models::Montagem,
+) -> Result<crate::models::Montagem> {
+    let ws = PathBuf::from(&workspace_path);
+    let _ = Manifest::read(&ws)?;
+    let mut m = montagem;
+    m.updated_at = Utc::now().to_rfc3339();
+    let path = montagem_path(&ws, &m.id)?;
+    std::fs::create_dir_all(ws.join(MONTAGENS_SUBDIR))?;
+    // Grava num temporário e renomeia: queda no meio não deixa o JSON pela metade.
+    let tmp = path.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(&m)?)?;
+    std::fs::rename(&tmp, &path)?;
+    Ok(m)
+}
+
+#[tauri::command]
+pub async fn delete_montagem(workspace_path: String, montagem_id: String) -> Result<()> {
+    let ws = PathBuf::from(&workspace_path);
+    let path = montagem_path(&ws, &montagem_id)?;
+    if path.is_file() {
+        std::fs::remove_file(&path)?;
+    }
+    Ok(())
+}
+
+#[derive(serde::Serialize, Clone)]
+struct MontagemProgresso<'a> {
+    montagem_id: &'a str,
+    pct: f64,
+}
+
+/// Renderiza a montagem num MP4 novo (H.264/AAC) com relatório ao lado. Os originais não são tocados.
+#[tauri::command]
+pub async fn render_montagem(
+    app: tauri::AppHandle,
+    workspace_path: String,
+    montagem_id: String,
+) -> Result<crate::models::RenderMontagemResult> {
+    use crate::video::montagem::{construir, fonte_padrao, Fonte};
+    use std::io::{BufRead, BufReader};
+    use std::process::Stdio;
+    use tauri::Emitter;
+
+    let ws = PathBuf::from(&workspace_path);
+    let manifest = Manifest::read(&ws)?;
+    let occ = manifest.occurrence_id;
+    let mut conn = open_connection(&ws.join(SQLITE_FILENAME))?;
+    run_migrations(&mut conn)?;
+
+    let mpath = montagem_path(&ws, &montagem_id)?;
+    let montagem: crate::models::Montagem = serde_json::from_slice(
+        &std::fs::read(&mpath).map_err(|e| SicroError::Filesystem(format!("montagem não encontrada: {e}")))?,
+    )?;
+
+    // Resolve cada vídeo usado (e guarda o hash do original para o relatório).
+    let mut usados: std::collections::HashMap<String, VideoMedia> = std::collections::HashMap::new();
+    for it in &montagem.itens {
+        let mid = match it {
+            crate::models::MontagemItem::Trecho { media_id, .. }
+            | crate::models::MontagemItem::Congelar { media_id, .. } => media_id,
+            _ => continue,
+        };
+        if usados.contains_key(mid) {
+            continue;
+        }
+        let uid = Uuid::parse_str(mid).map_err(|_| SicroError::Validation("vídeo inválido na montagem".into()))?;
+        let m = video_repo::find_media_by_id(&conn, &uid)?
+            .ok_or_else(|| SicroError::Validation("um vídeo da montagem não está mais no caso".into()))?;
+        usados.insert(mid.clone(), m);
+    }
+    let resolver = |id: &str| -> Result<Fonte> {
+        let m = usados.get(id).ok_or_else(|| SicroError::Validation("vídeo da montagem ausente".into()))?;
+        let path = ws.join(&m.relative_path);
+        if !path.is_file() {
+            return Err(SicroError::Filesystem(format!("vídeo ausente: {}", m.relative_path)));
+        }
+        let tem_audio = serde_json::from_str::<serde_json::Value>(&m.raw_probe_json)
+            .ok()
+            .and_then(|j| {
+                j.get("streams")?
+                    .as_array()?
+                    .iter()
+                    .any(|s| s.get("codec_type").and_then(|c| c.as_str()) == Some("audio"))
+                    .then_some(())
+            })
+            .is_some();
+        Ok(Fonte { path, tem_audio })
+    };
+    let plano = construir(&montagem, &fonte_padrao(), &resolver)?;
+
+    let ffmpeg = crate::tools::find_ffmpeg_tool("ffmpeg")
+        .ok_or_else(|| SicroError::Workspace("ffmpeg não encontrado".into()))?;
+    let dir = ws.join(MONTAGENS_SUBDIR);
+    std::fs::create_dir_all(&dir)?;
+    let stamp = Utc::now().format("%Y%m%d-%H%M%S");
+    let out_name = format!("{}_{stamp}.mp4", montagem.id);
+    let out_path = dir.join(&out_name);
+
+    // Pasta de trabalho com os textos (o ffmpeg roda nela: nomes simples no filtro).
+    let work = dir.join(format!(".render-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&work)?;
+    for (nome, conteudo) in &plano.textos {
+        std::fs::write(work.join(nome), conteudo)?;
+    }
+    let log_path = work.join("ffmpeg.log");
+
+    let mut args: Vec<String> = ["-y", "-nostdin", "-hide_banner", "-loglevel", "error", "-progress", "pipe:1", "-nostats"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    for i in &plano.inputs {
+        args.push("-i".into());
+        args.push(i.to_string_lossy().into_owned());
+    }
+    let fim: Vec<String> = [
+        "-filter_complex", plano.filter_complex.as_str(), "-map", "[v]", "-map", "[a]",
+        "-c:v", "libx264", "-preset", "medium", "-crf", "18", "-pix_fmt", "yuv420p",
+        "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    args.extend(fim);
+    args.push(out_path.to_string_lossy().into_owned());
+
+    let (app2, mid, total, work2, log2) = (app.clone(), montagem.id.clone(), plano.duracao_s, work.clone(), log_path.clone());
+    let args2 = args.clone();
+    let status = tauri::async_runtime::spawn_blocking(move || -> Result<bool> {
+        let log = std::fs::File::create(&log2)?;
+        let mut child = crate::tools::command(&ffmpeg)
+            .args(&args2)
+            .current_dir(&work2)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::from(log))
+            .spawn()
+            .map_err(|e| SicroError::Workspace(format!("não foi possível iniciar o ffmpeg: {e}")))?;
+        if let Some(out) = child.stdout.take() {
+            for linha in BufReader::new(out).lines().map_while(|l| l.ok()) {
+                if let Some(us) = linha.strip_prefix("out_time_us=").or_else(|| linha.strip_prefix("out_time_ms=")) {
+                    if let Ok(us) = us.trim().parse::<f64>() {
+                        let pct = (us / 1_000_000.0 / total.max(0.001) * 100.0).clamp(0.0, 99.0);
+                        let _ = app2.emit("montagem:progresso", MontagemProgresso { montagem_id: &mid, pct });
+                    }
+                }
+            }
+        }
+        Ok(child.wait()?.success())
+    })
+    .await
+    .map_err(|e| SicroError::Workspace(format!("render task: {e}")))??;
+
+    if !status {
+        let msg = std::fs::read_to_string(&log_path).unwrap_or_default();
+        let _ = std::fs::remove_file(&out_path);
+        let _ = std::fs::remove_dir_all(&work);
+        let tail: String = msg.lines().rev().take(6).collect::<Vec<_>>().into_iter().rev().collect::<Vec<_>>().join(" | ");
+        let dica = if tail.contains("drawtext") || tail.contains("ont") {
+            " (o ffmpeg desta máquina pode estar sem fonte para os textos)"
+        } else {
+            ""
+        };
+        return Err(SicroError::Workspace(format!("a renderização falhou{dica}: {tail}")));
+    }
+    let _ = std::fs::remove_dir_all(&work);
+    let _ = app.emit("montagem:progresso", MontagemProgresso { montagem_id: &montagem.id, pct: 100.0 });
+
+    let sha256 = sha256_file(&out_path)?;
+    let duracao_s = probe_media(&out_path).ok().and_then(|p| p.duration_s).unwrap_or(plano.duracao_s);
+    let relativo = format!("{MONTAGENS_SUBDIR}/{out_name}");
+
+    let itens: Vec<serde_json::Value> = montagem
+        .itens
+        .iter()
+        .map(|it| {
+            let mut v = serde_json::to_value(it).unwrap_or_default();
+            let mid = v.get("media_id").and_then(|x| x.as_str()).map(str::to_string);
+            if let (Some(mid), Some(o)) = (mid, v.as_object_mut()) {
+                if let Some(m) = usados.get(&mid) {
+                    o.insert("origem".into(), json!({ "arquivo": m.filename, "sha256": m.sha256 }));
+                }
+            }
+            v
+        })
+        .collect();
+    let relatorio = json!({
+        "montagem": { "id": montagem.id, "titulo": montagem.titulo },
+        "saida": {
+            "arquivo": out_name,
+            "sha256": sha256,
+            "duracao_s": duracao_s,
+            "largura": montagem.saida.largura,
+            "altura": montagem.saida.altura,
+            "fps": montagem.saida.fps,
+            "incluir_audio": montagem.saida.incluir_audio,
+        },
+        "itens": itens,
+        "renderizado_em": Utc::now().to_rfc3339(),
+        "sicro_versao": env!("CARGO_PKG_VERSION"),
+        "ffmpeg_args": args,
+        "nota": "Vídeo novo gerado a partir de cópias de trabalho; os originais não foram alterados.",
+    });
+    let rel_path = dir.join(format!("{out_name}.relatorio.json"));
+    std::fs::write(&rel_path, serde_json::to_vec_pretty(&relatorio)?)
+        .map_err(|e| SicroError::Filesystem(format!("cannot write {}: {e}", rel_path.display())))?;
+
+    video_repo::insert_log(
+        &conn,
+        &occ,
+        None,
+        "montagem.render",
+        &json!({
+            "montagem_id": montagem.id,
+            "saida": relativo,
+            "sha256": sha256,
+            "itens": montagem.itens.len(),
+            "duracao_s": duracao_s,
+        })
+        .to_string(),
+    )?;
+
+    Ok(crate::models::RenderMontagemResult { output_relative_path: relativo, sha256, duracao_s })
 }

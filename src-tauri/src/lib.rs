@@ -103,6 +103,7 @@ pub fn run() {
             commands::croqui_commands::fetch_map_tile,
             commands::croqui_commands::geocode_place,
             commands::croqui_commands::save_croqui_background,
+            commands::croqui_commands::save_croqui_thumbnail,
             // vídeo
             commands::video_commands::register_video_media,
             commands::video_commands::list_video_media,
@@ -119,6 +120,11 @@ pub fn run() {
             commands::video_commands::delete_video_clock,
             commands::video_commands::video_thumbnail,
             commands::video_commands::export_video_clip,
+            commands::video_commands::delete_video_media,
+            commands::video_commands::list_montagens,
+            commands::video_commands::save_montagem,
+            commands::video_commands::delete_montagem,
+            commands::video_commands::render_montagem,
             // áudio
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,

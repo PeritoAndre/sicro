@@ -171,6 +171,8 @@ export interface VideoBundle {
 
 export interface RegisterVideoInput {
   source_path: string;
+  /** Já existe no caso e o usuário confirmou anexar de novo. */
+  allow_duplicate?: boolean;
 }
 
 export interface CreateVideoEventInput {

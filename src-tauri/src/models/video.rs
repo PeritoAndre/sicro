@@ -46,6 +46,9 @@ pub struct VideoMedia {
 pub struct RegisterVideoInput {
     /// Caminho absoluto (diálogo do SO).
     pub source_path: String,
+    /// Já existe no caso e o usuário confirmou anexar de novo.
+    #[serde(default)]
+    pub allow_duplicate: bool,
 }
 
 // ---------------------------------------------------------------------------
@@ -261,4 +264,79 @@ pub struct VideoBundle {
     pub events: Vec<VideoEvent>,
     pub exports: Vec<VideoExport>,
     pub storyboard: Vec<VideoStoryboardFrame>,
+}
+
+// ---------------------------------------------------------------------------
+// Montagem (editor de sequência). Espelhado em `src/types/montagem.ts`.
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemTexto {
+    pub conteudo: String,
+    /// "topo" | "centro" | "rodape"
+    pub posicao: String,
+    /// "p" | "m" | "g"
+    pub tamanho: String,
+    /// Mostra o tempo do vídeo original no canto.
+    #[serde(default)]
+    pub carimbo_tempo: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(tag = "tipo", rename_all = "snake_case")]
+pub enum MontagemItem {
+    Trecho {
+        id: String,
+        media_id: String,
+        inicio_s: f64,
+        fim_s: f64,
+        velocidade: f64,
+        #[serde(default)]
+        texto: Option<MontagemTexto>,
+        /// "corte" | "fade"
+        #[serde(default)]
+        transicao_entrada: Option<String>,
+    },
+    Cartela {
+        id: String,
+        duracao_s: f64,
+        texto: String,
+        cor_fundo: String,
+        cor_texto: String,
+        tamanho: String,
+        #[serde(default)]
+        transicao_entrada: Option<String>,
+    },
+    Congelar {
+        id: String,
+        media_id: String,
+        instante_s: f64,
+        duracao_s: f64,
+        #[serde(default)]
+        texto: Option<MontagemTexto>,
+    },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct MontagemSaida {
+    pub largura: u32,
+    pub altura: u32,
+    pub fps: u32,
+    pub incluir_audio: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Montagem {
+    pub id: String,
+    pub titulo: String,
+    pub created_at: String,
+    pub updated_at: String,
+    pub itens: Vec<MontagemItem>,
+    pub saida: MontagemSaida,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct RenderMontagemResult {
+    pub output_relative_path: String,
+    pub sha256: String,
+    pub duracao_s: f64,
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Camera, Clock, Film, LayoutGrid, Plus, ShieldCheck } from "lucide-react";
+import { Camera, Clapperboard, Clock, Film, LayoutGrid, Plus, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import {
   ModuleLanding,
@@ -14,6 +14,7 @@ import {
   selectActiveWorkspacePath,
   useWorkspaceStore,
 } from "@stores/workspaceStore";
+import { askConfirm } from "@components/Dialog/ask";
 import { useVideoStore } from "./store/videoStore";
 import { formatDuration, prettyBytes } from "./editor/format";
 import { VideoThumb } from "./VideoThumb";
@@ -49,6 +50,8 @@ export function VideoListView() {
   const loadList = useVideoStore((s) => s.loadList);
   const registerMedia = useVideoStore((s) => s.registerMedia);
   const openMedia = useVideoStore((s) => s.openMedia);
+  const deleteMedia = useVideoStore((s) => s.deleteMedia);
+  const abrirMontagem = useVideoStore((s) => s.abrirMontagem);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -88,6 +91,22 @@ export function VideoListView() {
       setError(toSicroError(err).message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleDelete = async (mediaId: string) => {
+    if (!workspacePath) return;
+    const ok = await askConfirm({
+      title: "Excluir vídeo",
+      message: "Excluir este vídeo e tudo que foi marcado nele?",
+      confirmLabel: "Excluir",
+      danger: true,
+    });
+    if (!ok) return;
+    try {
+      await deleteMedia(workspacePath, mediaId);
+    } catch (err) {
+      setError(toSicroError(err).message);
     }
   };
 
@@ -135,14 +154,19 @@ export function VideoListView() {
               o storyboard pericial. O original é sempre preservado.
             </p>
           </div>
-          <Button
-            variant="primary"
-            leftIcon={<Plus size={14} />}
-            onClick={() => void handleAdd()}
-            disabled={busy}
-          >
-            {busy ? "Adicionando…" : "Adicionar vídeo"}
-          </Button>
+          <div style={{ display: "flex", gap: "var(--space-2)" }}>
+            <Button leftIcon={<Clapperboard size={14} />} onClick={abrirMontagem}>
+              Montagem
+            </Button>
+            <Button
+              variant="primary"
+              leftIcon={<Plus size={14} />}
+              onClick={() => void handleAdd()}
+              disabled={busy}
+            >
+              {busy ? "Adicionando…" : "Adicionar vídeo"}
+            </Button>
+          </div>
         </header>
 
         {error && <p className={styles.error}>{error}</p>}
@@ -209,6 +233,18 @@ export function VideoListView() {
                     disabled={busy}
                   >
                     Abrir
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    title="Excluir vídeo"
+                    aria-label="Excluir vídeo"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      void handleDelete(m.id);
+                    }}
+                    disabled={busy}
+                  >
+                    <Trash2 size={14} />
                   </Button>
                 </li>
               ))}

@@ -4,6 +4,7 @@
 pub mod clip;
 pub mod frame_export;
 pub mod measure;
+pub mod montagem;
 pub mod ort_env;
 pub mod pessoas;
 pub mod probe;

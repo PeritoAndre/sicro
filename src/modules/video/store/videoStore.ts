@@ -5,6 +5,7 @@
 
 import { create } from "zustand";
 import { commands } from "@core/commands";
+import { askConfirm } from "@components/Dialog/ask";
 import { toSicroError, type SicroError } from "@core/errors";
 import type {
   CollectFrameInput,
@@ -34,6 +35,11 @@ interface VideoState {
 
   activeMediaId: string | null;
   bundle: VideoBundle | null;
+  /** Tela da Montagem aberta no lugar da lista. */
+  montagemAberta: boolean;
+  abrirMontagem: () => void;
+  fecharMontagem: () => void;
+  deleteMedia: (workspacePath: string, mediaId: string) => Promise<void>;
 
   lastError: SicroError | null;
   warningsFromLastAction: string[];
@@ -102,6 +108,9 @@ export const useVideoStore = create<VideoState>((set) => ({
   isMutating: false,
   activeMediaId: null,
   bundle: null,
+  montagemAberta: false,
+  abrirMontagem: () => set({ montagemAberta: true }),
+  fecharMontagem: () => set({ montagemAberta: false }),
   lastError: null,
   warningsFromLastAction: [],
   speedCalibrations: [],
@@ -131,9 +140,47 @@ export const useVideoStore = create<VideoState>((set) => ({
       return media;
     } catch (err) {
       const e = toSicroError(err);
+      const dup = /VIDEO_DUPLICADO:([0-9a-f-]{36})/.exec(e.message);
+      if (dup) {
+        set({ isMutating: false, lastError: null });
+        const sim = await askConfirm({
+          title: "Este vídeo já está no caso",
+          message: "Anexar de novo?",
+          confirmLabel: "Anexar de novo",
+        });
+        if (!sim) {
+          // Sem anexar: devolve o que já existe, para quem chamou abrir esse.
+          const existente = (await commands.listVideoMedia(workspacePath)).find((m) => m.id === dup[1]);
+          if (existente) return existente;
+          throw e;
+        }
+        set({ isMutating: true });
+        try {
+          const media = await commands.registerVideoMedia(workspacePath, {
+            source_path: sourcePath,
+            allow_duplicate: true,
+          });
+          set((s) => ({ list: [media, ...s.list.filter((m) => m.id !== media.id)], isMutating: false }));
+          return media;
+        } catch (err2) {
+          const e2 = toSicroError(err2);
+          set({ isMutating: false, lastError: e2 });
+          throw e2;
+        }
+      }
       set({ isMutating: false, lastError: e });
       throw e;
     }
+  },
+
+  async deleteMedia(workspacePath, mediaId) {
+    await commands.deleteVideoMedia(workspacePath, mediaId);
+    set((s) => ({
+      list: s.list.filter((m) => m.id !== mediaId),
+      ...(s.activeMediaId === mediaId
+        ? { activeMediaId: null, bundle: null, speedCalibrations: [], speedCalculations: [], distanceMeasurements: [] }
+        : {}),
+    }));
   },
 
   async openMedia(workspacePath, mediaId) {

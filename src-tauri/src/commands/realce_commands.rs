@@ -1186,7 +1186,7 @@ mod testes {
         let reg = |nome: &str| {
             tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(
                 ws.clone(),
-                RegisterVideoInput { source_path: dir.join(nome).to_string_lossy().into() },
+                RegisterVideoInput { source_path: dir.join(nome).to_string_lossy().into(), allow_duplicate: false },
             ))
             .unwrap()
         };
