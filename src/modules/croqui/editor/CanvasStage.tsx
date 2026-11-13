@@ -1029,7 +1029,7 @@ function BackgroundImageLayer({
   // Origem do Group no centro da imagem para a rotação girar em torno dele;
   // a KonvaImage fica em (-w/2, -h/2).
   return (
-    <Layer listening={!bg.locked && interativo}>
+    <Layer listening={interativo}>
       <Group
         ref={groupRef}
         id={BACKGROUND_SELECTION_ID}

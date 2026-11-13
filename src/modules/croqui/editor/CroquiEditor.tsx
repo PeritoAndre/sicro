@@ -77,6 +77,7 @@ import {
   type RetanguloMundo,
 } from "./CanvasStage";
 import { commands } from "@core/commands";
+import { comUltimoEstilo, lembrarEstilo } from "./ultimoEstilo";
 import { DEFAULT_VIEWPORT, useEditorState, type Tool } from "./useEditorState";
 import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { DroneImportModal } from "./DroneImportModal";
@@ -269,6 +270,8 @@ export function CroquiEditor() {
   };
 
   const handleObjectChange = (id: string, patch: Partial<SicroObject>) => {
+    const alvo = doc?.objects.find((o) => o.id === id);
+    if (alvo && doc) lembrarEstilo(alvo, patch, fatorDaFolha(doc.canvas));
     mutateObjects((objs) =>
       objs.map((o) => (o.id === id ? ({ ...o, ...patch } as SicroObject) : o)),
     );
@@ -976,7 +979,8 @@ export function CroquiEditor() {
       if (!pts) return;
       const [p1, p2] = pts;
       const ln = makeLine(p1, p2, lineSubtype);
-      addObject({ ...ln, stroke_width: Math.round(ln.stroke_width * fatorDaFolha(doc.canvas) * 10) / 10 });
+      const fator = fatorDaFolha(doc.canvas);
+      addObject(comUltimoEstilo({ ...ln, stroke_width: Math.round(ln.stroke_width * fator * 10) / 10 }, fator));
       editor.setTool("select");
       return;
     }
@@ -992,7 +996,7 @@ export function CroquiEditor() {
       // Viva: perpendicular ao referencial e, se clicou sobre um objeto, presa a ele.
       const ppmCota = doc.scale?.px_per_m && doc.scale.px_per_m > 0 ? doc.scale.px_per_m : 10;
       const alvo = objetoSob(doc.objects, p, ppmCota);
-      const base = { ...makeMeasurement(pe, p), color: corDoReferencial(ref), ref_linha: qual };
+      const base = { ...comUltimoEstilo(makeMeasurement(pe, p), fatorDaFolha(doc.canvas)), color: corDoReferencial(ref), ref_linha: qual };
       const cota = alvo ? { ...base, ...ligarAoObjeto(base, alvo, ppmCota) } : base;
       addObject(cota);
       // Fica na ferramenta: um clique por ponto medido; Esc sai.
@@ -1003,7 +1007,7 @@ export function CroquiEditor() {
       const pts = twoPoints();
       if (!pts) return;
       const [p1, p2] = pts;
-      addObject(makeMeasurement(p1, p2));
+      addObject(comUltimoEstilo(makeMeasurement(p1, p2), fatorDaFolha(doc.canvas)));
       editor.setTool("select");
       const label = formatMeasurement(distancePx(p1, p2), doc.scale?.px_per_m);
       setFeedback(

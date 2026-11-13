@@ -14,7 +14,7 @@ describe("estilo das vias", () => {
     expect(st.tema).toBe("pb");
     expect(st.borda_px).toBe(3);
     expect(st.asfalto).toBe(PARITY_TEMAS.pb.asfalto);
-    expect(st.calcada).toBe("hachura");
+    expect(st.calcada).toBe("nenhuma");
   });
 });
 
