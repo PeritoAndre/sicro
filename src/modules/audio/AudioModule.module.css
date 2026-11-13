@@ -588,3 +588,12 @@
 .spectroToggle button:hover {
   color: var(--sicro-fg);
 }
+
+.central {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-bg);
+  overflow: hidden;
+}

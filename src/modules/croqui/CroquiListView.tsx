@@ -1,10 +1,8 @@
 /** Central de Croquis: três lâminas para criar e a lista dos croquis do caso. */
 
 import { useEffect, useState } from "react";
-import type { MouseEvent } from "react";
-import { Plus, Trash2 } from "lucide-react";
 import { ConfirmDialog } from "@components/Dialog/ConfirmDialog";
-import { formatDateTime } from "@core/formatters";
+import { Central, type CentralItem, type CentralLamina } from "@components/Central/Central";
 import { toSicroError } from "@core/errors";
 import type { CroquiKind } from "@domain/croqui";
 import { selectActiveWorkspacePath, useWorkspaceStore } from "@stores/workspaceStore";
@@ -13,7 +11,6 @@ import { urlMiniatura } from "./thumb";
 import viarioImg from "./assets/central/viario.webp";
 import corporalImg from "./assets/central/corporal.webp";
 import plantaImg from "./assets/central/planta.webp";
-import styles from "./CroquiListView.module.css";
 
 interface PendingDeleteCroqui {
   id: string;
@@ -69,15 +66,6 @@ export function CroquiListView() {
     }
   };
 
-  const handleDeleteClick = (
-    e: MouseEvent<HTMLButtonElement>,
-    croquiId: string,
-    croquiTitle: string,
-  ) => {
-    e.stopPropagation();
-    setPendingDelete({ id: croquiId, title: croquiTitle });
-  };
-
   const handleConfirmDelete = async () => {
     if (!pendingDelete || !workspacePath) return;
     const target = pendingDelete;
@@ -94,94 +82,45 @@ export function CroquiListView() {
     }
   };
 
-  const vazio = !isLoadingList && list.length === 0;
+  const laminas: CentralLamina[] = [
+    { id: "viario", nome: "Croqui viário", arte: viarioImg, onClick: abrirNovoViario },
+    { id: "corporal", nome: "Croqui corporal", arte: corporalImg, onClick: abrirNovoCorporal },
+    { id: "planta", nome: "Croqui de planta", arte: plantaImg, onClick: abrirNovoPlanta },
+  ];
 
-  const laminas = (
-    <div className={styles.laminas}>
-      {([
-        ["viario", "Croqui viário", abrirNovoViario],
-        ["corporal", "Croqui corporal", abrirNovoCorporal],
-        ["planta", "Croqui de planta", abrirNovoPlanta],
-      ] as const).map(([kind, nome, abrir]) => (
-        <button key={kind} type="button" className={styles.lamina} onClick={abrir} disabled={busy}>
-          <span className={styles.arte}>
-            <img src={ARTE[kind]} alt="" />
-          </span>
-          <span className={styles.nome}>
-            {nome}
-            <Plus size={20} />
-          </span>
-        </button>
-      ))}
-    </div>
-  );
+  const itens: CentralItem[] = list.map((c) => {
+    const versao = `${thumbRev[c.id] ?? 0}-${c.updated_at}`;
+    return {
+      id: c.id,
+      titulo: c.title,
+      miniatura: (
+        <img
+          key={versao}
+          src={
+            workspacePath && !semThumb[c.id] ? urlMiniatura(workspacePath, c.id, versao) : ARTE[c.kind]
+          }
+          alt=""
+          onError={() => setSemThumb((m) => ({ ...m, [c.id]: true }))}
+        />
+      ),
+      tipo: TIPO[c.kind],
+      resumo: `${STATUS[c.status] ?? c.status}${c.last_export_relative_path ? " · PNG exportado" : ""}`,
+      quando: c.updated_at,
+      onAbrir: () => void handleOpen(c.id, c.kind),
+      onExcluir: () => setPendingDelete({ id: c.id, title: c.title }),
+      excluirRotulo: "Excluir croqui",
+    };
+  });
 
   return (
-    <div className={`${styles.wrap} ${vazio ? styles.vazio : ""}`}>
-      <div className={styles.container}>
-        <h1 className={styles.title}>Central de Croquis</h1>
-        {laminas}
-        {error && <p className={styles.error}>{error}</p>}
-
-        {!vazio && (
-          <section className={styles.lista}>
-            <h2 className={styles.sectionTitle}>Neste caso</h2>
-            {isLoadingList && list.length === 0 ? (
-              <p className={styles.dim}>Carregando…</p>
-            ) : (
-              <ul className={styles.list}>
-                {list.map((c) => {
-                  const versao = `${thumbRev[c.id] ?? 0}-${c.updated_at}`;
-                  return (
-                    <li key={c.id} className={styles.row}>
-                      <button
-                        type="button"
-                        className={styles.rowBtn}
-                        onClick={() => void handleOpen(c.id, c.kind)}
-                        disabled={busy}
-                        aria-label={`Abrir ${c.title}`}
-                      >
-                        <span className={styles.mini}>
-                          <img
-                            key={versao}
-                            src={
-                              workspacePath && !semThumb[c.id]
-                                ? urlMiniatura(workspacePath, c.id, versao)
-                                : ARTE[c.kind]
-                            }
-                            alt=""
-                            onError={() => setSemThumb((m) => ({ ...m, [c.id]: true }))}
-                          />
-                        </span>
-                        <span className={styles.rowMain}>
-                          <strong className={styles.rowTitle}>{c.title}</strong>
-                          <span className={styles.rowMeta}>
-                            <span className={styles.chip}>{TIPO[c.kind]}</span>
-                            {STATUS[c.status] ?? c.status}
-                            {c.last_export_relative_path ? " · PNG exportado" : ""}
-                          </span>
-                        </span>
-                        <span className={styles.quando}>{formatDateTime(c.updated_at)}</span>
-                      </button>
-                      <button
-                        type="button"
-                        className={styles.deleteBtn}
-                        title="Excluir croqui"
-                        aria-label={`Excluir croqui ${c.title}`}
-                        disabled={busy}
-                        onClick={(e) => handleDeleteClick(e, c.id, c.title)}
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </section>
-        )}
-      </div>
-
+    <Central
+      titulo="Central de Croquis"
+      laminas={laminas}
+      itens={itens}
+      carregando={isLoadingList}
+      busy={busy}
+      erro={error}
+    >
       <ConfirmDialog
         open={pendingDelete !== null}
         title="Excluir croqui"
@@ -205,6 +144,6 @@ export function CroquiListView() {
         }}
         onConfirm={() => void handleConfirmDelete()}
       />
-    </div>
+    </Central>
   );
 }

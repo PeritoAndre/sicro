@@ -7,7 +7,7 @@ import { useEffect } from "react";
 import { savePosition } from "./editor/resume";
 import { audioToVideoTime, takeVideoHandoff } from "@modules/midia/midiaLink";
 import { commands } from "@core/commands";
-import { Film } from "lucide-react";
+import { Clapperboard } from "lucide-react";
 import {
   selectActiveOccurrence,
   selectActiveWorkspacePath,
@@ -15,7 +15,6 @@ import {
 } from "@stores/workspaceStore";
 import { NoOccurrenceState } from "@components/NoOccurrenceState/NoOccurrenceState";
 import { VideoListView } from "./VideoListView";
-import { MontagemView } from "./montagem/MontagemView";
 import { VideoAnalysisView } from "./editor/VideoAnalysisView";
 import { useVideoStore } from "./store/videoStore";
 import styles from "./VideoModule.module.css";
@@ -29,7 +28,6 @@ export function VideoModule() {
   const activeMediaId = useVideoStore((s) => s.activeMediaId);
   const closeMedia = useVideoStore((s) => s.closeMedia);
   const openMedia = useVideoStore((s) => s.openMedia);
-  const montagemAberta = useVideoStore((s) => s.montagemAberta);
 
   // Fecha o vídeo aberto só quando a ocorrência muda.
   useEffect(() => {
@@ -59,7 +57,7 @@ export function VideoModule() {
   if (!workspacePath || !occurrence) {
     return (
       <NoOccurrenceState
-        icon={<Film size={36} strokeWidth={1.5} />}
+        icon={<Clapperboard size={36} strokeWidth={1.5} />}
         moduleName="Vídeo"
       />
     );
@@ -70,8 +68,6 @@ export function VideoModule() {
       {/* key: cada vídeo começa com o estado limpo (trecho, lupa, comparação…) */}
       {activeMediaId != null ? (
         <VideoAnalysisView key={activeMediaId} />
-      ) : montagemAberta ? (
-        <MontagemView />
       ) : (
         <VideoListView />
       )}

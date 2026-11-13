@@ -12,28 +12,23 @@ import { mediaSrc } from "@core/mediaSrc";
 import {
   Activity,
   AlertTriangle,
+  ArrowLeft,
   Captions,
   FileAudio,
   Clapperboard,
   Film,
   FolderOpen,
-  Headphones,
   Import,
   ListMusic,
   ListPlus,
   RefreshCw,
   Scissors,
-  ShieldCheck,
   SlidersHorizontal,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { EmptyState } from "@components/EmptyState/EmptyState";
 import { NoOccurrenceState } from "@components/NoOccurrenceState/NoOccurrenceState";
-import {
-  ModuleLanding,
-  type ModuleLandingFeature,
-} from "@components/ModuleLanding/ModuleLanding";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import {
@@ -43,6 +38,8 @@ import {
 import type { AudioMedia } from "@domain/audio";
 import type { VideoMedia } from "@domain/video";
 import { probeHasAudio } from "@modules/video/editor/format";
+import { MidiaCentral } from "@modules/midia/MidiaCentral";
+import { useMidiaCentral } from "@modules/midia/midiaNav";
 import {
   prepareTabSwitch,
   registerOpenAudio,
@@ -164,29 +161,6 @@ type CompileItem = {
   label: string;
 };
 
-const AUDIO_FEATURES: ModuleLandingFeature[] = [
-  {
-    icon: <ShieldCheck size={18} />,
-    title: "Integridade e custódia",
-    desc: "Original preservado + WAV de análise (PCM 16-bit), ambos com hash.",
-  },
-  {
-    icon: <SlidersHorizontal size={18} />,
-    title: "Realce para escuta",
-    desc: "Reduzir ruído, cortar graves/agudos, normalizar — não-destrutivo.",
-  },
-  {
-    icon: <Activity size={18} />,
-    title: "Espectrograma e medições",
-    desc: "Tempo × frequência, pico/RMS/clipping e ENF — visualização objetiva.",
-  },
-  {
-    icon: <Captions size={18} />,
-    title: "Trechos e degravação",
-    desc: "Recorte A-B, compilação rotulada e degravação assistida.",
-  },
-];
-
 function prettyBytes(n: number): string {
   if (n < 1024) return `${n} B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
@@ -284,7 +258,7 @@ export function AudioModule() {
           ? cur
           : lastSelectedAudioId && list.some((i) => i.id === lastSelectedAudioId)
             ? lastSelectedAudioId
-            : (list[0]?.id ?? null),
+            : null,
       );
       setLoadedOnce(true);
     } catch (e) {
@@ -301,6 +275,20 @@ export function AudioModule() {
   useEffect(() => {
     if (selectedId) lastSelectedAudioId = selectedId;
   }, [selectedId]);
+
+  // Pedido da Central: abre este áudio.
+  const audioPedido = useMidiaCentral((s) => s.audioPedido);
+  useEffect(() => {
+    if (!audioPedido) return;
+    useMidiaCentral.getState().pedirAudio(null);
+    lastSelectedAudioId = audioPedido;
+    void reload().then(() => setSelectedId(audioPedido));
+  }, [audioPedido, reload]);
+
+  const voltarCentral = () => {
+    lastSelectedAudioId = null;
+    setSelectedId(null);
+  };
 
   // Veio da aba Vídeos com um vídeo aberto: pega o pedido (uma vez).
   useEffect(() => {
@@ -641,47 +629,18 @@ export function AudioModule() {
       </div>
     ) : null;
 
-  if (!loading && items.length === 0) {
+  if (!loadedOnce && !error) return <div className={styles.central} />;
+
+  // Sem áudio aberto (e sem extração em curso): a Central.
+  if (!selected && !linkNotice && !linkReq && busy === null) {
     return (
-      <div className={styles.wrap}>
-        <ModuleLanding
-          icon={<Headphones size={44} strokeWidth={1.2} />}
-          title="Áudio — Análise Pericial"
-          subtitle="Importe áudios (WhatsApp, gravador…) ou extraia de vídeos. O original é preservado e um WAV de análise é gerado, ambos com hash. Realce de escuta, espectrograma, recorte e degravação."
-          actions={
-            <>
-              <Button
-                variant="primary"
-                leftIcon={<Import size={15} />}
-                onClick={() => void handleImport()}
-                disabled={busy !== null}
-              >
-                {busy === "import" ? "Importando…" : "Importar áudio"}
-              </Button>
-              <Button
-                variant="secondary"
-                leftIcon={<Film size={15} />}
-                onClick={() => void handleExtractExternal()}
-                disabled={busy !== null}
-              >
-                {busy === "extract" ? "Extraindo…" : "Extrair de vídeo…"}
-              </Button>
-              {caseExtract && <div className={styles.caseExtractRow}>{caseExtract}</div>}
-            </>
-          }
-          features={AUDIO_FEATURES}
-          note="Realce, espectrograma e medições são apoio técnico (FFmpeg, determinístico). Não recuperam nem alteram o conteúdo; a interpretação cabe ao perito responsável."
-        >
-        </ModuleLanding>
-        {linkNotice && <div style={{ margin: "var(--space-3)" }}>{linkNoticeEl}</div>}
+      <div className={styles.central}>
         {error && (
-          <div
-            className={styles.errorBanner}
-            style={{ margin: "var(--space-3)" }}
-          >
+          <div className={styles.errorBanner} style={{ margin: "var(--space-3)" }}>
             <AlertTriangle size={14} /> {error}
           </div>
         )}
+        <MidiaCentral />
       </div>
     );
   }
@@ -691,12 +650,10 @@ export function AudioModule() {
       <header className={styles.topBar}>
         <div className={styles.title}>
           <h1>
-            <Headphones size={16} aria-hidden /> Áudio
+            <Button variant="secondary" size="sm" leftIcon={<ArrowLeft size={14} />} onClick={voltarCentral}>
+              Central
+            </Button>
           </h1>
-          <p className={styles.subtitle}>
-            Importe, extraia de vídeos e analise áudios — com hash e cadeia de
-            custódia, realce para escuta e degravação.
-          </p>
         </div>
         <div className={styles.headActions}>
           <Button
