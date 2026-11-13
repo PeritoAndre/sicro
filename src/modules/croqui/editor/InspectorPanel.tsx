@@ -110,8 +110,10 @@ interface Props {
   onResetBackgroundRotation?: () => void;
   onRemoveBackground?: () => void;
   corteAtivo?: boolean;
+  /** Alvo do corte em andamento: fundo ou id de imagem solta. */
+  corteAlvo?: string | null;
   aplicandoCorte?: boolean;
-  onIniciarCorte?: () => void;
+  onIniciarCorte?: (alvo?: string) => void;
   onAplicarCorte?: () => void;
   onCancelarCorte?: () => void;
 }
@@ -143,6 +145,7 @@ export function InspectorPanel({
   onResetBackgroundRotation,
   onRemoveBackground,
   corteAtivo,
+  corteAlvo,
   aplicandoCorte,
   onIniciarCorte,
   onAplicarCorte,
@@ -183,9 +186,9 @@ export function InspectorPanel({
             onFit={onFitBackground}
             onResetRotation={onResetBackgroundRotation}
             onRemove={onRemoveBackground}
-            corteAtivo={!!corteAtivo}
+            corteAtivo={!!corteAtivo && corteAlvo === BACKGROUND_SELECTION_ID}
             aplicandoCorte={!!aplicandoCorte}
-            onIniciarCorte={onIniciarCorte}
+            onIniciarCorte={onIniciarCorte ? () => onIniciarCorte(BACKGROUND_SELECTION_ID) : undefined}
             onAplicarCorte={onAplicarCorte}
             onCancelarCorte={onCancelarCorte}
           />
@@ -209,6 +212,17 @@ export function InspectorPanel({
             fator={canvas ? fatorDaFolha(canvas) : 1}
             onChange={(patch) => onUpdateObject(selected.id, patch)}
             onUpdateStyle={onUpdateStyle}
+            corte={
+              selected.kind === "image" && onIniciarCorte
+                ? {
+                    ativo: !!corteAtivo && corteAlvo === selected.id,
+                    aplicando: !!aplicandoCorte,
+                    iniciar: () => onIniciarCorte(selected.id),
+                    aplicar: onAplicarCorte,
+                    cancelar: onCancelarCorte,
+                  }
+                : undefined
+            }
           />
         </section>
         {objectsSection}
@@ -554,6 +568,7 @@ function ObjectProperties({
   fator,
   onChange,
   onUpdateStyle,
+  corte,
 }: {
   object: SicroObject;
   scale: SicroCroquiScale | null;
@@ -564,6 +579,8 @@ function ObjectProperties({
   onChange: (patch: Partial<SicroObject>) => void;
   /** Estilo das vias (vale para todas): mostrado dentro da via selecionada. */
   onUpdateStyle?: (patch: Partial<ParityStyle>) => void;
+  /** Corte da imagem solta selecionada. */
+  corte?: CorteDeImagem;
 }) {
   const st = resolveParityStyle(style);
   const isParity =
@@ -623,7 +640,7 @@ function ObjectProperties({
       {object.kind === "road_parity" && (
         <ParityRoadProps object={object} onChange={onChange} />
       )}
-      {object.kind === "image" && <ImageProps object={object} onChange={onChange} />}
+      {object.kind === "image" && <ImageProps object={object} onChange={onChange} corte={corte} />}
       {object.kind === "roundabout_parity" && (
         <ParityRoundaboutProps object={object} onChange={onChange} />
       )}
@@ -1697,10 +1714,36 @@ const SHEET_PRESETS_M: [number, number][] = [
   [200, 141],
 ];
 
-function ImageProps({ object, onChange }: { object: SicroImageObject; onChange: (patch: Partial<SicroObject>) => void }) {
+interface CorteDeImagem {
+  ativo: boolean;
+  aplicando: boolean;
+  iniciar: () => void;
+  aplicar?: () => void;
+  cancelar?: () => void;
+}
+
+function ImageProps({ object, onChange, corte }: { object: SicroImageObject; onChange: (patch: Partial<SicroObject>) => void; corte?: CorteDeImagem }) {
   const prop = object.height > 0 ? object.width / object.height : 1;
+  const rot = object.rotation ?? 0;
   return (
     <>
+      {corte && (
+        <div className={styles.temaRow}>
+          {!corte.ativo && (
+            <button type="button" className={styles.temaBtn} onClick={corte.iniciar} disabled={rot !== 0} title={rot !== 0 ? "Só com a rotação a 0°" : "Alças sobre a imagem; o que ficar fora é descartado do arquivo"}>
+              Cortar…
+            </button>
+          )}
+          {corte.ativo && corte.aplicar && (
+            <button type="button" className={styles.temaBtn} onClick={corte.aplicar} disabled={corte.aplicando}>
+              {corte.aplicando ? "Cortando…" : "Aplicar corte"}
+            </button>
+          )}
+          {corte.ativo && corte.cancelar && (
+            <button type="button" className={styles.temaBtn} onClick={corte.cancelar} disabled={corte.aplicando}>Cancelar</button>
+          )}
+        </div>
+      )}
       <Field label="Arquivo" value={object.source_path} readOnly mono />
       <RangeRow
         label="Opacidade"

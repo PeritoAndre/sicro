@@ -146,6 +146,7 @@ import { UnsavedChangesModal } from "./UnsavedChangesModal";
 import { useNavGuard } from "@app/navGuard";
 import { FileText } from "lucide-react";
 import styles from "./ImageEditor.module.css";
+import { useSalvamentoAutomatico } from "../../croqui/editor/useSalvamentoAutomatico";
 import { askText } from "@components/Dialog/ask";
 
 type Tool =
@@ -1469,9 +1470,9 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
   );
 
   // ----- Ações -----
-  const handleSave = async (): Promise<boolean> => {
+  const handleSave = async (opts?: { silencioso?: boolean }): Promise<boolean> => {
     setSaving(true);
-    setFeedback(null);
+    if (!opts?.silencioso) setFeedback(null);
     const snapshot = JSON.stringify(doc);
     try {
       const metadata = {
@@ -1481,8 +1482,10 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       };
       await saveActive(workspacePath, doc, JSON.stringify(metadata));
       setLastSavedJson(snapshot);
-      setFeedback("Análise salva.");
-      setTimeout(() => setFeedback(null), 2500);
+      if (!opts?.silencioso) {
+        setFeedback("Análise salva.");
+        setTimeout(() => setFeedback(null), 2500);
+      }
       return true;
     } catch (err) {
       setFeedback(`Falha ao salvar: ${toSicroError(err).message}`);
@@ -1491,6 +1494,9 @@ export function ImageEditor({ workspacePath, onClose }: Props) {
       setSaving(false);
     }
   };
+
+  // Salva sozinho 3 s depois da última mudança (sem o aviso "Análise salva.").
+  useSalvamentoAutomatico(dirty, () => handleSave({ silencioso: true }), !saving && !pendingNav);
 
   // ----- Guarda de alterações não salvas -----
   // Entrada única para sair do editor: sem `dirty` navega direto; com `dirty` abre o modal.

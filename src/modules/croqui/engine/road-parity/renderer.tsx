@@ -242,6 +242,8 @@ interface RoadParityRendererProps {
   selectedIds?: string[];
   /** Ausente ⇒ handles estáticos (modo visualização). */
   onObjectChange?: (id: string, patch: Partial<SicroParityObject>) => void;
+  /** Escala da tela: alças com tamanho fixo em px de tela. */
+  zoom?: number;
 }
 
 export function RoadParityRenderer({
@@ -254,8 +256,10 @@ export function RoadParityRenderer({
   onSelect,
   selectedIds,
   onObjectChange,
+  zoom,
 }: RoadParityRendererProps) {
   const ppm = resolvePxPerM(pxPerM);
+  const k = 1 / Math.max(zoom ?? 1, 0.0001);
   const st = useMemo(() => resolveParityStyle(style), [style]);
   const colors = useMemo(() => parityTemaColors(st), [st]);
 
@@ -576,16 +580,16 @@ export function RoadParityRenderer({
               const roadId = m.road.id;
               return (
                 <Group key={`h_${roadId}`} name={`obj_${roadId}`}>
-                  <Line points={[a.x, a.y, c1.x, c1.y]} stroke={SELECTION_GUIDE} strokeWidth={1} dash={[3, 3]} listening={false} />
-                  <Line points={[b.x, b.y, c2.x, c2.y]} stroke={SELECTION_GUIDE} strokeWidth={1} dash={[3, 3]} listening={false} />
+                  <Line points={[a.x, a.y, c1.x, c1.y]} stroke={SELECTION_GUIDE} strokeWidth={1 * k} dash={[3 * k, 3 * k]} listening={false} />
+                  <Line points={[b.x, b.y, c2.x, c2.y]} stroke={SELECTION_GUIDE} strokeWidth={1 * k} dash={[3 * k, 3 * k]} listening={false} />
                   {/* Âncoras arrastam o controle junto (preserva a curvatura). */}
                   <Circle
                     x={a.x}
                     y={a.y}
-                    radius={7}
+                    radius={7 * k}
                     fill={SELECTION}
                     stroke="#1a1a1a"
-                    strokeWidth={2}
+                    strokeWidth={2 * k}
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
@@ -602,10 +606,10 @@ export function RoadParityRenderer({
                   <Circle
                     x={b.x}
                     y={b.y}
-                    radius={7}
+                    radius={7 * k}
                     fill={SELECTION}
                     stroke="#1a1a1a"
-                    strokeWidth={2}
+                    strokeWidth={2 * k}
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;
@@ -622,7 +626,7 @@ export function RoadParityRenderer({
                   <Circle
                     x={c1.x}
                     y={c1.y}
-                    radius={5}
+                    radius={5 * k}
                     fill="#4F72E0"
                     draggable={canDrag}
                     onDragEnd={(e) => {
@@ -633,7 +637,7 @@ export function RoadParityRenderer({
                   <Circle
                     x={c2.x}
                     y={c2.y}
-                    radius={5}
+                    radius={5 * k}
                     fill="#4F72E0"
                     draggable={canDrag}
                     onDragEnd={(e) => {
@@ -656,10 +660,10 @@ export function RoadParityRenderer({
                   <Circle
                     x={cx}
                     y={cy}
-                    radius={7}
+                    radius={7 * k}
                     fill={SELECTION}
                     stroke="#1a1a1a"
-                    strokeWidth={2}
+                    strokeWidth={2 * k}
                     draggable={canDrag}
                     onDragEnd={(e) => {
                       if (!onObjectChange) return;

@@ -184,8 +184,9 @@ interface Props {
   onBackgroundChange?: (patch: Partial<SicroCroquiBackgroundImage>) => void;
   /** Alças da folha (origem e tamanho). */
   onCanvasChange?: (patch: Partial<SicroCroquiCanvas>) => void;
-  /** Corte do fundo em andamento: retângulo com alças (imã na folha e no fundo). */
-  corte?: { rect: RetanguloMundo; onChange: (r: RetanguloMundo) => void } | null;
+  /** Corte em andamento (fundo ou imagem solta): retângulo com alças (imã na folha e no fundo).
+   *  Enquanto dura, clique no vazio e laço não tiram a seleção do alvo, senão o menu de corte some. */
+  corte?: { rect: RetanguloMundo; alvo: string; onChange: (r: RetanguloMundo) => void } | null;
   onSelect: (id: string | null) => void;
   workspacePath: string;
 }
@@ -462,7 +463,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     );
     const isTinyClick = rect.width * rect.height < 9;
     if (isTinyClick) {
-      onSelect(marqueeNoFundoRef.current ? BACKGROUND_SELECTION_ID : SHEET_SELECTION_ID);
+      onSelect(corte ? corte.alvo : marqueeNoFundoRef.current ? BACKGROUND_SELECTION_ID : SHEET_SELECTION_ID);
       return;
     }
     const pxPerM = resolvePxPerM(doc.scale?.px_per_m);
@@ -474,7 +475,10 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     // Fundo desbloqueado entra no laço: aí o grupo inteiro anda com ele.
     const bg = doc.background_image;
     if (bg && !bg.locked && rectsIntersect({ x: bg.x, y: bg.y, width: bg.width, height: bg.height }, rect)) hits.push(BACKGROUND_SELECTION_ID);
-    editor.setSelectedIds(hits);
+    // Laço vazio sobre a foto travada seleciona a foto (a folha se seleciona clicando fora da arte).
+    if (corte) onSelect(corte.alvo);
+    else if (hits.length === 0 && marqueeNoFundoRef.current) onSelect(BACKGROUND_SELECTION_ID);
+    else editor.setSelectedIds(hits);
     // O `click` que o browser emite em seguida seria tratado como clique
     // no vazio e apagaria a seleção; ver justFinishedMarqueeRef.
     justFinishedMarqueeRef.current = true;
@@ -509,7 +513,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
     if (!pos) return;
     const world = toWorld(stage, pos);
     if (editor.tool === "select") {
-      onSelect(SHEET_SELECTION_ID);
+      onSelect(corte ? corte.alvo : SHEET_SELECTION_ID);
       return;
     }
     if (editor.tool === "pan") {
@@ -628,6 +632,7 @@ export const CanvasStage = forwardRef<CanvasStageHandle, Props>(function CanvasS
           objects={parityObjects}
           pxPerM={doc.scale?.px_per_m ?? null}
           style={doc.style ?? null}
+          zoom={editor.viewport.scale}
           selectedId={editor.selectedId}
           selectedIds={editor.selectedIds}
           onSelect={(id) => onSelect(id ?? null)}
