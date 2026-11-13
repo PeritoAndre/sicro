@@ -1402,7 +1402,11 @@ export function CroquiEditor() {
           onBackgroundChange={handleBackgroundChange}
           onCanvasChange={handleCanvasChange}
           corte={corte ? { rect: corte.rect, alvo: corte.alvo, onChange: (rect) => setCorte((c) => (c ? { ...c, rect } : c)) } : null}
-          onSelect={(id) => editor.setSelectedId(id)}
+          onSelect={(id) => {
+            // Durante um corte a seleção fica presa no alvo, senão o painel de corte some.
+            if (corte) return;
+            editor.setSelectedId(id);
+          }}
           workspacePath={workspacePath}
         />
         {escalaPendente && !faixaEscalaFechada && (
@@ -1441,7 +1445,10 @@ export function CroquiEditor() {
         objects={doc.objects}
         selectedId={editor.selectedId}
         scale={doc.scale}
-        onSelectObject={(id) => editor.setSelectedId(id)}
+        onSelectObject={(id) => {
+          if (corte) return;
+          editor.setSelectedId(id);
+        }}
         onToggleLayerVisibility={handleToggleLayerVisibility}
         onUpdateObject={handleObjectChange}
         onDeleteObject={(id) => {
