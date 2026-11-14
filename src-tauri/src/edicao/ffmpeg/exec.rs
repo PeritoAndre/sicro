@@ -359,8 +359,13 @@ pub fn pts_lidos(stderr: &Path) -> Result<HashMap<String, Vec<i64>>> {
 
 /// `[nome@rotulo @ 0x…] resto` → (rotulo, resto).
 fn rotulo_de(linha: &str, prefixo: &str) -> Option<(String, String)> {
-    let i = linha.find(&format!("[{prefixo}"))?;
-    let resto = &linha[i + 1 + prefixo.len()..];
+    // só no começo da linha: metadado do arquivo com o mesmo texto não vira quadro lido
+    // (sem `-nostats`, a linha de progresso do ffmpeg termina em `\r` e fica colada na frente)
+    let linha = match linha.rsplit_once('\r') {
+        Some((antes, depois)) if antes.starts_with("frame=") || antes.starts_with("size=") => depois,
+        _ => linha,
+    };
+    let resto = linha.strip_prefix('[')?.strip_prefix(prefixo)?;
     let fim = resto.find(" @ ")?;
     let rotulo = &resto[..fim];
     let depois = &resto[fim..];

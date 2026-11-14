@@ -41,6 +41,14 @@ pub mod codigo {
     pub const ARQUIVO_VAZIO: &str = "arquivo_vazio";
     pub const EXTENSAO: &str = "extensao";
     pub const MIME: &str = "mime";
+    // acréscimos do integrador depois da leva 3
+    pub const NAO_SUPORTADO: &str = "nao_suportado";
+    pub const TABELA_GRANDE: &str = "tabela_grande";
+    pub const PTS_INVALIDO: &str = "pts_invalido";
+    pub const SHA256_INVALIDO: &str = "sha256_invalido";
+    pub const LEITURA_DIVERGENTE: &str = "leitura_divergente";
+    pub const PROJETO_NAO_ENCONTRADO: &str = "projeto_nao_encontrado";
+    pub const ORIGINAL: &str = "original";
     // periciais
     pub const TAXA_VARIAVEL: &str = "taxa_variavel";
     pub const QUADROS_DESCARTADOS: &str = "quadros_descartados";
@@ -80,5 +88,12 @@ pub fn frase(codigo: &str, n: Option<u64>, detalhe: Option<&str>) -> String {
 
 /// `Problema` do código, com nível e frase do catálogo e os demais campos vazios.
 pub fn problema(codigo: &'static str, n: Option<u64>, detalhe: Option<&str>) -> Problema {
+    todo!()
+}
+
+// CONTRATO: acréscimo do integrador depois da leva 3 (dono: P0.R; quem usa: P0.7).
+/// Erro de armazém, fila, motor ou executor (`Validation("<código>[: detalhe]")`) → `Validation("<código>: <frase do catálogo>")`.
+/// Erro sem código do catálogo passa como chegou.
+pub fn erro_de_comando(e: crate::error::SicroError) -> crate::error::SicroError {
     todo!()
 }

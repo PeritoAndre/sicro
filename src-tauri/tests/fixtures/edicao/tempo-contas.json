@@ -1,0 +1,4300 @@
+[
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 0 s a 25/2",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 25/2",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 0.01 s a 25/2",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 25/2",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 0.5 s a 25/2",
+    "saida": 6
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 25/2",
+    "saida": 6
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 1 s a 25/2",
+    "saida": 13
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 25/2",
+    "saida": 13
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 2.5 s a 25/2",
+    "saida": 31
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 25/2",
+    "saida": 31
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 3.337 s a 25/2",
+    "saida": 42
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 25/2",
+    "saida": 42
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 10 s a 25/2",
+    "saida": 125
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 25/2",
+    "saida": 125
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 59.94 s a 25/2",
+    "saida": 749
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 25/2",
+    "saida": 749
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de 3600 s a 25/2",
+    "saida": 45000
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 25/2",
+    "saida": 45000
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "slots de -1 s a 25/2",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 2,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 25/2",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 25/2",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 25/2",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 25/2",
+    "saida": 0.08
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 25/2",
+    "saida": 3840
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 25/2",
+    "saida": 0.16
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 25/2",
+    "saida": 7680
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 25/2",
+    "saida": 0.4
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 25/2",
+    "saida": 19200
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 25/2",
+    "saida": 2.32
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 25/2",
+    "saida": 111360
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 25/2",
+    "saida": 2.4
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 25/2",
+    "saida": 115200
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 25/2",
+    "saida": 80.08
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 25/2",
+    "saida": 3843840
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 25/2",
+    "saida": 2400.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 25/2",
+    "saida": 115200000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 25/2",
+    "saida": 8631.36
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 2,
+        "num": 25
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 25/2",
+    "saida": 414305280
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 0 s a 15/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 15/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 0.01 s a 15/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 15/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 0.5 s a 15/1",
+    "saida": 8
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 15/1",
+    "saida": 8
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 1 s a 15/1",
+    "saida": 15
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 15/1",
+    "saida": 15
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 2.5 s a 15/1",
+    "saida": 38
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 15/1",
+    "saida": 38
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 3.337 s a 15/1",
+    "saida": 50
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 15/1",
+    "saida": 50
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 10 s a 15/1",
+    "saida": 150
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 15/1",
+    "saida": 150
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 59.94 s a 15/1",
+    "saida": 899
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 15/1",
+    "saida": 899
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de 3600 s a 15/1",
+    "saida": 54000
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 15/1",
+    "saida": 54000
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "slots de -1 s a 15/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 15
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 15/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 15/1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 15/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 15/1",
+    "saida": 0.06666666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 15/1",
+    "saida": 3200
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 15/1",
+    "saida": 0.13333333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 15/1",
+    "saida": 6400
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 15/1",
+    "saida": 0.3333333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 15/1",
+    "saida": 16000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 15/1",
+    "saida": 1.9333333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 15/1",
+    "saida": 92800
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 15/1",
+    "saida": 2.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 15/1",
+    "saida": 96000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 15/1",
+    "saida": 66.73333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 15/1",
+    "saida": 3203200
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 15/1",
+    "saida": 2000.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 15/1",
+    "saida": 96000000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 15/1",
+    "saida": 7192.8
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 15
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 15/1",
+    "saida": 345254400
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 0 s a 24000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 24000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 0.01 s a 24000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 24000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 0.5 s a 24000/1001",
+    "saida": 12
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 24000/1001",
+    "saida": 12
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 1 s a 24000/1001",
+    "saida": 24
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 24000/1001",
+    "saida": 24
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 2.5 s a 24000/1001",
+    "saida": 60
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 24000/1001",
+    "saida": 60
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 3.337 s a 24000/1001",
+    "saida": 80
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 24000/1001",
+    "saida": 80
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 10 s a 24000/1001",
+    "saida": 240
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 24000/1001",
+    "saida": 240
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 59.94 s a 24000/1001",
+    "saida": 1437
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 24000/1001",
+    "saida": 1437
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de 3600 s a 24000/1001",
+    "saida": 86314
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 24000/1001",
+    "saida": 86314
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "slots de -1 s a 24000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 24000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 24000/1001",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 24000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 24000/1001",
+    "saida": 0.04170833333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 24000/1001",
+    "saida": 2002
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 24000/1001",
+    "saida": 0.08341666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 24000/1001",
+    "saida": 4004
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 24000/1001",
+    "saida": 0.20854166666666665
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 24000/1001",
+    "saida": 10010
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 24000/1001",
+    "saida": 1.2095416666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 24000/1001",
+    "saida": 58058
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 24000/1001",
+    "saida": 1.25125
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 24000/1001",
+    "saida": 60060
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 24000/1001",
+    "saida": 41.75004166666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 24000/1001",
+    "saida": 2004002
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 24000/1001",
+    "saida": 1251.25
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 24000/1001",
+    "saida": 60060000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 24000/1001",
+    "saida": 4499.9955
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 24000
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 24000/1001",
+    "saida": 215999784
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 0 s a 25/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 25/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 0.01 s a 25/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 25/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 0.5 s a 25/1",
+    "saida": 13
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 25/1",
+    "saida": 13
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 1 s a 25/1",
+    "saida": 25
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 25/1",
+    "saida": 25
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 2.5 s a 25/1",
+    "saida": 63
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 25/1",
+    "saida": 63
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 3.337 s a 25/1",
+    "saida": 83
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 25/1",
+    "saida": 83
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 10 s a 25/1",
+    "saida": 250
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 25/1",
+    "saida": 250
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 59.94 s a 25/1",
+    "saida": 1499
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 25/1",
+    "saida": 1499
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de 3600 s a 25/1",
+    "saida": 90000
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 25/1",
+    "saida": 90000
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "slots de -1 s a 25/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 25
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 25/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 25/1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 25/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 25/1",
+    "saida": 0.04
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 25/1",
+    "saida": 1920
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 25/1",
+    "saida": 0.08
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 25/1",
+    "saida": 3840
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 25/1",
+    "saida": 0.2
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 25/1",
+    "saida": 9600
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 25/1",
+    "saida": 1.16
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 25/1",
+    "saida": 55680
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 25/1",
+    "saida": 1.2
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 25/1",
+    "saida": 57600
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 25/1",
+    "saida": 40.04
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 25/1",
+    "saida": 1921920
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 25/1",
+    "saida": 1200.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 25/1",
+    "saida": 57600000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 25/1",
+    "saida": 4315.68
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 25
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 25/1",
+    "saida": 207152640
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 0 s a 30000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 30000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 0.01 s a 30000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 30000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 0.5 s a 30000/1001",
+    "saida": 15
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 30000/1001",
+    "saida": 15
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 1 s a 30000/1001",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 30000/1001",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 2.5 s a 30000/1001",
+    "saida": 75
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 30000/1001",
+    "saida": 75
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 3.337 s a 30000/1001",
+    "saida": 100
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 30000/1001",
+    "saida": 100
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 10 s a 30000/1001",
+    "saida": 300
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 30000/1001",
+    "saida": 300
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 59.94 s a 30000/1001",
+    "saida": 1796
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 30000/1001",
+    "saida": 1796
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de 3600 s a 30000/1001",
+    "saida": 107892
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 30000/1001",
+    "saida": 107892
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "slots de -1 s a 30000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 30000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 30000/1001",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 30000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 30000/1001",
+    "saida": 0.03336666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 30000/1001",
+    "saida": 1602
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 30000/1001",
+    "saida": 0.06673333333333334
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 30000/1001",
+    "saida": 3203
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 30000/1001",
+    "saida": 0.16683333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 30000/1001",
+    "saida": 8008
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 30000/1001",
+    "saida": 0.9676333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 30000/1001",
+    "saida": 46446
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 30000/1001",
+    "saida": 1.001
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 30000/1001",
+    "saida": 48048
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 30000/1001",
+    "saida": 33.40003333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 30000/1001",
+    "saida": 1603202
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 30000/1001",
+    "saida": 1001.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 30000/1001",
+    "saida": 48048000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 30000/1001",
+    "saida": 3599.9964
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 30000
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 30000/1001",
+    "saida": 172799827
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 0 s a 30/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 30/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 0.01 s a 30/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 30/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 0.5 s a 30/1",
+    "saida": 15
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 30/1",
+    "saida": 15
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 1 s a 30/1",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 30/1",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 2.5 s a 30/1",
+    "saida": 75
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 30/1",
+    "saida": 75
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 3.337 s a 30/1",
+    "saida": 100
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 30/1",
+    "saida": 100
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 10 s a 30/1",
+    "saida": 300
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 30/1",
+    "saida": 300
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 59.94 s a 30/1",
+    "saida": 1798
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 30/1",
+    "saida": 1798
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de 3600 s a 30/1",
+    "saida": 108000
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 30/1",
+    "saida": 108000
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "slots de -1 s a 30/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 30
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 30/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 30/1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 30/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 30/1",
+    "saida": 0.03333333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 30/1",
+    "saida": 1600
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 30/1",
+    "saida": 0.06666666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 30/1",
+    "saida": 3200
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 30/1",
+    "saida": 0.16666666666666666
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 30/1",
+    "saida": 8000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 30/1",
+    "saida": 0.9666666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 30/1",
+    "saida": 46400
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 30/1",
+    "saida": 1.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 30/1",
+    "saida": 48000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 30/1",
+    "saida": 33.36666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 30/1",
+    "saida": 1601600
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 30/1",
+    "saida": 1000.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 30/1",
+    "saida": 48000000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 30/1",
+    "saida": 3596.4
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 30
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 30/1",
+    "saida": 172627200
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 0 s a 50/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 50/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 0.01 s a 50/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 50/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 0.5 s a 50/1",
+    "saida": 25
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 50/1",
+    "saida": 25
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 1 s a 50/1",
+    "saida": 50
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 50/1",
+    "saida": 50
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 2.5 s a 50/1",
+    "saida": 125
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 50/1",
+    "saida": 125
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 3.337 s a 50/1",
+    "saida": 167
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 50/1",
+    "saida": 167
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 10 s a 50/1",
+    "saida": 500
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 50/1",
+    "saida": 500
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 59.94 s a 50/1",
+    "saida": 2997
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 50/1",
+    "saida": 2997
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de 3600 s a 50/1",
+    "saida": 180000
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 50/1",
+    "saida": 180000
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "slots de -1 s a 50/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 50
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 50/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 50/1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 50/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 50/1",
+    "saida": 0.02
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 50/1",
+    "saida": 960
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 50/1",
+    "saida": 0.04
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 50/1",
+    "saida": 1920
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 50/1",
+    "saida": 0.1
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 50/1",
+    "saida": 4800
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 50/1",
+    "saida": 0.58
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 50/1",
+    "saida": 27840
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 50/1",
+    "saida": 0.6
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 50/1",
+    "saida": 28800
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 50/1",
+    "saida": 20.02
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 50/1",
+    "saida": 960960
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 50/1",
+    "saida": 600.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 50/1",
+    "saida": 28800000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 50/1",
+    "saida": 2157.84
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 50
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 50/1",
+    "saida": 103576320
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 0 s a 60000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 60000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 0.01 s a 60000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 60000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 0.5 s a 60000/1001",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 60000/1001",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 1 s a 60000/1001",
+    "saida": 60
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 60000/1001",
+    "saida": 60
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 2.5 s a 60000/1001",
+    "saida": 150
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 60000/1001",
+    "saida": 150
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 3.337 s a 60000/1001",
+    "saida": 200
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 60000/1001",
+    "saida": 200
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 10 s a 60000/1001",
+    "saida": 599
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 60000/1001",
+    "saida": 599
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 59.94 s a 60000/1001",
+    "saida": 3593
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 60000/1001",
+    "saida": 3593
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de 3600 s a 60000/1001",
+    "saida": 215784
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 60000/1001",
+    "saida": 215784
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "slots de -1 s a 60000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 60000/1001",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 60000/1001",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 60000/1001",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 60000/1001",
+    "saida": 0.016683333333333335
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 60000/1001",
+    "saida": 801
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 60000/1001",
+    "saida": 0.03336666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 60000/1001",
+    "saida": 1602
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 60000/1001",
+    "saida": 0.08341666666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 60000/1001",
+    "saida": 4004
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 60000/1001",
+    "saida": 0.4838166666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 60000/1001",
+    "saida": 23223
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 60000/1001",
+    "saida": 0.5005
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 60000/1001",
+    "saida": 24024
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 60000/1001",
+    "saida": 16.700016666666667
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 60000/1001",
+    "saida": 801601
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 60000/1001",
+    "saida": 500.5
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 60000/1001",
+    "saida": 24024000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 60000/1001",
+    "saida": 1799.9982
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1001,
+        "num": 60000
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 60000/1001",
+    "saida": 86399914
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 0 s a 60/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 0 s a 60/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 0.01 s a 60/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.01,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 0.01 s a 60/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 0.5 s a 60/1",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 0.5,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 0.5 s a 60/1",
+    "saida": 30
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 1 s a 60/1",
+    "saida": 60
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 1.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 1 s a 60/1",
+    "saida": 60
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 2.5 s a 60/1",
+    "saida": 150
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 2.5,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 2.5 s a 60/1",
+    "saida": 150
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 3.337 s a 60/1",
+    "saida": 200
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3.337,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 3.337 s a 60/1",
+    "saida": 200
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 10 s a 60/1",
+    "saida": 600
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 10.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 10 s a 60/1",
+    "saida": 600
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 59.94 s a 60/1",
+    "saida": 3596
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 59.94,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 59.94 s a 60/1",
+    "saida": 3596
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de 3600 s a 60/1",
+    "saida": 216000
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": 3600.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de 3600 s a 60/1",
+    "saida": 216000
+  },
+  {
+    "entrada": {
+      "conta": "slots",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "slots de -1 s a 60/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "n_q_sem_fonte",
+      "duracao_s": -1.0,
+      "fps": {
+        "den": 1,
+        "num": 60
+      }
+    },
+    "nome": "clipe sem fonte de -1 s a 60/1",
+    "saida": 1
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 0
+    },
+    "nome": "instante do slot 0 a 60/1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 0
+    },
+    "nome": "amostra do slot 0 a 60/1",
+    "saida": 0
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 1
+    },
+    "nome": "instante do slot 1 a 60/1",
+    "saida": 0.016666666666666666
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 1
+    },
+    "nome": "amostra do slot 1 a 60/1",
+    "saida": 800
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 2
+    },
+    "nome": "instante do slot 2 a 60/1",
+    "saida": 0.03333333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 2
+    },
+    "nome": "amostra do slot 2 a 60/1",
+    "saida": 1600
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 5
+    },
+    "nome": "instante do slot 5 a 60/1",
+    "saida": 0.08333333333333333
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 5
+    },
+    "nome": "amostra do slot 5 a 60/1",
+    "saida": 4000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 29
+    },
+    "nome": "instante do slot 29 a 60/1",
+    "saida": 0.48333333333333334
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 29
+    },
+    "nome": "amostra do slot 29 a 60/1",
+    "saida": 23200
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 30
+    },
+    "nome": "instante do slot 30 a 60/1",
+    "saida": 0.5
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 30
+    },
+    "nome": "amostra do slot 30 a 60/1",
+    "saida": 24000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 1001
+    },
+    "nome": "instante do slot 1001 a 60/1",
+    "saida": 16.683333333333334
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 1001
+    },
+    "nome": "amostra do slot 1001 a 60/1",
+    "saida": 800800
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 30000
+    },
+    "nome": "instante do slot 30000 a 60/1",
+    "saida": 500.0
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 30000
+    },
+    "nome": "amostra do slot 30000 a 60/1",
+    "saida": 24000000
+  },
+  {
+    "entrada": {
+      "conta": "instante_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 107892
+    },
+    "nome": "instante do slot 107892 a 60/1",
+    "saida": 1798.2
+  },
+  {
+    "entrada": {
+      "conta": "amostra_do_slot",
+      "fps": {
+        "den": 1,
+        "num": 60
+      },
+      "q": 107892
+    },
+    "nome": "amostra do slot 107892 a 60/1",
+    "saida": 86313600
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.05
+    },
+    "nome": "fator 0.05",
+    "saida": {
+      "den": 20,
+      "num": 1
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.1
+    },
+    "nome": "fator 0.1",
+    "saida": {
+      "den": 10,
+      "num": 1
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.25
+    },
+    "nome": "fator 0.25",
+    "saida": {
+      "den": 4,
+      "num": 1
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.333
+    },
+    "nome": "fator 0.333",
+    "saida": {
+      "den": 1000,
+      "num": 333
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.37
+    },
+    "nome": "fator 0.37",
+    "saida": {
+      "den": 100,
+      "num": 37
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.5
+    },
+    "nome": "fator 0.5",
+    "saida": {
+      "den": 2,
+      "num": 1
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.75
+    },
+    "nome": "fator 0.75",
+    "saida": {
+      "den": 4,
+      "num": 3
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 1.0
+    },
+    "nome": "fator 1",
+    "saida": {
+      "den": 1,
+      "num": 1
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 1.25
+    },
+    "nome": "fator 1.25",
+    "saida": {
+      "den": 4,
+      "num": 5
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 1.5
+    },
+    "nome": "fator 1.5",
+    "saida": {
+      "den": 2,
+      "num": 3
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 2.0
+    },
+    "nome": "fator 2",
+    "saida": {
+      "den": 1,
+      "num": 2
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 4.0
+    },
+    "nome": "fator 4",
+    "saida": {
+      "den": 1,
+      "num": 4
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 8.0
+    },
+    "nome": "fator 8",
+    "saida": {
+      "den": 1,
+      "num": 8
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 16.0
+    },
+    "nome": "fator 16",
+    "saida": {
+      "den": 1,
+      "num": 16
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.049
+    },
+    "nome": "fator 0.049",
+    "saida": {
+      "erro": "velocidade"
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 16.001
+    },
+    "nome": "fator 16.001",
+    "saida": {
+      "erro": "velocidade"
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.3333
+    },
+    "nome": "fator 0.3333",
+    "saida": {
+      "erro": "velocidade"
+    }
+  },
+  {
+    "entrada": {
+      "conta": "fator_racional",
+      "fator": 0.0
+    },
+    "nome": "fator 0",
+    "saida": {
+      "erro": "velocidade"
+    }
+  }
+]

@@ -1,0 +1,157 @@
+# Edição profissional (P0.10, arquitetura §11 e §12 riscos 1 e 2):
+# - Windows: `cargo test --lib edicao::` em CPU com o ffmpeg do instalador (fetch-ffmpeg-windows.ps1).
+# - Ubuntu 22.04 (ffmpeg 4.4) e 24.04 (6.1): testes da sonda com o ffmpeg da distro e o relatório da
+#   sonda como artefato. Reprovação do binário não falha o job: o objetivo é medir o mínimo (§12.2).
+name: Edição — testes de plataforma
+
+on:
+  push:
+    branches: [edicao-pro]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: edicao-testes-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      SICRO_EXIGE_FFMPEG: "1"
+      SICRO_FFMPEG: ${{ github.workspace }}\src-tauri\ffmpeg-win\ffmpeg.exe
+    steps:
+      # Fixtures conferidas por texto: sem CRLF no checkout.
+      - run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: FFmpeg do instalador
+        shell: pwsh
+        run: |
+          scripts/fetch-ffmpeg-windows.ps1
+          # ffprobe pelo PATH também (testes que usam o detect_ffprobe de sempre)
+          "$env:GITHUB_WORKSPACE\src-tauri\ffmpeg-win" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+          & $env:SICRO_FFMPEG -hide_banner -version
+          if ($LASTEXITCODE -ne 0) { throw "ffmpeg não roda: $env:SICRO_FFMPEG" }
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          key: windows-latest
+          save-if: ${{ github.ref == 'refs/heads/edicao-pro' }}
+
+      # generate_context! exige a pasta do frontendDist; a página não entra nos testes.
+      - shell: pwsh
+        run: New-Item -ItemType Directory -Force dist | Out-Null
+
+      - name: "cargo test --lib edicao::"
+        working-directory: src-tauri
+        run: |
+          cargo test --lib edicao::
+
+  sonda-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      SICRO_EXIGE_FFMPEG: "1"
+      SICRO_FFMPEG: /usr/bin/ffmpeg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dependências do sistema e ffmpeg da distro
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev \
+            libxdo-dev libssl-dev libdbus-1-dev \
+            ffmpeg
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+          # por imagem: cache do 24.04 quebra os proc-macros no 22.04 (ver release.yml)
+          key: ${{ matrix.os }}
+          save-if: ${{ github.ref == 'refs/heads/edicao-pro' }}
+
+      - run: mkdir -p dist
+
+      # Erro de compilação falha o job; reprovação da sonda, não.
+      - name: Compilar os testes
+        working-directory: src-tauri
+        run: cargo test --lib --no-run
+
+      - name: Sonda do ffmpeg da distro
+        run: |
+          set +e -uo pipefail
+          out="$RUNNER_TEMP/sonda"; mkdir -p "$out"
+          rel="$out/sonda-${{ matrix.os }}.txt"
+          SONDA=src-tauri/src/edicao/ffmpeg/sonda.rs
+          # listas tiradas do código, para não divergirem da sonda
+          lista() { awk -v n="$1" '$0 ~ "^const "n": " {f=1} f {print} f && /\];/ {exit}' "$SONDA" | grep -o '"[^"]*"' | tr -d '"'; }
+          confere() { # rótulo, constante, arquivo com o que o binário tem
+            local tem="" falta=""
+            for x in $(lista "$2"); do
+              if grep -qxF "$x" "$3"; then tem="$tem $x"; else falta="$falta $x"; fi
+            done
+            echo "$1 presentes:$tem"
+            echo "$1 ausentes:${falta:- (nenhum)}"
+          }
+          for c in FILTROS_OBRIGATORIOS FILTROS_OPCIONAIS CODIFICADORES_OBRIGATORIOS DECODIFICADORES_OBRIGATORIOS MUXERS_OBRIGATORIOS; do
+            [ -n "$(lista $c)" ] || { echo "::error::$c não encontrada em $SONDA"; exit 1; }
+          done
+          ff="$SICRO_FFMPEG"
+          "$ff" -hide_banner -filters 2>/dev/null | awk 'NF>=3 && $1 ~ /^[TSC.]+$/ && index($3,"->")>0 {print $2}' > "$out/filtros"
+          codecs='NF>=2 && length($1)==6 && $1 ~ /^[VASDT][VASDTFXBI.]+$/ && $2 != "=" {print $2}'
+          "$ff" -hide_banner -encoders 2>/dev/null | awk "$codecs" > "$out/codificadores"
+          "$ff" -hide_banner -decoders 2>/dev/null | awk "$codecs" > "$out/decodificadores"
+          "$ff" -hide_banner -muxers 2>/dev/null | awk 'f && $1 ~ /^[DEd]+$/ {n=split($2,a,","); for(i=1;i<=n;i++) print a[i]} /^ *--/ {f=1}' > "$out/muxers"
+          printf 'color=c=red:s=16x16:d=0.1,format=yuv420p[v]' > "$out/g.txt"
+          forma() { "$ff" -hide_banner -nostdin -loglevel error "$1" "$out/g.txt" -map '[v]' -f null - >/dev/null 2>&1 && echo sim || echo não; }
+          {
+            echo "== ${{ matrix.os }}: $ff ($(dpkg -S "$ff" 2>/dev/null | cut -d: -f1))"
+            "$ff" -version
+            echo
+            echo "sha256: $(sha256sum "$ff" | cut -d' ' -f1)"
+            echo "ffprobe ao lado: $([ -x "$(dirname "$ff")/ffprobe" ] && echo sim || echo não)"
+            echo "grafo em arquivo -/filter_complex: $(forma -/filter_complex)"
+            echo "grafo em arquivo -filter_complex_script: $(forma -filter_complex_script)"
+            echo
+            confere "filtros obrigatórios" FILTROS_OBRIGATORIOS "$out/filtros"
+            confere "filtros opcionais" FILTROS_OPCIONAIS "$out/filtros"
+            confere "codificadores obrigatórios" CODIFICADORES_OBRIGATORIOS "$out/codificadores"
+            confere "decodificadores obrigatórios" DECODIFICADORES_OBRIGATORIOS "$out/decodificadores"
+            confere "muxers obrigatórios" MUXERS_OBRIGATORIOS "$out/muxers"
+          } > "$rel"
+          cat "$rel"
+          { echo '```'; cat "$rel"; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: "cargo test --lib edicao::ffmpeg::"
+        working-directory: src-tauri
+        run: |
+          set +e -uo pipefail
+          log="$RUNNER_TEMP/sonda/testes-${{ matrix.os }}.log"
+          cargo test --lib edicao::ffmpeg:: -- --nocapture --test-threads=1 2>&1 | tee "$log"
+          rc=${PIPESTATUS[0]}
+          echo "código de saída: $rc" | tee -a "$log"
+          [ "$rc" -eq 0 ] || echo "::warning::testes da sonda reprovaram o ffmpeg da distro (${{ matrix.os }}): ver o artefato"
+          echo "testes da sonda (${{ matrix.os }}): código $rc" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sonda-${{ matrix.os }}
+          if-no-files-found: warn
+          path: |
+            ${{ runner.temp }}/sonda/sonda-*.txt
+            ${{ runner.temp }}/sonda/testes-*.log

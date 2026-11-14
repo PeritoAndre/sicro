@@ -1,0 +1,5465 @@
+[
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque circulo caixa",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.45000000000000007,
+          "cy": 0.4,
+          "k": "elipse",
+          "rx": 0.08750446417183527,
+          "ry": 0.1555634918610405,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque circulo ponto",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.5,
+          "cy": 0.5,
+          "k": "elipse",
+          "rx": 0.033749999999999995,
+          "ry": 0.06,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "elipse",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          0.75,
+          0.0,
+          0.0,
+          1.0,
+          0.125,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque elipse caixa 4:3 em 16:9",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.4625,
+          "cy": 0.4,
+          "k": "elipse",
+          "rx": 0.058336309447890165,
+          "ry": 0.1555634918610405,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "elipse",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": false,
+          "cor": "#ff0000",
+          "espessura": 0.01
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque elipse ponto sem contorno",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.5,
+          "cy": 0.5,
+          "k": "elipse",
+          "rx": 0.033749999999999995,
+          "ry": 0.06,
+          "traco": {
+            "cor": "#ff0000",
+            "largura": 0.01
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "retangulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.1,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque retangulo caixa margem",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.39,
+              0.27999999999999997
+            ],
+            [
+              "L",
+              0.51,
+              0.27999999999999997
+            ],
+            [
+              "L",
+              0.51,
+              0.52
+            ],
+            [
+              "L",
+              0.39,
+              0.52
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "retangulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque retangulo ponto",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.46625,
+              0.44
+            ],
+            [
+              "L",
+              0.53375,
+              0.44
+            ],
+            [
+              "L",
+              0.53375,
+              0.5599999999999999
+            ],
+            [
+              "L",
+              0.46625,
+              0.5599999999999999
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "colchetes",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque colchetes caixa",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.3950000000000001,
+              0.3388888888888889
+            ],
+            [
+              "L",
+              0.3950000000000001,
+              0.29
+            ],
+            [
+              "L",
+              0.42250000000000004,
+              0.29
+            ],
+            [
+              "M",
+              0.4775000000000001,
+              0.29
+            ],
+            [
+              "L",
+              0.5050000000000001,
+              0.29
+            ],
+            [
+              "L",
+              0.5050000000000001,
+              0.3388888888888889
+            ],
+            [
+              "M",
+              0.5050000000000001,
+              0.4611111111111111
+            ],
+            [
+              "L",
+              0.5050000000000001,
+              0.51
+            ],
+            [
+              "L",
+              0.4775000000000001,
+              0.51
+            ],
+            [
+              "M",
+              0.42250000000000004,
+              0.51
+            ],
+            [
+              "L",
+              0.3950000000000001,
+              0.51
+            ],
+            [
+              "L",
+              0.3950000000000001,
+              0.4611111111111111
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "colchetes",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          0.0,
+          1.0,
+          -0.31640625,
+          0.0,
+          0.658203125,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.2,
+            "y": 0.7
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque colchetes ponto girado",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.4029687500000001,
+              0.16999999999999998
+            ],
+            [
+              "L",
+              0.4029687500000001,
+              0.13999999999999999
+            ],
+            [
+              "L",
+              0.41984375000000007,
+              0.13999999999999999
+            ],
+            [
+              "M",
+              0.45359375000000013,
+              0.13999999999999999
+            ],
+            [
+              "L",
+              0.4704687500000001,
+              0.13999999999999999
+            ],
+            [
+              "L",
+              0.4704687500000001,
+              0.16999999999999998
+            ],
+            [
+              "M",
+              0.4704687500000001,
+              0.22999999999999995
+            ],
+            [
+              "L",
+              0.4704687500000001,
+              0.25999999999999995
+            ],
+            [
+              "L",
+              0.45359375000000013,
+              0.25999999999999995
+            ],
+            [
+              "M",
+              0.41984375000000007,
+              0.25999999999999995
+            ],
+            [
+              "L",
+              0.4029687500000001,
+              0.25999999999999995
+            ],
+            [
+              "L",
+              0.4029687500000001,
+              0.22999999999999995
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 135.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta caixa 135",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.3472702922699081,
+              0.21736940847983652
+            ],
+            [
+              "L",
+              0.3950000000000001,
+              0.3022222222222222
+            ],
+            [
+              "M",
+              0.38975891433667403,
+              0.26744889247581577
+            ],
+            [
+              "L",
+              0.3950000000000001,
+              0.3022222222222222
+            ],
+            [
+              "L",
+              0.37544000201764643,
+              0.29290473659853145
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 0.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          0.0,
+          1.0,
+          -0.31640625,
+          0.0,
+          0.658203125,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta caixa 0 girado",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.6339453124999999,
+              0.45
+            ],
+            [
+              "L",
+              0.5664453124999999,
+              0.45
+            ],
+            [
+              "M",
+              0.5839823269266348,
+              0.46799999999999997
+            ],
+            [
+              "L",
+              0.5664453124999999,
+              0.45
+            ],
+            [
+              "L",
+              0.5839823269266348,
+              0.432
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "outro": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque sem rastreio no quadro",
+    "saida": {
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": false,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque desligado",
+    "saida": {
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 45",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.547729707730092,
+              0.4151471862576143
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.5195599979823536,
+              0.4906825143763093
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.505241085663326,
+              0.46522667025359354
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 0.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 0",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.5675,
+              0.5
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.5175370144266348,
+              0.518
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.5175370144266348,
+              0.48199999999999993
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 90.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 90",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.5,
+              0.38
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.510125,
+              0.4688230854637602
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.48987499999999995,
+              0.4688230854637602
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 180.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 180",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.4325,
+              0.5
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.48246298557336514,
+              0.48199999999999993
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.48246298557336514,
+              0.518
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 270.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 270",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.5,
+              0.62
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.48987499999999995,
+              0.5311769145362397
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.510125,
+              0.5311769145362397
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": -30.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto -30",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.5584567147554496,
+              0.5599999999999999
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.510125,
+              0.5311769145362397
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.52025,
+              0.5
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 400.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 400",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.5517079999105311,
+              0.4228654868376153
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.5199423569984972,
+              0.49374866560399056
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.5069259079023448,
+              0.4661710656517073
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 137.5,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 137.5",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.4502337797653166,
+              0.41892917508612076
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.49391070756003846,
+              0.46566618977306384
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.4802300058558214,
+              0.49220817389822835
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 359.9999999,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": null,
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta ponto 359.9999999",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.5675,
+              0.5000000002094396
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.5175370144089634,
+              0.5180000000544139
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.5175370144443063,
+              0.48200000005441407
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.01,
+              "raio": 0.005
+            },
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          },
+          "lado": "cima",
+          "texto": "Veículo 1"
+        },
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Veículo 1",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.005
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "d1",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-176x45.png",
+            "w": 176
+          }
+        }
+      ]
+    },
+    "nome": "destaque rotulo cima",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.45000000000000007,
+          "cy": 0.4,
+          "k": "elipse",
+          "rx": 0.08750446417183527,
+          "ry": 0.1555634918610405,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.09166666666666666,
+            "x": 0.4041666666666667,
+            "y": 0.19722222222222222
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-176x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.01,
+              "raio": 0.005
+            },
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          },
+          "lado": "baixo",
+          "texto": "Veículo 1"
+        },
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Veículo 1",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.005
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "d1",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-176x45.png",
+            "w": 176
+          }
+        }
+      ]
+    },
+    "nome": "destaque rotulo baixo",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.45000000000000007,
+          "cy": 0.4,
+          "k": "elipse",
+          "rx": 0.08750446417183527,
+          "ry": 0.1555634918610405,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.09166666666666666,
+            "x": 0.4041666666666667,
+            "y": 0.5611111111111111
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-176x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.01,
+              "raio": 0.005
+            },
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          },
+          "lado": "esq",
+          "texto": "Veículo 1"
+        },
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Veículo 1",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.005
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "d1",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-176x45.png",
+            "w": 176
+          }
+        }
+      ]
+    },
+    "nome": "destaque rotulo esq",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.45000000000000007,
+          "cy": 0.4,
+          "k": "elipse",
+          "rx": 0.08750446417183527,
+          "ry": 0.1555634918610405,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.09166666666666666,
+            "x": 0.2677083333333333,
+            "y": 0.37962962962962965
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-176x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "circulo",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.01,
+              "raio": 0.005
+            },
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          },
+          "lado": "dir",
+          "texto": "Veículo 1"
+        },
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Veículo 1",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.005
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "d1",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.0,
+                  "y": 0.0
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-176x45.png",
+            "w": 176
+          }
+        }
+      ]
+    },
+    "nome": "destaque rotulo dir",
+    "saida": {
+      "primitivas": [
+        {
+          "cx": 0.45000000000000007,
+          "cy": 0.4,
+          "k": "elipse",
+          "rx": 0.08750446417183527,
+          "ry": 0.1555634918610405,
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.09166666666666666,
+            "x": 0.540625,
+            "y": 0.37962962962962965
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-176x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "angulo_graus": 45.0,
+        "ativo": null,
+        "forma": "seta",
+        "id": "d1",
+        "ligado": true,
+        "margem": 0.05,
+        "nome": "",
+        "rastreio": "r1",
+        "rotulo": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          },
+          "lado": "cima",
+          "texto": ""
+        },
+        "tamanho": 0.12,
+        "tipo": "destaque",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffcc00",
+          "espessura": 0.006
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.0,
+            "w": 0.0,
+            "x": 0.5,
+            "y": 0.5
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "destaque seta rotulo vazio",
+    "saida": {
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.547729707730092,
+              0.4151471862576143
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "M",
+              0.5195599979823536,
+              0.4906825143763093
+            ],
+            [
+              "L",
+              0.5,
+              0.5
+            ],
+            [
+              "L",
+              0.505241085663326,
+              0.46522667025359354
+            ]
+          ],
+          "k": "caminho",
+          "traco": {
+            "contorno": "#000000bf",
+            "cor": "#ffcc00",
+            "largura": 0.006
+          }
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "retangulo",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "solido",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar solido retangulo",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.0,
+          "cor": "#000000ff",
+          "espaco": "fonte",
+          "forma": {
+            "d": [
+              [
+                "M",
+                0.39,
+                0.27999999999999997
+              ],
+              [
+                "L",
+                0.51,
+                0.27999999999999997
+              ],
+              [
+                "L",
+                0.51,
+                0.52
+              ],
+              [
+                "L",
+                0.39,
+                0.52
+              ],
+              [
+                "Z"
+              ]
+            ],
+            "k": "caminho"
+          },
+          "intensidade": 0.6,
+          "inverter": false,
+          "k": "regiao",
+          "modo": "solido"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.25,
+          "forma": "elipse",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "desfoque",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar desfoque elipse borda",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.25,
+          "espaco": "fonte",
+          "forma": {
+            "cx": 0.45,
+            "cy": 0.4,
+            "k": "elipse",
+            "rx": 0.06,
+            "ry": 0.12000000000000002
+          },
+          "intensidade": 0.6,
+          "inverter": false,
+          "k": "regiao",
+          "modo": "desfoque"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "poligono",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": [
+            {
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "x": 1.0,
+              "y": 0.2
+            },
+            {
+              "x": 0.6,
+              "y": 1.0
+            }
+          ]
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "mosaico",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar mosaico poligono",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.0,
+          "espaco": "fonte",
+          "forma": {
+            "d": [
+              [
+                "M",
+                0.39,
+                0.27999999999999997
+              ],
+              [
+                "L",
+                0.51,
+                0.32799999999999996
+              ],
+              [
+                "L",
+                0.462,
+                0.52
+              ],
+              [
+                "Z"
+              ]
+            ],
+            "k": "caminho"
+          },
+          "intensidade": 0.6,
+          "inverter": false,
+          "k": "regiao",
+          "modo": "mosaico"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "retangulo",
+          "inverter": true,
+          "margem": -0.2,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "solido",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar inverter margem negativa",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.0,
+          "cor": "#000000ff",
+          "espaco": "fonte",
+          "forma": {
+            "d": [
+              [
+                "M",
+                0.42000000000000004,
+                0.33999999999999997
+              ],
+              [
+                "L",
+                0.48,
+                0.33999999999999997
+              ],
+              [
+                "L",
+                0.48,
+                0.45999999999999996
+              ],
+              [
+                "L",
+                0.42000000000000004,
+                0.45999999999999996
+              ],
+              [
+                "Z"
+              ]
+            ],
+            "k": "caminho"
+          },
+          "intensidade": 0.6,
+          "inverter": true,
+          "k": "regiao",
+          "modo": "solido"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "retangulo",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "solido",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.1,
+            "w": 0.1,
+            "x": 0.95,
+            "y": -0.05
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar fora da imagem",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.0,
+          "cor": "#000000ff",
+          "espaco": "fonte",
+          "forma": {
+            "d": [
+              [
+                "M",
+                0.94,
+                0.0
+              ],
+              [
+                "L",
+                1.0,
+                0.0
+              ],
+              [
+                "L",
+                1.0,
+                0.060000000000000005
+              ],
+              [
+                "L",
+                0.94,
+                0.060000000000000005
+              ],
+              [
+                "Z"
+              ]
+            ],
+            "k": "caminho"
+          },
+          "intensidade": 0.6,
+          "inverter": false,
+          "k": "regiao",
+          "modo": "solido"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "poligono",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "solido",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar poligono sem vertices",
+    "saida": {
+      "erro": "item_invalido"
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "silhueta",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "conteudo": "placa",
+        "cor": "#000000ff",
+        "id": "o1",
+        "intensidade": 0.6,
+        "ligado": true,
+        "modo": "solido",
+        "motivo": "",
+        "nome": "",
+        "tipo": "ocultar"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ocultar silhueta",
+    "saida": {
+      "erro": "nao_suportado"
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.1,
+          "forma": "elipse",
+          "inverter": false,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": null
+        },
+        "ativo": null,
+        "dessaturar": 0.5,
+        "escurecer": 0.7,
+        "id": "h1",
+        "ligado": true,
+        "nome": "",
+        "tipo": "holofote"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          0.0,
+          1.0,
+          -0.31640625,
+          0.0,
+          0.658203125,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "holofote elipse girado",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.1,
+          "espaco": "canvas",
+          "forma": {
+            "cx": 0.531640625,
+            "cy": 0.45,
+            "k": "elipse",
+            "rx": 0.03796875000000001,
+            "ry": 0.06
+          },
+          "intensidade": 0.7,
+          "inverter": true,
+          "k": "regiao",
+          "modo": "escurecer"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "alvo": {
+          "borda_suave": 0.0,
+          "forma": "poligono",
+          "inverter": true,
+          "margem": 0.1,
+          "rastreio": "r1",
+          "vertices": [
+            {
+              "x": 0.0,
+              "y": 0.0
+            },
+            {
+              "x": 1.0,
+              "y": 0.2
+            },
+            {
+              "x": 0.6,
+              "y": 1.0
+            }
+          ]
+        },
+        "ativo": null,
+        "dessaturar": 0.0,
+        "escurecer": 0.5,
+        "id": "h1",
+        "ligado": true,
+        "nome": "",
+        "tipo": "holofote"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          0.75,
+          0.0,
+          0.0,
+          1.0,
+          0.125,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "holofote poligono 4:3 invertido",
+    "saida": {
+      "primitivas": [
+        {
+          "borda_suave": 0.0,
+          "espaco": "canvas",
+          "forma": {
+            "d": [
+              [
+                "M",
+                0.4175,
+                0.27999999999999997
+              ],
+              [
+                "L",
+                0.5075000000000001,
+                0.32799999999999996
+              ],
+              [
+                "L",
+                0.47150000000000003,
+                0.52
+              ],
+              [
+                "Z"
+              ]
+            ],
+            "k": "caminho"
+          },
+          "intensidade": 0.5,
+          "inverter": false,
+          "k": "regiao",
+          "modo": "escurecer"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "conteudo": "Câmera 2 — saída",
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": {
+            "cor": "#0000008c",
+            "margem": 0.01,
+            "raio": 0.005
+          },
+          "contorno": {
+            "cor": "#000000",
+            "largura": 0.002
+          },
+          "cor": "#ffffff",
+          "fonte": "sans",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "id": "t1",
+        "largura_max": 0.8,
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "base",
+          "x": 0.95,
+          "y": 0.9
+        },
+        "nome": "",
+        "tipo": "texto"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.005
+                  },
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "t1",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.9
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-314x45.png",
+            "w": 314
+          }
+        }
+      ]
+    },
+    "nome": "texto dir base com caixa e contorno",
+    "saida": {
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.16354166666666667,
+            "x": 0.7864583333333334,
+            "y": 0.8583333333333333
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-314x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "conteudo": "#import *a* $x$",
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "serifa",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "id": "t1",
+        "largura_max": 0.8,
+        "ligado": true,
+        "lugar": {
+          "h": "centro",
+          "v": "meio",
+          "x": 0.5,
+          "y": 0.5
+        },
+        "nome": "",
+        "tipo": "texto"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "#import *a* $x$",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "serifa",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "t1",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-294x45.png",
+            "w": 294
+          }
+        }
+      ]
+    },
+    "nome": "texto centro meio",
+    "saida": {
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.153125,
+            "x": 0.4234375,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-294x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "conteudo": "",
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "sans",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "id": "t1",
+        "largura_max": 0.8,
+        "ligado": true,
+        "lugar": {
+          "h": "centro",
+          "v": "meio",
+          "x": 0.5,
+          "y": 0.5
+        },
+        "nome": "",
+        "tipo": "texto"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "texto vazio",
+    "saida": {
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "conteudo": "Vertical",
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "id": "t1",
+        "largura_max": 0.8,
+        "ligado": true,
+        "lugar": {
+          "h": "esq",
+          "v": "topo",
+          "x": 0.1,
+          "y": 0.1
+        },
+        "nome": "",
+        "tipo": "texto"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1920,
+          "w": 1080
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {},
+        "t": 3723.4565
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1920,
+            "blocos": [
+              {
+                "conteudo": "Vertical",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "mono",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "t1",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.1,
+                  "y": 0.1
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.45
+          },
+          "sprite": {
+            "h": 79,
+            "relativo": "sprites/falso-279x79.png",
+            "w": 279
+          }
+        }
+      ]
+    },
+    "nome": "texto vertical",
+    "saida": {
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.04114583333333333,
+            "w": 0.25833333333333336,
+            "x": 0.1,
+            "y": 0.1
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-279x79.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms_ms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "tempo_fonte",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo tempo_fonte hms_ms",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Original 01:02:03,457"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "tempo_fonte",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo tempo_fonte hms",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Original 01:02:03"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "data_hora",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "tempo_fonte",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo tempo_fonte data_hora",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Original 01:02:03,457"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms_ms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "tempo_fonte",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": -1.5
+      },
+      "sprites": []
+    },
+    "nome": "carimbo tempo negativo",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Original -00:00:01,500"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms_ms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "relogio",
+        "nome": "",
+        "relogio": {
+          "clock_date": null,
+          "clock_seconds": 86300.0,
+          "media_time_s": 3600.0
+        },
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo relogio hms_ms virando o dia",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Câmera 00:00:23,457"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "data_hora",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "relogio",
+        "nome": "",
+        "relogio": {
+          "clock_date": "2028-02-28",
+          "clock_seconds": 86300.0,
+          "media_time_s": 3600.0
+        },
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo relogio data_hora virando o mes",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Câmera 29/02/2028 00:00:23"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "data_hora",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "relogio",
+        "nome": "",
+        "relogio": {
+          "clock_date": null,
+          "clock_seconds": 86300.0,
+          "media_time_s": 3600.0
+        },
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo relogio data_hora sem data",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Câmera 00:00:23"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "relogio",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo relogio sem retrato",
+    "saida": {
+      "erro": "item_invalido"
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms_ms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "quadro",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo quadro",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": "Quadro 312"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms_ms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "quadro",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo quadro sem indice",
+    "saida": {
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [
+        {
+          "altura_canvas": 1080,
+          "atlas": {
+            "celula": {
+              "h": 42,
+              "w": 23
+            },
+            "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+            "relativo": "atlas/falso.png"
+          },
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.01,
+              "raio": 0.005
+            },
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "mono",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.033
+          }
+        }
+      ],
+      "efeito": {
+        "ativo": null,
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": {
+            "cor": "#0000008c",
+            "margem": 0.01,
+            "raio": 0.005
+          },
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "mono",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "formato": "hms_ms",
+        "id": "k1",
+        "ligado": true,
+        "lugar": {
+          "h": "dir",
+          "v": "topo",
+          "x": 0.984,
+          "y": 0.028
+        },
+        "mostra": "tempo_programa",
+        "nome": "",
+        "relogio": null,
+        "tipo": "carimbo"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "carimbo tempo_programa com caixa",
+    "saida": {
+      "primitivas": [
+        {
+          "altura": 0.03888888888888889,
+          "celula": {
+            "h": 42,
+            "w": 23
+          },
+          "glifos": "0123456789:,./- OrignalCâmeQudoVí",
+          "k": "atlas",
+          "lugar": {
+            "h": "dir",
+            "v": "topo",
+            "x": 0.984,
+            "y": 0.028
+          },
+          "src": "atlas/falso.png",
+          "texto": " Vídeo 00:00:04,004 "
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "id": "i1",
+        "largura": 0.25,
+        "ligado": true,
+        "lugar": {
+          "h": "centro",
+          "v": "meio",
+          "x": 0.5,
+          "y": 0.5
+        },
+        "midia": "logo",
+        "nome": "",
+        "opacidade": 0.8,
+        "tipo": "imagem"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "imagem centro meio",
+    "saida": {
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.3333333333333333,
+            "w": 0.25,
+            "x": 0.375,
+            "y": 0.3333333333333333
+          },
+          "k": "sprite",
+          "opacidade": 0.8,
+          "src": "midia:logo"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "id": "i1",
+        "largura": 0.25,
+        "ligado": true,
+        "lugar": {
+          "h": "esq",
+          "v": "topo",
+          "x": 0.0,
+          "y": 0.0
+        },
+        "midia": "nada",
+        "nome": "",
+        "opacidade": 1.0,
+        "tipo": "imagem"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "imagem ausente",
+    "saida": {
+      "erro": "midia_ausente"
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "brilho": 0.1,
+        "contraste": 1.0,
+        "gama": 1.0,
+        "id": "a1",
+        "ligado": true,
+        "nome": "",
+        "saturacao": 1.0,
+        "tipo": "ajustes"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "ajustes",
+    "saida": {
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "fator": 2.0,
+        "forma": "circulo",
+        "id": "l1",
+        "interpolacao": "bilinear",
+        "janela": 0.2,
+        "ligacao": true,
+        "ligado": true,
+        "moldura": {
+          "contorno": true,
+          "cor": "#ffffff",
+          "espessura": 0.004
+        },
+        "nome": "",
+        "onde": {
+          "modo": "fixa",
+          "x": 0.8,
+          "y": 0.2
+        },
+        "rastreio": "r1",
+        "tipo": "lupa"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "lupa",
+    "saida": {
+      "erro": "nao_suportado"
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "fator": 2.0,
+        "forma": "circulo",
+        "id": "l1",
+        "interpolacao": "bilinear",
+        "janela": 0.2,
+        "ligacao": true,
+        "ligado": false,
+        "moldura": {
+          "contorno": true,
+          "cor": "#ffffff",
+          "espessura": 0.004
+        },
+        "nome": "",
+        "onde": {
+          "modo": "fixa",
+          "x": 0.8,
+          "y": 0.2
+        },
+        "rastreio": "r1",
+        "tipo": "lupa"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "lupa desligada",
+    "saida": {
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ancora": {
+          "x": 0.5,
+          "y": 0.5
+        },
+        "ativo": null,
+        "calibracao": {
+          "espaco": {
+            "h": 1080,
+            "w": 1920
+          },
+          "h": [
+            1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1
+          ],
+          "id": "c",
+          "metodo": "plane",
+          "pontos_sha256": "",
+          "regiao": [],
+          "residuo_m": 0.01
+        },
+        "comprimento_m": 1.0,
+        "direcao_graus": 0.0,
+        "divisoes": 10,
+        "id": "g1",
+        "ligado": true,
+        "nome": "",
+        "rotulo": true,
+        "tipo": "regua",
+        "traco": {
+          "contorno": true,
+          "cor": "#ffffff",
+          "espessura": 0.004
+        }
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "regua",
+    "saida": {
+      "erro": "nao_suportado"
+    }
+  },
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "calculo": {
+          "ate_s": 1.0,
+          "de_s": 0.0,
+          "faixa": [
+            39.0,
+            45.0
+          ],
+          "id": "c",
+          "kmh": 42.0,
+          "metodo": "x"
+        },
+        "estilo": {
+          "alinhamento": "centro",
+          "caixa": null,
+          "contorno": null,
+          "cor": "#ffffff",
+          "fonte": "sans",
+          "italico": false,
+          "negrito": false,
+          "tamanho": 0.033
+        },
+        "id": "v1",
+        "ligado": true,
+        "nome": "",
+        "onde": {
+          "lugar": {
+            "h": "centro",
+            "v": "base",
+            "x": 0.5,
+            "y": 0.9
+          },
+          "modo": "fixa"
+        },
+        "tipo": "velocidade_exibida"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "velocidade_exibida",
+    "saida": {
+      "erro": "nao_suportado"
+    }
+  }
+]

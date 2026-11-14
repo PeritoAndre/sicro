@@ -148,6 +148,16 @@ glob = "0.3"
 # Production builds bake the WebView assets in.
 custom-protocol = ["tauri/custom-protocol"]
 
+# rasterizador das camadas: sem otimização, cada quadro custa 30 ms no cargo test
+[profile.dev.package.tiny-skia]
+opt-level = 3
+[profile.dev.package.png]
+opt-level = 3
+[profile.dev.package.fdeflate]
+opt-level = 3
+[profile.dev.package.sha2]
+opt-level = 3
+
 [profile.release]
 strip = true
 lto = true
