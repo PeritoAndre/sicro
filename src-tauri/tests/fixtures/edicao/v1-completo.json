@@ -1,0 +1,216 @@
+{
+  "id": "a0000000-0000-4000-8000-000000000006",
+  "titulo": "Todos os efeitos da v1",
+  "created_at": "2026-11-01T10:00:00.000Z",
+  "updated_at": "2026-11-01T10:05:00.000Z",
+  "itens": [
+    {
+      "tipo": "trecho",
+      "id": "f1",
+      "media_id": "11111111-2222-4333-8444-555555555551",
+      "inicio_s": 10,
+      "fim_s": 20,
+      "velocidade": 1,
+      "texto": {
+        "conteudo": "Câmera 1 — entrada",
+        "posicao": "topo",
+        "tamanho": "g",
+        "carimbo_tempo": true
+      },
+      "transicao_entrada": "fade",
+      "zoom": {
+        "inicio": {
+          "x": 0,
+          "y": 0,
+          "w": 1,
+          "h": 1
+        },
+        "fim": {
+          "x": 0.2,
+          "y": 0.3,
+          "w": 0.05,
+          "h": 0.5
+        }
+      },
+      "destaques": [
+        {
+          "id": "d1",
+          "forma": "circulo",
+          "cor": "#ff2d2d",
+          "quadros": [
+            {
+              "t": 1,
+              "x": 0.4,
+              "y": 0.5
+            },
+            {
+              "t": 3,
+              "x": 0.6,
+              "y": 0.5
+            }
+          ]
+        },
+        {
+          "id": "d2",
+          "forma": "seta",
+          "cor": "#00ff00",
+          "quadros": [
+            {
+              "t": 2.5,
+              "x": 0.3,
+              "y": 0.7
+            }
+          ]
+        },
+        {
+          "id": "d3",
+          "forma": "retangulo",
+          "cor": "#ffff00",
+          "quadros": [
+            {
+              "t": 0,
+              "x": 0.1,
+              "y": 0.1,
+              "w": 0.2,
+              "h": 0.3
+            },
+            {
+              "t": 5,
+              "x": 0.2,
+              "y": 0.1,
+              "w": 0.25,
+              "h": 0.3
+            }
+          ]
+        }
+      ],
+      "desfoques": [
+        {
+          "id": "g1",
+          "quadros": [
+            {
+              "t": 4,
+              "x": 0.5,
+              "y": 0.5,
+              "w": 0.1,
+              "h": 0.05
+            },
+            {
+              "t": 2,
+              "x": 0.4,
+              "y": 0.5,
+              "w": 0.1,
+              "h": 0.05
+            }
+          ]
+        },
+        {
+          "id": "g2",
+          "quadros": [
+            {
+              "t": 0,
+              "x": 0.7,
+              "y": 0.1,
+              "w": 0.2,
+              "h": 0.2
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cartela",
+      "id": "f2",
+      "duracao_s": 0.6,
+      "texto": "Fim do trecho",
+      "cor_fundo": "#101010",
+      "cor_texto": "#fafafa",
+      "tamanho": "p",
+      "transicao_entrada": "fade"
+    },
+    {
+      "tipo": "congelar",
+      "id": "f3",
+      "media_id": "11111111-2222-4333-8444-555555555552",
+      "instante_s": 3.5,
+      "duracao_s": 2,
+      "texto": {
+        "conteudo": "Parado",
+        "posicao": "centro",
+        "tamanho": "p",
+        "carimbo_tempo": true
+      }
+    },
+    {
+      "tipo": "trecho",
+      "id": "f4",
+      "media_id": "11111111-2222-4333-8444-555555555551",
+      "inicio_s": 30,
+      "fim_s": 31,
+      "velocidade": 2,
+      "texto": {
+        "conteudo": "   ",
+        "posicao": "rodape",
+        "tamanho": "x",
+        "carimbo_tempo": false
+      },
+      "transicao_entrada": "fade"
+    },
+    {
+      "tipo": "trecho",
+      "id": "f5",
+      "media_id": "11111111-2222-4333-8444-555555555553",
+      "inicio_s": 0,
+      "fim_s": 1,
+      "velocidade": 1,
+      "texto": null,
+      "transicao_entrada": "outra"
+    },
+    {
+      "tipo": "cartela",
+      "id": "f6",
+      "duracao_s": 1,
+      "texto": "  ",
+      "cor_fundo": "#000000",
+      "cor_texto": "#ffffff",
+      "tamanho": "m"
+    }
+  ],
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": 30,
+    "incluir_audio": true
+  },
+  "narracoes": [
+    {
+      "id": "n1",
+      "arquivo_relativo": "Sistema/videos/montagens/audios/a1.webm",
+      "inicio_s": 0,
+      "volume": 0.8,
+      "nome": "Abertura"
+    },
+    {
+      "id": "n2",
+      "arquivo_relativo": "Sistema/videos/montagens/audios/a2.wav",
+      "inicio_s": 5.5,
+      "volume": 1.5,
+      "nome": "Explicação"
+    },
+    {
+      "id": "n3",
+      "arquivo_relativo": "Sistema/videos/montagens/audios/a1.webm",
+      "inicio_s": 12,
+      "volume": 1,
+      "nome": "Repetida"
+    },
+    {
+      "id": "n4",
+      "arquivo_relativo": "Sistema/videos/montagens/audios/sumiu.ogg",
+      "inicio_s": 20,
+      "volume": 1,
+      "nome": "Sumida"
+    }
+  ],
+  "volume_original": 0.8
+}

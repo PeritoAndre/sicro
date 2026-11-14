@@ -1,0 +1,44 @@
+{
+  "id": "a0000000-0000-4000-8000-000000000001",
+  "titulo": "Velocidade",
+  "created_at": "2026-11-01T10:00:00.000Z",
+  "updated_at": "2026-11-01T10:05:00.000Z",
+  "itens": [
+    {
+      "tipo": "trecho",
+      "id": "a1",
+      "media_id": "11111111-2222-4333-8444-555555555551",
+      "inicio_s": 2,
+      "fim_s": 4,
+      "velocidade": 0.5,
+      "texto": null,
+      "transicao_entrada": "corte"
+    },
+    {
+      "tipo": "cartela",
+      "id": "a2",
+      "duracao_s": 2,
+      "texto": "x",
+      "cor_fundo": "#000000",
+      "cor_texto": "#ffffff",
+      "tamanho": "m",
+      "transicao_entrada": "corte"
+    },
+    {
+      "tipo": "congelar",
+      "id": "a3",
+      "media_id": "11111111-2222-4333-8444-555555555551",
+      "instante_s": 1,
+      "duracao_s": 1.5,
+      "texto": null
+    }
+  ],
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": 30,
+    "incluir_audio": true
+  },
+  "narracoes": [],
+  "volume_original": 1
+}

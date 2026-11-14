@@ -1,0 +1,4603 @@
+[
+  {
+    "entrada": {
+      "em": {
+        "pts": 0,
+        "t": 0.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 0",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 14848,
+        "t": 0.9666666666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 29",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 15360,
+        "t": 1.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 30",
+    "saida": {
+      "caixa": {
+        "h": 0.2,
+        "w": 0.2,
+        "x": 0.1,
+        "y": 0.1
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 15872,
+        "t": 1.0333333333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 31",
+    "saida": {
+      "caixa": {
+        "h": 0.2066666666666667,
+        "w": 0.2,
+        "x": 0.11333333333333338,
+        "y": 0.10666666666666669
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 23040,
+        "t": 1.5
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 45",
+    "saida": {
+      "caixa": {
+        "h": 0.30000000000000004,
+        "w": 0.2,
+        "x": 0.30000000000000004,
+        "y": 0.2
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 30208,
+        "t": 1.9666666666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 59",
+    "saida": {
+      "caixa": {
+        "h": 0.3933333333333333,
+        "w": 0.2,
+        "x": 0.4866666666666667,
+        "y": 0.29333333333333333
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 30720,
+        "t": 2.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 60",
+    "saida": {
+      "caixa": {
+        "h": 0.4,
+        "w": 0.2,
+        "x": 0.5,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 31232,
+        "t": 2.033333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 61",
+    "saida": {
+      "caixa": {
+        "h": 0.3990222222222223,
+        "w": 0.1996740740740741,
+        "x": 0.5006518518518518,
+        "y": 0.3
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 38400,
+        "t": 2.5
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 75",
+    "saida": {
+      "caixa": {
+        "h": 0.25,
+        "w": 0.15000000000000002,
+        "x": 0.6,
+        "y": 0.3
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 45568,
+        "t": 2.966666666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 89",
+    "saida": {
+      "caixa": {
+        "h": 0.10097777777777778,
+        "w": 0.10032592592592593,
+        "x": 0.699348148148148,
+        "y": 0.3
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 46080,
+        "t": 3.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 90",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.7,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 46592,
+        "t": 3.033333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 91",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.7,
+        "y": 0.3
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 153600,
+        "t": 10.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual quadro 300",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.7,
+        "y": 0.3
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 30720,
+        "t": 1.999999999
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual pts da ancora com t ruidoso",
+    "saida": {
+      "caixa": {
+        "h": 0.4,
+        "w": 0.2,
+        "x": 0.5,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": null,
+        "t": 2.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual sem pts no t da ancora",
+    "saida": {
+      "caixa": {
+        "h": 0.4,
+        "w": 0.2,
+        "x": 0.5,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 5120,
+        "t": 0.3333333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido quadro 10",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 15360,
+        "t": 1.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido quadro 30",
+    "saida": {
+      "caixa": {
+        "h": 0.2,
+        "w": 0.2,
+        "x": 0.1,
+        "y": 0.1
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 25600,
+        "t": 1.6666666666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido quadro 50",
+    "saida": {
+      "caixa": {
+        "h": 0.33333333333333337,
+        "w": 0.2,
+        "x": 0.3666666666666667,
+        "y": 0.23333333333333334
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 46080,
+        "t": 3.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido quadro 90",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.7,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 46592,
+        "t": 3.033333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido quadro 91",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 61440,
+        "t": 4.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "copiado_em": "2026-11-14T00:00:00Z",
+          "estado": "auto",
+          "pessoa_id": "p7",
+          "tipo": "pessoas"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "pessoas depois da ultima",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 61440,
+        "t": 4.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "classe": "rosto",
+          "tipo": "deteccao"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "deteccao depois da ultima",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 50688,
+        "t": 3.3
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 51200,
+            "t": 3.3333333333333335,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.4,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancora unica quadro 99",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 51200,
+        "t": 3.3333333333333335
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 51200,
+            "t": 3.3333333333333335,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.4,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancora unica quadro 100",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.4,
+        "y": 0.4
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 51712,
+        "t": 3.3666666666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 51200,
+            "t": 3.3333333333333335,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.4,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancora unica quadro 101",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.4,
+        "y": 0.4
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 2560000,
+        "t": 166.66666666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 51200,
+            "t": 3.3333333333333335,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.4,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancora unica quadro 5000",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.4,
+        "y": 0.4
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": null,
+        "t": 0.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 0.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.2,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 1.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.2,
+              "x": 0.6,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "local",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": null,
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "local t=0",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": null,
+        "t": 0.5
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 0.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.2,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 1.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.2,
+              "x": 0.6,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "local",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": null,
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "local t=0.5",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.2,
+        "y": 0.2
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": null,
+        "t": 0.8
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 0.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.2,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 1.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.2,
+              "x": 0.6,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "local",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": null,
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "local t=0.8",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.13,
+        "x": 0.32,
+        "y": 0.26
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": null,
+        "t": 1.5
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 0.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.2,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 1.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.2,
+              "x": 0.6,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "local",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": null,
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "local t=1.5",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.2,
+        "x": 0.6,
+        "y": 0.4
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": null,
+        "t": 2.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 0.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.2,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": null,
+            "t": 1.5,
+            "v": {
+              "h": 0.1,
+              "w": 0.2,
+              "x": 0.6,
+              "y": 0.4
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "local",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": null,
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "local t=2",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.2,
+        "x": 0.6,
+        "y": 0.4
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 2560,
+        "t": 0.16666666666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 5120,
+            "t": 0.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.25,
+              "y": 0.75
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 20480,
+            "t": 1.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.75,
+              "y": 0.25
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "ponto"
+      }
+    },
+    "nome": "ponto quadro 5",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 5120,
+        "t": 0.3333333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 5120,
+            "t": 0.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.25,
+              "y": 0.75
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 20480,
+            "t": 1.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.75,
+              "y": 0.25
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "ponto"
+      }
+    },
+    "nome": "ponto quadro 10",
+    "saida": {
+      "caixa": {
+        "h": 0.0,
+        "w": 0.0,
+        "x": 0.25,
+        "y": 0.75
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 10240,
+        "t": 0.6666666666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 5120,
+            "t": 0.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.25,
+              "y": 0.75
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 20480,
+            "t": 1.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.75,
+              "y": 0.25
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "ponto"
+      }
+    },
+    "nome": "ponto quadro 20",
+    "saida": {
+      "caixa": {
+        "h": 0.0,
+        "w": 0.0,
+        "x": 0.37962962962962965,
+        "y": 0.6203703703703703
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 12800,
+        "t": 0.8333333333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 5120,
+            "t": 0.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.25,
+              "y": 0.75
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 20480,
+            "t": 1.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.75,
+              "y": 0.25
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "ponto"
+      }
+    },
+    "nome": "ponto quadro 25",
+    "saida": {
+      "caixa": {
+        "h": 0.0,
+        "w": 0.0,
+        "x": 0.5,
+        "y": 0.5
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 20480,
+        "t": 1.3333333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 5120,
+            "t": 0.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.25,
+              "y": 0.75
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 20480,
+            "t": 1.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.75,
+              "y": 0.25
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "ponto"
+      }
+    },
+    "nome": "ponto quadro 40",
+    "saida": {
+      "caixa": {
+        "h": 0.0,
+        "w": 0.0,
+        "x": 0.75,
+        "y": 0.25
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 20992,
+        "t": 1.3666666666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "suave",
+            "pts": 5120,
+            "t": 0.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.25,
+              "y": 0.75
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 20480,
+            "t": 1.3333333333333333,
+            "v": {
+              "h": 0.0,
+              "w": 0.0,
+              "x": 0.75,
+              "y": 0.25
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "ponto"
+      }
+    },
+    "nome": "ponto quadro 41",
+    "saida": {
+      "caixa": {
+        "h": 0.0,
+        "w": 0.0,
+        "x": 0.75,
+        "y": 0.25
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 99099,
+        "t": 3.3033
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 99",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 100100,
+        "t": 3.3366666666666664
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 100",
+    "saida": {
+      "caixa": {
+        "h": 0.2,
+        "w": 0.2,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 101101,
+        "t": 3.370033333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 101",
+    "saida": {
+      "caixa": {
+        "h": 0.1972972972972973,
+        "w": 0.20540540540540542,
+        "x": 0.11081081081081084,
+        "y": 0.21081081081081085
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 136136,
+        "t": 4.537866666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 136",
+    "saida": {
+      "caixa": {
+        "h": 0.10270270270270271,
+        "w": 0.3945945945945946,
+        "x": 0.4891891891891892,
+        "y": 0.5891891891891892
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 137137,
+        "t": 4.571233333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 137",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.4,
+        "x": 0.5,
+        "y": 0.6
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 138138,
+        "t": 4.6046
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 138",
+    "saida": {
+      "caixa": {
+        "h": 0.10014957188048647,
+        "w": 0.3999252140597568,
+        "x": 0.4998504281195135,
+        "y": 0.5997756421792703
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 163163,
+        "t": 5.438766666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 163",
+    "saida": {
+      "caixa": {
+        "h": 0.17407567377333066,
+        "w": 0.3629621631133347,
+        "x": 0.4259243262266693,
+        "y": 0.488886489340004
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 199199,
+        "t": 6.639966666666667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 199",
+    "saida": {
+      "caixa": {
+        "h": 0.29985042811951357,
+        "w": 0.3000747859402432,
+        "x": 0.3001495718804864,
+        "y": 0.30022435782072965
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 200200,
+        "t": 6.673333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 200",
+    "saida": {
+      "caixa": {
+        "h": 0.3,
+        "w": 0.3,
+        "x": 0.3,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 201201,
+        "t": 6.7067
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 100100,
+            "t": 3.3366666666666664,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 137137,
+            "t": 4.571233333333334,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 200200,
+            "t": 6.673333333333333,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "29,97 em 1/30000 quadro 201",
+    "saida": {
+      "caixa": {
+        "h": 0.3,
+        "w": 0.3,
+        "x": 0.3,
+        "y": 0.3
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 423297,
+        "t": 4.7033
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 99",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 426300,
+        "t": 4.736666666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 100",
+    "saida": {
+      "caixa": {
+        "h": 0.2,
+        "w": 0.2,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 429303,
+        "t": 4.770033333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 101",
+    "saida": {
+      "caixa": {
+        "h": 0.1972972972972973,
+        "w": 0.20540540540540544,
+        "x": 0.11081081081081084,
+        "y": 0.21081081081081085
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 534408,
+        "t": 5.937866666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 136",
+    "saida": {
+      "caixa": {
+        "h": 0.10270270270270271,
+        "w": 0.3945945945945946,
+        "x": 0.4891891891891892,
+        "y": 0.5891891891891892
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 537411,
+        "t": 5.971233333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 137",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.4,
+        "x": 0.5,
+        "y": 0.6
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 540414,
+        "t": 6.0046
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 138",
+    "saida": {
+      "caixa": {
+        "h": 0.10014957188048647,
+        "w": 0.3999252140597568,
+        "x": 0.4998504281195135,
+        "y": 0.5997756421792703
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 615489,
+        "t": 6.838766666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 163",
+    "saida": {
+      "caixa": {
+        "h": 0.17407567377333052,
+        "w": 0.36296216311333473,
+        "x": 0.4259243262266695,
+        "y": 0.48888648934000417
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 723597,
+        "t": 8.039966666666666
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 199",
+    "saida": {
+      "caixa": {
+        "h": 0.2998504281195135,
+        "w": 0.3000747859402432,
+        "x": 0.30014957188048647,
+        "y": 0.3002243578207297
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 726600,
+        "t": 8.073333333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 200",
+    "saida": {
+      "caixa": {
+        "h": 0.3,
+        "w": 0.3,
+        "x": 0.3,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 729603,
+        "t": 8.1067
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 426300,
+            "t": 4.736666666666666,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 537411,
+            "t": 5.971233333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 726600,
+            "t": 8.073333333333334,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "TS 1/90000 com inicio em 1,4 s quadro 201",
+    "saida": {
+      "caixa": {
+        "h": 0.3,
+        "w": 0.3,
+        "x": 0.3,
+        "y": 0.3
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 3300,
+        "t": 3.3
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 99",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 3333,
+        "t": 3.333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 100",
+    "saida": {
+      "caixa": {
+        "h": 0.2,
+        "w": 0.2,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 3367,
+        "t": 3.367
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 101",
+    "saida": {
+      "caixa": {
+        "h": 0.19724473257698544,
+        "w": 0.20551053484602916,
+        "x": 0.11102106969205829,
+        "y": 0.2110210696920583
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 4533,
+        "t": 4.533
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 136",
+    "saida": {
+      "caixa": {
+        "h": 0.10275526742301458,
+        "w": 0.3944894651539709,
+        "x": 0.4889789303079417,
+        "y": 0.5889789303079417
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 4567,
+        "t": 4.567
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 137",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.4,
+        "x": 0.5,
+        "y": 0.6
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 4600,
+        "t": 4.6
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 138",
+    "saida": {
+      "caixa": {
+        "h": 0.1001466110787172,
+        "w": 0.39992669446064144,
+        "x": 0.4998533889212828,
+        "y": 0.5997800833819242
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 5433,
+        "t": 5.433
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 163",
+    "saida": {
+      "caixa": {
+        "h": 0.1739833497030558,
+        "w": 0.3630083251484721,
+        "x": 0.4260166502969442,
+        "y": 0.4890249754454163
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 6633,
+        "t": 6.633
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 199",
+    "saida": {
+      "caixa": {
+        "h": 0.299844418702084,
+        "w": 0.300077790648958,
+        "x": 0.300155581297916,
+        "y": 0.300233371946874
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 6667,
+        "t": 6.667
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 200",
+    "saida": {
+      "caixa": {
+        "h": 0.3,
+        "w": 0.3,
+        "x": 0.3,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 6700,
+        "t": 6.7
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 3333,
+            "t": 3.333,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.2
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 4567,
+            "t": 4.567,
+            "v": {
+              "h": 0.1,
+              "w": 0.4,
+              "x": 0.5,
+              "y": 0.6
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 6667,
+            "t": 6.667,
+            "v": {
+              "h": 0.3,
+              "w": 0.3,
+              "x": 0.3,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "MKV 1/1000 quadro 201",
+    "saida": {
+      "caixa": {
+        "h": 0.3,
+        "w": 0.3,
+        "x": 0.3,
+        "y": 0.3
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 23040,
+        "t": 1.5
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "pts": 15360,
+            "t": 1,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "t": 2,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r2",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancoras cruas: meio",
+    "saida": {
+      "caixa": {
+        "h": 0.30000000000000004,
+        "w": 0.2,
+        "x": 0.30000000000000004,
+        "y": 0.2
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 30720,
+        "t": 2.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "pts": 15360,
+            "t": 1,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "t": 2,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r2",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancoras cruas: na ancora sem pts, t exato",
+    "saida": {
+      "caixa": {
+        "h": 0.4,
+        "w": 0.2,
+        "x": 0.5,
+        "y": 0.3
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 30720,
+        "t": 1.999999999
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "pts": 15360,
+            "t": 1,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "t": 2,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r2",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancoras cruas: na ancora sem pts, t ruidoso",
+    "saida": {
+      "caixa": {
+        "h": 0.3999999998,
+        "w": 0.2,
+        "x": 0.49999999959999997,
+        "y": 0.2999999998
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 38400,
+        "t": 2.5
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "pts": 15360,
+            "t": 1,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "t": 2,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r2",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "ancoras cruas: depois",
+    "saida": {
+      "caixa": {
+        "h": 0.4,
+        "w": 0.2,
+        "x": 0.5,
+        "y": 0.3
+      },
+      "como": "segurado",
+      "incerto": false
+    }
+  }
+]

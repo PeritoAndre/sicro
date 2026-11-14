@@ -19,6 +19,8 @@ pub const TIPO_ESTENDIDO: u8 = 2;
 
 /// Conteúdo de `rastreios/<rid>/<sha256>.json`: uma linha por quadro da fonte, em colunas.
 /// `pts` na base da tabela do decodificador; `x`, `y`, `w`, `h` em 0..1; `corrida` = índice em `corridas`.
+/// `rastreio` = id com que o arquivo nasceu: a cópia do projeto leva o arquivo byte a byte (mesmo SHA-256),
+/// então o leitor NÃO compara esse campo com o id do rastreio que aponta para ele.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ArquivoDenso {
     pub esquema: u32,
@@ -31,7 +33,7 @@ pub struct ArquivoDenso {
     pub y: Vec<f64>,
     pub w: Vec<f64>,
     pub h: Vec<f64>,
-    pub conf: Vec<f32>,
+    pub conf: Vec<f64>,
     pub estado: Vec<u8>,
     pub tipo: Vec<u8>,
     pub corrida: Vec<u32>,

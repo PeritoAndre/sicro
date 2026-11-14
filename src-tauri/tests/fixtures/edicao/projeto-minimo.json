@@ -1,0 +1,29 @@
+{
+  "esquema": 2,
+  "id": "0b6f1c2a-5d1e-4c1b-9a43-2f7d0c1e9b10",
+  "titulo": "Mínimo",
+  "created_at": "2026-11-14T03:00:00.000Z",
+  "updated_at": "2026-11-14T03:00:00.000Z",
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "cor_fundo": "#000000",
+    "audio": true,
+    "selos": {
+      "velocidade": true,
+      "ampliacao": true,
+      "realce": true
+    },
+    "exportacao": {
+      "predefinicao": "juri",
+      "codificador": "auto",
+      "legendas": "nenhuma",
+      "pdf": "a3",
+      "revisado_por": ""
+    }
+  }
+}

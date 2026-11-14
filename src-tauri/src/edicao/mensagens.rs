@@ -35,6 +35,12 @@ pub mod codigo {
     pub const FILTRO_AUSENTE: &str = "filtro_ausente";
     pub const AUDIO: &str = "audio";
     pub const COR: &str = "cor";
+    pub const PIXEL_NAO_SUPORTADO: &str = "pixel_nao_suportado";
+    pub const SEM_GRAVACAO: &str = "sem_gravacao";
+    // erros de comando (mídia do projeto): `Validation("<código>[: detalhe]")`
+    pub const ARQUIVO_VAZIO: &str = "arquivo_vazio";
+    pub const EXTENSAO: &str = "extensao";
+    pub const MIME: &str = "mime";
     // periciais
     pub const TAXA_VARIAVEL: &str = "taxa_variavel";
     pub const QUADROS_DESCARTADOS: &str = "quadros_descartados";

@@ -2016,19 +2016,9 @@ mod testes {
         lit!(ida_volta, crate::edicao::rastreio::avaliar::Como: Ancora = "ancora", Denso = "denso", Interpolado = "interpolado", Segurado = "segurado");
     }
 
-    /// Projeto com todas as variantes de clipe, efeito, posição, fundo e trilha, Option cheio e vazio, e três itens
-    /// desconhecidos: lido do TEXTO, nenhum conhecido cai em `Desconhecido`, e volta igual.
-    #[test]
-    fn contrato_todas_as_variantes_vai_e_volta() {
+    /// Variantes vistas num projeto lido e ids dos itens que caíram em `Desconhecido`.
+    fn cobertura(p: &ProjetoEdicao) -> (std::collections::BTreeSet<String>, Vec<String>) {
         use std::collections::BTreeSet;
-        let caminho = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/edicao/contrato-todas-variantes.json");
-        let texto = std::fs::read_to_string(&caminho).expect("fixture");
-        let bruto: Value = serde_json::from_str(&texto).unwrap();
-        let p: ProjetoEdicao = serde_json::from_str(&texto).expect("lê tipado");
-        assert_eq!(serde_json::to_value(&p).unwrap(), bruto, "não voltou igual");
-        let de_novo: ProjetoEdicao = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
-        assert_eq!(de_novo, p);
-
         fn tag<T: Serialize>(x: &T, campo: &str) -> String {
             serde_json::to_value(x).unwrap()[campo].as_str().unwrap().to_string()
         }
@@ -2104,23 +2094,69 @@ mod testes {
         for s in &p.sincronias {
             for c in &s.conferencias { vistos.insert(format!("conferencia:{}", tag(c, "modo"))); }
         }
-        let esperado = [
-            "clipe:trecho", "clipe:congelar", "clipe:imagem", "clipe:titulo", "clipe:tela",
-            "sobreposto:video", "sobreposto:imagem", "sobreposto:titulo",
-            "efeito:estabilizar", "efeito:lente", "efeito:desentrelacar", "efeito:media_temporal", "efeito:ajustes",
-            "efeito:nitidez", "efeito:girar", "efeito:enquadramento", "efeito:ocultar", "efeito:holofote", "efeito:destaque",
-            "efeito:lupa", "efeito:regua", "efeito:velocidade_exibida", "efeito:texto", "efeito:carimbo", "efeito:imagem",
-            "posicao:programa", "posicao:clipe", "marcador:programa", "marcador:clipe", "marcador:fonte",
-            "fundo:cor", "fundo:transparente", "fundo:imagem",
-            "trilha:sobreposicao", "trilha:audio:narracao", "trilha:audio:musica", "trilha:audio:efeitos",
-            "trilha:legenda:fonte", "trilha:legenda:programa",
-            "velocidade:constante", "velocidade:rampa", "onde_lupa:fixa", "onde_lupa:segue",
-            "onde_velocidade:fixa", "onde_velocidade:segue", "animavel:true", "animavel:false",
-            "origem_rastreio:manual", "origem_rastreio:assistido", "origem_rastreio:pessoas", "origem_rastreio:deteccao",
-            "conferencia:evento_visivel", "conferencia:sem_evento",
-        ];
-        let faltam: Vec<&str> = esperado.iter().copied().filter(|e| !vistos.contains(*e)).collect();
+        (vistos, desconhecidos)
+    }
+
+    const VARIANTES: &[&str] = &[
+        "clipe:trecho", "clipe:congelar", "clipe:imagem", "clipe:titulo", "clipe:tela",
+        "sobreposto:video", "sobreposto:imagem", "sobreposto:titulo",
+        "efeito:estabilizar", "efeito:lente", "efeito:desentrelacar", "efeito:media_temporal", "efeito:ajustes",
+        "efeito:nitidez", "efeito:girar", "efeito:enquadramento", "efeito:ocultar", "efeito:holofote", "efeito:destaque",
+        "efeito:lupa", "efeito:regua", "efeito:velocidade_exibida", "efeito:texto", "efeito:carimbo", "efeito:imagem",
+        "posicao:programa", "posicao:clipe", "marcador:programa", "marcador:clipe", "marcador:fonte",
+        "fundo:cor", "fundo:transparente", "fundo:imagem",
+        "trilha:sobreposicao", "trilha:audio:narracao", "trilha:audio:musica", "trilha:audio:efeitos",
+        "trilha:legenda:fonte", "trilha:legenda:programa",
+        "velocidade:constante", "velocidade:rampa", "onde_lupa:fixa", "onde_lupa:segue",
+        "onde_velocidade:fixa", "onde_velocidade:segue", "animavel:true", "animavel:false",
+        "origem_rastreio:manual", "origem_rastreio:assistido", "origem_rastreio:pessoas", "origem_rastreio:deteccao",
+        "conferencia:evento_visivel", "conferencia:sem_evento",
+    ];
+
+    fn fixture(nome: &str) -> String {
+        let caminho = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/edicao").join(nome);
+        std::fs::read_to_string(&caminho).expect("fixture")
+    }
+
+    /// Projeto com todas as variantes de clipe, efeito, posição, fundo e trilha, Option cheio e vazio, e três itens
+    /// desconhecidos: lido do TEXTO, nenhum conhecido cai em `Desconhecido`, e volta igual.
+    #[test]
+    fn contrato_todas_as_variantes_vai_e_volta() {
+        let texto = fixture("contrato-todas-variantes.json");
+        let bruto: Value = serde_json::from_str(&texto).unwrap();
+        let p: ProjetoEdicao = serde_json::from_str(&texto).expect("lê tipado");
+        assert_eq!(serde_json::to_value(&p).unwrap(), bruto, "não voltou igual");
+        let de_novo: ProjetoEdicao = serde_json::from_str(&serde_json::to_string(&p).unwrap()).unwrap();
+        assert_eq!(de_novo, p);
+        let (vistos, desconhecidos) = cobertura(&p);
+        let faltam: Vec<&str> = VARIANTES.iter().copied().filter(|e| !vistos.contains(*e)).collect();
         assert!(faltam.is_empty(), "faltam na fixture: {faltam:?}");
         assert_eq!(desconhecidos, ["e99", "c9", "l9"], "só os três itens do futuro podem cair em Desconhecido");
+    }
+
+    /// `completo.json` (a referência do front contra `src/types/edicao.ts`): toda variante e todo campo opcional
+    /// preenchido (nenhum `null`, `pts`/`interp`/`de`/`ate` presentes), nenhum item desconhecido, e o Rust o regrava igual.
+    #[test]
+    fn completo_vai_e_volta() {
+        fn nulos(v: &Value, onde: &str, saida: &mut Vec<String>) {
+            match v {
+                Value::Null => saida.push(onde.to_string()),
+                Value::Array(a) => a.iter().enumerate().for_each(|(i, x)| nulos(x, &format!("{onde}/{i}"), saida)),
+                Value::Object(o) => o.iter().for_each(|(k, x)| nulos(x, &format!("{onde}/{k}"), saida)),
+                _ => {}
+            }
+        }
+        let texto = fixture("completo.json");
+        let bruto: Value = serde_json::from_str(&texto).unwrap();
+        let mut com_nulo = Vec::new();
+        nulos(&bruto, "", &mut com_nulo);
+        assert!(com_nulo.is_empty(), "campos nulos em completo.json: {com_nulo:?}");
+        let p: ProjetoEdicao = serde_json::from_str(&texto).expect("lê tipado");
+        let regravado = serde_json::to_value(&p).unwrap();
+        assert_eq!(regravado, bruto, "o Rust não regrava completo.json igual");
+        let (vistos, desconhecidos) = cobertura(&p);
+        let faltam: Vec<&str> = VARIANTES.iter().copied().filter(|e| !vistos.contains(*e)).collect();
+        assert!(faltam.is_empty(), "faltam em completo.json: {faltam:?}");
+        assert!(desconhecidos.is_empty(), "caíram em Desconhecido: {desconhecidos:?}");
     }
 }

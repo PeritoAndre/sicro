@@ -143,6 +143,9 @@ pub fn run() {
             commands::video_commands::render_montagem,
             commands::video_commands::importar_audio_montagem,
             commands::video_commands::gravar_audio_montagem,
+            // edição: diagnóstico da prévia (Configurações > Vídeo)
+            commands::edicao_diagnostico_commands::edicao_diagnostico_midias,
+            commands::edicao_diagnostico_commands::edicao_diagnostico_salvar,
             // áudio
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,

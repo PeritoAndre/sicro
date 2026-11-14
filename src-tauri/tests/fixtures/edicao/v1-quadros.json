@@ -1,0 +1,45 @@
+{
+  "id": "a0000000-0000-4000-8000-000000000005",
+  "titulo": "Quadros fora de ordem",
+  "created_at": "2026-11-01T10:00:00.000Z",
+  "updated_at": "2026-11-01T10:05:00.000Z",
+  "itens": [
+    {
+      "tipo": "trecho",
+      "id": "e1",
+      "media_id": "11111111-2222-4333-8444-555555555551",
+      "inicio_s": 10,
+      "fim_s": 14,
+      "velocidade": 1,
+      "texto": null,
+      "transicao_entrada": "corte",
+      "destaques": [
+        {
+          "id": "d1",
+          "forma": "seta",
+          "cor": "#ff2d2d",
+          "quadros": [
+            {
+              "t": 2,
+              "x": 0.6,
+              "y": 0.2
+            },
+            {
+              "t": 0,
+              "x": 0.2,
+              "y": 0.2
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": 30,
+    "incluir_audio": true
+  },
+  "narracoes": [],
+  "volume_original": 1
+}

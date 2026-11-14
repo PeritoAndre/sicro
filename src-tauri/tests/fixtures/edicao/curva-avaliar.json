@@ -1,0 +1,2901 @@
+[
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=-1",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=0",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=0.5",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=1",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=0.3333333333333333",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=1.5",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=2",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=2.5",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=2.999",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=3",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=4",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": 0.75,
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero fixo t=1.2345666666666668",
+    "saida": 0.75
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=-1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=0",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=0.5",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=0.3333333333333333",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=1.5",
+    "saida": 2.5
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=2",
+    "saida": 5.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=2.5",
+    "saida": 7.5
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=2.999",
+    "saida": 9.995000000000001
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=3",
+    "saida": 10.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=4",
+    "saida": 10.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero linear t=1.2345666666666668",
+    "saida": 1.172833333333334
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=-1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=0",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=0.5",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=0.3333333333333333",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=1.5",
+    "saida": 1.5625
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=2",
+    "saida": 5.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=2.5",
+    "saida": 8.4375
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=2.999",
+    "saida": 9.9999925025
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=3",
+    "saida": 10.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=4",
+    "saida": 10.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero suave t=1.2345666666666668",
+    "saida": 0.3803958713284264
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=-1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=0",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=0.5",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=0.3333333333333333",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=1.5",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=2",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=2.5",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=2.999",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=3",
+    "saida": 10.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=4",
+    "saida": 10.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 1.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 3.0,
+          "v": 10.0
+        }
+      ],
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero degrau t=1.2345666666666668",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=-1",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=0",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=0.5",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=1",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=0.3333333333333333",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=1.5",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=2",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=2.5",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=2.999",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=3",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=4",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 2.0,
+          "v": 0.3
+        }
+      ],
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero chave unica t=1.2345666666666668",
+    "saida": 0.3
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=-1",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=0",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=0.5",
+    "saida": 1.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=1",
+    "saida": 6.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=0.3333333333333333",
+    "saida": 0.6666666666666666
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=1.5",
+    "saida": 7.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=2",
+    "saida": 8.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=2.5",
+    "saida": 8.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=2.999",
+    "saida": 8.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=3",
+    "saida": 8.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=4",
+    "saida": 8.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.0,
+          "v": 0.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.0,
+          "v": 2.0
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.0,
+          "v": 6.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": 8.0
+        }
+      ],
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero mesmo instante t=1.2345666666666668",
+    "saida": 6.278504267458815
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": -1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=-1",
+    "saida": 1.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 0.0,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=0",
+    "saida": 1.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=0.5",
+    "saida": 2.6034985422740524
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 1.0,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=1",
+    "saida": 3.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 0.3333333333333333,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=0.3333333333333333",
+    "saida": 1.928625418421337
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 1.5,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=1.5",
+    "saida": 1.7625
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 2.0,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=2",
+    "saida": 1.1687500000000002
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 2.5,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=2.5",
+    "saida": 0.5750000000000002
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 2.999,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=2.999",
+    "saida": 0.1
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=3",
+    "saida": 0.1
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 4.0,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=4",
+    "saida": 0.1
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": 1.0
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 0.7,
+          "v": 3.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 1.3,
+          "v": 2.0
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.9,
+          "v": 0.1
+        }
+      ],
+      "t": 1.2345666666666668,
+      "tipo": "numero"
+    },
+    "nome": "numero tres trechos t=1.2345666666666668",
+    "saida": 3.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": -0.5,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=-0.5",
+    "saida": {
+      "h": 1.0,
+      "w": 1.0,
+      "x": 0.0,
+      "y": 0.0
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 0.0,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=0",
+    "saida": {
+      "h": 1.0,
+      "w": 1.0,
+      "x": 0.0,
+      "y": 0.0
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 0.6,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=0.6",
+    "saida": {
+      "h": 0.8704000000000001,
+      "w": 0.8704000000000001,
+      "x": 0.0648,
+      "y": 0.0432
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 1.0,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=1",
+    "saida": {
+      "h": 0.7,
+      "w": 0.7,
+      "x": 0.15,
+      "y": 0.1
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 1.9,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=1.9",
+    "saida": {
+      "h": 0.40435,
+      "w": 0.40435,
+      "x": 0.297825,
+      "y": 0.19855
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 2.0,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=2",
+    "saida": {
+      "h": 0.4,
+      "w": 0.4,
+      "x": 0.3,
+      "y": 0.2
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 2.75,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=2.75",
+    "saida": {
+      "h": 0.325,
+      "w": 0.325,
+      "x": 0.2,
+      "y": 0.35
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 3.5,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=3.5",
+    "saida": {
+      "h": 0.25,
+      "w": 0.25,
+      "x": 0.1,
+      "y": 0.5
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 3.9,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=3.9",
+    "saida": {
+      "h": 0.25,
+      "w": 0.25,
+      "x": 0.1,
+      "y": 0.5
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 4.0,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=4",
+    "saida": {
+      "h": 0.3,
+      "w": 0.3,
+      "x": 0.6,
+      "y": 0.6
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 0.0,
+          "v": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.0,
+          "v": {
+            "h": 0.4,
+            "w": 0.4,
+            "x": 0.3,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "degrau",
+          "pts": null,
+          "t": 3.5,
+          "v": {
+            "h": 0.25,
+            "w": 0.25,
+            "x": 0.1,
+            "y": 0.5
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 4.0,
+          "v": {
+            "h": 0.3,
+            "w": 0.3,
+            "x": 0.6,
+            "y": 0.6
+          }
+        }
+      ],
+      "t": 10.0,
+      "tipo": "caixa"
+    },
+    "nome": "caixa zoom t=10",
+    "saida": {
+      "h": 0.3,
+      "w": 0.3,
+      "x": 0.6,
+      "y": 0.6
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.5,
+          "v": {
+            "x": 0.1,
+            "y": 0.9
+          }
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.5,
+          "v": {
+            "x": 0.7,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.5,
+          "v": {
+            "x": 0.3,
+            "y": 0.3
+          }
+        }
+      ],
+      "t": 0.0,
+      "tipo": "ponto"
+    },
+    "nome": "ponto t=0",
+    "saida": {
+      "x": 0.1,
+      "y": 0.9
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.5,
+          "v": {
+            "x": 0.1,
+            "y": 0.9
+          }
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.5,
+          "v": {
+            "x": 0.7,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.5,
+          "v": {
+            "x": 0.3,
+            "y": 0.3
+          }
+        }
+      ],
+      "t": 0.5,
+      "tipo": "ponto"
+    },
+    "nome": "ponto t=0.5",
+    "saida": {
+      "x": 0.1,
+      "y": 0.9
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.5,
+          "v": {
+            "x": 0.1,
+            "y": 0.9
+          }
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.5,
+          "v": {
+            "x": 0.7,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.5,
+          "v": {
+            "x": 0.3,
+            "y": 0.3
+          }
+        }
+      ],
+      "t": 0.8,
+      "tipo": "ponto"
+    },
+    "nome": "ponto t=0.8",
+    "saida": {
+      "x": 0.28,
+      "y": 0.69
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.5,
+          "v": {
+            "x": 0.1,
+            "y": 0.9
+          }
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.5,
+          "v": {
+            "x": 0.7,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.5,
+          "v": {
+            "x": 0.3,
+            "y": 0.3
+          }
+        }
+      ],
+      "t": 1.5,
+      "tipo": "ponto"
+    },
+    "nome": "ponto t=1.5",
+    "saida": {
+      "x": 0.7,
+      "y": 0.2
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.5,
+          "v": {
+            "x": 0.1,
+            "y": 0.9
+          }
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.5,
+          "v": {
+            "x": 0.7,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.5,
+          "v": {
+            "x": 0.3,
+            "y": 0.3
+          }
+        }
+      ],
+      "t": 2.1,
+      "tipo": "ponto"
+    },
+    "nome": "ponto t=2.1",
+    "saida": {
+      "x": 0.4407999999999999,
+      "y": 0.26480000000000004
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 0.5,
+          "v": {
+            "x": 0.1,
+            "y": 0.9
+          }
+        },
+        {
+          "interp": "suave",
+          "pts": null,
+          "t": 1.5,
+          "v": {
+            "x": 0.7,
+            "y": 0.2
+          }
+        },
+        {
+          "interp": "linear",
+          "pts": null,
+          "t": 2.5,
+          "v": {
+            "x": 0.3,
+            "y": 0.3
+          }
+        }
+      ],
+      "t": 3.0,
+      "tipo": "ponto"
+    },
+    "nome": "ponto t=3",
+    "saida": {
+      "x": 0.3,
+      "y": 0.3
+    }
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "t": 0,
+          "v": 1
+        },
+        {
+          "interp": "suave",
+          "t": 2,
+          "v": 3
+        },
+        {
+          "t": 4,
+          "v": 0
+        }
+      ],
+      "t": 0.5,
+      "tipo": "numero"
+    },
+    "nome": "numero sem interp nem pts t=0.5",
+    "saida": 1.5
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "t": 0,
+          "v": 1
+        },
+        {
+          "interp": "suave",
+          "t": 2,
+          "v": 3
+        },
+        {
+          "t": 4,
+          "v": 0
+        }
+      ],
+      "t": 3.0,
+      "tipo": "numero"
+    },
+    "nome": "numero sem interp nem pts t=3",
+    "saida": 1.5
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "t": 0,
+          "v": 1
+        },
+        {
+          "interp": "suave",
+          "t": 2,
+          "v": 3
+        },
+        {
+          "t": 4,
+          "v": 0
+        }
+      ],
+      "t": 5.0,
+      "tipo": "numero"
+    },
+    "nome": "numero sem interp nem pts t=5",
+    "saida": 0.0
+  },
+  {
+    "entrada": {
+      "a": [
+        {
+          "t": 1,
+          "v": {
+            "h": 1,
+            "w": 1,
+            "x": 0,
+            "y": 0
+          }
+        },
+        {
+          "t": 2,
+          "v": {
+            "h": 0.5,
+            "w": 0.5,
+            "x": 0.5,
+            "y": 0.25
+          }
+        }
+      ],
+      "t": 1.25,
+      "tipo": "caixa"
+    },
+    "nome": "caixa sem interp nem pts t=1.25",
+    "saida": {
+      "h": 0.875,
+      "w": 0.875,
+      "x": 0.125,
+      "y": 0.0625
+    }
+  }
+]

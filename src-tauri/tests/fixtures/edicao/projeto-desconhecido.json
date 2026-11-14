@@ -1,0 +1,167 @@
+{
+  "esquema": 2,
+  "esquema_menor": 0,
+  "id": "7c2d9e4b-1f3a-4b5c-8d6e-0a1b2c3d4e5f",
+  "titulo": "Com itens do futuro",
+  "created_at": "2026-11-14T03:00:00.000Z",
+  "updated_at": "2026-11-14T03:05:00.000Z",
+  "gravado_por": "6.0.0",
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "auto": true,
+    "cor_fundo": "#000000",
+    "audio": true,
+    "selos": {
+      "velocidade": true,
+      "ampliacao": true,
+      "realce": true
+    },
+    "exportacao": {
+      "predefinicao": "juri",
+      "codificador": "auto",
+      "legendas": "nenhuma",
+      "pacote": null,
+      "pdf": "a3",
+      "revisado_por": "",
+      "personalizada": null
+    }
+  },
+  "midias": [
+    {
+      "id": "m1",
+      "tipo": "video",
+      "origem": "caso",
+      "media_id": "v1",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "nome": "cam 1 — pátio.dav",
+      "relativo": "Mídias/Vídeos/cam 1 — pátio.dav",
+      "duracao_s": 600.5,
+      "inicio_s": 1505762700.040001,
+      "largura": 1920,
+      "altura": 1080,
+      "taxa": {
+        "num": 25,
+        "den": 1
+      },
+      "vfr": false,
+      "tem_audio": true,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    }
+  ],
+  "principal": [
+    {
+      "tipo": "trecho",
+      "id": "c1",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [
+        {
+          "tipo": "nitidez",
+          "id": "e1",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "quantidade": 0.5
+        },
+        {
+          "tipo": "efeito_do_futuro",
+          "id": "e9",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "parametros": {
+            "raio": 0.9856906946328695,
+            "pontos": [
+              0.21291890726713458,
+              0.9259338926496359,
+              -0.0,
+              1e-300,
+              1.7976931348623157e+308
+            ],
+            "grande": 9007199254740993,
+            "negativo": -42,
+            "texto": "não é \"código\" {}; \\n ção",
+            "vazio": {},
+            "lista_vazia": [],
+            "nulo": null,
+            "logico": false
+          }
+        },
+        {
+          "tipo": "nitidez",
+          "id": "e8",
+          "ligado": false,
+          "nome": "sem quantidade"
+        }
+      ],
+      "midia": "m1",
+      "inicio_s": 1505762701.0,
+      "fim_s": 1505762703.5,
+      "inicio_pts": null,
+      "fim_pts": null,
+      "velocidade": {
+        "tipo": "constante",
+        "fator": 1.0
+      },
+      "audio": {
+        "volume": 1.0,
+        "mudo": false,
+        "manter_tom": true,
+        "silencios": []
+      }
+    },
+    {
+      "tipo": "clipe_do_futuro",
+      "id": "c9",
+      "desligado": true,
+      "rotulo": "Do futuro",
+      "carga": {
+        "t": 1505762700.040001,
+        "pts": [
+          0,
+          1001,
+          2002
+        ],
+        "coordenada": 0.44166130716816643
+      }
+    }
+  ],
+  "fecho": null,
+  "sobreposicoes": [
+    {
+      "id": "t1",
+      "nome": "S1",
+      "oculta": false,
+      "clipes": [
+        {
+          "tipo": "sobreposto_do_futuro",
+          "id": "l9",
+          "pos": {
+            "ref": "programa",
+            "t": 0.0
+          },
+          "valor": 0.9726104788033849
+        }
+      ]
+    }
+  ],
+  "audios": [],
+  "rastreios": [],
+  "marcadores": [],
+  "sincronias": []
+}

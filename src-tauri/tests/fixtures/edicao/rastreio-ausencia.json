@@ -1,0 +1,586 @@
+[
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 0.0
+    },
+    "nome": "t=0",
+    "saida": false
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 1.2
+    },
+    "nome": "t=1.2",
+    "saida": true
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 1.4
+    },
+    "nome": "t=1.4",
+    "saida": true
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 1.6
+    },
+    "nome": "t=1.6",
+    "saida": true
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 1.6000001
+    },
+    "nome": "t=1.6000001",
+    "saida": false
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 2.4999
+    },
+    "nome": "t=2.4999",
+    "saida": false
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 2.5
+    },
+    "nome": "t=2.5",
+    "saida": true
+  },
+  {
+    "entrada": {
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.2,
+              "w": 0.2,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "suave",
+            "pts": 30720,
+            "t": 2.0,
+            "v": {
+              "h": 0.4,
+              "w": 0.2,
+              "x": 0.5,
+              "y": 0.3
+            }
+          },
+          {
+            "interp": "degrau",
+            "pts": 46080,
+            "t": 3.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.3
+            }
+          }
+        ],
+        "ausencias": [
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 1.6,
+            "de_s": 1.2,
+            "motivo": "oculto",
+            "por": "perito"
+          },
+          {
+            "aceita_em": "2026-11-14T00:00:00Z",
+            "ate_s": 2.5,
+            "de_s": 2.5,
+            "motivo": "fora_de_cena",
+            "por": "perito"
+          }
+        ],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      },
+      "t": 2.6
+    },
+    "nome": "t=2.6",
+    "saida": false
+  }
+]

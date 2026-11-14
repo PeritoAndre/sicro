@@ -8,7 +8,8 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use super::ffmpeg::sonda::Capacidades;
-use super::modelo::Racional;
+use super::modelo::{CorMidia, Racional};
+use super::motor::FonteInfo;
 use crate::error::Result;
 
 /// De onde veio a tabela: pacotes (ffprobe) ou decodificador (a que vale para o render).
@@ -154,6 +155,16 @@ impl TabelaQuadros {
     pub fn compacta(&self) -> TabelaCompacta {
         todo!()
     }
+}
+
+/// A ÚNICA leitura `ffprobe` → `FonteInfo` (o `preparar`, a prévia e os testes usam esta), juntada à tabela já obtida.
+/// `exibido` = `geometria::exibido` (a regra de `decode.rs::display_size`); `giro` em graus no sentido horário
+/// (o `rotation` do ffprobe vem com o sinal contrário); `inicio_s` = `start_time` do contêiner como está (pode ser negativo);
+/// `matriz` e `faixa`: `cor` do `MidiaRef` quando houver, senão a etiqueta do fluxo, senão a presunção
+/// (`cor::matriz_presumida`, faixa limitada; `yuvj*` = cheia). Imagem e arquivo só de áudio: ver `FonteInfo`.
+// CONTRATO: acréscimo do integrador depois da leva 2 (dono: P0.3b).
+pub fn fonte_info(cap: &Capacidades, video: &Path, sha256: &str, quadros: Arc<TabelaQuadros>, cor: Option<&CorMidia>) -> Result<FonteInfo> {
+    todo!()
 }
 
 #[cfg(test)]

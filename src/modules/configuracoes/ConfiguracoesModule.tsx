@@ -8,6 +8,7 @@ import { useSearchParams } from "react-router-dom";
 import {
   Archive,
   Cpu,
+  Film,
   Keyboard,
   Palette,
   Save,
@@ -21,6 +22,7 @@ import { useSettingsStore } from "@stores/settingsStore";
 import { clampUiZoom } from "@core/uiZoom";
 import { MUNICIPIOS_POR_UF, UFS } from "@domain/pericia";
 import { AiManagerCard } from "./AiManagerCard";
+import { DiagnosticoVideo } from "./DiagnosticoVideo";
 import { GlobalBackupCard } from "./GlobalBackupCard";
 import type {
   AppSettings,
@@ -147,6 +149,7 @@ type CatId =
   | "aparencia"
   | "backup"
   | "iaocr"
+  | "video"
   | "atalhos";
 
 const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
@@ -154,6 +157,7 @@ const CATS: { id: CatId; label: string; sub: string; Icon: typeof User }[] = [
   { id: "aparencia", label: "Aparência", sub: "Tema, cores e personalização", Icon: Palette },
   { id: "backup", label: "Backup geral", sub: "Cópia de todos os casos", Icon: Archive },
   { id: "iaocr", label: "IA (local)", sub: "Degravação, locutores e pessoas", Icon: Cpu },
+  { id: "video", label: "Vídeo", sub: "ffmpeg, GPU e prévia", Icon: Film },
   { id: "atalhos", label: "Atalhos de teclado", sub: "Customizáveis por ação", Icon: Keyboard },
 ];
 
@@ -404,6 +408,8 @@ export function ConfiguracoesModule() {
 
           {/* IA de degravação */}
           {activeCat === "iaocr" && <AiManagerCard />}
+
+          {activeCat === "video" && <DiagnosticoVideo />}
 
           {/* Atalhos de teclado */}
           {activeCat === "atalhos" && (
