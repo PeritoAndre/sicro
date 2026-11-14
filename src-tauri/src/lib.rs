@@ -13,6 +13,7 @@ pub mod image_processing;
 pub mod importer;
 pub mod models;
 pub mod registry;
+pub mod relatorio_pdf;
 pub mod state;
 pub mod tools;
 pub mod video;
@@ -175,6 +176,13 @@ pub fn run() {
             commands::edicao_commands::edicao_saidas,
             commands::edicao_commands::edicao_saida_excluir,
             commands::edicao_commands::edicao_refazer,
+            commands::edicao_commands::edicao_origem_pedir,
+            commands::edicao_commands::edicao_onda,
+            commands::edicao_commands::edicao_degravacao,
+            commands::edicao_commands::edicao_retrato_calibracao,
+            commands::edicao_commands::edicao_retrato_calculo,
+            commands::video_proveniencia_commands::video_proveniencia,
+            commands::video_proveniencia_commands::video_proveniencia_salvar,
             // áudio
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,
@@ -319,7 +327,7 @@ mod tests {
             .map(str::trim)
             .filter_map(|l| l.strip_suffix(',').filter(|n| n.starts_with("edicao_")))
             .collect();
-        assert_eq!(lista.len(), 26, "{lista:?}");
+        assert_eq!(lista.len(), 31, "{lista:?}");
         // só o corpo de `run()` (este teste também traz os nomes)
         let corpo = &fonte[fonte.find("pub fn run()").unwrap()..fonte.find("#[cfg(test)]").unwrap()];
         for n in &lista {

@@ -1,11 +1,12 @@
-//! Fecho do bloco e predefinições de codificação (§5.7). Fase 0: júri e prévia do render. Dono: P0.6a.
+//! Fecho do bloco e predefinições de codificação (§5.7): júri e prévia do render; WhatsApp, preservação e
+//! personalizada no P1.8. Dono: P1.8.
 
 use super::grafo::Grafo;
 use super::plano::Canvas;
 use super::Alvo;
 use crate::edicao::ffmpeg::args;
 use crate::edicao::ffmpeg::sonda::Capacidades;
-use crate::edicao::modelo::{Codec, EscolhaCodificador, Predefinicao};
+use crate::edicao::modelo::{Codec, EscolhaCodificador, Exportacao, Predefinicao};
 use crate::error::{Result, SicroError};
 
 /// Maior lado que o H.264 do NVENC aceita (§5.6).
@@ -51,6 +52,12 @@ fn nvenc(canvas: &Canvas, cap: &Capacidades) -> Option<Vec<String>> {
     (g.codificador == "h264_nvenc" && canvas.w <= NVENC_LADO_MAX && canvas.h <= NVENC_LADO_MAX).then(|| g.args.clone())
 }
 
+/// Detalhe do `nao_suportado` da predefinição que o motor ainda não codifica; None = codifica. Uma regra só:
+/// `validar` (fase_0) e `codificacao` perguntam aqui.
+pub fn recusa(exportacao: &Exportacao) -> Option<&'static str> {
+    (exportacao.predefinicao != Predefinicao::Juri).then_some("predefinicao")
+}
+
 /// Codificação do alvo: predefinição + sonda (GPU aprovada no tamanho do projeto, senão `libx264`).
 /// Pura: usa o que `cap.gpu` já traz; quem monta o `Contexto` roda antes `sonda::gpu_serve` no tamanho do projeto
 /// e tira a GPU das capacidades se ela não serve.
@@ -62,7 +69,7 @@ pub fn codificacao(alvo: &Alvo, canvas: &Canvas, cap: &Capacidades) -> Result<Co
     };
     match alvo {
         Alvo::Final { exportacao } => {
-            if exportacao.predefinicao != Predefinicao::Juri {
+            if recusa(exportacao).is_some() {
                 let nome = serde_json::to_value(exportacao.predefinicao).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default();
                 return Err(SicroError::Validation(format!("nao_suportado: predefinicao {nome}")));
             }

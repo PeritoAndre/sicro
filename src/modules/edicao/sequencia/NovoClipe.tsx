@@ -18,6 +18,7 @@ import { exibido, fimDaMidia, fimDoPar, ptsDaTabela, tempoDoQuadro } from "../mo
 import { garantirMidia, recursoDe, useRecursos } from "../palco/recursos";
 import { MODELOS, novoTitulo, paresDeEventos, tempoDoEvento, type ModeloNovo } from "./novos";
 import styles from "./Sequencia.module.css";
+import { provenienciaDaMidia } from "@modules/video/editor/proveniencia";
 
 export type Formulario = "trecho" | "titulo" | "eventos";
 
@@ -130,9 +131,11 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
     setFim(video ? ate : null);
   }, [video?.id, de, ate]); // eslint-disable-line react-hooks/exhaustive-deps
   const p = video && ini !== null && fim !== null ? pontas(tabela, ini, fim) : null;
-  const adicionar = () => {
+  const adicionar = async () => {
     if (!video || !p) return;
-    onTrechos([{ midia: midiaDoCaso(video, lista, info), ...p }]);
+    // proveniência gravada na análise (P1.10)
+    const prov = await provenienciaDaMidia(ws, video.id).catch(() => null);
+    onTrechos([{ midia: midiaDoCaso(video, lista, info, prov), ...p }]);
   };
   return (
     <Dialog
@@ -260,9 +263,10 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   useEffect(() => setMarcados(new Set()), [id]);
   const pares = useMemo(() => paresDeEventos(eventos.filter((e) => marcados.has(e.id)).map(tempoDoEvento)), [eventos, marcados]);
-  const adicionar = () => {
+  const adicionar = async () => {
     if (!video) return;
-    const ref = midiaDoCaso(video, lista, info);
+    const prov = await provenienciaDaMidia(ws, video.id).catch(() => null);
+    const ref = midiaDoCaso(video, lista, info, prov);
     const itens = pares.map(([a, b]) => pontas(tabela, a, b)).filter((x): x is NonNullable<typeof x> => x !== null);
     // o mesmo retrato da mídia para todos os trechos (um id só no projeto)
     onTrechos(itens.map((p) => ({ midia: ref, ...p })));

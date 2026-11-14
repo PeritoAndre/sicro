@@ -6,8 +6,10 @@
 
 import { useEffect, useRef, useState, type PointerEvent as PE } from "react";
 import { Copy, Eye, GripVertical, Image as IconeImagem, Mic, Music, Plus, Trash2, Type, Video, Volume2 } from "lucide-react";
-import type { Problema, Seg } from "@domain/edicao";
+import type { Id, Problema, Seg } from "@domain/edicao";
 import { textoDuracao, type Preso, type RotuloTipo, type Selo } from "./contas";
+import { useMenuAberto } from "../menus";
+import { Presos, PRESOS_PRONTOS } from "./Presos";
 import styles from "./Sequencia.module.css";
 
 export type TipoPreso = "Título" | "Terço inferior" | "Imagem" | "Narração";
@@ -16,6 +18,8 @@ export const TIPOS_PRESO: readonly TipoPreso[] = ["Título", "Terço inferior", 
 export interface CartaoProps {
   /** Posição na trilha (0…). */
   indice: number;
+  /** Id do clipe; ausente no item sem id. */
+  id?: Id;
   /** null = item desconhecido ou inválido; o texto é o `tipo` cru. */
   tipo: RotuloTipo | null;
   tipoCru: string;
@@ -45,6 +49,7 @@ const NOME_PRESO = { titulo: "Título", imagem: "Imagem", video: "Vídeo", narra
 export function CartaoClipe(p: CartaoProps) {
   const [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLSpanElement | null>(null);
+  useMenuAberto(menu);
   // menu aberto: clique fora ou Esc fecha
   useEffect(() => {
     if (!menu) return;
@@ -125,7 +130,8 @@ export function CartaoClipe(p: CartaoProps) {
           {problema.mensagem}
         </p>
       )}
-      {conhecido && (p.presos.length > 0 || p.selecionado) && (
+      {conhecido && PRESOS_PRONTOS && p.id && <Presos clipe={p.id} />}
+      {conhecido && !PRESOS_PRONTOS && (p.presos.length > 0 || p.selecionado) && (
         <div className={styles.presos} onClick={parar}>
           {p.presos.map((x) => {
             const I = ICONE_PRESO[x.tipo];

@@ -134,23 +134,29 @@ import type {
   TranscriptAi,
 } from "@domain/audio";
 import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
-// --- Edição (Fase 0) ---
+// --- Edição ---
 import type {
   AlvoQuadro,
   AlvoRender,
   Analise,
   AtlasCarimbo,
+  Degravacao,
+  EstadoOrigem,
   EstiloTexto,
   MidiaInfo,
   MidiaRef,
+  Onda,
   PedidoSprite,
   PreviaMidia,
   ProjetoAberto,
   ProjetoEdicao,
+  ProvenienciaMidia,
   QuadroEm,
   QuadroFinal,
   ResumoCapacidades,
   ResumoProjeto,
+  RetratoCalculo,
+  RetratoCalibracao,
   SaidaRegistrada,
   Salvo,
   SpriteTexto,
@@ -1516,6 +1522,39 @@ export const commands = {
 
   edicaoRefazer(workspacePath: string, saidaId: string): Promise<string> {
     return safeInvoke<string>("edicao_refazer", { workspacePath, saidaId });
+  },
+
+  // ----- Fase 1 (contratos-fase1.md): o integrador declara; o corpo no Rust é do pacote dono -----
+  /** Intermediário de origem do clipe (P1.4). */
+  edicaoOrigemPedir(workspacePath: string, projeto: ProjetoEdicao, clipeId: string): Promise<EstadoOrigem> {
+    return safeInvoke<EstadoOrigem>("edicao_origem_pedir", { workspacePath, projeto, clipeId });
+  },
+
+  /** Forma de onda (P1.9); null = pedida à fila de fundo (pedir de novo quando `edicao:fundo` disser pronta). */
+  edicaoOnda(workspacePath: string, sha256: string): Promise<Onda | null> {
+    return safeInvoke<Onda | null>("edicao_onda", { workspacePath, sha256 });
+  },
+
+  /** Degravação do som da mídia, em tempo de fonte (P1.6; usada também pelo P1.5). */
+  edicaoDegravacao(workspacePath: string, sha256: string): Promise<Degravacao> {
+    return safeInvoke<Degravacao>("edicao_degravacao", { workspacePath, sha256 });
+  },
+
+  edicaoRetratoCalibracao(workspacePath: string, calibracaoId: string): Promise<RetratoCalibracao> {
+    return safeInvoke<RetratoCalibracao>("edicao_retrato_calibracao", { workspacePath, calibracaoId });
+  },
+
+  edicaoRetratoCalculo(workspacePath: string, calculoId: string): Promise<RetratoCalculo> {
+    return safeInvoke<RetratoCalculo>("edicao_retrato_calculo", { workspacePath, calculoId });
+  },
+
+  /** Proveniência da mídia na análise (P1.10; `video_proveniencia_commands.rs`). */
+  videoProveniencia(workspacePath: string, mediaId: string): Promise<ProvenienciaMidia> {
+    return safeInvoke<ProvenienciaMidia>("video_proveniencia", { workspacePath, mediaId });
+  },
+
+  videoProvenienciaSalvar(workspacePath: string, mediaId: string, proveniencia: ProvenienciaMidia): Promise<ProvenienciaMidia> {
+    return safeInvoke<ProvenienciaMidia>("video_proveniencia_salvar", { workspacePath, mediaId, proveniencia });
   },
   // ===== fim da Edição (Fase 0) =====
 } as const;

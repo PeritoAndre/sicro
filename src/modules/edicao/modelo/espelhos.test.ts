@@ -72,7 +72,8 @@ describe("rastreio × fixtures", () => {
 
 /** Arquivos que este teste sabe conferir. */
 const TEMPO = ["tempo-mapa.json", "tempo-quadro.json", "tempo-contas.json", "tempo-resolver.json"];
-const PRIMITIVAS = ["primitivas-efeitos.json", "primitivas-seno.json", "primitivas-titulo.json"];
+// Fase 1: a lupa (P1.2) e as medidas (P1.3) têm fixture própria, gravada pelo arquivo do pacote no Rust
+const PRIMITIVAS = ["primitivas-efeitos.json", "primitivas-seno.json", "primitivas-titulo.json", "primitivas-lupa.json", "primitivas-medidas.json"];
 
 /** Erro de validação do Rust vira `{ erro: "<código>[: detalhe]" }` na fixture. */
 const resultadoOuErro = (f: () => unknown) => {
@@ -126,7 +127,7 @@ describe("primitivas × fixtures (P0.5)", () => {
     }
   };
 
-  it("primitivas-efeitos.json: uma função por efeito", () => {
+  it.each(["primitivas-efeitos.json", "primitivas-lupa.json", "primitivas-medidas.json"])("%s: uma função por efeito", (arquivo) => {
     type Sprite = { relativo: string; w: number; h: number };
     type Atlas = { relativo: string; celula: { w: number; h: number }; glifos: string };
     type E = {
@@ -136,7 +137,7 @@ describe("primitivas × fixtures (P0.5)", () => {
       sprites: { pedido: PedidoSprite; sprite: Sprite }[];
       atlas: { estilo: EstiloTexto; altura_canvas: number; atlas: Atlas }[];
     };
-    const lista = casos<E, unknown>("primitivas-efeitos.json");
+    const lista = casos<E, unknown>(arquivo);
     const erros = conferirCasos(lista, (e) => {
       const q: QuadroPalco = {
         q: e.quadro.q,

@@ -19,6 +19,8 @@ import type {
   Traco,
 } from "@domain/edicao";
 import { caixaNoCanvas, comMargem, ponto, type Afim } from "../../modelo/geometria";
+import { primitivasLupa } from "./lupa";
+import { primitivasRegua, primitivasVelocidade } from "./medidas";
 
 type Seg = Extract<Primitiva, { k: "caminho" }>["d"][number];
 type Traco2 = NonNullable<Extract<Primitiva, { k: "caminho" }>["traco"]>;
@@ -295,16 +297,18 @@ function textoCarimbo(c: EfCarimbo, q: QuadroPalco): string | null {
 }
 
 /** Primitivas de um efeito num quadro. `ativo` não é olhado: quem chama só pede os quadros em que o efeito vale.
- *  Lupa, régua e velocidade exibida (ligadas) são da Fase 1: erro `nao_suportado`. */
+ *  Lupa (`lupa.ts`, P1.2), régua e velocidade exibida (`medidas.ts`, P1.3): a função do pacote dono. */
 export function primitivas(e: Efeito, q: QuadroPalco): Primitiva[] {
   // desligado vem antes de tudo (o Rust também): lupa desligada não é erro
   if (!e.ligado) return [];
   const t = tela(q.canvas);
   switch (e.tipo) {
     case "lupa":
+      return primitivasLupa(e, q);
     case "regua":
+      return primitivasRegua(e, q);
     case "velocidade_exibida":
-      throw erro("nao_suportado", e.tipo);
+      return primitivasVelocidade(e, q);
     default:
   }
   switch (e.tipo) {

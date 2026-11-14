@@ -29,7 +29,8 @@ vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: (p: string) => `asset:/
 import { useEdicaoStore } from "./store/edicaoStore";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
 import { EditorEdicao } from "./EditorEdicao";
-import { desmontarTudo, lerFixture, montar } from "./inspetor/testeTela";
+import { botao, clicar, desmontarTudo, lerFixture, montar } from "./inspetor/testeTela";
+import { useExportarUi } from "./exportar/avisos";
 
 const WS = "/casos/c1";
 const st = () => useEdicaoStore.getState();
@@ -83,6 +84,43 @@ describe("editor: atalhos só na frente e sem diálogo", () => {
     await del();
     expect(n()).toBe(n0 - 1);
     t2.desmontar();
+  });
+
+  it("com a Fila ou o menu do cartão abertos, Del não remove (contratos (i))", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    const n0 = n();
+    await act(async () => focar(2));
+    // Fila (painel do topo, não é Dialog)
+    await act(async () => useExportarUi.getState().mostrarFila(true));
+    await del();
+    expect(n()).toBe(n0);
+    await act(async () => useExportarUi.getState().mostrarFila(false));
+    // menu "Adicionar" do cartão em foco
+    const cartao = t.raiz.querySelector<HTMLElement>('[data-cartao="2"]')!;
+    await clicar(botao(cartao, "Adicionar"));
+    expect(cartao.querySelector('[role="menu"]')).not.toBeNull();
+    await del();
+    expect(n()).toBe(n0);
+    await clicar(botao(cartao, "Adicionar"));
+    expect(cartao.querySelector('[role="menu"]')).toBeNull();
+    await del();
+    expect(n()).toBe(n0 - 1);
+  });
+
+  it("com o menu Adicionar das marcações aberto, Del não remove; fechado pelo Esc, remove (contratos (i))", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    const n0 = n();
+    await act(async () => focar(2));
+    const adicionar = t.raiz.querySelector<HTMLElement>('[data-acao="adicionar"]');
+    expect(adicionar).not.toBeNull();
+    await clicar(adicionar!);
+    expect(t.raiz.querySelector('[role="menu"]')).not.toBeNull();
+    await del();
+    expect(n()).toBe(n0);
+    await act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true })));
+    expect(t.raiz.querySelector('[role="menu"]')).toBeNull();
+    await del();
+    expect(n()).toBe(n0 - 1);
   });
 
   it("escondida para de tocar o clipe sem fonte (toca pelo relógio, sem <video> para pausar)", async () => {

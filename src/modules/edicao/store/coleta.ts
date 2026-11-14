@@ -9,6 +9,7 @@ import type { Derivacao, Id, MidiaInfo, MidiaRef, ProjetoEdicao, Pts, Seg } from
 import type { VideoMedia } from "@domain/video";
 import { comoChegou, completar, garantirMidia, novoId, novoProjeto, novoTrecho } from "../modelo/projeto";
 import { correnteDe, definirCorrente, emSerie, separarErro, useEdicaoStore } from "./edicaoStore";
+import { provenienciaDaMidia } from "@modules/video/editor/proveniencia";
 
 export interface TrechoColetado {
   sha256: string;
@@ -66,8 +67,9 @@ function derivacao(m: VideoMedia, lista: VideoMedia[]): Derivacao | null {
   return { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas: !(tipo === "trecho" && j.mode === "copy") };
 }
 
-/** `MidiaRef` de um vídeo do caso. `info` (tabela, tamanho exibido) quando o backend já tem. */
-export function midiaDoCaso(m: VideoMedia, lista: VideoMedia[], info: MidiaInfo | null): MidiaRef {
+/** `MidiaRef` de um vídeo do caso. `info` (tabela, tamanho exibido) quando o backend já tem; `prov` = a proveniência
+ *  gravada na análise (P1.10, `provenienciaDaMidia`). */
+export function midiaDoCaso(m: VideoMedia, lista: VideoMedia[], info: MidiaInfo | null, prov: Pick<MidiaRef, "recebido" | "relogio_desvio_s" | "gravador"> | null = null): MidiaRef {
   const p = probe(m);
   const ini = Number(p.format?.start_time);
   return {
@@ -88,9 +90,9 @@ export function midiaDoCaso(m: VideoMedia, lista: VideoMedia[], info: MidiaInfo 
     tem_audio: info?.tem_audio ?? p.streams.some((s) => s.codec_type === "audio"),
     cor: null,
     derivacao: derivacao(m, lista),
-    recebido: { nativo: null, obs: "" },
-    relogio_desvio_s: null,
-    gravador: null,
+    recebido: prov?.recebido ?? { nativo: null, obs: "" },
+    relogio_desvio_s: prov?.relogio_desvio_s ?? null,
+    gravador: prov?.gravador ?? null,
     decodificacao: null,
     ocultacoes: [],
   };
@@ -106,7 +108,8 @@ async function preparar(ws: string, itens: TrechoColetado[]): Promise<Preparado[
       const v = lista.find((x) => x.sha256 === it.sha256);
       if (!v) throw new Error("midia_ausente");
       const info = await commands.edicaoMidiaInfo(ws, it.sha256).catch(() => null);
-      m = { ref: midiaDoCaso(v, lista, info), info };
+      const prov = await provenienciaDaMidia(ws, v.id).catch(() => null);
+      m = { ref: midiaDoCaso(v, lista, info, prov), info };
       midias.set(it.sha256, m);
     }
     // quem prende é o Rust: pts do quadro exibido; sem resposta, fica para `Analise.prender`

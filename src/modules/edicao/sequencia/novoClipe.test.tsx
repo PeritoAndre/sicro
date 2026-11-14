@@ -21,7 +21,7 @@ const ev = (id: string, ts: number, x: Partial<VideoEvent> = {}): VideoEvent =>
 const info: MidiaInfo = {
   id: "v1", sha256: SHA, nome: "cam1.mp4", exibido: { w: 1280, h: 720 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
   de_s: 1, ate_s: 41, n: 1200, tem_audio: false, previa: { relativo: "x", tipo: "original", desloc_s: 0, de_s: 1, ate_s: 41, largura: 1280, altura: 720, pronta: true },
-  tabela: "decodificador", erros: 0, marcavel: true,
+  tabela: "decodificador", erros: 0, marcavel: true, cor: { matriz: "bt709", faixa: "tv" },
 };
 const tabela: TabelaQuadros = { tb: { num: 1, den: 30 }, pts0: 30, passos: Array(1199).fill(1), passo_mediano: 1, chaves: [0], vfr: false, origem: "decodificador" };
 

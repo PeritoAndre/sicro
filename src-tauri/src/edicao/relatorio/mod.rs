@@ -1,5 +1,8 @@
-//! Relatório da exportação (§10). Fase 0: `tecnico.json` e `mapa.csv`; `juri.rs` e `frases.rs` nascem na Fase 1. Dono: P0.R.
+//! Relatório da exportação (§10): `tecnico.json`, `mapa.csv`, dados do PDF do júri (`juri.rs`) e o catálogo das frases
+//! dele (`frases.rs`). Dono: o pacote R da fase (P1.R).
 
+pub mod frases;
+pub mod juri;
 pub mod mapa;
 pub mod tecnico;
 
@@ -118,6 +121,7 @@ pub(crate) mod apoio {
             transicao: None,
             processamentos: vec![ProvProcessamento { ordem: 1, nome: "recorte".into(), parametros: json!({ "de_pts": 15360 }) }],
             selos: vec![],
+            audio: None,
         }
     }
 
@@ -217,8 +221,12 @@ pub(crate) mod apoio {
                     motivo: "terceiro sem relação".into(),
                     quadros: ProvQuadrosOcultos { ancora: 2, medido: 0, interpolado: 0, incerto: 0 },
                     inverter: false,
+                    margem: 0.0,
+                    borda_suave: 0.0,
+                    cor: "#000000ff".into(),
+                    rastreio: "r1".into(),
                 }],
-                audio: ProvAudio { silencios: vec![ProvSilencio { midia: "m1".into(), de_s: 1.5, ate_s: 2.0, modo: ModoSilencio::Tom, motivo: "nome".into() }], tolerancia_atempo_ms: 0.0 },
+                audio: ProvAudio { silencios: vec![ProvSilencio { midia: "m1".into(), de_s: 1.5, ate_s: 2.0, modo: ModoSilencio::Tom, motivo: "nome".into() }], tolerancia_atempo_ms: 0.0, mixagem: None, trilhas: vec![] },
                 legendas: ProvLegendas { origem: None, n: 0, conferidas: 0 },
                 sincronias: vec![],
                 rastreios: vec![ProvRastreio {
@@ -229,6 +237,7 @@ pub(crate) mod apoio {
                     silhuetas_sha256: None,
                     corridas: vec![json!({ "motor": "edgetam", "modelo": { "nome": "EdgeTAM vídeo", "arquivo": format!("{caso}/../modelos/x.onnx") } })],
                     confirmacao: Some(Confirmacao { por: "Perito Teste".into(), em: "2026-11-14T09:00:00Z".into(), denso_sha256: None, de_s: 1.0, ate_s: 2.0 }),
+                    ausencias: vec![],
                 }],
                 ia: vec![ProvIa {
                     modelo: "EdgeTAM".into(),
@@ -250,6 +259,7 @@ pub(crate) mod apoio {
                     origem: Origem::Path,
                     sha256: "f".repeat(64),
                 },
+                fecho: None,
             },
         }
     }

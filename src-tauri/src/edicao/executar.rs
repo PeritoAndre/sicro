@@ -1622,7 +1622,7 @@ pub(crate) mod apoio {
             midias: vec![],
             roteiro: vec![],
             ocultacoes: vec![],
-            audio: ProvAudio { silencios: vec![], tolerancia_atempo_ms: 0.0 },
+            audio: ProvAudio { silencios: vec![], tolerancia_atempo_ms: 0.0, mixagem: None, trilhas: vec![] },
             legendas: ProvLegendas { origem: None, n: 0, conferidas: 0 },
             sincronias: vec![],
             rastreios: vec![],
@@ -1632,6 +1632,7 @@ pub(crate) mod apoio {
             selos_desligados: vec![],
             revisado_por: String::new(),
             ffmpeg: ProvFfmpeg { versao: cap.versao.clone(), configuracao: String::new(), origem: Origem::Path, sha256: cap.sha256.clone() },
+            fecho: None,
         }
     }
 

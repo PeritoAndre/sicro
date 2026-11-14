@@ -3,6 +3,7 @@
 import { describe, expect, it } from "vitest";
 import type { AlvoRegiao, Caixa, EfCarimbo, EfDestaque, EfHolofote, EfImagem, EfLupa, EfOcultar, EfTexto, Efeito, EstiloTexto, QuadroPalco } from "@domain/edicao";
 import { cosSenGraus, primitivas } from "./primitivas";
+import { LUPA_PRONTA } from "../../inspetor/secoes/LupaEditor";
 import type { Afim } from "../../modelo/geometria";
 
 const base = { id: "e1", ligado: true, nome: "", ativo: null };
@@ -88,7 +89,8 @@ describe("primitivas", () => {
 
   it("Fase 1 e silhueta: nao_suportado; polígono sem vértices: item_invalido", () => {
     const lupa: EfLupa = { ...base, tipo: "lupa", rastreio: "r1", janela: 0.2, fator: 2, forma: "circulo", interpolacao: "bilinear", onde: { modo: "fixa", x: 0.8, y: 0.2 }, moldura: { cor: "#fff", espessura: 0.004, contorno: true }, ligacao: true };
-    expect(() => primitivas(lupa, quadro(MEIO, r))).toThrow(/^nao_suportado: lupa/);
+    // a lupa é do P1.2: recusada até ele ligar a bandeira (contratos-fase1, regra 2)
+    if (!LUPA_PRONTA) expect(() => primitivas(lupa, quadro(MEIO, r))).toThrow(/^nao_suportado: lupa/);
     // desligada não é erro (igual ao Rust: `ligado` vem antes)
     expect(primitivas({ ...lupa, ligado: false }, quadro(MEIO, r))).toEqual([]);
     const oc: EfOcultar = { ...base, tipo: "ocultar", modo: "solido", alvo: { ...alvo, forma: "silhueta" }, intensidade: 1, cor: "#000000ff", conteudo: "rosto", motivo: "" };

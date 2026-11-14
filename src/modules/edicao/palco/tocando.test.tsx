@@ -7,7 +7,7 @@
 
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ClipeCongelar, ClipeTrecho, MidiaInfo, MidiaRef, ProjetoAberto, TabelaQuadros } from "@domain/edicao";
+import type { ClipeCongelar, ClipeTrecho, MidiaInfo, MidiaRef, ProjetoAberto, Rastreio, TabelaQuadros } from "@domain/edicao";
 
 const cmd = vi.hoisted(() => ({
   edicaoAbrir: vi.fn(),
@@ -38,6 +38,7 @@ import { useRenderStore } from "../store/renderStore";
 import { selecionarClipe } from "../sequencia/acoes";
 import { meioDoQuadro } from "./faixa";
 import { botao, clicar, desmontarTudo, esperar, montar } from "../inspetor/testeTela";
+import { useInspetorUi } from "../inspetor/ui";
 
 const WS = "/casos/toca";
 const SHA = "d".repeat(64);
@@ -47,7 +48,7 @@ const tab: TabelaQuadros = { tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(
 const info: MidiaInfo = {
   id: "v1", sha256: SHA, nome: "cam.mp4", exibido: { w: 640, h: 360 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
   de_s: 0, ate_s: 10, n: 300, tem_audio: false, previa: { relativo: "cam.mp4", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 10, largura: 640, altura: 360, pronta: true },
-  tabela: "decodificador", erros: 0, marcavel: true,
+  tabela: "decodificador", erros: 0, marcavel: true, cor: { matriz: "bt709", faixa: "tv" },
 };
 const tecla = (key: string, code: string, x: Partial<KeyboardEventInit> = {}) =>
   act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, ...x })));
@@ -100,6 +101,59 @@ async function tocarAte(v: HTMLVideoElement, j: number) {
   v.currentTime = meioDoQuadro(tab, j);
   await espera(40);
 }
+
+describe("trava de marcação do palco (livre())", () => {
+  it("I e Enter durante a busca não gravam o quadro velho; com o quadro na tela, gravam o dele (contratos (i))", async () => {
+    const { t, v } = await noPalco();
+    const inicio = () => (st().doc!.principal[0] as ClipeTrecho).inicio_pts;
+    const proximo = async (chegou: boolean) => {
+      await clicar(botao(t.raiz, "Próximo quadro"));
+      if (chegou) {
+        await act(async () => void v.dispatchEvent(new Event("seeked")));
+        await espera(50);
+      }
+    };
+    // quadro 1 na tela; o início segue no 0
+    await proximo(true);
+    expect(inicio()).toBe(0);
+    // pedido o 2, ainda o 1 na tela: I não grava o 1
+    await proximo(false);
+    await tecla("i", "KeyI");
+    expect(inicio()).toBe(0);
+    await act(async () => void v.dispatchEvent(new Event("seeked")));
+    await espera(50);
+    await tecla("i", "KeyI");
+    expect(inicio()).toBe(2 * 512);
+    // Enter ("Marcar neste quadro") com a ferramenta de caixa do rastreio: âncora só no quadro 0
+    const r = { id: "r1", nome: "", midia: "m", base: "fonte", tipo: "caixa", espaco: "original", ancoras: [{ t: tempoDoQuadro(tab, 0), pts: 0, v: { x: 0.1, y: 0.1, w: 0.2, h: 0.2 }, interp: "linear" }],
+      denso: null, silhuetas: null, ausencias: [], origem: { tipo: "manual" }, confirmacao: null } as unknown as Rastreio;
+    await act(async () => st().alterar("Rastreio", (d) => void d.rastreios.push(r)));
+    await act(async () => useInspetorUi.getState().pedir({ tipo: "caixa", rastreio: "r1" }, () => {}, "teste"));
+    const pts = () => st().doc!.rastreios[0]!.ancoras.map((a) => a.pts);
+    // pedido o 3, ainda o 2 na tela: Enter não grava no 2
+    await proximo(false);
+    await tecla("Enter", "Enter");
+    expect(pts()).toEqual([0]);
+    await act(async () => void v.dispatchEvent(new Event("seeked")));
+    await espera(50);
+    await tecla("Enter", "Enter");
+    expect(pts()).toEqual([0, 3 * 512]);
+    // clique no palco com a ferramenta de lugar (o `onMarcar`): o mesmo
+    const marcou = vi.fn();
+    await act(async () => useInspetorUi.getState().pedir({ tipo: "lugar" }, marcou, "lugar"));
+    const camada = t.raiz.querySelector<HTMLElement>("[data-camada]")!;
+    const ponteiro = (tipo: string) => act(async () => void camada.dispatchEvent(new PointerEvent(tipo, { bubbles: true, button: 0, pointerId: 1, clientX: 0, clientY: 0 })));
+    await clicar(botao(t.raiz, "Próximo quadro"));
+    await ponteiro("pointerdown");
+    await ponteiro("pointerup");
+    expect(marcou).not.toHaveBeenCalled();
+    await act(async () => void v.dispatchEvent(new Event("seeked")));
+    await espera(50);
+    await ponteiro("pointerdown");
+    await ponteiro("pointerup");
+    expect(marcou).toHaveBeenCalledTimes(1);
+  });
+});
 
 describe("palco tocando", () => {
   it("Congelar aqui (atalho e botão) e Dividir no cursor pegam o quadro mostrado", async () => {

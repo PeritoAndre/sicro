@@ -31,6 +31,7 @@ import type {
   ContextoClipe,
   Desconhecido,
   Efeito,
+  Id,
   Lugar,
   MidiaInfo,
   Ponto,
@@ -53,6 +54,12 @@ import { TituloSecao } from "./secoes/TituloSecao";
 import { EntradaSecao } from "./secoes/EntradaSecao";
 import { EnquadramentoSecao } from "./secoes/EnquadramentoSecao";
 import { MarcacoesSecao, RealceSoLeitura } from "./secoes/MarcacoesSecao";
+// Fase 1: cada pacote liga o seu (`*_PRONTA`/`*_PRONTO`) ao entregar, sem tocar aqui (contratos-fase1 (c))
+import { adicionarLupa, LUPA_PRONTA, LupaEditor, novaLupa } from "./secoes/LupaEditor";
+import { adicionarRegua, novaRegua, REGUA_PRONTA, ReguaEditor } from "./secoes/ReguaEditor";
+import { adicionarVelocidade, novaVelocidade, VELOCIDADE_PRONTA, VelocidadeEditor } from "./secoes/VelocidadeEditor";
+import { REALCE_PRONTO, RealceSecao } from "./secoes/RealceSecao";
+import { AUDIO_CLIPE_PRONTO, AudioClipeSecao } from "./secoes/AudioClipeSecao";
 
 // ---- efeitos ----
 
@@ -189,11 +196,16 @@ export const REGISTRO: Registro = {
   // enquadre: editados na seção Enquadramento do clipe, não na lista de marcações
   girar: { ...soLeitura("girar", "Girar", RotateCw, "enquadre"), novo: () => novoGirar(90) },
   enquadramento: { ...soLeitura("enquadramento", "Enquadramento", Crop, "enquadre"), novo: () => novoEnquadramento(CAIXA_CENTRO) },
+  // Fase 1: só leitura até o pacote dono ligar
+  lupa: LUPA_PRONTA
+    ? { tipo: "lupa", rotulo: "Lupa", icone: Search, familia: "anotacao", novo: novaLupa, Editor: LupaEditor, primitivas: prim, alcas: (e, q) => alcasRastreio(e.rastreio, q) }
+    : soLeitura("lupa", "Lupa", Search, "anotacao"),
+  regua: REGUA_PRONTA ? { tipo: "regua", rotulo: "Régua", icone: Ruler, familia: "anotacao", novo: novaRegua, Editor: ReguaEditor, primitivas: prim } : soLeitura("regua", "Régua", Ruler, "anotacao"),
+  velocidade_exibida: VELOCIDADE_PRONTA
+    ? { tipo: "velocidade_exibida", rotulo: "Velocidade", icone: Gauge, familia: "anotacao", novo: novaVelocidade, Editor: VelocidadeEditor, primitivas: prim }
+    : soLeitura("velocidade_exibida", "Velocidade", Gauge, "anotacao"),
   // fases seguintes
   holofote: soLeitura("holofote", "Holofote", Lightbulb, "regiao"),
-  lupa: soLeitura("lupa", "Lupa", Search, "anotacao"),
-  regua: soLeitura("regua", "Régua", Ruler, "anotacao"),
-  velocidade_exibida: soLeitura("velocidade_exibida", "Velocidade", Gauge, "anotacao"),
   estabilizar: soLeitura("estabilizar", "Estabilizar", Sparkles, "origem"),
   lente: soLeitura("lente", "Lente", Sparkles, "origem"),
   desentrelacar: soLeitura("desentrelacar", "Desentrelaçar", Sparkles, "origem"),
@@ -202,8 +214,24 @@ export const REGISTRO: Registro = {
   nitidez: soLeitura("nitidez", "Nitidez", Focus, "origem"),
 };
 
-/** O que "Adicionar" oferece nesta fase, na ordem do §8.6. */
-export const ADICIONAR = ["destaque", "ocultar", "texto", "carimbo", "imagem"] as const satisfies readonly Efeito["tipo"][];
+/** O que "Adicionar" oferece, na ordem do §8.6 (lupa, régua e velocidade quando o pacote dono liga). */
+export const ADICIONAR: readonly TipoAdicionavel[] = [
+  "destaque",
+  "ocultar",
+  ...(LUPA_PRONTA ? (["lupa"] as const) : []),
+  ...(REGUA_PRONTA ? (["regua"] as const) : []),
+  ...(VELOCIDADE_PRONTA ? (["velocidade_exibida"] as const) : []),
+  "texto",
+  "carimbo",
+  "imagem",
+];
+export type TipoAdicionavel = "destaque" | "ocultar" | "lupa" | "regua" | "velocidade_exibida" | "texto" | "carimbo" | "imagem";
+/** "Adicionar" dos tipos que criam o efeito por conta própria (rastreio, retrato da análise): a função do pacote. */
+export const ADICIONAR_PROPRIO: Partial<Record<TipoAdicionavel, (clipeId: Id, rotulo: string) => Promise<Id | null>>> = {
+  lupa: adicionarLupa,
+  regua: adicionarRegua,
+  velocidade_exibida: adicionarVelocidade,
+};
 /** Tipos com editor nesta fase (o resto aparece só para leitura). */
 export const EDITAVEIS = new Set<Efeito["tipo"]>([...ADICIONAR, "girar", "enquadramento"]);
 
@@ -242,11 +270,14 @@ export interface SecaoProps<C> {
 
 type TipoItem = `principal:${ClipePrincipal["tipo"]}` | `livre:${ClipeSobreposto["tipo"]}`;
 
+/** Realce: o do P1.4 quando ele liga; até lá, os efeitos de origem só para leitura. */
+const Realce = REALCE_PRONTO ? RealceSecao : RealceSoLeitura;
+
 /** Seções do Inspetor, por tipo de item, na ordem em que aparecem. `tela` e vídeo sobreposto: Fase 3. */
 export const SECOES: Partial<Record<TipoItem, FC<SecaoProps<never>>[]>> = {
-  "principal:trecho": [TrechoSecao, EntradaSecao, EnquadramentoSecao, RealceSoLeitura, MarcacoesSecao] as FC<SecaoProps<never>>[],
-  "principal:congelar": [CongelarSecao, EntradaSecao, EnquadramentoSecao, RealceSoLeitura, MarcacoesSecao] as FC<SecaoProps<never>>[],
-  "principal:imagem": [ImagemClipeSecao, EntradaSecao, EnquadramentoSecao, RealceSoLeitura, MarcacoesSecao] as FC<SecaoProps<never>>[],
+  "principal:trecho": [TrechoSecao, ...(AUDIO_CLIPE_PRONTO ? [AudioClipeSecao] : []), EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao] as FC<SecaoProps<never>>[],
+  "principal:congelar": [CongelarSecao, EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao] as FC<SecaoProps<never>>[],
+  "principal:imagem": [ImagemClipeSecao, EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao] as FC<SecaoProps<never>>[],
   "principal:titulo": [TituloSecao, EntradaSecao, MarcacoesSecao] as FC<SecaoProps<never>>[],
   "livre:titulo": [TituloSecao] as FC<SecaoProps<never>>[],
   "livre:imagem": [SobImagemSecao] as FC<SecaoProps<never>>[],

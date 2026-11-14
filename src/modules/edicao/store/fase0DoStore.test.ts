@@ -132,6 +132,7 @@ const info = (id: string, c: string): MidiaInfo => ({
   tabela: "decodificador",
   erros: 0,
   marcavel: true,
+  cor: { matriz: "bt709", faixa: "tv" },
 });
 
 const propria = (id: string, c: string, tipo: "imagem" | "audio", nome: string): MidiaRef => ({

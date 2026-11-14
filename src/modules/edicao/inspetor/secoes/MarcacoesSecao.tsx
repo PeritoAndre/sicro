@@ -28,9 +28,10 @@ import {
 } from "../acoes";
 import { pedirMarcacao, useInvalidos } from "../contexto";
 import { Icone, Mini, Secao, Tempo } from "../campos";
-import { ADICIONAR, descritor, REGISTRO, type SecaoProps } from "../registro";
+import { ADICIONAR, ADICIONAR_PROPRIO, descritor, REGISTRO, type SecaoProps } from "../registro";
 import { useInspetorUi } from "../ui";
 import { escolherMidia } from "./importar";
+import { useMenuAberto } from "../../menus";
 import styles from "../Inspetor.module.css";
 
 interface Item {
@@ -48,6 +49,7 @@ export function MarcacoesSecao({ clipe: c, ctx, info, tabela: lida }: SecaoProps
   const aberto = useEdicaoStore((s) => s.selecao.efeito);
   const invalidos = useInvalidos();
   const menu = useContextMenu();
+  useMenuAberto(menu.isOpen);
   // enquadre tem seção própria; realce (origem) também
   const itens: Item[] = c.efeitos.filter((e) => !(efeitoConhecido(e) && ["enquadre", "origem"].includes(REGISTRO[e.tipo].familia))).map((e) => ({ e, daMidia: false }));
   if (c.tipo === "trecho" || c.tipo === "congelar") {
@@ -67,8 +69,10 @@ export function MarcacoesSecao({ clipe: c, ctx, info, tabela: lida }: SecaoProps
           label: d.rotulo,
           icon: <Ic size={12} />,
           onSelect: () => {
-            if (tipo === "imagem") void escolherMidia("imagem").then((m) => m && adicionarImagem(c.id, m, d.rotulo));
-            else adicionarEfeito(c.id, tipo, d.rotulo);
+            const proprio = ADICIONAR_PROPRIO[tipo];
+            if (proprio) void proprio(c.id, d.rotulo).catch(() => {});
+            else if (tipo === "imagem") void escolherMidia("imagem").then((m) => m && adicionarImagem(c.id, m, d.rotulo));
+            else adicionarEfeito(c.id, tipo as Exclude<typeof tipo, "imagem" | "lupa" | "regua" | "velocidade_exibida">, d.rotulo);
           },
         };
       }),

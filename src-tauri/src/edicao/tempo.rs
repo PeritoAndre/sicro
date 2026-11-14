@@ -269,7 +269,11 @@ fn medir(c: &ClipePrincipal, ctx: &Contexto, fps: Racional) -> (u32, Option<Faix
             };
             n_q_sem_fonte((fim.0 - ini.0) / fator, fps)
         };
-        let Some(tab) = ctx.fontes.get(midia).map(|f| &f.quadros) else { return (estimado(), None) };
+        let Some(f) = ctx.fontes.get(midia) else { return (estimado(), None) };
+        // a tabela do mapa: a da fonte, ou a de campos no desentrelace por campo (P1.4; espelho `modelo/realce.ts`).
+        // `FaixaFonte` sai nos índices dela, os mesmos que `clipe::trecho` usa.
+        let tab_clipe = super::motor::efeitos::realce::tabela(&base(c).efeitos, &f.quadros);
+        let tab: &TabelaQuadros = &tab_clipe;
         let mapa = faixa_do_trecho(tab, ini.0, ini.1, fim.0, fim.1).and_then(|(a, b)| mapa_trecho(tab, a, b, v, fps));
         return match mapa {
             Ok(m) => {

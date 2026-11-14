@@ -37,6 +37,8 @@ function Conteudo({ fechar }: { fechar: () => void }) {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<ErroComando | null>(null);
   const [cap, setCap] = useState<ResumoCapacidades | null>(null);
+  // análise desta revisão que falhou (falha passageira): pedida de novo ao abrir
+  useEffect(() => useEdicaoStore.getState().analisarDeNovo(), []);
   useEffect(() => {
     let vivo = true;
     commands

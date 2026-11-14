@@ -876,6 +876,11 @@ pub struct SaidaRegistrada {
     pub conferida_por: Option<String>,
     pub conferida_em: Option<String>,
     pub criado_em: String,
+    /// Resultado do "Refazer e comparar" numa saída refeita (`refeita_de` preenchido); None nas outras. Quem lê e
+    /// grava é o P1.8 (`refazer.rs`; o resultado mora no retrato da saída refeita).
+    // CONTRATO: abertura da Fase 1 (§10.4: os quatro resultados aparecem na Fila).
+    #[serde(default)]
+    pub comparacao: Option<super::refazer::Comparacao>,
 }
 
 impl From<VideoEditOutput> for SaidaRegistrada {
@@ -906,6 +911,7 @@ impl From<VideoEditOutput> for SaidaRegistrada {
             conferida_por: s.conferida_por,
             conferida_em: s.conferida_em.map(|d| d.to_rfc3339()),
             criado_em: s.criado_em.to_rfc3339(),
+            comparacao: None,
         }
     }
 }
@@ -1200,6 +1206,40 @@ fn arquivo_do_item(it: &ItemManifesto) -> Option<&str> {
 }
 
 /// Grafos, listas e argumentos de cada passo (sem caminho absoluto: mídia vira `midia:<id>`).
+/// As prévias (`loudnorm`, `vidstabdetect`) citam a mídia pelo caminho absoluto: no retrato vai `midia:<id>`, como nas
+/// entradas dos blocos (contratos (i): o retrato não leva caminho do caso).
+fn previas_sem_caminho(plano: &Plano) -> Result<Value> {
+    use super::motor::plano::Papel;
+    let mut caminhos: Vec<(String, String)> = Vec::new();
+    let entradas = plano.blocos.iter().flat_map(|b| b.entradas.iter()).chain(plano.audio.iter().flat_map(|a| a.entradas.iter()));
+    for e in entradas {
+        let Papel::Midia { id, .. } = &e.papel else { continue };
+        let c = e.caminho.to_string_lossy().into_owned();
+        if !c.is_empty() && !caminhos.iter().any(|(x, _)| *x == c) {
+            caminhos.push((c, format!("midia:{id}")));
+        }
+    }
+    // o caminho mais longo primeiro: um não pode ser prefixo do outro na troca
+    caminhos.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+    fn trocar(v: &mut Value, caminhos: &[(String, String)]) {
+        match v {
+            Value::String(s) => {
+                for (c, m) in caminhos {
+                    if s.contains(c.as_str()) {
+                        *s = s.replace(c.as_str(), m);
+                    }
+                }
+            }
+            Value::Array(a) => a.iter_mut().for_each(|x| trocar(x, caminhos)),
+            Value::Object(o) => o.values_mut().for_each(|x| trocar(x, caminhos)),
+            _ => {}
+        }
+    }
+    let mut v = serde_json::to_value(&plano.previas)?;
+    trocar(&mut v, &caminhos);
+    Ok(v)
+}
+
 fn gravar_grafos(dir: &Path, plano: &Plano) -> Result<()> {
     use super::motor::plano::{Juncao, Papel};
     use super::ffmpeg::args::gravar_texto;
@@ -1237,7 +1277,7 @@ fn gravar_grafos(dir: &Path, plano: &Plano) -> Result<()> {
         })).collect::<Vec<_>>(),
         "juncao": plano.juncao,
         "audio": plano.audio.as_ref().map(|a| serde_json::json!({ "globais": a.globais, "entradas": a.entradas.iter().map(entrada).collect::<Vec<_>>() })),
-        "previas": plano.previas,
+        "previas": previas_sem_caminho(plano)?,
     });
     fs::write(dir.join("argumentos.json"), serde_json::to_vec_pretty(&argumentos)?)?;
     Ok(())
@@ -2212,6 +2252,12 @@ mod testes {
         let cap = Arc::new(crate::edicao::quadros::apoio::cap_falsa());
         let mut plano = ap::plano(&cap, Path::new("/caminho/da/fonte.mp4"), &[0; 120], &ap::cpu(), ap::alvo_final(EscolhaCodificador::Cpu));
         plano.proveniencia.midias = vec![prov_midia()];
+        // prévias da Fase 1 (`loudnorm` do P1.5, `vidstabdetect` do P1.4) citam a mídia pelo caminho
+        use crate::edicao::motor::plano::Previa;
+        plano.previas = vec![
+            Previa::Loudnorm { args: ["-cpuflags", "0", "-i", "/caminho/da/fonte.mp4", "-f", "null", "-"].iter().map(|s| s.to_string()).collect() },
+            Previa::Vidstab { efeito: "e1".into(), args: ["-i", "/caminho/da/fonte.mp4", "-vf", "vidstabdetect=result=e001.trf"].iter().map(|s| s.to_string()).collect(), trf: "e001.trf".into() },
+        ];
         if ocultar {
             plano.proveniencia.ocultacoes = vec![ocultacao()];
         }

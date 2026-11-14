@@ -8,6 +8,8 @@ export const ROTULOS = new Set<string>([
   "Clipe", "Áudio", "Legendas", "Saída", "Trecho", "Entrada", "Enquadramento", "Realce", "Marcações", "Título", "Quadro congelado", "Imagem",
   // Clipe · Trecho, Entrada, Enquadramento
   "Nome", "Vídeo", "Início", "Fim", "Evento", "Velocidade", "Manter o tom", "Som",
+  // "Cor" da mídia (§8.6 Mídia: BT.601, BT.709; Limitada, Cheia), no Inspetor desde a abertura da Fase 1 (O4)
+  "BT.601 · Limitada", "BT.601 · Cheia", "BT.709 · Limitada", "BT.709 · Cheia",
   "Transição", "Duração (s)", "Corte", "Escurecer",
   "Ajuste", "Inteiro", "Preencher", "Marcar início", "Marcar fim", "Girar", "Espelhar", "Interpolação", "Vizinho", "Bilinear", "Bicúbica",
   // Marcações
@@ -26,6 +28,15 @@ export const ROTULOS = new Set<string>([
   "Exportar", "Predefinição", "Júri", "WhatsApp", "Preservação", "Personalizada", "Arquivo reprodutível", "Ciente", "Cancelar",
   "Fila", "Na fila", "Preparando", "Camadas", "Juntando", "Conferindo", "A conferir", "Relatório", "Pronto", "Falhou", "Cancelado",
   "Abrir pasta", "Ver registro", "Conferido", "Concluir sem conferir", "Pacote do júri", "Excluir", "Fechar",
+  // Fase 1 (§8.6 e contratos-fase1 (f)), já aqui: o pacote que liga a seção não edita este arquivo
+  "Acompanhar", "Cortar", "Fecho",
+  "Suavizar", "Borda", "Preta", "Ampliar", "Refazer estabilização", "Campo", "Contraste", "Gama", "Saturação",
+  "Ampliação", "Janela", "Fixa", "Acompanha", "Ligação", "Calibração", "Comprimento (m)", "Divisões", "Cálculo",
+  "Abaixar sob a narração", "Normalizar", "Limitador", "Silenciar trecho", "Tom", "Mudo", "Da degravação…",
+  "Nova legenda", "Conferida", "Linhas",
+  "Selo de velocidade", "Selo de ampliação", "Selo de realce",
+  "Não", "Na imagem", "Arquivo", "As duas", "Incluir originais", "PDF sem anexos", "Revisado por", "Testar de novo",
+  "Conferir ocultações", "Refazer e comparar", "Igual", "Conteúdo igual, arquivo diferente", "Não comparável",
   // amostras e unidades
   "Aa", "×", "%", "°", "#",
 ]);
@@ -35,6 +46,7 @@ export function textoPermitido(t: string): boolean {
   if (ROTULOS.has(t)) return true;
   if (/^Exportar com \d+ avisos?$/.test(t)) return true;
   if (/^Vídeo \d+\/\d+$/.test(t)) return true;
+  if (/^Diferente a partir de \d{2}:\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^\d+ marcaç(ão|ões)$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;
   if (/^-?\d+(,\d+)?\s?(%|°|×)?$/.test(t)) return true;

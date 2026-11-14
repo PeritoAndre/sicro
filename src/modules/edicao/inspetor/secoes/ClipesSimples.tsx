@@ -4,7 +4,7 @@ import type { ClipeCongelar, ClipeImagem, SobImagem } from "@domain/edicao";
 import { noClipe } from "../acoes";
 import { Grade, Marca, Numero, Secao, Tempo, Texto } from "../campos";
 import type { SecaoProps } from "../registro";
-import { NomeMidia, round } from "./comum";
+import { CorDaMidia, NomeMidia, round } from "./comum";
 
 const duracaoValida = (v: number) => v > 0 && Number.isFinite(v);
 
@@ -15,6 +15,7 @@ export function CongelarSecao({ clipe: c, info, tabela }: SecaoProps<ClipeCongel
       <Grade>
         <Texto rotulo="Nome" larga valor={c.rotulo} aplicar={(v) => noClipe<ClipeCongelar>(id, (x) => void (x.rotulo = v))} />
         <NomeMidia rotulo="Vídeo" midia={c.midia} />
+        <CorDaMidia midia={c.midia} info={info} />
         <Tempo
           rotulo="Posição"
           item={id}

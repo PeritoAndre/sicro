@@ -101,6 +101,7 @@ const info = (c: string, de: number, ate: number): MidiaInfo => ({
   tabela: "decodificador",
   erros: 0,
   marcavel: true,
+  cor: { matriz: "bt709", faixa: "tv" },
 });
 
 /** O que o Rust devolveria em base 1/15360 a 30 qps: quadro exibido em t. */

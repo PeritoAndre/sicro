@@ -18,5 +18,6 @@ pub mod registry_commands;
 pub mod settings_commands;
 pub mod video_commands;
 pub mod video_distance_commands;
+pub mod video_proveniencia_commands;
 pub mod video_speed_commands;
 pub mod workspace_commands;

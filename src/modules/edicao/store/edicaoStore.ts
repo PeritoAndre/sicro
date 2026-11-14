@@ -101,6 +101,9 @@ export interface EdicaoState {
   salvar(): Promise<void>;
   /** Espera a gravação pendente: antes de exportar, fechar, trocar de caso e fechar a janela. Rejeita se falhar. */
   descarregar(): Promise<void>;
+  // CONTRATO: acréscimo da abertura da Fase 1 (contratos (i)): falha passageira não deixa a exportação travada.
+  /** Pede a análise de novo quando a da revisão atual falhou (o diálogo de exportar chama ao abrir). */
+  analisarDeNovo(): void;
 }
 
 // ---- edição corrente do caso (a última aberta), como em video/editor/resume.ts ----
@@ -158,8 +161,6 @@ interface Aberto {
   gravado: boolean;
   /** Arquivo sem campos de padrão: como chegou e como ficou completo (`comoChegou` ao gravar); null = veio completo. */
   incompleto: { original: ProjetoEdicao; completado: ProjetoEdicao } | null;
-  /** `aprenderRaiz` já foi chamado (uma vez por projeto: `edicao_abrir` regrava o `projeto.anterior.json`). */
-  raizPedida: boolean;
 }
 let rt: Aberto | null = null;
 /** `raiz_cache` por caso (é a mesma para todo projeto do caso). */
@@ -251,16 +252,11 @@ export const useEdicaoStore = create<EdicaoState>((set, get) => {
     mudou(meu);
   };
 
-  const aprenderRaiz = (meu: Aberto) => {
-    // projeto novo: a raiz do cache só vem de `edicao_abrir`
-    meu.raizPedida = true;
-    commands
-      .edicaoAbrir(meu.ws, meu.id)
-      .then((r) => {
-        if (r.raiz_cache) raizes.set(meu.ws, r.raiz_cache);
-        if (rt === meu) set({ raizCache: r.raiz_cache || null });
-      })
-      .catch(() => {});
+  /** Raiz do cache que veio numa resposta (`edicao_abrir` ou `edicao_salvar`, contratos (g) 11). */
+  const aprenderRaiz = (meu: Aberto, raiz: string | undefined) => {
+    if (!raiz) return;
+    raizes.set(meu.ws, raiz);
+    if (rt === meu && get().raizCache !== raiz) set({ raizCache: raiz });
   };
 
   /** `id` = o da pasta (o pedido). Arquivo com outro `id` dentro abre só para leitura e continua sendo fechado e excluído por este. */
@@ -276,7 +272,6 @@ export const useEdicaoStore = create<EdicaoState>((set, get) => {
       seq: 0,
       gesto: null,
       gravado: x.gravado,
-      raizPedida: false,
       incompleto: completo === chegou ? null : { original: chegou, completado: doc },
       autosave: new Autosave({
         revisao: () => (rt === meu ? get().revisao : 0),
@@ -286,9 +281,10 @@ export const useEdicaoStore = create<EdicaoState>((set, get) => {
           const s = get();
           const rev = s.revisao;
           const doc = s.doc as ProjetoEdicao;
-          await commands.edicaoSalvar(meu.ws, meu.incompleto ? comoChegou(doc, meu.incompleto.completado, meu.incompleto.original) : doc);
+          const salvo = await commands.edicaoSalvar(meu.ws, meu.incompleto ? comoChegou(doc, meu.incompleto.completado, meu.incompleto.original) : doc);
           meu.gravado = true;
-          if (!raizes.has(meu.ws) && !meu.raizPedida) aprenderRaiz(meu);
+          // edição nova: a raiz do cache chega na primeira gravação, sem `edicao_abrir` (que mexeria no projeto aberto)
+          aprenderRaiz(meu, salvo?.raiz_cache);
           return rev;
         },
         estado: (e) => rt === meu && set({ salvando: e }),
@@ -519,6 +515,11 @@ export const useEdicaoStore = create<EdicaoState>((set, get) => {
 
     async descarregar() {
       await rt?.autosave.descarregar();
+    },
+
+    analisarDeNovo() {
+      const s = get();
+      if (rt && s.doc && s.analiseFalhou === s.revisao) agendarAnalise(rt, 0);
     },
   };
 });

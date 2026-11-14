@@ -8,6 +8,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Check, CircleDot, Crosshair, Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, TriangleAlert, Undo2 } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
+import { useMenusAbertos } from "./menus";
 import { isEditableTarget } from "@core/keymap";
 import { useShortcuts } from "@core/useShortcuts";
 import type { Caixa, Lugar, Ponto, Pts, Seg } from "@domain/edicao";
@@ -31,9 +32,9 @@ import { efetivas, gradeDasColunas, LIMITES, useColunas } from "./colunas";
 import styles from "./EditorEdicao.module.css";
 import { capturar } from "./palco/capturar";
 
-/** Atalhos da tela: só na frente e sem diálogo aberto. */
-export function atalhosLigados(x: { ativo: boolean; exportando: boolean; modal: boolean; semDialogo: boolean }): boolean {
-  return x.ativo && !x.exportando && !x.modal && x.semDialogo;
+/** Atalhos da tela: só na frente, sem diálogo e sem menu aberto (Fila, menu do cartão, menu de contexto). */
+export function atalhosLigados(x: { ativo: boolean; exportando: boolean; modal: boolean; semDialogo: boolean; semMenu: boolean }): boolean {
+  return x.ativo && !x.exportando && !x.modal && x.semDialogo && x.semMenu;
 }
 
 function IconeGravacao({ estado }: { estado: "salvo" | "alterado" | "salvando" | "erro" }) {
@@ -65,7 +66,8 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
   const [modal, setModal] = useState(false);
   // qualquer diálogo aberto (Sequência, Inspetor, confirmações, exportação) desliga os atalhos da tela (h 25)
   const semDialogo = useDialogosAbertos((s) => s.pilha.length === 0);
-  const atalhos = atalhosLigados({ ativo, exportando, modal, semDialogo });
+  const semMenu = useMenusAbertos((s) => s.n === 0);
+  const atalhos = atalhosLigados({ ativo, exportando, modal, semDialogo, semMenu });
   const palco = useRef<PalcoApi | null>(null);
   // largura do corpo: as laterais cedem quando o palco ficaria estreito
   const corpoRef = useRef<HTMLDivElement | null>(null);

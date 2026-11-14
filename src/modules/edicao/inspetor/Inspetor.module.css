@@ -525,3 +525,14 @@ select.entrada {
   color: var(--sicro-danger);
   fill: var(--sicro-danger);
 }
+
+/* "Cor" da mídia: a lista e, quando escolhida, o ícone que volta à da fonte */
+.linhaCor {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+}
+.linhaCor > label {
+  flex: 1;
+  min-width: 0;
+}

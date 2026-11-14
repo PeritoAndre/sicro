@@ -1,4 +1,5 @@
-/** Clipe · Entrada: transição de entrada. Fase 0: corte ou escurecer (catálogo `juncao::TRANSICOES`). */
+/** Clipe · Entrada: transição de entrada pelo catálogo `juncao::TRANSICOES` (corte e escurecer; as do `xfade` e o "Som"
+ *  no P1.1). `FechoSecao`: a transição de saída do último clipe (`fecho`), na aba Saída, rótulo "Fecho" (P1.1). */
 
 import type { ClipePrincipal } from "@domain/edicao";
 import { noClipe, transicaoEm } from "../acoes";
@@ -10,6 +11,14 @@ const OPCOES = [
   { v: CORTE, r: "Corte" },
   { v: "escurecer", r: "Escurecer" },
 ];
+
+/** O P1.1 liga ao entregar: a seção "Fecho" aparece na aba Saída. */
+export const FECHO_PRONTO = false;
+
+/** Saída · "Fecho": "Transição" · "Duração (s)" · "Som" (Acompanhar, Cortar). Fase 0: casca. */
+export function FechoSecao() {
+  return null;
+}
 
 export function EntradaSecao({ clipe: c }: SecaoProps<ClipePrincipal>) {
   const id = c.id;

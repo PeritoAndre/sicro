@@ -27,6 +27,8 @@ export const VIDEO_ACTIONS: ShortcutAction[] = [
   { id: "video.gotoOut", scope: "video", group: "Vídeo · Trecho", label: "Ir para a saída", defaultBinding: "Shift+O" },
   { id: "video.toggleLoop", scope: "video", group: "Vídeo · Trecho", label: "Repetir o trecho (liga / desliga)", defaultBinding: "Ctrl+L" },
   { id: "video.clearInOut", scope: "video", group: "Vídeo · Trecho", label: "Limpar entrada e saída", defaultBinding: "Alt+X" },
+  // Coleta para a Edição (§8.1, §8.5): o P1.10 liga o comando no reprodutor da análise.
+  { id: "video.collectClip", scope: "video", group: "Vídeo · Trecho", label: "Coletar trecho para a edição", defaultBinding: "Ctrl+3" },
 
   // Linha do tempo.
   { id: "video.timelineZoomIn", scope: "video", group: "Vídeo · Linha do tempo", label: "Aproximar a linha do tempo", defaultBinding: "=" },

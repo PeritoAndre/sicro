@@ -11,6 +11,7 @@ import { novoBloco } from "../novos";
 import type { SecaoProps } from "../registro";
 import { round } from "./comum";
 import styles from "../Inspetor.module.css";
+import { EDITOR_TITULO_PRONTO, EditorTitulo } from "../../titulos/EditorTitulo";
 
 type Mut = (d: Draft<ProjetoEdicao>) => void;
 
@@ -45,6 +46,7 @@ export function TituloSecao({ clipe: c }: SecaoProps<ComTitulo>) {
   const estilo = principal?.estilo ?? null;
   return (
     <Secao titulo="Título">
+      {EDITOR_TITULO_PRONTO && <EditorTitulo clipe={c} />}
       <Grade>
         <Texto rotulo="Nome" larga valor={c.rotulo} aplicar={(v) => noClipe<ComTitulo>(id, (x) => void (x.rotulo = v))} />
         <Lista rotulo="Modelo" larga valor={t.modelo} opcoes={MODELOS} aplicar={(v) => noTitulo((x) => void (x.modelo = v))} />

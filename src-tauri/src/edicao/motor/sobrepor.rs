@@ -1,4 +1,5 @@
-//! Camada global (§5.3, passo 6): títulos e imagens sobrepostos, por cima da principal já junta. Dono: P0.6a.
+//! Camada global (§5.3, passo 6): títulos e imagens sobrepostos (presos ou não, P1.7), legendas queimadas (P1.6) e
+//! selos (P1.R), por cima da principal já junta. Compartilhado desde a Fase 1 (O2); o vídeo sobreposto é do P3.2.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -101,6 +102,9 @@ pub fn aplicar(
             itens.push(ItemCamada { desenho, de: (a - de_q) as u32, quadros });
         }
     }
+    // legendas queimadas (P1.6) e selos (P1.R): por cima dos sobrepostos, nessa ordem
+    itens.extend(super::legendas::queimadas(p, linha, de_q, n_q, t, alvo)?);
+    itens.extend(crate::edicao::camada::selos::itens(p, linha, de_q, n_q, t)?);
     if itens.is_empty() {
         return Ok(Sobreposto { saida: base.to_string(), entrada: None, camada: None });
     }

@@ -1,4 +1,6 @@
-//! Validação única (§2.3): o front não valida, só mostra. Dono: P0.R.
+//! Validação única (§2.3): o front não valida, só mostra. Dono: o pacote R da fase (P1.R).
+//! O que o motor ainda não faz (`nao_suportado`) é perguntado à regra do pacote dono do recurso (`recusa` em
+//! `motor::{juncao, audio, legendas, saida}`, `motor::efeitos::{lupa, realce}`, `medidas`): uma regra só (contratos (h) 1).
 //! A estrutura de cada item (lista de chaves vazia, chaves fora de ordem) é conferida antes de qualquer curva
 //! dele ser avaliada (contratos (f) 7). Toda frase sai de `mensagens`.
 
@@ -18,8 +20,10 @@ use super::modelo::{
     Titulo, Fundo, Tolerante, Velocidade, ESQUEMA as ESQUEMA_DOC, ESQUEMA_MENOR as ESQUEMA_MENOR_DOC,
 };
 use super::modelo::EfBase;
+use super::medidas;
 use super::motor::efeitos;
-use super::motor::efeitos::enquadramento;
+use super::motor::efeitos::{enquadramento, lupa, realce};
+use super::motor::{audio as motor_audio, juncao, legendas as motor_legendas, saida as motor_saida};
 use super::motor::{clipe as motor_clipe, Alvo, Contexto};
 use super::quadros::{OrigemTabela, TabelaQuadros};
 use super::rastreio::avaliar::{self as rastreio_avaliar, Como, Instante};
@@ -951,9 +955,9 @@ impl<'a> Validacao<'a> {
                     self.add(FILTRO_AUSENTE, &onde, None, Some(filtro), None);
                 }
             }
-            // efeitos de origem: a Fase 0 não renderiza (o motor recusa); o rótulo é o tipo
-            if efeitos::familia(e) == efeitos::Familia::Origem {
-                self.add(NAO_SUPORTADO, &onde, None, Some(efeitos::tipo(e)), None);
+            // efeitos de origem que o motor ainda não aplica (P1.4); o rótulo é o tipo
+            if let Some(d) = realce::recusa(e, uso.base != Base::Local) {
+                self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
             }
             match e {
                 Efeito::Enquadramento(q) => {
@@ -1010,14 +1014,18 @@ impl<'a> Validacao<'a> {
                     }
                 }
                 Efeito::Lupa(l) => {
-                    self.add(NAO_SUPORTADO, &onde, None, Some("lupa"), None);
+                    if let Some(d) = lupa::recusa(l) {
+                        self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
+                    }
                     self.cor(&l.moldura.cor, &onde.campo("moldura"));
                     if let Some(r) = self.rastreio_do_uso(&l.rastreio, uso, &onde, false) {
                         self.confirmado(r, uso, base, &onde);
                     }
                 }
                 Efeito::Regua(rg) => {
-                    self.add(NAO_SUPORTADO, &onde, None, Some("regua"), None);
+                    if let Some(d) = medidas::recusa(e) {
+                        self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
+                    }
                     self.cor(&rg.traco.cor, &onde.campo("traco"));
                     let geometrico = uso.efeitos.iter().any(|x| {
                         matches!(x, Tolerante::Conhecido(Efeito::Estabilizar(s)) if s.base.ligado)
@@ -1032,7 +1040,15 @@ impl<'a> Validacao<'a> {
                     }
                 }
                 Efeito::VelocidadeExibida(v) => {
-                    self.add(NAO_SUPORTADO, &onde, None, Some("velocidade_exibida"), None);
+                    if let Some(d) = medidas::recusa(e) {
+                        self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
+                    }
+                    // só dentro do intervalo medido (O5; a regra é do P1.3), no tempo de fonte do quadro mostrado
+                    let mut fora = false;
+                    self.cada_ativo(uso, base, |a| fora |= medidas::fora_do_intervalo(v, a.pts.map(|_| a.t)));
+                    if fora {
+                        self.por(VELOCIDADE_FORA_DO_INTERVALO, &onde);
+                    }
                     self.estilo(&v.estilo, &onde);
                     if let OndeVelocidade::Segue { rastreio, .. } = &v.onde {
                         if let Some(r) = self.rastreio_do_uso(rastreio, uso, &onde, false) {
@@ -1413,8 +1429,11 @@ impl<'a> Validacao<'a> {
             for t in [b.transicao_entrada.as_ref(), if i + 1 == clipes.len() { p.fecho.as_ref() } else { None }].into_iter().flatten() {
                 if t.tipo.trim().is_empty() || !(t.duracao_s.is_finite() && t.duracao_s >= 0.0) {
                     ok = false;
-                } else if !super::motor::juncao::TRANSICOES.contains(&t.tipo.as_str()) {
-                    // as do `xfade` (com sobreposição) entram no P1.1: o motor recusa
+                } else if !juncao::TRANSICOES.contains(&t.tipo.as_str()) {
+                    // fora do catálogo do P1.1: o motor recusa
+                    de_outra_fase = true;
+                } else if self.com_som && p.saida.audio && tempo::transicao_sobrepoe(&t.tipo) && motor_audio::recusa("transicao") {
+                    // o som da transição com sobreposição é do P1.5 (O3)
                     de_outra_fase = true;
                 }
             }
@@ -1563,20 +1582,23 @@ impl<'a> Validacao<'a> {
     /// alvo tem som e a saída leva áudio): as mesmas condições de `saida::codificacao` e de `audio::montar`.
     fn fase_0(&mut self) {
         let p = self.p;
-        if self.exporta && self.exportacao.predefinicao != Predefinicao::Juri {
-            self.add(NAO_SUPORTADO, &Onde::default().campo("exportacao"), None, Some("predefinicao"), None);
-        }
-        // legendas queimadas ou em arquivo são do P1.6: o motor não as gera e recusa (nunca saem faltando caladas)
-        if self.exporta && self.exportacao.legendas != ModoLegendas::Nenhuma && !p.legendas.itens.is_empty() {
-            self.add(NAO_SUPORTADO, &Onde::default().campo("legendas"), None, Some("legendas"), None);
+        if self.exporta {
+            if let Some(d) = motor_saida::recusa(self.exportacao) {
+                self.add(NAO_SUPORTADO, &Onde::default().campo("exportacao"), None, Some(d), None);
+            }
+            // legendas que o motor ainda não gera (P1.6): nunca saem faltando caladas
+            if let Some(d) = motor_legendas::recusa(p, self.exportacao) {
+                self.add(NAO_SUPORTADO, &Onde::default().campo("legendas"), None, Some(d), None);
+            }
         }
         if !(self.com_som && p.saida.audio) {
             return;
         }
-        if p.mixagem.normalizar.is_some() {
+        // o som que o motor de áudio ainda não faz (P1.5)
+        if p.mixagem.normalizar.is_some() && motor_audio::recusa("normalizar") {
             self.add(NAO_SUPORTADO, &Onde::default().campo("normalizar"), None, Some("normalizar"), None);
         }
-        if p.mixagem.limitador {
+        if p.mixagem.limitador && motor_audio::recusa("limitador") {
             self.add(NAO_SUPORTADO, &Onde::default().campo("limitador"), None, Some("limitador"), None);
         }
         for c in &p.principal {
@@ -1585,18 +1607,18 @@ impl<'a> Validacao<'a> {
                 continue;
             }
             let onde = Onde::clipe(&t.base.id).campo("audio");
-            if !t.audio.silencios.is_empty() {
+            if !t.audio.silencios.is_empty() && motor_audio::recusa("silenciar") {
                 self.add(NAO_SUPORTADO, &onde, None, Some("silenciar"), None);
             }
-            if volume_animado(&t.audio.volume) {
+            if volume_animado(&t.audio.volume) && motor_audio::recusa("volume_animado") {
                 self.add(NAO_SUPORTADO, &onde, None, Some("volume_animado"), None);
             }
         }
         for t in p.audios.iter().filter(|t| !t.mudo && !t.clipes.is_empty()) {
-            if t.abaixa_original {
+            if t.abaixa_original && motor_audio::recusa("abaixar") {
                 self.add(NAO_SUPORTADO, &Onde::default().trilha(&t.id).campo("abaixa_original"), None, Some("abaixar"), None);
             }
-            for c in t.clipes.iter().filter(|c| volume_animado(&c.volume)) {
+            for c in t.clipes.iter().filter(|c| volume_animado(&c.volume) && motor_audio::recusa("volume_animado")) {
                 self.add(NAO_SUPORTADO, &Onde::clipe(&c.id).trilha(&t.id).campo("volume"), None, Some("volume_animado"), None);
             }
         }
@@ -2108,6 +2130,38 @@ mod testes {
         alvo: Option<Alvo>,
     }
 
+    /// Efeito do tipo, tirado da fixture com todas as variantes, ligado.
+    fn ef_do_tipo(tipo: &str) -> Value {
+        let v: Value = serde_json::from_str(include_str!("../../tests/fixtures/edicao/contrato-todas-variantes.json")).unwrap();
+        let mut e = v["principal"][0]["efeitos"].as_array().unwrap().iter().find(|e| e["tipo"] == tipo).cloned().expect(tipo);
+        e["ligado"] = json!(true);
+        e
+    }
+
+    /// `NAO_SUPORTADO` enquanto o motor recusar o efeito: a regra é a do pacote dono (contratos-fase1 (c)), e a
+    /// expectativa some sozinha quando ele entrega.
+    fn ns_efeito(e: &Value) -> Option<&'static str> {
+        let e: Efeito = serde_json::from_value(e.clone()).expect("efeito");
+        motor_clipe::recusa_do_efeito(&e, true).map(|_| NAO_SUPORTADO)
+    }
+
+    fn ns_tipo(tipo: &str) -> Option<&'static str> {
+        ns_efeito(&ef_do_tipo(tipo))
+    }
+
+    fn ns_se(recusa: bool) -> Option<&'static str> {
+        recusa.then_some(NAO_SUPORTADO)
+    }
+
+    /// Os códigos esperados mais o `nao_suportado`, se alguma recusa ainda vale.
+    fn mais(cods: &[&'static str], recusas: &[Option<&'static str>]) -> Vec<&'static str> {
+        let mut v = cods.to_vec();
+        if recusas.iter().any(Option::is_some) {
+            v.push(NAO_SUPORTADO);
+        }
+        v
+    }
+
     fn cena() -> Cena {
         let p = json!({
             "esquema": 2, "esquema_menor": 0, "id": "p1", "titulo": "Caso", "created_at": "2026-11-14T00:00:00Z",
@@ -2237,9 +2291,10 @@ mod testes {
         e.predefinicao = Predefinicao::Personalizada;
         e.personalizada = Some(super::super::modelo::Personalizada {
             codec: Codec::H264, conteiner: super::super::modelo::Conteiner::Mp4, qualidade: 20.0, altura_max: Some(2160), audio_kbps: 192 });
+        let recusa = motor_saida::recusa(&e).is_some();
         c.alvo = Some(Alvo::Final { exportacao: e });
-        // a altura máxima traz o lado para baixo de 4096; a predefinição é de outra fase
-        c.so(&[NAO_SUPORTADO]);
+        // a altura máxima traz o lado para baixo de 4096; a predefinição é do P1.8
+        c.so(&mais(&[], &[ns_se(recusa)]));
     }
 
     #[test]
@@ -2390,10 +2445,14 @@ mod testes {
     #[test]
     fn transicao() {
         let mut c = cena();
-        // transição do `xfade` (Fase 1, com sobreposição): o motor recusa
+        // transição do `xfade` (com sobreposição): o motor recusa até o P1.1 (imagem) e o P1.5 (som) entregarem
         c.p["principal"][0]["transicao_entrada"] = json!({ "tipo": "fundir", "duracao_s": 0.5, "audio": "acompanhar" });
-        c.so(&[NAO_SUPORTADO]);
-        assert_eq!(c.problemas()[0].mensagem, "Ainda não suportado: transição");
+        let som = c.p["saida"]["audio"].as_bool().unwrap_or(false);
+        let recusa = !juncao::TRANSICOES.contains(&"fundir") || (som && motor_audio::recusa("transicao"));
+        c.so(&mais(&[], &[ns_se(recusa)]));
+        if recusa {
+            assert_eq!(c.problemas()[0].mensagem, "Ainda não suportado: transição");
+        }
         c.p["principal"][0]["transicao_entrada"]["tipo"] = json!(" ");
         c.so(&[TRANSICAO]);
         c.p["principal"][0]["transicao_entrada"] = json!({ "tipo": "escurecer", "duracao_s": -1.0, "audio": "acompanhar" });
@@ -2488,11 +2547,11 @@ mod testes {
         c.p["rastreios"] = json!([rastreio(&[30])]);
         efeito(&mut c, com(base("lente", "e3"), json!({ "k1": -0.1, "k2": 0.0, "cx": 0.5, "cy": 0.5, "perfil": "" })));
         efeito(&mut c, destaque("r1"));
-        // a lente é de origem: a Fase 0 também a recusa
-        c.so(&[RASTREIO_ESPACO, NAO_SUPORTADO]);
+        // a lente é de origem: recusada até o P1.4 entregar
+        c.so(&mais(&[RASTREIO_ESPACO], &[ns_tipo("lente")]));
         let espaco = geometria::espaco_de_origem(SHA, &c.projeto().principal_efeitos());
         c.p["rastreios"][0]["espaco"] = json!(espaco);
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_tipo("lente")]));
     }
 
     trait Efeitos {
@@ -2580,12 +2639,14 @@ mod testes {
         assert_eq!(c.problemas()[0].clipe.as_deref(), Some("l1"));
         // legenda vazia: com "nenhuma" é aviso; só barra quando as legendas saem (contratos (h) 4)
         assert_eq!(c.problemas()[0].nivel, Nivel::Aviso);
-        // quando saem, a Fase 0 também recusa (o motor não gera legenda: `nao_suportado`), ao lado das regras delas
+        // quando saem, o motor recusa até o P1.6 entregar (`nao_suportado`), ao lado das regras delas
+        let ns_leg = |c: &Cena| ns_se(motor_legendas::recusa(&c.projeto(), &c.projeto().saida.exportacao).is_some());
         let das_legendas = |c: &Cena| c.problemas().iter().filter(|p| p.codigo != NAO_SUPORTADO).map(|p| (p.codigo, p.nivel)).collect::<Vec<_>>();
         c.p["saida"]["exportacao"]["legendas"] = json!("arquivo");
         assert_eq!(das_legendas(&c), vec![(LEGENDA, Nivel::Erro)]);
         let recusa: Vec<_> = c.problemas().into_iter().filter(|p| p.codigo == NAO_SUPORTADO).collect();
-        assert_eq!(recusa.iter().map(|p| (p.nivel, p.campo.as_deref(), p.mensagem.as_str())).collect::<Vec<_>>(), vec![(Nivel::Erro, Some("legendas"), "Ainda não suportado: legendas")]);
+        let esperada = if ns_leg(&c).is_some() { vec![(Nivel::Erro, Some("legendas"), "Ainda não suportado: legendas")] } else { vec![] };
+        assert_eq!(recusa.iter().map(|p| (p.nivel, p.campo.as_deref(), p.mensagem.as_str())).collect::<Vec<_>>(), esperada);
         c.p["legendas"]["itens"][0]["ref"]["ate"] = json!(1.6);
         assert_eq!(das_legendas(&c), vec![(LEGENDA, Nivel::Erro)]);
         c.p["saida"]["exportacao"]["legendas"] = json!("nenhuma");
@@ -2594,22 +2655,24 @@ mod testes {
         c.p["legendas"]["itens"] = json!([legenda("ia", false, "Para!")]);
         c.so(&[]);
         c.p["saida"]["exportacao"]["legendas"] = json!("arquivo");
-        c.so(&[LEGENDA_NAO_CONFERIDA, NAO_SUPORTADO]);
+        c.so(&mais(&[LEGENDA_NAO_CONFERIDA], &[ns_leg(&c)]));
         c.p["legendas"]["itens"] = json!([legenda("perito", true, "Para!")]);
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_leg(&c)]));
+        // o silêncio só é recusado (até o P1.5 entregar) com som na saída; aqui não há
+        let ns_sil = ns_se(c.p["saida"]["audio"].as_bool() == Some(true) && motor_audio::recusa("silenciar"));
         c.p["principal"][0]["audio"]["silencios"] = json!([{ "id": "s1", "de": 1.5, "ate": 2.0, "modo": "tom", "motivo": "nome" }]);
-        c.so(&[LEGENDA_SOB_SILENCIO, NAO_SUPORTADO]);
+        c.so(&mais(&[LEGENDA_SOB_SILENCIO], &[ns_leg(&c), ns_sil]));
         // no tempo do programa: o silêncio de 1,5 a 2,0 na fonte cai em 0,5 a 1,0 no programa
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 0.9, "ate": 1.2 });
-        c.so(&[LEGENDA_SOB_SILENCIO, NAO_SUPORTADO]);
+        c.so(&mais(&[LEGENDA_SOB_SILENCIO], &[ns_leg(&c), ns_sil]));
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 1.0, "ate": 1.2 });
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_leg(&c), ns_sil]));
         // a 2× o silêncio cai em 0,25 a 0,5 s do programa
         c.p["principal"][0]["velocidade"]["fator"] = json!(2.0);
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 0.3, "ate": 0.4 });
-        c.so(&[LEGENDA_SOB_SILENCIO, NAO_SUPORTADO]);
+        c.so(&mais(&[LEGENDA_SOB_SILENCIO], &[ns_leg(&c), ns_sil]));
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 0.5, "ate": 0.6 });
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_leg(&c), ns_sil]));
         // sem itens não há o que sair: nada a recusar
         c.p["legendas"]["itens"] = json!([]);
         c.so(&[]);
@@ -2624,10 +2687,10 @@ mod testes {
     fn estabilizar_fora_da_analise() {
         let mut c = cena();
         efeito(&mut c, estabilizar(45, 75));
-        // estabilizar é de origem: a Fase 0 também o recusa (a regra da faixa segue conferida)
-        c.so(&[ESTABILIZAR_FORA_DA_ANALISE, NAO_SUPORTADO]);
+        // estabilizar é de origem: recusado até o P1.4 entregar (a regra da faixa segue conferida)
+        c.so(&mais(&[ESTABILIZAR_FORA_DA_ANALISE], &[ns_efeito(&estabilizar(45, 75))]));
         c.p["principal"][0]["efeitos"] = json!([estabilizar(0, 89)]);
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_efeito(&estabilizar(0, 89))]));
     }
 
     fn regua(regiao: Value) -> Value {
@@ -2640,15 +2703,16 @@ mod testes {
     #[test]
     fn regua_espaco_e_fora_da_calibracao() {
         let quadrado = json!([{ "x": 0.2, "y": 0.2 }, { "x": 0.8, "y": 0.2 }, { "x": 0.8, "y": 0.8 }, { "x": 0.2, "y": 0.8 }]);
-        // régua é da Fase 1: a validação também a recusa
+        // régua é do P1.3: recusada até ele entregar
         let mut c = cena();
         efeito(&mut c, regua(quadrado.clone()));
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_efeito(&regua(quadrado.clone()))]));
         efeito(&mut c, estabilizar(0, 89));
-        c.so(&[REGUA_ESPACO, NAO_SUPORTADO]);
+        c.so(&mais(&[REGUA_ESPACO], &[ns_efeito(&regua(quadrado.clone())), ns_efeito(&estabilizar(0, 89))]));
         let mut c = cena();
-        efeito(&mut c, regua(json!([{ "x": 0.6, "y": 0.6 }, { "x": 0.9, "y": 0.6 }, { "x": 0.9, "y": 0.9 }])));
-        c.so(&[REGUA_FORA_DA_CALIBRACAO, NAO_SUPORTADO]);
+        let fora = json!([{ "x": 0.6, "y": 0.6 }, { "x": 0.9, "y": 0.6 }, { "x": 0.9, "y": 0.9 }]);
+        efeito(&mut c, regua(fora.clone()));
+        c.so(&mais(&[REGUA_FORA_DA_CALIBRACAO], &[ns_efeito(&regua(fora))]));
         assert!(dentro_do_poligono(0.2, 0.5, &serde_json::from_value::<Vec<_>>(quadrado).unwrap()), "na borda conta");
     }
 
@@ -2657,18 +2721,18 @@ mod testes {
         let mut c = cena();
         c.cap.filtros.remove("unsharp");
         efeito(&mut c, com(base("nitidez", "e2"), json!({ "quantidade": 0.5 })));
-        // efeito de origem: a Fase 0 também recusa (contratos (h) 1)
-        c.so(&[FILTRO_AUSENTE, NAO_SUPORTADO]);
+        // efeito de origem: recusado até o P1.4 entregar (contratos (h) 1)
+        c.so(&mais(&[FILTRO_AUSENTE], &[ns_tipo("nitidez")]));
         assert_eq!(c.problemas()[0].mensagem, "Filtro ausente no ffmpeg: unsharp");
         // estabilizar sem .trf pede também o vidstabdetect
         let mut c = cena();
         c.cap.filtros.remove("vidstabdetect");
         let mut e = estabilizar(0, 89);
         e["trf_sha256"] = json!(null);
-        efeito(&mut c, e);
-        c.so(&[FILTRO_AUSENTE, NAO_SUPORTADO]);
+        efeito(&mut c, e.clone());
+        c.so(&mais(&[FILTRO_AUSENTE], &[ns_efeito(&e)]));
         c.p["principal"][0]["efeitos"][0]["trf_sha256"] = json!(SHA2);
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_efeito(&estabilizar(0, 89))]));
         // enquadramento animado sem `perspective`: o filtro falta só quando o motor o trata como animado
         let mut c = cena();
         c.cap.filtros.remove("perspective");
@@ -2688,8 +2752,8 @@ mod testes {
         c.so(&[AUDIO]);
         let mut c = cena();
         c.p["principal"][0]["audio"]["silencios"] = json!([{ "id": "s1", "de": 2.0, "ate": 1.5, "modo": "tom", "motivo": "" }]);
-        // silenciar é da Fase 1: recusado também (contratos (h) 1)
-        c.so(&[AUDIO, NAO_SUPORTADO]);
+        // silenciar é do P1.5: recusado até ele entregar (contratos (h) 1)
+        c.so(&mais(&[AUDIO], &[ns_se(motor_audio::recusa("silenciar"))]));
         // narração presa a clipe inexistente, recorte invertido
         let clipe_audio = |pos: Value, ate: Value| json!({ "id": "a1", "nome": "", "midia": "m1", "pos": pos, "de_s": 1.0, "ate_s": ate,
             "volume": 1.0, "entrada_s": 0.0, "saida_s": 0.0 });
@@ -2725,8 +2789,10 @@ mod testes {
         efeito(&mut c, com(base("lupa", "e7"), json!({ "rastreio": "r1", "janela": 0.2, "fator": 2.0, "forma": "circulo",
             "interpolacao": "bilinear", "onde": { "modo": "fixa", "x": 0.8, "y": 0.2 }, "moldura": { "cor": "#ffffff", "espessura": 0.004,
             "contorno": true }, "ligacao": true })));
-        c.so(&[NAO_SUPORTADO]);
-        assert_eq!(c.problemas()[0].mensagem, "Ainda não suportado: lupa");
+        c.so(&mais(&[], &[ns_tipo("lupa")]));
+        if ns_tipo("lupa").is_some() {
+            assert_eq!(c.problemas()[0].mensagem, "Ainda não suportado: lupa");
+        }
         let mut c = cena();
         c.p["sobreposicoes"] = json!([{ "id": "t1", "nome": "", "oculta": false, "clipes": [{ "tipo": "video", "id": "v1", "rotulo": "",
             "pos": { "ref": "programa", "t": 0.0 }, "duracao_s": 1.0, "transformacao": { "x": 0.5, "y": 0.5, "escala": 0.3, "rotacao": 0.0,
@@ -2862,7 +2928,7 @@ mod testes {
     fn media_de_quadros() {
         let mut c = cena();
         efeito(&mut c, com(base("media_temporal", "e2"), json!({ "quadros": 4 })));
-        c.so(&[MEDIA_DE_QUADROS, NAO_SUPORTADO]);
+        c.so(&mais(&[MEDIA_DE_QUADROS], &[ns_tipo("media_temporal")]));
     }
 
     #[test]
@@ -2916,8 +2982,8 @@ mod testes {
         c.fontes.insert("m1".into(), f);
         c.so(&[ENTRELACADO]);
         efeito(&mut c, com(base("desentrelacar", "e2"), json!({ "modo": "quadro", "ordem": "auto" })));
-        // o aviso sai; o efeito é de origem e a Fase 0 o recusa
-        c.so(&[NAO_SUPORTADO]);
+        // o aviso sai; o efeito é de origem, recusado até o P1.4 entregar
+        c.so(&mais(&[], &[ns_efeito(&com(base("desentrelacar", "e2"), json!({ "modo": "quadro", "ordem": "auto" })))]));
     }
 
     #[test]
@@ -3202,11 +3268,12 @@ mod testes {
         // estabilização: a análise tem de alcançar o último quadro do trecho (89) e o primeiro (30)
         let mut c = cena();
         efeito(&mut c, estabilizar(30, 88));
-        c.so(&[ESTABILIZAR_FORA_DA_ANALISE, NAO_SUPORTADO]);
+        let ns = ns_efeito(&estabilizar(30, 89));
+        c.so(&mais(&[ESTABILIZAR_FORA_DA_ANALISE], &[ns]));
         c.p["principal"][0]["efeitos"] = json!([estabilizar(31, 89)]);
-        c.so(&[ESTABILIZAR_FORA_DA_ANALISE, NAO_SUPORTADO]);
+        c.so(&mais(&[ESTABILIZAR_FORA_DA_ANALISE], &[ns]));
         c.p["principal"][0]["efeitos"] = json!([estabilizar(30, 89)]);
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns]));
         // confirmação presa a outro denso
         let mut c = cena();
         let mut r = rastreio(&[30, 89]);
@@ -3399,10 +3466,11 @@ mod testes {
         assert_eq!(campo(&c, ITEM_INVALIDO), vec!["borda_suave"]);
         c.p["principal"][0]["efeitos"][0]["alvo"]["borda_suave"] = json!(0.5);
         c.so(&[]);
-        for (q, esperado) in [(1u32, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO, ITEM_INVALIDO]), (2, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO]), (15, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO]), (16, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO, ITEM_INVALIDO])] {
+        let ns = ns_tipo("media_temporal");
+        for (q, esperado) in [(1u32, vec![MEDIA_DE_QUADROS, ITEM_INVALIDO]), (2, vec![MEDIA_DE_QUADROS]), (15, vec![MEDIA_DE_QUADROS]), (16, vec![MEDIA_DE_QUADROS, ITEM_INVALIDO])] {
             let mut c = cena();
             efeito(&mut c, com(base("media_temporal", "e2"), json!({ "quadros": q })));
-            c.so(&esperado);
+            c.so(&mais(&esperado, &[ns]));
         }
     }
 
@@ -3411,18 +3479,22 @@ mod testes {
     #[test]
     fn fase_0_recusa_no_item_com_rotulo() {
         let rotulo = |c: &Cena| c.problemas().iter().filter(|p| p.codigo == NAO_SUPORTADO).map(|p| p.mensagem.clone()).collect::<Vec<_>>();
-        let mut c = cena();
-        efeito(&mut c, com(base("ajustes", "e2"), json!({ "brilho": 0.0, "contraste": 1.0, "saturacao": 1.0, "gama": 1.0 })));
-        c.so(&[NAO_SUPORTADO]);
-        assert_eq!(rotulo(&c), vec!["Ainda não suportado: ajustes de imagem"]);
-        assert_eq!(c.problemas()[0].efeito.as_deref(), Some("e2"));
-        // desligado: nada
-        c.p["principal"][0]["efeitos"][0]["ligado"] = json!(false);
-        c.so(&[]);
+        // cada parte só enquanto o pacote dono recusa (P1.4 realce, P1.8 predefinição, P1.5 som)
+        let ajustes = com(base("ajustes", "e2"), json!({ "brilho": 0.0, "contraste": 1.0, "saturacao": 1.0, "gama": 1.0 }));
+        if ns_efeito(&ajustes).is_some() {
+            let mut c = cena();
+            efeito(&mut c, ajustes);
+            c.so(&[NAO_SUPORTADO]);
+            assert_eq!(rotulo(&c), vec!["Ainda não suportado: ajustes de imagem"]);
+            assert_eq!(c.problemas()[0].efeito.as_deref(), Some("e2"));
+            // desligado: nada
+            c.p["principal"][0]["efeitos"][0]["ligado"] = json!(false);
+            c.so(&[]);
+        }
         // predefinição: só na exportação (e na análise sem alvo); a prévia e o quadro final não pesam
         let mut c = cena();
         c.p["saida"]["exportacao"]["predefinicao"] = json!("whatsapp");
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_se(motor_saida::recusa(&c.projeto().saida.exportacao).is_some())]));
         c.alvo = Some(Alvo::Previa { altura: 360, de_q: 0, ate_q: 10 });
         c.so(&[]);
         c.alvo = Some(Alvo::Quadro { q: 0, largura: 640 });
@@ -3430,8 +3502,13 @@ mod testes {
         // som da Fase 1: só com som na saída e fora do quadro final
         let mut c = cena();
         c.p["mixagem"] = json!({ "volume_original": 1.0, "abaixar": { "db": -12.0, "ataque_s": 0.3, "soltura_s": 0.5 }, "normalizar": { "lufs": -16.0, "pico_db": -1.5 }, "limitador": true });
-        c.so(&[NAO_SUPORTADO]);
-        assert_eq!(rotulo(&c), vec!["Ainda não suportado: normalização", "Ainda não suportado: limitador"]);
+        let rotulos: Vec<&str> = [("normalizar", "Ainda não suportado: normalização"), ("limitador", "Ainda não suportado: limitador")]
+            .into_iter()
+            .filter(|(d, _)| motor_audio::recusa(d))
+            .map(|(_, r)| r)
+            .collect();
+        c.so(&mais(&[], &[ns_se(!rotulos.is_empty())]));
+        assert_eq!(rotulo(&c), rotulos);
         c.alvo = Some(Alvo::Quadro { q: 0, largura: 640 });
         c.so(&[]);
         c.alvo = None;
@@ -3442,7 +3519,7 @@ mod testes {
         c.p["principal"][0]["audio"]["volume"] = json!([{ "t": 0.0, "v": 0.8 }, { "t": 1.0, "v": 0.8 }]);
         c.so(&[]);
         c.p["principal"][0]["audio"]["volume"][1]["v"] = json!(0.4);
-        c.so(&[NAO_SUPORTADO]);
+        c.so(&mais(&[], &[ns_se(motor_audio::recusa("volume_animado"))]));
         c.p["principal"][0]["audio"]["mudo"] = json!(true);
         c.so(&[]);
         // ocultar em título: no efeito do título

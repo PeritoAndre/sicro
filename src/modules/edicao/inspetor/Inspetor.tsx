@@ -14,6 +14,11 @@ import { secoesDe } from "./registro";
 import { SoLeitura } from "./secoes/comum";
 import { AudioSecao } from "./secoes/AudioSecao";
 import { SaidaSecao } from "./secoes/SaidaSecao";
+// Fase 1: cada pacote liga o seu ao entregar (contratos-fase1 (c))
+import { FECHO_PRONTO, FechoSecao } from "./secoes/EntradaSecao";
+import { SELOS_PRONTOS, SelosSecao } from "./secoes/SelosSecao";
+import { PAINEL_AUDIO_PRONTO, PainelAudio } from "../audio/PainelAudio";
+import { LEGENDAS_PRONTAS, PainelLegendas } from "../legendas/PainelLegendas";
 import { useInspetorUi, type Aba } from "./ui";
 import styles from "./Inspetor.module.css";
 
@@ -54,9 +59,15 @@ export function Inspetor() {
       </div>
       <div className={styles.corpo} role="tabpanel" data-painel={aba}>
         {aberto && aba === "clipe" && <AbaClipe />}
-        {aberto && aba === "audio" && <AudioSecao />}
-        {aberto && aba === "legendas" && <Vazio icone={<Captions size={20} />} />}
-        {aberto && aba === "saida" && <SaidaSecao />}
+        {aberto && aba === "audio" && (PAINEL_AUDIO_PRONTO ? <PainelAudio /> : <AudioSecao />)}
+        {aberto && aba === "legendas" && (LEGENDAS_PRONTAS ? <PainelLegendas /> : <Vazio icone={<Captions size={20} />} />)}
+        {aberto && aba === "saida" && (
+          <>
+            <SaidaSecao />
+            {SELOS_PRONTOS && <SelosSecao />}
+            {FECHO_PRONTO && <FechoSecao />}
+          </>
+        )}
       </div>
     </div>
   );

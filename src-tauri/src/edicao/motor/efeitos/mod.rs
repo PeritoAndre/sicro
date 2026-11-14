@@ -1,10 +1,12 @@
-//! Efeito → mecanismo (§5.4). Fase 0: enquadramento, região (ocultar) e anotação;
-//! `lupa.rs` e `realce.rs` nascem na Fase 1. Dono: P0.6a.
+//! Efeito → mecanismo (§5.4): enquadramento, região (ocultar, holofote), anotação; `lupa.rs` (P1.2) e
+//! `realce.rs` (P1.4) na Fase 1. Compartilhado (integrador) desde o P0.8.
 
 use crate::edicao::modelo::{EfBase, Efeito, Tolerante};
 
 pub mod anotacao;
 pub mod enquadramento;
+pub mod lupa;
+pub mod realce;
 pub mod regiao;
 
 /// Família do efeito: decide o ponto da cadeia em que ele entra.
@@ -73,6 +75,20 @@ pub(crate) fn tipo(e: &Efeito) -> &'static str {
         Efeito::Texto(_) => "texto",
         Efeito::Carimbo(_) => "carimbo",
         Efeito::Imagem(_) => "imagem",
+    }
+}
+
+/// Rastreio que a anotação segue (a caixa avaliada vai em `QuadroCamada.rastreios`): destaque, lupa e velocidade que
+/// acompanha. Região (`ocultar`, holofote) avalia o dela à parte.
+pub(crate) fn rastreio_seguido(e: &Efeito) -> Option<&str> {
+    match e {
+        Efeito::Destaque(d) => Some(&d.rastreio),
+        Efeito::Lupa(l) => Some(&l.rastreio),
+        Efeito::VelocidadeExibida(v) => match &v.onde {
+            crate::edicao::modelo::OndeVelocidade::Segue { rastreio, .. } => Some(rastreio),
+            crate::edicao::modelo::OndeVelocidade::Fixa { .. } => None,
+        },
+        _ => None,
     }
 }
 

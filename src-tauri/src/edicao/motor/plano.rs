@@ -11,6 +11,7 @@ use crate::edicao::modelo::{
     Confirmacao, ConteudoOculto, CorMidia, Derivacao, Efeito, FaixaAnalise, FormaRegiao, ModoOcultar, ModoSilencio, Normalizar,
     OrigemLegendas, OrigemRastreio, Predefinicao, Racional, Recebido, SincroniaRef, TamanhoPx, Titulo, Transicao, Velocidade,
 };
+use crate::edicao::modelo::{Animavel, AudioClipe, Ausencia, Mixagem, PapelAudio};
 use crate::edicao::motor::Alvo;
 use crate::edicao::quadros::Declarado;
 
@@ -250,6 +251,10 @@ pub struct Proveniencia {
     pub selos_desligados: Vec<String>,
     pub revisado_por: String,
     pub ffmpeg: ProvFfmpeg,
+    /// Transição de saída do último clipe (contratos-fase1 (b)).
+    // CONTRATO: abertura da Fase 1 (contratos (i): o `feito` não registrava o `fecho`).
+    #[serde(default)]
+    pub fecho: Option<Transicao>,
 }
 
 /// O SHA-256 do `projeto.json` não está aqui (o compilador não vê o arquivo): vem do retrato.
@@ -380,6 +385,10 @@ pub struct ProvItem {
     pub transicao: Option<Transicao>,
     pub processamentos: Vec<ProvProcessamento>,
     pub selos: Vec<String>,
+    /// Som do clipe da principal (volume, mudo, tom, silêncios); None sem som de fonte (foto, título).
+    // CONTRATO: abertura da Fase 1 (contratos (i)).
+    #[serde(default)]
+    pub audio: Option<AudioClipe>,
 }
 
 /// Quadros cobertos por tipo de amostra.
@@ -408,6 +417,17 @@ pub struct ProvOcultacao {
     // CONTRATO: acréscimo da verificação da Fase 0; sem ele a invertida saía no `tecnico.json` como a comum.
     #[serde(default)]
     pub inverter: bool,
+    /// `alvo.margem`, `alvo.borda_suave` (fração do lado) e `cor` do sólido.
+    // CONTRATO: abertura da Fase 1 (contratos (i): só a ocultação do clipe saía completa).
+    #[serde(default)]
+    pub margem: f64,
+    #[serde(default)]
+    pub borda_suave: f64,
+    #[serde(default)]
+    pub cor: String,
+    /// Id do rastreio do alvo (liga a ocultação à origem dele em `feito.rastreios`, para o resumo de IA do PDF).
+    #[serde(default)]
+    pub rastreio: String,
 }
 
 /// Trecho silenciado, em tempo de fonte (s).
@@ -426,6 +446,39 @@ pub struct ProvSilencio {
 pub struct ProvAudio {
     pub silencios: Vec<ProvSilencio>,
     pub tolerancia_atempo_ms: f64,
+    // CONTRATO: abertura da Fase 1 (contratos (i)): mixagem e trilhas. O buraco aceito (`tolerancia_buraco_ms`)
+    // depende do passo de áudio do alvo e continua posto pelo `relatorio::tecnico` (a proveniência é a mesma em todo alvo).
+    /// Mixagem do programa; None sem áudio na saída.
+    #[serde(default)]
+    pub mixagem: Option<Mixagem>,
+    /// Trilhas de áudio que tocam (narração, música, efeitos), com os clipes resolvidos.
+    #[serde(default)]
+    pub trilhas: Vec<ProvTrilha>,
+}
+
+/// Trilha de áudio no `feito` (sem o nome, que é texto livre).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProvTrilha {
+    pub id: String,
+    pub papel: PapelAudio,
+    pub volume: f64,
+    pub mudo: bool,
+    pub abaixa_original: bool,
+    pub clipes: Vec<ProvClipeAudio>,
+}
+
+/// Clipe de áudio resolvido: slots no programa e recorte no arquivo (s, do começo do som).
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProvClipeAudio {
+    pub id: String,
+    pub midia: String,
+    pub de_q: u64,
+    pub n_q: u32,
+    pub de_s: f64,
+    pub ate_s: Option<f64>,
+    pub volume: Animavel<f64>,
+    pub entrada_s: f64,
+    pub saida_s: f64,
 }
 
 /// `feito.legendas`: origem, quantas e quantas conferidas.
@@ -446,6 +499,10 @@ pub struct ProvRastreio {
     pub silhuetas_sha256: Option<String>,
     pub corridas: Vec<serde_json::Value>,
     pub confirmacao: Option<Confirmacao>,
+    /// Ausências aceitas pelo perito (quadros sem ocultação por decisão dele).
+    // CONTRATO: abertura da Fase 1 (contratos (i)).
+    #[serde(default)]
+    pub ausencias: Vec<Ausencia>,
 }
 
 /// Arquivo de modelo: nome e SHA-256.

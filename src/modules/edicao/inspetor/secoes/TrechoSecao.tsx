@@ -7,7 +7,7 @@ import { noClipe } from "../acoes";
 import { Deslizante, Grade, Marca, Numero, Secao, Tempo, Texto } from "../campos";
 import { useEdicaoStore } from "../../store/edicaoStore";
 import type { SecaoProps } from "../registro";
-import { NomeMidia } from "./comum";
+import { CorDaMidia, NomeMidia } from "./comum";
 import styles from "../Inspetor.module.css";
 
 /** Velocidade aceita: 0,05× a 16×, com até 3 casas (vira racional exato no Rust). */
@@ -28,6 +28,7 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
       <Grade>
         <Texto rotulo="Nome" valor={c.rotulo} larga aplicar={(v) => noClipe<ClipeTrecho>(id, (x) => void (x.rotulo = v))} />
         <NomeMidia rotulo="Vídeo" midia={c.midia} />
+        <CorDaMidia midia={c.midia} info={info} />
         <Tempo
           rotulo="Início"
           item={id}

@@ -129,6 +129,24 @@ describe("Exportar", () => {
     expect(corpo().querySelector("[data-erro-analise]")?.textContent).toBe("Vídeo danificado");
   });
 
+  it("análise que falhou é pedida de novo ao abrir o diálogo (contratos (i))", async () => {
+    // a análise da abertura (timer 0) primeiro: a falha é a da mudança
+    await vi.waitFor(() => expect(cmd.edicaoAnalisar).toHaveBeenCalled());
+    cmd.edicaoAnalisar.mockRejectedValueOnce({ kind: "validation", message: "validation error: outra: Falha no ffmpeg" });
+    await montar(<DialogoExportar />);
+    await esperar(() => st().alterar("Título", (d) => void (d.titulo = "y")));
+    await esperar(() => new Promise((r) => setTimeout(r, 300)));
+    expect(st().analiseFalhou).toBe(st().revisao);
+    const antes = cmd.edicaoAnalisar.mock.calls.length;
+    // a falha era passageira: a resposta seguinte é boa
+    cmd.edicaoAnalisar.mockResolvedValueOnce({ problemas: [], linha: { fps: { num: 30, den: 1 }, total_q: 0, clipes: [], livres: [] }, midias: [], prender: [], saida_auto: null } satisfies Analise);
+    await esperar(() => abrirExportar());
+    await esperar(() => new Promise((r) => setTimeout(r, 50)));
+    expect(cmd.edicaoAnalisar.mock.calls.length).toBe(antes + 1);
+    expect(st().analiseFalhou).toBe(-1);
+    expect(exportarBtn().disabled).toBe(false);
+  });
+
   it("1 aviso: Exportar com 1 aviso, sem ciência", async () => {
     await montar(<DialogoExportar />);
     await esperar(() => abrirExportar());
@@ -252,6 +270,7 @@ const saida = (id: string, x: Partial<SaidaRegistrada>): SaidaRegistrada => ({
   conferida_por: null,
   conferida_em: null,
   criado_em: "2026-11-14T10:00:00Z",
+  comparacao: null,
   ...x,
 });
 

@@ -1,5 +1,6 @@
-//! Rasterizador do SICRO (§5.5): de um `PedidoCamada` para PNGs + lista. Dono: P0.5
-//! (`selos.rs` é do P1.R e `medidas.rs` do P1.3: não entram na Fase 0).
+//! Rasterizador do SICRO (§5.5): de um `PedidoCamada` para PNGs + lista. Fase 1: `mod.rs`, `formas.rs`, `lista.rs`,
+//! `texto.rs` do integrador; `lupa.rs` do P1.2, `medidas.rs` do P1.3, `selos.rs` do P1.R, `titulo.rs` e `modelos/`
+//! do P1.7, `mascara.rs` do P2.6.
 //! Anotação: PNG RGBA 8 bits, alfa reto. Máscara: PNG cinza 8 bits (branco = aplica).
 //!
 //! Um PNG por quadro DIFERENTE (o nome é o do primeiro quadro que o usa); a lista tem uma entrada por slot ou por
@@ -27,7 +28,10 @@ use texto::SpritesEmCache;
 
 pub mod formas;
 pub mod lista;
+pub mod lupa;
 pub mod mascara;
+pub mod medidas;
+pub mod selos;
 pub mod texto;
 pub mod titulo;
 
@@ -206,15 +210,18 @@ fn desenhar_quadro(tipo: TipoCamada, caixa_px: [u32; 4], ps: &[Pintura], r: &Rec
             Ok(formas::bitmap_reto(pm))
         }
         TipoCamada::MascaraCanvas | TipoCamada::MascaraFonte => {
-            let mut regioes = Vec::new();
+            let (mut regioes, mut lupas) = (Vec::new(), Vec::new());
             let mut espaco = None;
             for p in ps {
                 if let Pintura::Primitivas { p, canvas, .. } = p {
                     espaco.get_or_insert(*canvas);
                     regioes.extend(p.iter().filter(|x| matches!(x, Primitiva::Regiao { .. })).cloned());
+                    lupas.extend(p.iter().filter(|x| matches!(x, Primitiva::Lupa { .. })).cloned());
                 }
             }
             match espaco {
+                // a forma da lupa para o `alphamerge` dela (P1.2): camada de máscara pedida por `motor/efeitos/lupa.rs`
+                Some(e) if !lupas.is_empty() => lupa::mascara(&lupas, e, caixa_px),
                 Some(e) => mascara::mascara(&regioes, e, caixa_px),
                 None => Ok(Bitmap { w: caixa_px[2], h: caixa_px[3], canais: 1, px: vec![0; caixa_px[2] as usize * caixa_px[3] as usize] }),
             }

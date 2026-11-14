@@ -1,0 +1,68 @@
+[
+  {
+    "entrada": {
+      "atlas": [],
+      "efeito": {
+        "ativo": null,
+        "fator": 2.0,
+        "forma": "circulo",
+        "id": "l1",
+        "interpolacao": "bilinear",
+        "janela": 0.2,
+        "ligacao": true,
+        "ligado": true,
+        "moldura": {
+          "contorno": true,
+          "cor": "#ffffff",
+          "espessura": 0.004
+        },
+        "nome": "",
+        "onde": {
+          "modo": "fixa",
+          "x": 0.8,
+          "y": 0.2
+        },
+        "rastreio": "r1",
+        "tipo": "lupa"
+      },
+      "imagens": {
+        "logo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": 312,
+        "programa_s": 4.004,
+        "pts": 57210000,
+        "q": 120,
+        "rastreios": {
+          "r1": {
+            "h": 0.2,
+            "w": 0.1,
+            "x": 0.4,
+            "y": 0.3
+          }
+        },
+        "t": 3723.4565
+      },
+      "sprites": []
+    },
+    "nome": "lupa",
+    "saida": {
+      "erro": "nao_suportado"
+    }
+  }
+]

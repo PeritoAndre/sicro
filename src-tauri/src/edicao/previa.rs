@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::executar::{ERRO_CANCELADO, ERRO_LEITURA_DIVERGENTE};
 use super::ffmpeg::exec::{self, Comando};
 use super::ffmpeg::sonda::Capacidades;
-use super::modelo::{Racional, TamanhoPx};
+use super::modelo::{CorMidia, Racional, TamanhoPx};
 use super::motor::FonteInfo;
 use super::quadros::{OrigemTabela, TabelaQuadros};
 use crate::error::{Result, SicroError};
@@ -69,6 +69,10 @@ pub struct MidiaInfo {
     pub tabela: OrigemTabela,
     pub erros: Option<u32>,
     pub marcavel: bool,
+    /// Cor da FONTE (etiqueta ou presunção do §3.3), sem a escolha do projeto (`MidiaRef.cor`): o que o Inspetor
+    /// mostra em "Cor" enquanto o perito não troca.
+    // CONTRATO: abertura da Fase 1 (decisão O4/F5: "Cor" da mídia no Inspetor).
+    pub cor: CorMidia,
 }
 
 /// Parâmetros do proxy de CPU (O8): 720p, `libx264 veryfast crf 23`, GOP 12, sem quadros B, pts iguais aos da fonte.
@@ -230,6 +234,7 @@ fn midia_info_com(id: &str, nome: &str, fonte: &FonteInfo, previa: PreviaMidia, 
         tabela: t.origem,
         erros: (t.origem == OrigemTabela::Decodificador).then_some(t.erros_decodificacao),
         marcavel: marcavel(fonte),
+        cor: CorMidia { matriz: fonte.matriz, faixa: fonte.faixa },
     }
 }
 
@@ -1133,6 +1138,7 @@ mod testes {
                 tabela: OrigemTabela::Decodificador,
                 erros: Some(2),
                 marcavel: true,
+                cor: CorMidia { matriz: f.matriz, faixa: f.faixa },
             }
         );
     }

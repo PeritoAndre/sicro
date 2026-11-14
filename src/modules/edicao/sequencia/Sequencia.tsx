@@ -254,6 +254,7 @@ export function VistaSequencia(p: VistaSequenciaProps) {
           return (
             <CartaoClipe
               key={id ?? `i${i}`}
+              id={id ?? undefined}
               indice={i}
               tipo={conhecido ? rotuloDoTipo(c) : null}
               tipoCru={String((c as { tipo?: unknown }).tipo ?? "")}

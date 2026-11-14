@@ -6,6 +6,7 @@
 
 import type { AlvoQuadro, ClipePrincipal, ClipeResolvido, FaixaFonte, Id, LinhaResolvida, LivreResolvido, Posicao, ProjetoEdicao, QuadroEm, Racional, Seg, TabelaQuadros, Velocidade } from "@domain/edicao";
 import { clipeConhecido, sobrepostoConhecido } from "./projeto";
+import { tabelaDoClipe } from "./realce";
 
 export const TAXA_AUDIO = 48_000;
 /** O `setpts` calcula em `double`: inteiro só é exato abaixo de 2^53. */
@@ -263,7 +264,9 @@ function medir(c: ClipePrincipal, ctx: ContextoTempo, fps: Racional): [number, F
         const fator = v.tipo === "constante" && Number.isFinite(v.fator) && v.fator > 0 ? v.fator : 1;
         return nQSemFonte((c.fim_s - c.inicio_s) / fator, fps);
       };
-      const tab = ctx.tabela(midia);
+      // a tabela do mapa: a da fonte, ou a de campos no desentrelace por campo (P1.4)
+      const daFonte = ctx.tabela(midia);
+      const tab = daFonte ? tabelaDoClipe(daFonte, c.efeitos) : null;
       if (!tab) return [estimado(), null];
       try {
         const [a, b] = faixaDoTrecho(tab, c.inicio_s, c.inicio_pts, c.fim_s, c.fim_pts);

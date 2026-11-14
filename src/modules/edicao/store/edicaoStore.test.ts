@@ -340,6 +340,19 @@ describe("salvamento", () => {
     expect(salvo().id).toBe(id);
   });
 
+  it("edição nova aprende a raiz do cache pela gravação, sem edicao_abrir (contratos (g) 11)", async () => {
+    const ws = "/casos/raiz-nova";
+    cmd.edicaoSalvar.mockImplementation(async () => ({ updated_at: new Date().toISOString(), raiz_cache: "/cache/edicao/raiz-nova" }));
+    await st().novo(ws);
+    expect(st().raizCache).toBeNull();
+    st().alterar("Nome", (d) => void (d.titulo = "Primeira"));
+    await vi.advanceTimersByTimeAsync(ATRASO_MS);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(cmd.edicaoSalvar).toHaveBeenCalledTimes(1);
+    expect(cmd.edicaoAbrir).not.toHaveBeenCalled();
+    expect(st().raizCache).toBe("/cache/edicao/raiz-nova");
+  });
+
   it("excluir cancela a gravação pendente (e espera a que está em curso)", async () => {
     await abrirCom(ler<ProjetoEdicao>("completo.json"));
     const id = st().doc!.id;

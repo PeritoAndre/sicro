@@ -1,5 +1,6 @@
 //! Compilador do render (§5.2, §5.3): projeto + contexto + alvo → `Plano`. Puro: sem disco, sem processo.
-//! Dono: P0.6a (`audio.rs` é do P0.6b).
+//! Compartilhado desde a Fase 1 (O2: miolo, integrador). Cada efeito ou recurso da Fase 1 entra pela função do
+//! pacote dono (`contratos-fase1.md` (c)).
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use super::ffmpeg::args as ffmpeg_args;
 use super::ffmpeg::sonda::Capacidades;
 use super::modelo::{
-    ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, ModoLegendas, Nivel,
+    ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, Nivel,
     ProjetoEdicao, Racional, Tolerante,
 };
 use super::quadros::TabelaQuadros;
@@ -27,6 +28,7 @@ pub mod efeitos;
 pub mod expr;
 pub mod grafo;
 pub mod juncao;
+pub mod legendas;
 pub mod plano;
 pub mod saida;
 pub mod sobrepor;
@@ -35,8 +37,9 @@ use clipe::Janela;
 use grafo::Grafo;
 use juncao::Peca;
 use plano::{
-    Bloco, Canvas, Entrada, Papel, Plano, ProvAudio, ProvAviso, ProvFaixa, ProvFfmpeg, ProvItem, ProvLegendas, ProvMapa, ProvMedido, ProvMidia,
-    ProvNaSaida, ProvOcultacao, ProvOrigem, ProvProcessamento, ProvProjeto, ProvQuadrosOcultos, ProvRastreio, ProvSaida, ProvSilencio, Proveniencia,
+    Bloco, Canvas, Entrada, Papel, Plano, ProvAudio, ProvAviso, ProvClipeAudio, ProvFaixa, ProvFfmpeg, ProvItem, ProvLegendas, ProvMapa, ProvMedido,
+    ProvMidia, ProvNaSaida, ProvOcultacao, ProvOrigem, ProvProcessamento, ProvProjeto, ProvQuadrosOcultos, ProvRastreio, ProvSaida, ProvSilencio,
+    ProvTrilha, Proveniencia,
 };
 
 /// Tudo que o compilador enxerga além do projeto. Montado por `executar::preparar`, o único lugar com E/S.
@@ -174,6 +177,8 @@ pub fn compilar(p: &ProjetoEdicao, ctx: &Contexto, alvo: &Alvo) -> Result<Plano>
         plano.juncao = blocos::juncao(&plano.blocos, &plano.canvas, &cod, Some(a), alvo);
     }
     plano.audio = audio;
+    // legendas em arquivo (P1.6): o executor grava, a fila publica ao lado do vídeo
+    plano.legendas = legendas::arquivos(p, &linha, ctx, alvo)?;
     // avisos periciais presentes, um por código
     let mut avisos: Vec<ProvAviso> = Vec::new();
     for x in problemas.iter().filter(|x| x.nivel == Nivel::Pericial) {
@@ -206,28 +211,23 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
         }
     }
     let cod = saida::codificacao(alvo, &canvas, ctx.cap)?;
-    // legendas queimadas ou em arquivo são do P1.6: a exportação nunca sai sem elas calada
-    if matches!(alvo, Alvo::Final { exportacao } if exportacao.legendas != ModoLegendas::Nenhuma) && !p.legendas.itens.is_empty() {
-        return Err(erro("nao_suportado", "legendas"));
-    }
+    // legendas pedidas que o motor ainda não gera: a exportação nunca sai sem elas, calada (P1.6)
+    legendas::recusar(p, alvo)?;
     let janelas = blocos::dividir(p, linha, alvo);
     if janelas.is_empty() {
         return Err(erro("intervalo", "janela fora do programa"));
     }
     let exportacao_final = matches!(alvo, Alvo::Final { .. });
-    let (mut blocos_prontos, mut camadas) = (Vec::with_capacity(janelas.len()), Vec::new());
+    let (mut blocos_prontos, mut camadas, mut previas) = (Vec::with_capacity(janelas.len()), Vec::new(), Vec::<plano::Previa>::new());
     for (indice, jb) in janelas.iter().enumerate() {
         let (de, ate) = (jb.de_q, jb.de_q + jb.n_q as u64);
         let prefixo = ffmpeg_args::nome("b", indice, "");
         let mut g = Grafo::novo();
-        let (mut entradas, mut pecas, mut conferir, mut hashes) = (Vec::<Entrada>::new(), Vec::new(), Vec::new(), Vec::new());
+        let (mut entradas, mut pecas, mut conferir, mut hashes, mut auxiliares) = (Vec::<Entrada>::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for (i, res) in linha.clipes.iter().enumerate() {
             let (ci, cf) = (res.inicio_q, res.inicio_q + res.n_q as u64);
             if cf <= de || ci >= ate {
                 continue;
-            }
-            if res.sobrepoe_q > 0 {
-                return Err(erro("nao_suportado", format!("transicao com sobreposicao no clipe {}", res.id)));
             }
             let c = clipe_da_principal(p, &res.id)?;
             let janela = Janela { de: (de.max(ci) - ci) as u32, ate: (ate.min(cf) - ci) as u32 };
@@ -240,7 +240,7 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
             };
             let entrada = base_do_clipe(c).transicao_entrada.as_ref().filter(|_| d_in > 0 && janela.de < d_in).map(|t| (t.clone(), d_in));
             let saida = seguinte.filter(|_| d_out > 0 && janela.ate > res.n_q - d_out).map(|t| (t.clone(), d_out));
-            pecas.push(Peca { rotulo: cad.saida.clone(), n_q: res.n_q, entrada, saida });
+            pecas.push(Peca { rotulo: cad.saida.clone(), clipe: res.id.clone(), n_q: res.n_q, de: janela.de, ate: janela.ate, sobrepoe: res.sobrepoe_q, entrada, saida });
             // o id da camada é único no plano: ganha o bloco na frente
             for e in &mut cad.entradas {
                 if let Papel::Camada { id } = &mut e.papel {
@@ -254,8 +254,14 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
             entradas.append(&mut cad.entradas);
             camadas.append(&mut cad.camadas);
             conferir.extend(cad.conferir);
+            auxiliares.append(&mut cad.auxiliares);
+            for pv in cad.previas {
+                if !previas.contains(&pv) {
+                    previas.push(pv);
+                }
+            }
         }
-        let junto = juncao::montar(&mut g, &pecas, canvas.fps)?;
+        let junto = juncao::montar(&mut g, &pecas, &canvas)?;
         let mut sob = sobrepor::aplicar(&mut g, &junto, p, linha, jb.de_q, jb.n_q, entradas.len(), ctx, alvo)?;
         if let (Some(mut e), Some(mut k)) = (sob.entrada.take(), sob.camada.take()) {
             k.id = format!("{prefixo}{}", k.id);
@@ -290,7 +296,7 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
             chave,
             entradas,
             grafo,
-            auxiliares: Vec::new(),
+            auxiliares,
             codificador,
             saida: ffmpeg_args::nome("b", indice, &format!(".{}", cod.extensao)),
             framehash: if exportacao_final { ffmpeg_args::nome("b", indice, ".framehash") } else { String::new() },
@@ -300,7 +306,7 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
     let total_q = blocos_prontos.iter().map(|b| b.n_q as u64).sum();
     let juncao = blocos::juncao(&blocos_prontos, &canvas, &cod, None, alvo);
     let proveniencia = proveniencia(p, linha, ctx, alvo)?;
-    Ok(Plano { alvo: alvo.clone(), canvas, total_q, previas: Vec::new(), camadas, blocos: blocos_prontos, audio: None, legendas: Vec::new(), juncao, proveniencia })
+    Ok(Plano { alvo: alvo.clone(), canvas, total_q, previas, camadas, blocos: blocos_prontos, audio: None, legendas: Vec::new(), juncao, proveniencia })
 }
 
 /// Threads de decodificação por entrada de mídia, pelo número delas no bloco. Cada decodificador segura
@@ -380,7 +386,12 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         };
         if let Some((midia, j_in, j_out)) = lido {
             let fonte = ctx.fontes.get(midia).ok_or_else(|| erro("midia_ausente", midia))?;
-            let tab = &fonte.quadros;
+            // a tabela dos índices de `res.fonte` (`tempo::medir`): a do clipe no trecho (P1.4), a da fonte no congelado
+            let tab_clipe = match c {
+                ClipePrincipal::Trecho(t) => efeitos::realce::tabela(&t.base.efeitos, &fonte.quadros),
+                _ => std::borrow::Cow::Borrowed(&*fonte.quadros),
+            };
+            let tab: &TabelaQuadros = &tab_clipe;
             if j_in >= j_out || j_out > tab.pts.len() {
                 return Err(erro("intervalo", &res.id));
             }
@@ -461,6 +472,10 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
                         motivo: o.motivo.clone(),
                         quadros: n,
                         inverter: o.alvo.inverter,
+                        margem: o.alvo.margem,
+                        borda_suave: o.alvo.borda_suave,
+                        cor: o.cor.clone(),
+                        rastreio: o.alvo.rastreio.clone(),
                         });
                     }
                 }
@@ -519,7 +534,11 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             velocidade,
             transicao: b.transicao_entrada.clone(),
             processamentos,
-            selos: Vec::new(),
+            selos: crate::edicao::camada::selos::do_clipe(p, linha, &res.id),
+            audio: match c {
+                ClipePrincipal::Trecho(t) => Some(t.audio.clone()),
+                _ => None,
+            },
         });
     }
     for trilha in p.sobreposicoes.iter().filter(|t| !t.oculta) {
@@ -536,11 +555,26 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         }
     }
     // trilhas de som (narração): a mídia de cada clipe que toca também é fonte do vídeo entregue
+    let mut trilhas = Vec::new();
     if p.saida.audio {
         for trilha in p.audios.iter().filter(|t| !t.mudo) {
-            for c in trilha.clipes.iter().filter(|c| linha.livres.iter().any(|l| l.id == c.id && l.trilha == trilha.id)) {
+            let mut clipes = Vec::new();
+            for c in &trilha.clipes {
+                let Some(l) = linha.livres.iter().find(|l| l.id == c.id && l.trilha == trilha.id) else { continue };
                 citadas.insert(c.midia.clone());
+                clipes.push(ProvClipeAudio {
+                    id: c.id.clone(),
+                    midia: c.midia.clone(),
+                    de_q: l.inicio_q,
+                    n_q: l.n_q,
+                    de_s: c.de_s,
+                    ate_s: c.ate_s,
+                    volume: c.volume.clone(),
+                    entrada_s: c.entrada_s,
+                    saida_s: c.saida_s,
+                });
             }
+            trilhas.push(ProvTrilha { id: trilha.id.clone(), papel: trilha.papel, volume: trilha.volume, mudo: trilha.mudo, abaixa_original: trilha.abaixa_original, clipes });
         }
     }
     let mut midias = Vec::new();
@@ -597,6 +631,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             silhuetas_sha256: r.silhuetas.as_ref().map(|s| s.sha256.clone()),
             corridas,
             confirmacao: r.confirmacao.clone(),
+            ausencias: r.ausencias.clone(),
         });
     }
     let selos = &p.saida.selos;
@@ -615,7 +650,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         midias,
         roteiro,
         ocultacoes,
-        audio: ProvAudio { silencios, tolerancia_atempo_ms },
+        audio: ProvAudio { silencios, tolerancia_atempo_ms, mixagem: p.saida.audio.then(|| p.mixagem.clone()), trilhas },
         legendas: ProvLegendas { origem: p.legendas.origem.clone(), n: p.legendas.itens.len() as u32, conferidas: p.legendas.itens.iter().filter(|l| l.conferida).count() as u32 },
         sincronias: Vec::new(),
         rastreios,
@@ -625,6 +660,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         selos_desligados,
         revisado_por: exportacao.revisado_por.clone(),
         ffmpeg: ProvFfmpeg { versao: ctx.cap.versao.clone(), configuracao: ctx.cap.configuracao.clone(), origem: ctx.cap.origem, sha256: ctx.cap.sha256.clone() },
+        fecho: p.fecho.clone(),
     })
 }
 

@@ -1,4 +1,4 @@
-//! Catálogo fixo dos códigos e das frases de `Problema` (§2.3). Dono: P0.R.
+//! Catálogo fixo dos códigos e das frases de `Problema` (§2.3). Dono: o pacote R da fase (P1.R).
 //! Toda frase que chega à tela sai daqui: nenhuma é montada fora do catálogo.
 
 use super::modelo::{Nivel, Problema};
@@ -63,6 +63,12 @@ pub mod codigo {
     pub const GPU: &str = "gpu";
     pub const OUTRA: &str = "outra";
     pub const ORIGINAL: &str = "original";
+    // Fase 1 (abertura): validação (O5) e erros dos comandos novos
+    pub const VELOCIDADE_FORA_DO_INTERVALO: &str = "velocidade_fora_do_intervalo";
+    pub const CALIBRACAO_AUSENTE: &str = "calibracao_ausente";
+    pub const CALCULO_AUSENTE: &str = "calculo_ausente";
+    pub const DEGRAVACAO_AUSENTE: &str = "degravacao_ausente";
+    pub const RETRATO_DIVERGENTE: &str = "retrato_divergente";
     // periciais
     pub const TAXA_VARIAVEL: &str = "taxa_variavel";
     pub const QUADROS_DESCARTADOS: &str = "quadros_descartados";
@@ -172,6 +178,11 @@ const CATALOGO: &[Entrada] = &[
     e(GPU, Erro, "Falha na placa de vídeo"),
     e(OUTRA, Erro, "Falha no ffmpeg"),
     e(ORIGINAL, Erro, "Prévia pelo original"),
+    e(VELOCIDADE_FORA_DO_INTERVALO, Erro, "Velocidade fora do intervalo medido"),
+    e(CALIBRACAO_AUSENTE, Erro, "Calibração não encontrada"),
+    e(CALCULO_AUSENTE, Erro, "Cálculo de velocidade não encontrado"),
+    e(DEGRAVACAO_AUSENTE, Erro, "Degravação não encontrada"),
+    e(RETRATO_DIVERGENTE, Erro, "Retrato da exportação alterado"),
     // periciais
     com_n(TAXA_VARIAVEL, Pericial, "Taxa variável", "Taxa variável: 1 intervalo irregular", "Taxa variável: {n} intervalos irregulares"),
     com_n(QUADROS_DESCARTADOS, Pericial, "Quadros descartados", "1 quadro descartado", "{n} quadros descartados"),
@@ -321,7 +332,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 75, "constantes de `codigo`");
+        assert_eq!(cods.len(), 80, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {
@@ -349,7 +360,7 @@ mod testes {
         for c in [FPS_DIFERENTE, AMPLIACAO_ALTA, FONTE_10BITS, ENTRELACADO, TEXTO_FORA, QUADRO_AJUSTADO, RETRATO_DESATUALIZADO, SELO_DESLIGADO] {
             assert_eq!(nivel(c), Some(Aviso), "{c}");
         }
-        assert_eq!(nivel("velocidade_fora_do_intervalo"), None, "fica para a Fase 1 (O5)");
+        assert_eq!(nivel(VELOCIDADE_FORA_DO_INTERVALO), Some(Erro), "O5");
         assert_eq!(nivel("x"), None);
     }
 

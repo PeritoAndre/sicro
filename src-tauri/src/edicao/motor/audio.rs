@@ -1,4 +1,4 @@
-//! Áudio do programa inteiro numa passada (§5.9). Dono: P0.6b.
+//! Áudio do programa inteiro numa passada (§5.9). Dono: P1.5 (herda do P0.6b; inclui o som das transições, O3).
 //! Decisão O6: a passada de áudio e a de medição rodam SEMPRE com `-cpuflags 0`, antes das entradas.
 //!
 //! Fase 0: uma entrada por mídia (`-vn`, sem `-ss`) com `asplit`, e outra da mesma mídia quando o som teria de
@@ -69,6 +69,15 @@ fn erro(codigo: impl Into<String>) -> SicroError {
 
 fn nao_suportado(o_que: &str) -> SicroError {
     erro(format!("nao_suportado: {o_que}"))
+}
+
+/// O que o motor de áudio ainda não faz, pelo detalhe do catálogo (`mensagens`). Uma regra só: `validar` (fase_0 e
+/// transições) e `recusar` perguntam aqui; o P1.5 tira da lista o que passa a fazer, junto com o sítio de recusa.
+const RECUSAS: &[&str] = &["normalizar", "limitador", "silenciar", "volume_animado", "abaixar", "transicao"];
+
+/// `detalhe` ainda é recusado pelo motor de áudio?
+pub fn recusa(detalhe: &str) -> bool {
+    RECUSAS.contains(&detalhe)
 }
 
 /// Recorte de mídia que vira som (tempo de fonte). `ate` None = até o fim do som; `entrada`/`saida` = `afade` em amostras.
@@ -304,13 +313,13 @@ fn base(c: &ClipePrincipal) -> &ClipeBase {
 
 /// Recusa o que a Fase 0 não faz (nunca ignora calado).
 fn recusar(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &ClipePrincipal>) -> Result<()> {
-    if p.mixagem.normalizar.is_some() {
+    if p.mixagem.normalizar.is_some() && recusa("normalizar") {
         return Err(nao_suportado("normalizar"));
     }
-    if p.mixagem.limitador {
+    if p.mixagem.limitador && recusa("limitador") {
         return Err(nao_suportado("limitador"));
     }
-    let com_sobreposicao = |t: &Option<Transicao>| t.as_ref().is_some_and(|t| tempo::transicao_sobrepoe(&t.tipo));
+    let com_sobreposicao = |t: &Option<Transicao>| t.as_ref().is_some_and(|t| tempo::transicao_sobrepoe(&t.tipo) && recusa("transicao"));
     for r in &linha.clipes {
         let Some(c) = clipes.get(r.id.as_str()) else { continue };
         if com_sobreposicao(&base(c).transicao_entrada) {
@@ -322,7 +331,7 @@ fn recusar(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &Cl
                 if matches!(t.velocidade, Velocidade::Rampa { .. }) {
                     return Err(nao_suportado("rampa"));
                 }
-                if !t.audio.silencios.is_empty() {
+                if !t.audio.silencios.is_empty() && recusa("silenciar") {
                     return Err(nao_suportado("silenciar"));
                 }
                 volume_fixo(&t.audio.volume)?;
@@ -334,7 +343,7 @@ fn recusar(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &Cl
         return Err(nao_suportado("transicao"));
     }
     for t in p.audios.iter().filter(|t| !t.mudo && !t.clipes.is_empty()) {
-        if t.abaixa_original {
+        if t.abaixa_original && recusa("abaixar") {
             return Err(nao_suportado("abaixar"));
         }
         for c in &t.clipes {

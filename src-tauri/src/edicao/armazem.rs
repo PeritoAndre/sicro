@@ -54,6 +54,11 @@ pub struct ProjetoAberto {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Salvo {
     pub updated_at: String,
+    /// Raiz do cache da Edição do caso, como em `ProjetoAberto.raiz_cache` (o comando preenche; o armazém deixa
+    /// vazia): o projeto novo aprende a raiz na primeira gravação, sem `edicao_abrir` (contratos (g) 11).
+    // CONTRATO: (g) 11, feito na abertura da Fase 1.
+    #[serde(default)]
+    pub raiz_cache: String,
 }
 
 /// Uso de uma mídia (`edicao_usos`): projeto, clipes que a usam e exportações registradas desse projeto que a usaram.
@@ -261,7 +266,7 @@ pub fn salvar(ws: &Path, projeto: &Value) -> Result<Salvo> {
     doc["updated_at"] = Value::String(updated_at.clone());
     doc["gravado_por"] = Value::String(APP_VERSION.into());
     gravar_atomico(&pasta.join(PROJETO), &serde_json::to_vec_pretty(&doc)?)?;
-    Ok(Salvo { updated_at })
+    Ok(Salvo { updated_at, raiz_cache: String::new() })
 }
 
 /// Apaga a pasta do projeto MENOS `exportacoes/` (O7) e o cache dele (`cache` = pasta da Edição do caso). Audita.

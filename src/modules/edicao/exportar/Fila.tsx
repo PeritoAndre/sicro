@@ -13,6 +13,7 @@ import type { EstadoTarefa, Fase, Tarefa } from "@domain/edicao";
 import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
 import { useExportarUi } from "./avisos";
+import { useMenuAberto } from "../menus";
 import { Saidas, conferirSaida } from "./Saidas";
 import styles from "./Exportar.module.css";
 
@@ -70,6 +71,7 @@ export function Fila() {
   const tarefas = useRenderStore((s) => s.tarefas);
   const caso = useWorkspaceStore(selectActiveOccurrence)?.id ?? null;
   const raiz = useRef<HTMLDivElement>(null);
+  useMenuAberto(aberta);
   useEffect(() => {
     void useRenderStore
       .getState()

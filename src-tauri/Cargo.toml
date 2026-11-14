@@ -131,6 +131,8 @@ typst = "=0.15.1"
 # `PagedDocument` mora aqui desde a 0.15 (o `typst` não reexporta).
 typst-layout = "=0.15.1"
 typst-svg = "=0.15.1"
+# PDF do relatório do júri (Fase 1, `relatorio_pdf/`): PDF/A-3a + PDF/UA-1, mesma versão exata do `typst`.
+typst-pdf = "=0.15.1"
 
 # Linux (WebKitGTK) — o player de mídia (GStreamer) não lê o asset protocol do
 # Tauri; <video>/<audio> vão por file:// e a página precisa ser "local" no

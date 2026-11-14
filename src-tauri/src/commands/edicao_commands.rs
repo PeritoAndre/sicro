@@ -1,7 +1,9 @@
-//! Comandos da Edição, Fase 0 (arquitetura §5.12). Dono: P0.7. Quem registra no `invoke_handler` é o P0.1, ao fechar a fase.
+//! Comandos da Edição (arquitetura §5.12). Compartilhado desde a Fase 1 (O2: o integrador declara e registra; o corpo
+//! de cada comando da Fase 1 chama a função do pacote dono, `contratos-fase1.md` (c)).
 //! `workspace_path` = raiz do caso. Caminhos `relativo` das respostas: ao cache da Edição do caso
 //! (`app_cache_dir()/edicao/<id do caso>/`), salvo onde o tipo diz outra coisa.
-//! Fora daqui: `edicao_diagnostico_salvar` (P0.9, arquivo próprio), `edicao_origem_pedir` e `edicao_onda` (Fase 1).
+//! Fora daqui: `edicao_diagnostico_salvar` (P0.9, arquivo próprio); proveniência da mídia (P1.10,
+//! `video_proveniencia_commands.rs`).
 //! Todo erro sai por `mensagens::erro_de_comando` (`"<código>: <frase>"`); o trabalho roda em `spawn_blocking`
 //! (o `PR_SET_PDEATHSIG` dos filhos vale enquanto a thread que os criou viver).
 
@@ -13,13 +15,18 @@ use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::edicao::armazem::{self, ProjetoAberto, ResumoProjeto, Salvo, UsoMidia};
+use crate::edicao::legendas::{self as degravacao, Degravacao};
+use crate::edicao::medidas;
+use crate::edicao::ondas::{self, Onda};
+use crate::edicao::origem::{self, EstadoOrigem};
+use crate::edicao::refazer;
 use crate::edicao::camada::texto::{self, Atlas, PedidoSprite, Sprite};
 use crate::edicao::executar::{self, abrir_banco, sha_valido};
 use crate::edicao::ffmpeg::sonda::{self, Capacidades, ResumoCapacidades};
 use crate::edicao::fila::{self, Estado, PedidoRender, SaidaRegistrada, Tarefa, TipoTarefa};
 use crate::edicao::fundo::{self, TarefaFundo, TipoFundo};
 use crate::edicao::mensagens::{self, codigo};
-use crate::edicao::modelo::{Analise, EstiloTexto, LinhaResolvida, MidiaRef, Problema, Racional, TipoMidia};
+use crate::edicao::modelo::{Analise, EstiloTexto, LinhaResolvida, MidiaRef, Problema, Racional, RetratoCalculo, RetratoCalibracao, TipoMidia};
 use crate::edicao::motor::{Alvo, FonteInfo};
 use crate::edicao::previa::{self, MidiaInfo, PreviaMidia, TipoPrevia};
 use crate::edicao::quadros::{AlvoQuadro, OrigemTabela, QuadroEm, TabelaCompacta, TabelaQuadros};
@@ -100,9 +107,18 @@ pub(crate) fn abrir(ws: &Path, projeto_id: &str, app_cache: &Path, ocupado: &dyn
 }
 
 /// Grava o documento como chegou e devolve o `updated_at` gravado.
+/// `raiz_cache` vem junto: a edição nova aprende a raiz do cache sem `edicao_abrir` (contratos (g) 11).
 #[tauri::command]
-pub async fn edicao_salvar(workspace_path: String, projeto: Value) -> Result<Salvo> {
-    em_fundo(move || armazem::salvar(Path::new(&workspace_path), &projeto)).await
+pub async fn edicao_salvar(app: AppHandle, workspace_path: String, projeto: Value) -> Result<Salvo> {
+    let raiz = app_cache(&app).ok();
+    em_fundo(move || salvar(Path::new(&workspace_path), &projeto, raiz.as_deref())).await
+}
+
+/// A raiz vai de carona: sem ela (cache sem gravação) a gravação vale e a raiz fica vazia (a tela não aprende).
+pub(crate) fn salvar(ws: &Path, projeto: &Value, app_cache: Option<&Path>) -> Result<Salvo> {
+    let mut s = armazem::salvar(ws, projeto)?;
+    s.raiz_cache = app_cache.and_then(|c| cache_do_caso(c, ws).ok()).map(|c| c.to_string_lossy().into_owned()).unwrap_or_default();
+    Ok(s)
 }
 
 /// Apaga o projeto e o cache dele; as exportações ficam.
@@ -155,7 +171,10 @@ pub(crate) fn analisar(ws: &Path, projeto: &Value, app_cache: &Path) -> Result<A
     };
     let cache = cache_do_caso(app_cache, ws)?;
     let prep = executar::preparar(ws, &p, &cache, false)?;
-    Ok(validar::analisar(&p, &prep.contexto(), None))
+    let mut a = validar::analisar(&p, &prep.contexto(), None);
+    // retratos de análise que mudaram depois de gravados no projeto (P1.3)
+    a.problemas.extend(medidas::desatualizados(ws, &p));
+    Ok(a)
 }
 
 /// `esquema` ou `item_invalido` (com o texto do serde) da leitura tipada.
@@ -469,12 +488,52 @@ pub async fn edicao_saida_excluir(app: AppHandle, workspace_path: String, saida_
     .await
 }
 
-// CONTRATO: acréscimo. Está no §5.12; o `refazer.rs` é da Fase 1 (P1.8).
-/// Refaz uma exportação a partir do retrato (Fase 1): por ora `nao_suportado`.
+/// Refaz uma exportação a partir do retrato (§10.4): o id da tarefa `Refazer` (P1.8, `refazer::pedir`).
 #[tauri::command]
 pub async fn edicao_refazer(workspace_path: String, saida_id: String) -> Result<String> {
-    let _ = (workspace_path, saida_id);
-    Err(mensagens::erro_de_comando(erro(format!("{}: refazer", codigo::NAO_SUPORTADO))))
+    em_fundo(move || refazer::pedir(Path::new(&workspace_path), &saida_id)).await
+}
+
+// ---------------------------------------------------------------------------------------------- Fase 1
+
+/// Intermediário de origem do clipe (§7.5; P1.4): o pronto, ou o progresso na fila de fundo (evento `edicao:fundo`).
+#[tauri::command]
+pub async fn edicao_origem_pedir(app: AppHandle, workspace_path: String, projeto: Value, clipe_id: String) -> Result<EstadoOrigem> {
+    let raiz = app_cache(&app)?;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        origem::pedir_do_projeto(ws, &cache_do_caso(&raiz, ws)?, &projeto, &clipe_id)
+    })
+    .await
+}
+
+/// Forma de onda da mídia (P1.9): a do cache, ou None depois de pedir à fila de fundo (`onda:<sha256>`).
+#[tauri::command]
+pub async fn edicao_onda(app: AppHandle, workspace_path: String, sha256: String) -> Result<Option<Onda>> {
+    let raiz = app_cache(&app)?;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        ondas::pedir(ws, &cache_do_caso(&raiz, ws)?, &sha256)
+    })
+    .await
+}
+
+/// Degravação do som da mídia, em tempo de fonte (P1.6): legendas "Da degravação…" e silêncios (P1.5).
+#[tauri::command]
+pub async fn edicao_degravacao(workspace_path: String, sha256: String) -> Result<Degravacao> {
+    em_fundo(move || degravacao::degravacao(Path::new(&workspace_path), &sha256)).await
+}
+
+/// Retrato da calibração da análise para a régua (P1.3).
+#[tauri::command]
+pub async fn edicao_retrato_calibracao(workspace_path: String, calibracao_id: String) -> Result<RetratoCalibracao> {
+    em_fundo(move || medidas::retrato_calibracao(Path::new(&workspace_path), &calibracao_id)).await
+}
+
+/// Retrato do cálculo de velocidade da análise (P1.3).
+#[tauri::command]
+pub async fn edicao_retrato_calculo(workspace_path: String, calculo_id: String) -> Result<RetratoCalculo> {
+    em_fundo(move || medidas::retrato_calculo(Path::new(&workspace_path), &calculo_id)).await
 }
 
 // ---------------------------------------------------------------------------------------------- partida e saída
@@ -553,6 +612,27 @@ mod testes {
         let mut v: Value = serde_json::from_str(include_str!("../../tests/fixtures/edicao/projeto-minimo.json")).unwrap();
         v["id"] = Value::String(id.into());
         v
+    }
+
+    /// A edição nova aprende a raiz do cache na primeira gravação, a mesma de `edicao_abrir` (contratos (g) 11).
+    #[test]
+    fn salvar_devolve_a_raiz_do_cache() {
+        let (_d, ws, app) = caso();
+        let id = uuid::Uuid::new_v4().to_string();
+        let s = salvar(&ws, &minimo(&id), Some(&app)).unwrap();
+        let occ = Manifest::read(&ws).unwrap().occurrence_id;
+        assert_eq!(s.raiz_cache, paths::dir_edicao_cache(&app, &occ).to_string_lossy());
+        assert!(Path::new(&s.raiz_cache).is_dir());
+        assert_eq!(s.raiz_cache, abrir(&ws, &id, &app, &|_: &str, _: &str| false).unwrap().raiz_cache);
+        // cache que não aceita pasta (um arquivo no lugar): a gravação vale, a raiz fica vazia
+        let ruim = app.parent().unwrap().join("cache-arquivo");
+        std::fs::write(&ruim, b"x").unwrap();
+        let mut v = minimo(&id);
+        v["titulo"] = Value::String("Depois".into());
+        let s = salvar(&ws, &v, Some(&ruim)).unwrap();
+        assert_eq!(s.raiz_cache, "");
+        assert_eq!(armazem::abrir(&ws, &id).unwrap().projeto["titulo"], "Depois");
+        assert_eq!(salvar(&ws, &minimo(&id), None).unwrap().raiz_cache, "");
     }
 
     /// Criar, salvar, abrir, listar, duplicar e excluir num caso temporário, pelas funções dos comandos.
@@ -767,6 +847,11 @@ mod testes {
             edicao_saidas,
             edicao_saida_excluir,
             edicao_refazer,
+            edicao_origem_pedir,
+            edicao_onda,
+            edicao_degravacao,
+            edicao_retrato_calibracao,
+            edicao_retrato_calculo,
         ]);
     }
 }

@@ -324,7 +324,7 @@ fn invalido(detalhe: &str) -> SicroError {
 
 /// Primitivas de um efeito num quadro (vazio = nada a desenhar). Efeito de pixel puro (ajustes, lente…) devolve vazio;
 /// efeito desligado também. `ativo` não é olhado aqui: quem chama só pede os quadros em que o efeito vale.
-/// Lupa, régua e velocidade exibida são da Fase 1: erro `nao_suportado`.
+/// Lupa (`lupa.rs`, P1.2), régua e velocidade exibida (`medidas.rs`, P1.3): a função do pacote dono.
 pub fn primitivas(efeito: &Efeito, quadro: &QuadroCamada, sprites: &dyn FonteSprites) -> Result<Vec<Primitiva>> {
     if !ligado(efeito) {
         return Ok(Vec::new());
@@ -411,9 +411,9 @@ pub fn primitivas(efeito: &Efeito, quadro: &QuadroCamada, sprites: &dyn FonteSpr
             let y0 = i.lugar.y * t.h - sh * fator_v(i.lugar.v);
             Ok(vec![Primitiva::Sprite { src: format!("midia:{}", i.midia), caixa: t.caixa(x0, y0, sw, sh), opacidade: i.opacidade }])
         }
-        Efeito::Lupa(_) => Err(SicroError::Validation(format!("{NAO_SUPORTADO}: lupa"))),
-        Efeito::Regua(_) => Err(SicroError::Validation(format!("{NAO_SUPORTADO}: regua"))),
-        Efeito::VelocidadeExibida(_) => Err(SicroError::Validation(format!("{NAO_SUPORTADO}: velocidade_exibida"))),
+        Efeito::Lupa(l) => super::lupa::primitivas(l, quadro, sprites),
+        Efeito::Regua(r) => super::medidas::regua(r, quadro, sprites),
+        Efeito::VelocidadeExibida(v) => super::medidas::velocidade(v, quadro, sprites),
     }
 }
 
@@ -1193,8 +1193,9 @@ pub(crate) fn transformacao(x: f64, y: f64, escala: f64, rotacao: f64, ow: f64, 
     Transform::from_row(a as f32, b as f32, cc as f32, d as f32, tx as f32, ty as f32)
 }
 
+// `pub(crate)`: os casos da lupa (`lupa.rs`, P1.2) e das medidas (`medidas.rs`, P1.3) usam os ajudantes daqui.
 #[cfg(test)]
-mod testes {
+pub(crate) mod testes {
     use super::*;
     use serde_json::json;
 
@@ -1267,9 +1268,9 @@ mod testes {
         }
     }
 
-    const CANVAS: TamanhoPx = TamanhoPx { w: 1920, h: 1080 };
+    pub(crate) const CANVAS: TamanhoPx = TamanhoPx { w: 1920, h: 1080 };
 
-    fn quadro(canvas: TamanhoPx, a: Afim, rastreios: &[(&str, [f64; 4])]) -> QuadroCamada {
+    pub(crate) fn quadro(canvas: TamanhoPx, a: Afim, rastreios: &[(&str, [f64; 4])]) -> QuadroCamada {
         QuadroCamada {
             q: 120,
             t: 3723.4565,
@@ -1292,18 +1293,18 @@ mod testes {
         a_de(&[Tolerante::Conhecido(girar)], 0.0, TamanhoPx { w: 1280, h: 720 }, CANVAS)
     }
 
-    fn base(tipo: &str, id: &str) -> Value {
+    pub(crate) fn base(tipo: &str, id: &str) -> Value {
         json!({ "tipo": tipo, "id": id, "ligado": true, "nome": "", "ativo": null })
     }
 
-    fn com(mut v: Value, extra: Value) -> Value {
+    pub(crate) fn com(mut v: Value, extra: Value) -> Value {
         for (k, x) in extra.as_object().unwrap() {
             v[k] = x.clone();
         }
         v
     }
 
-    fn estilo(fonte: &str, caixa: bool, contorno: bool) -> Value {
+    pub(crate) fn estilo(fonte: &str, caixa: bool, contorno: bool) -> Value {
         json!({ "fonte": fonte, "negrito": false, "italico": false, "tamanho": 0.033, "cor": "#ffffff", "alinhamento": "centro",
                 "caixa": if caixa { json!({ "cor": "#0000008c", "margem": 0.01, "raio": 0.005 }) } else { Value::Null },
                 "contorno": if contorno { json!({ "cor": "#000000", "largura": 0.002 }) } else { Value::Null } })
@@ -1331,7 +1332,7 @@ mod testes {
             "estilo": estilo("mono", caixa, false), "lugar": { "x": 0.984, "y": 0.028, "h": "dir", "v": "topo" } }))
     }
 
-    const CAIXA: [f64; 4] = [0.4, 0.3, 0.1, 0.2];
+    pub(crate) const CAIXA: [f64; 4] = [0.4, 0.3, 0.1, 0.2];
     const PONTO: [f64; 4] = [0.5, 0.5, 0.0, 0.0];
 
     /// Casos da fixture: (nome, efeito, quadro).
@@ -1431,28 +1432,9 @@ mod testes {
             ),
             ("ajustes".into(), com(base("ajustes", "a1"), json!({ "brilho": 0.1, "contraste": 1.0, "gama": 1.0, "saturacao": 1.0 })), q_caixa.clone()),
             (
-                "lupa".into(),
-                com(base("lupa", "l1"), json!({ "rastreio": "r1", "janela": 0.2, "fator": 2.0, "forma": "circulo", "interpolacao": "bilinear",
-                    "onde": { "modo": "fixa", "x": 0.8, "y": 0.2 }, "moldura": { "cor": "#ffffff", "espessura": 0.004, "contorno": true }, "ligacao": true })),
-                q_caixa.clone(),
-            ),
-            (
                 "lupa desligada".into(),
                 com(base("lupa", "l1"), json!({ "ligado": false, "rastreio": "r1", "janela": 0.2, "fator": 2.0, "forma": "circulo", "interpolacao": "bilinear",
                     "onde": { "modo": "fixa", "x": 0.8, "y": 0.2 }, "moldura": { "cor": "#ffffff", "espessura": 0.004, "contorno": true }, "ligacao": true })),
-                q_caixa.clone(),
-            ),
-            (
-                "regua".into(),
-                com(base("regua", "g1"), json!({ "calibracao": { "id": "c", "metodo": "plane", "h": [1, 0, 0, 0, 1, 0, 0, 0, 1], "espaco": { "w": 1920, "h": 1080 },
-                    "pontos_sha256": "", "residuo_m": 0.01, "regiao": [] }, "ancora": { "x": 0.5, "y": 0.5 }, "direcao_graus": 0.0, "comprimento_m": 1.0,
-                    "divisoes": 10, "traco": { "cor": "#ffffff", "espessura": 0.004, "contorno": true }, "rotulo": true })),
-                q_caixa.clone(),
-            ),
-            (
-                "velocidade_exibida".into(),
-                com(base("velocidade_exibida", "v1"), json!({ "calculo": { "id": "c", "kmh": 42.0, "faixa": [39.0, 45.0], "de_s": 0.0, "ate_s": 1.0, "metodo": "x" },
-                    "onde": { "modo": "fixa", "lugar": { "x": 0.5, "y": 0.9, "h": "centro", "v": "base" } }, "estilo": estilo("sans", false, false) })),
                 q_caixa.clone(),
             ),
         ]);
@@ -1467,7 +1449,7 @@ mod testes {
         }
     }
 
-    fn rodar_caso(efeito: &Value, q: &QuadroCamada) -> Value {
+    pub(crate) fn rodar_caso(efeito: &Value, q: &QuadroCamada) -> Value {
         let e: Efeito = serde_json::from_value(efeito.clone()).expect("efeito lido");
         let f = Falso::novo();
         let saida = match primitivas(&e, q, &f) {
@@ -1480,15 +1462,19 @@ mod testes {
         })
     }
 
+    /// Grava ou confere a fixture `nome` com os casos (nome, efeito, quadro).
+    pub(crate) fn fixture(nome: &str, casos: Vec<(String, Value, QuadroCamada)>) {
+        let mut lista = Vec::new();
+        for (n, ef, q) in casos {
+            let c = rodar_caso(&ef, &q);
+            lista.push(json!({ "nome": n, "entrada": c["entrada"], "saida": c["saida"] }));
+        }
+        fixtures::conferir(nome, Value::Array(lista));
+    }
+
     #[test]
     fn fixture_primitivas_efeitos() {
-        let mut lista = Vec::new();
-        for (nome, ef, q) in casos() {
-            let mut c = rodar_caso(&ef, &q);
-            c["nome"] = json!(nome);
-            lista.push(json!({ "nome": c["nome"], "entrada": c["entrada"], "saida": c["saida"] }));
-        }
-        fixtures::conferir("primitivas-efeitos.json", Value::Array(lista));
+        fixture("primitivas-efeitos.json", casos());
     }
 
     #[test]

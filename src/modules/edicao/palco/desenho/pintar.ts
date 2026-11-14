@@ -8,6 +8,7 @@
 import type { Lugar, Primitiva } from "@domain/edicao";
 import type { Afim } from "../../modelo/geometria";
 import { CONTORNO } from "./primitivas";
+import { pintarLupa } from "./lupa";
 
 export interface Pintura {
   ctx: CanvasRenderingContext2D;
@@ -219,7 +220,8 @@ export function pintar(p: Pintura): void {
         atlas(p, pr);
         break;
       case "lupa":
-        // Fase 1
+        // a ampliação na prévia é do P1.2 (aproximada, §7.4)
+        pintarLupa(p, pr);
         break;
     }
   }

@@ -362,7 +362,8 @@ export interface ResumoProjeto { id: Id; titulo: string; updated_at: string; esq
                                  miniatura_rel: string | null; problema: string | null }
 /** projeto = o JSON como está no disco (pode trazer item de versão futura). */
 export interface ProjetoAberto { projeto: ProjetoEdicao; importado_de: number | null; so_leitura: boolean; avisos: Problema[]; raiz_cache: string }
-export interface Salvo { updated_at: string }
+// CONTRATO: `raiz_cache` (contratos (g) 11, feito na abertura da Fase 1): a mesma de `ProjetoAberto.raiz_cache`.
+export interface Salvo { updated_at: string; raiz_cache: string }
 /** saidas = exportações registradas desse projeto que usaram a mídia. */
 export interface UsoMidia { projeto_id: Id; titulo: string; n_clipes: number; saidas: number }
 
@@ -384,7 +385,9 @@ export interface MidiaInfo { id: Id; sha256: string; nome: string; exibido: { w:
                              de_s: Seg; ate_s: Seg; n: number; tem_audio: boolean; previa: PreviaMidia; tabela: OrigemTabela; erros: number | null;
                              // CONTRATO: contratos (h) 17. Falso enquanto a tabela é a de pacotes em contêiner sem tempo confiável
                              // nos pacotes (h264, hevc, mpeg, mpegvideo): única regra para marcar entrada, saída e quadro-chave.
-                             marcavel: boolean }
+                             marcavel: boolean;
+                             // CONTRATO: abertura da Fase 1 (O4/F5). Cor da FONTE (etiqueta ou presunção do §3.3), sem a escolha do projeto.
+                             cor: { matriz: "bt601" | "bt709"; faixa: "tv" | "pc" } }
 
 // ---- texto (camada/texto.rs) ----
 export interface PedidoSprite { blocos: BlocoTexto[]; largura_max: number; altura_canvas: number; fundo: boolean }
@@ -446,7 +449,34 @@ export interface SaidaRegistrada {
   predefinicao: Exportacao["predefinicao"]; codificador: string;
   tecnico_rel: string | null; retrato_rel: string; projeto_sha256: string; autor: AutorSaida; refeita_de: Id | null;
   estado: "a_conferir" | "concluida"; exige_conferencia: boolean; conferida_por: string | null; conferida_em: string | null; criado_em: string;
+  // CONTRATO: abertura da Fase 1 (§10.4). Só numa saída refeita (`refeita_de`); P1.8.
+  comparacao: Comparacao | null;
 }
+
+// ---- Fase 1 (contratos-fase1.md) ----
+/** Resultado do "Refazer e comparar" (refazer.rs, P1.8). `tempo` em s do programa. */
+export type Comparacao =
+  | { tipo: "igual" }
+  | { tipo: "conteudo_igual"; diferencas: string[] }
+  | { tipo: "diferente"; primeiro_q: number; tempo: Seg }
+  | { tipo: "nao_comparavel"; motivo: string };
+/** `.trf` feito agora (executar.rs): o front grava `trf_sha256` e `zoom_pct` no efeito `efeito` por alterar(). */
+export interface TrfNovo { efeito: Id; sha256: string; zoom_pct: number }
+/** Intermediário de origem do clipe (origem.rs, P1.4); `fazendo`: progresso também pelo evento `edicao:fundo`. */
+export type EstadoOrigem =
+  | { tipo: "fazendo"; tarefa: string; feito: number }
+  | { tipo: "pronto"; previa: PreviaMidia; trf: TrfNovo | null };
+/** Forma de onda (ondas.rs, P1.9): min/max s16 mono por balde; o balde i começa em inicio_s + i / por_s (tempo de fonte). */
+export interface Onda { inicio_s: Seg; por_s: number; min: number[]; max: number[] }
+/** Trecho de fala da degravação em tempo de fonte (legendas.rs, P1.6); ia = rascunho da IA não reescrito. */
+export interface TrechoFala { de: Seg; ate: Seg; texto: string; locutor: string | null; ia: boolean }
+export interface Degravacao { origem: { audio_sha256: string; importado_em: string; motor: string | null; modelo_sha256: string | null }; trechos: TrechoFala[] }
+/** Retratos lidos das análises (medidas.rs, P1.3): o mesmo formato de `EfRegua.calibracao` e `EfVelocidadeExibida.calculo`. */
+export interface RetratoCalibracao { id: string; metodo: "line" | "plane" | "cross_ratio"; h: number[]; espaco: { w: number; h: number };
+                                     pontos_sha256: string; residuo_m: number; regiao: Ponto[] }
+export interface RetratoCalculo { id: string; kmh: number; faixa: [number, number] | null; de_s: Seg; ate_s: Seg; metodo: string }
+/** Proveniência da mídia na análise (video_proveniencia_commands.rs, P1.10); null = não informado. */
+export interface ProvenienciaMidia { recebido_nativo: boolean | null; recebido_obs: string; relogio_desvio_s: number | null; gravador: string | null }
 
 // ---- palco e desenho (§8.3) ----
 // Unidades: 0..1 do canvas. O pintor (front) e camada::formas (Rust) implementam TODOS os `k` uma vez; efeito novo só devolve primitivas.

@@ -252,9 +252,17 @@ fn item_de_outra_fase_devolve_nao_suportado_com_o_id() {
     let info = apoio::fonte(apoio::tabela((1, 30), (0..300).collect()), (320, 180));
     let mundo = Mundo::novo(&cap).com("m1", &info);
     let t = &info.quadros;
-    let casos: Vec<(&str, Vec<Value>, Value)> = vec![
-        ("efeito lupa L9", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([efeito("lupa", "L9", json!({ "rastreio": "r1", "janela": 0.1, "fator": 2.0, "forma": "circulo", "interpolacao": "bilinear", "onde": { "modo": "fixa", "x": 0.8, "y": 0.2 }, "moldura": { "cor": "#ffffff", "espessura": 0.004, "contorno": false }, "ligacao": false }))]))], json!({})),
-        ("efeito nitidez N1", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([efeito("nitidez", "N1", json!({ "quantidade": 0.5 }))]))], json!({})),
+    let lupa = efeito("lupa", "L9", json!({ "rastreio": "r1", "janela": 0.1, "fator": 2.0, "forma": "circulo", "interpolacao": "bilinear", "onde": { "modo": "fixa", "x": 0.8, "y": 0.2 }, "moldura": { "cor": "#ffffff", "espessura": 0.004, "contorno": false }, "ligacao": false }));
+    let nitidez = efeito("nitidez", "N1", json!({ "quantidade": 0.5 }));
+    let mut casos: Vec<(&str, Vec<Value>, Value)> = Vec::new();
+    // os da Fase 1 saem quando o pacote dono entrega (P1.2, P1.4)
+    if ainda_recusa(&lupa, true) {
+        casos.push(("efeito lupa L9", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([lupa]))], json!({})));
+    }
+    if ainda_recusa(&nitidez, true) {
+        casos.push(("efeito nitidez N1", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([nitidez]))], json!({})));
+    }
+    casos.extend::<Vec<(&str, Vec<Value>, Value)>>(vec![
 
         ("efeito ocultar O4 em clipe sem fonte", vec![json!({ "tipo": "titulo", "id": "c1", "duracao_s": 1.0, "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] }, "efeitos": [ocultar("O4", "r1", "solido", json!({}))] })], json!({})),
         (
@@ -264,7 +272,7 @@ fn item_de_outra_fase_devolve_nao_suportado_com_o_id() {
                 "transformacao": { "x": 0.5, "y": 0.5, "escala": 0.3, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [],
                 "midia": "m1", "inicio_s": 0.0, "inicio_pts": 0, "velocidade": { "tipo": "constante", "fator": 1.0 }, "audio": null, "moldura": null, "sincronia": null }] }] }),
         ),
-    ];
+    ]);
     for (esperado, principal, extra) in casos {
         let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], principal, extra);
         let e = mundo.compilar(&p, &alvo_final("cpu")).expect_err(esperado).to_string();
@@ -295,7 +303,9 @@ fn item_de_outra_fase_devolve_nao_suportado_com_o_id() {
     assert!(mundo.compilar(&p, &alvo_final("cpu")).is_ok());
     // predefinição de outra fase
     let wa: Alvo = serde_json::from_value(json!({ "tipo": "final", "exportacao": { "predefinicao": "whatsapp", "codificador": "auto", "legendas": "nenhuma", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } })).unwrap();
-    assert!(mundo.compilar(&p, &wa).unwrap_err().to_string().contains("nao_suportado: predefinicao whatsapp"));
+    if matches!(&wa, Alvo::Final { exportacao } if crate::edicao::motor::saida::recusa(exportacao).is_some()) {
+        assert!(mundo.compilar(&p, &wa).unwrap_err().to_string().contains("nao_suportado: predefinicao whatsapp"));
+    }
     // ocultar ativo sem caixa: nunca sai quadro descoberto calado
     let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(10), Some(10), [0.1, 0.1, 0.2, 0.2])]);
     let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([ocultar("o1", "r1", "solido", json!({}))]))], vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([]))], json!({ "rastreios": [r] }));
@@ -318,6 +328,13 @@ fn com_id(mut v: Value, id: &str) -> Value {
 }
 
 /// Efeito da fixture, ligado, sem `ativo` e com o id dado.
+/// O motor ainda recusa o efeito (`json`)? A regra é a do pacote dono (contratos-fase1 (c)): o caso some sozinho quando
+/// o pacote entrega.
+fn ainda_recusa(efeito: &Value, com_fonte: bool) -> bool {
+    let e: crate::edicao::modelo::Efeito = serde_json::from_value(efeito.clone()).expect("efeito");
+    crate::edicao::motor::clipe::recusa_do_efeito(&e, com_fonte).is_some()
+}
+
 fn efeito_da_fixture(ponteiro: &str, id: &str) -> Value {
     let mut e = da_fixture(ponteiro);
     e["id"] = json!(id);
@@ -413,14 +430,21 @@ fn recusas(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
     let r = |arquivo, motor, codigo, (clipe, efeito, midia): (Option<&'static str>, Option<&'static str>, Option<&'static str>), p: ProjetoEdicao, alvo: &Alvo| Recusa { arquivo, motor, codigo, clipe, efeito, midia, p, alvo: alvo.clone() };
     use crate::edicao::mensagens::codigo::{ITEM_DESCONHECIDO as DESC, NAO_SUPORTADO as NS, PIXEL_NAO_SUPORTADO as PIX};
     let mut v = Vec::new();
-    // efeitos de origem, lupa, régua e velocidade: `clipe::recusar_de_outra_fase` (um sítio para todos)
+    // efeitos de origem, lupa, régua e velocidade: `clipe::recusar_de_outra_fase` (um sítio de despacho para todos,
+    // pela regra do pacote dono); cada caso só enquanto o pacote recusa
     let origem = [("estabilizar", "/principal/0/efeitos/0"), ("lente", "/principal/0/efeitos/1"), ("desentrelacar", "/principal/0/efeitos/2"), ("media_temporal", "/principal/0/efeitos/3"), ("ajustes", "/principal/0/efeitos/4"), ("nitidez", "/principal/0/efeitos/5")];
     for (tipo, ponteiro) in origem {
-        v.push(r("motor/clipe.rs", tipo, NS, (Some("c1"), Some("e1"), None), base(vec![tr("c1", json!([efeito_da_fixture(ponteiro, "e1")]))], json!({})), &fim));
+        let e = efeito_da_fixture(ponteiro, "e1");
+        if ainda_recusa(&e, true) {
+            v.push(r("motor/clipe.rs", tipo, NS, (Some("c1"), Some("e1"), None), base(vec![tr("c1", json!([e]))], json!({})), &fim));
+        }
     }
-    // a mesma recusa tem um sítio também no rasterizador (`camada/formas.rs`)
-    for (tipo, ponteiro) in [("lupa", "/principal/0/efeitos/12"), ("regua", "/principal/0/efeitos/13"), ("velocidade_exibida", "/principal/0/efeitos/14")] {
-        v.push(r("camada/formas.rs", tipo, NS, (Some("c1"), Some("e1"), None), base(vec![tr("c1", json!([efeito_da_fixture(ponteiro, "e1")]))], json!({})), &fim));
+    // a mesma recusa tem um sítio também no rasterizador (`camada/lupa.rs`, `camada/medidas.rs`)
+    for (arquivo, tipo, ponteiro) in [("camada/lupa.rs", "lupa", "/principal/0/efeitos/12"), ("camada/medidas.rs", "regua", "/principal/0/efeitos/13"), ("camada/medidas.rs", "velocidade_exibida", "/principal/0/efeitos/14")] {
+        let e = efeito_da_fixture(ponteiro, "e1");
+        if ainda_recusa(&e, true) {
+            v.push(r(arquivo, tipo, NS, (Some("c1"), Some("e1"), None), base(vec![tr("c1", json!([e]))], json!({})), &fim));
+        }
     }
     v.push(r("camada/formas.rs", "silhueta", NS, (Some("c1"), Some("h1"), None), base(vec![tr("c1", json!([silhueta]))], json!({})), &fim));
     v.push(r("motor/clipe.rs", "em parte do congelado", NS, (Some("c2"), Some("o1"), None), base(vec![congelado(json!([ocultar("o1", "r1", "solido", json!({ "ativo": { "de": 0.0, "ate": 0.5 } }))]))], json!({})), &fim));
@@ -429,30 +453,53 @@ fn recusas(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
     v.push(r("motor/clipe.rs", "em clipe sem fonte", NS, (Some("c3"), Some("o3"), None), base(vec![json!({ "tipo": "titulo", "id": "c3", "duracao_s": 1.0, "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] }, "efeitos": [ocultar("o3", "r1", "solido", json!({}))] })], json!({})), &fim));
     v.push(r("motor/clipe.rs", "clipe tela c5", NS, (Some("c5"), None, None), base(vec![tela.clone()], json!({})), &fim));
     v.push(r("motor/clipe.rs", "item_desconhecido: efeito_do_futuro e99", DESC, (Some("c1"), Some("e99"), None), base(vec![tr("c1", json!([da_fixture("/principal/0/efeitos/20")]))], json!({})), &fim));
-    v.push(r("motor/mod.rs", "transicao com sobreposicao no clipe c2", NS, (Some("c2"), None, None), base(vec![tr("c1", json!([])), c2_fundir.clone()], json!({})), &fim));
+    // `fundir` (do `xfade`) entra no catálogo do P1.1 junto com a junção por pedaços
+    let sem_xfade = !crate::edicao::motor::juncao::TRANSICOES.contains(&"fundir");
+    if sem_xfade {
+        v.push(r("motor/juncao.rs", "transicao com sobreposicao no clipe c2", NS, (Some("c2"), None, None), base(vec![tr("c1", json!([])), c2_fundir.clone()], json!({})), &fim));
+    }
     let com_legenda = json!({ "legendas": { "estilo": da_fixture("/legendas/estilo"), "lugar": { "x": 0.5, "y": 0.9, "h": "centro", "v": "base" }, "linhas_max": 2, "origem": null,
         "itens": [{ "id": "l1", "texto": "Para!", "locutor": null, "origem": "perito", "conferida": true, "locutor_auto": false, "ref": { "tipo": "programa", "de": 0.1, "ate": 0.5 } }] } });
     let com_legendas: Alvo = serde_json::from_value(json!({ "tipo": "final", "exportacao": { "predefinicao": "juri", "codificador": "cpu", "legendas": "queimar", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } })).unwrap();
-    v.push(r("motor/mod.rs", "nao_suportado: legendas", NS, (None, None, None), base(vec![tr("c1", json!([]))], com_legenda), &com_legendas));
+    let p_legenda = base(vec![tr("c1", json!([]))], com_legenda);
+    if matches!(&com_legendas, Alvo::Final { exportacao } if crate::edicao::motor::legendas::recusa(&p_legenda, exportacao).is_some()) {
+        v.push(r("motor/legendas.rs", "nao_suportado: legendas", NS, (None, None, None), p_legenda, &com_legendas));
+    }
     v.push(r("motor/mod.rs", "item_desconhecido: clipe_do_futuro c9", DESC, (Some("c9"), None, None), base(vec![tr("c1", json!([])), da_fixture("/principal/5")], json!({})), &fim));
-    v.push(r("motor/juncao.rs", "transicao fundir", NS, (Some("c1"), None, None), base(vec![tr("c1", json!([]))], json!({ "fecho": fundir.clone() })), &fim));
-    v.push(r("motor/saida.rs", "predefinicao whatsapp", NS, (None, None, None), base(vec![tr("c1", json!([]))], json!({})), &whatsapp));
+    // tipo fora de qualquer catálogo: a recusa fica
+    v.push(r("motor/juncao.rs", "transicao transicao_do_futuro", NS, (Some("c1"), None, None), base(vec![tr("c1", json!([]))], json!({ "fecho": { "tipo": "transicao_do_futuro", "duracao_s": 0.5, "audio": "acompanhar" } })), &fim));
+    if matches!(&whatsapp, Alvo::Final { exportacao } if crate::edicao::motor::saida::recusa(exportacao).is_some()) {
+        v.push(r("motor/saida.rs", "predefinicao whatsapp", NS, (None, None, None), base(vec![tr("c1", json!([]))], json!({})), &whatsapp));
+    }
     v.push(r("motor/sobrepor.rs", "sobreposto video", NS, (Some("l1"), None, None), base(vec![tr("c1", json!([]))], video_sob(Value::Null)), &fim));
     v.push(r("motor/sobrepor.rs", "em sobreposto x1", NS, (Some("x1"), Some("e18"), None), base(vec![tr("c1", json!([]))], titulo_sob(json!([efeito_da_fixture("/principal/0/efeitos/16", "e18")]))), &fim));
     v.push(r("motor/sobrepor.rs", "item_desconhecido: sobreposto_do_futuro l9", DESC, (Some("l9"), None, None), base(vec![tr("c1", json!([]))], json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [da_fixture("/sobreposicoes/0/clipes/3")] }] })), &fim));
     v.push(r("motor/sobrepor.rs", "item_desconhecido: efeito_do_futuro x9", DESC, (Some("x1"), Some("x9"), None), base(vec![tr("c1", json!([]))], titulo_sob(json!([{ "tipo": "efeito_do_futuro", "id": "x9", "ligado": true }]))), &fim));
     v.push(r("motor/efeitos/enquadramento.rs", "destino variável", NS, (Some("c1"), Some("q1"), None), base(vec![tr("c1", json!([com_id(enquadramento(zoom, "conter"), "q1")]))], json!({})), &fim));
-    // som: `audio::montar` (Fase 1)
+    // som: `audio::montar` (rampa e tela: Fase 3; o resto sai quando o P1.5 entrega, pela lista `audio::recusa`)
+    let a = crate::edicao::motor::audio::recusa;
     v.push(r("motor/audio.rs", "rampa", NS, (Some("c1"), None, None), com_som(base(vec![rampa.clone()], json!({}))), &fim));
     v.push(r("motor/audio.rs", "rampa", NS, (Some("c1"), None, None), com_som(base(vec![rampa], json!({}))), &fim));
-    v.push(r("motor/audio.rs", "volume animado", NS, (Some("c1"), None, None), com_som(base(vec![volume_animado], json!({}))), &fim));
-    v.push(r("motor/audio.rs", "normalizar", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], mixagem(json!({ "lufs": -16.0, "pico_db": -1.5 }), false))), &fim));
-    v.push(r("motor/audio.rs", "limitador", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], mixagem(Value::Null, true))), &fim));
-    v.push(r("motor/audio.rs", "transicao", NS, (Some("c2"), None, None), com_som(base(vec![tr("c1", json!([])), c2_fundir], json!({}))), &fim));
-    v.push(r("motor/audio.rs", "transicao", NS, (Some("c1"), None, None), com_som(base(vec![tr("c1", json!([]))], json!({ "fecho": fundir }))), &fim));
+    if a("volume_animado") {
+        v.push(r("motor/audio.rs", "volume animado", NS, (Some("c1"), None, None), com_som(base(vec![volume_animado], json!({}))), &fim));
+    }
+    if a("normalizar") {
+        v.push(r("motor/audio.rs", "normalizar", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], mixagem(json!({ "lufs": -16.0, "pico_db": -1.5 }), false))), &fim));
+    }
+    if a("limitador") {
+        v.push(r("motor/audio.rs", "limitador", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], mixagem(Value::Null, true))), &fim));
+    }
+    if a("transicao") {
+        v.push(r("motor/audio.rs", "transicao", NS, (Some("c2"), None, None), com_som(base(vec![tr("c1", json!([])), c2_fundir], json!({}))), &fim));
+        v.push(r("motor/audio.rs", "transicao", NS, (Some("c1"), None, None), com_som(base(vec![tr("c1", json!([]))], json!({ "fecho": fundir }))), &fim));
+    }
     v.push(r("motor/audio.rs", "tela", NS, (Some("c5"), None, None), com_som(base(vec![tela], json!({}))), &fim));
-    v.push(r("motor/audio.rs", "silenciar", NS, (Some("c1"), None, None), com_som(base(vec![com_silencio], json!({}))), &fim));
-    v.push(r("motor/audio.rs", "abaixar", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], narracao(true))), &fim));
+    if a("silenciar") {
+        v.push(r("motor/audio.rs", "silenciar", NS, (Some("c1"), None, None), com_som(base(vec![com_silencio], json!({}))), &fim));
+    }
+    if a("abaixar") {
+        v.push(r("motor/audio.rs", "abaixar", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], narracao(true))), &fim));
+    }
     v.push(r("motor/audio.rs", "video sobreposto", NS, (Some("l1"), None, None), com_som(base(vec![tr("c1", json!([]))], video_sob(json!({ "volume": 1.0, "mudo": false, "manter_tom": true, "silencios": [] })))), &fim));
     v
 }
@@ -481,19 +528,25 @@ fn recusas_a_mais(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
     let fim = alvo_final("cpu");
     use crate::edicao::mensagens::codigo::NAO_SUPORTADO as NS;
     let r = |arquivo, motor, (clipe, efeito): (Option<&'static str>, Option<&'static str>), p: ProjetoEdicao, alvo: &Alvo| Recusa { arquivo, motor, codigo: NS, clipe, efeito, midia: None, p, alvo: alvo.clone() };
-    vec![
+    let nitidez = efeito_da_fixture("/principal/0/efeitos/5", "e1");
+    let mut v = vec![
         r("motor/clipe.rs", "em clipe sem fonte", (Some("c3"), Some("o3")), base(vec![foto(json!([ocultar("o3", "rl", "solido", json!({}))]))], json!({}), false), &fim),
-        r("motor/clipe.rs", "nitidez e1", (Some("c2"), Some("e1")), base(vec![congelado(json!([efeito_da_fixture("/principal/0/efeitos/5", "e1")]))], json!({}), false), &fim),
         r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c2"), Some("q1")), base(vec![congelado(json!([zoom()]))], json!({}), false), &fim),
         r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c3"), Some("q1")), base(vec![foto(json!([zoom()]))], json!({}), false), &fim),
         r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c4"), Some("q1")), base(vec![titulo(json!([zoom()]))], json!({}), false), &fim),
         // quadro final reduzido: o motor mede o destino no canvas do alvo, a validação no da saída
         r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c4"), Some("q1")), base(vec![titulo(json!([zoom()]))], json!({}), false), &Alvo::Quadro { q: 20, largura: 160 }),
         r("motor/sobrepor.rs", "em sobreposto x2", (Some("x2"), Some("e18")), base(vec![tr("c1", json!([]))], imagem_sob, false), &fim),
-        // prévia de uma janela que não pega a transição nem o congelado: só o som e a proveniência recusam
-        r("motor/audio.rs", "transicao", (Some("c1"), None), base(vec![tr("c1", json!([]))], json!({ "fecho": { "tipo": "fundir", "duracao_s": 0.2, "audio": "acompanhar" } }), true), &Alvo::Previa { altura: 90, de_q: 5, ate_q: 10 }),
         r("motor/clipe.rs", "em parte do congelado", (Some("c2"), Some("o1")), base(vec![tr("c1", json!([])), congelado(json!([ocultar("o1", "r1", "solido", json!({ "ativo": { "de": 0.0, "ate": 0.5 } }))]))], json!({}), false), &Alvo::Previa { altura: 90, de_q: 0, ate_q: 10 }),
-    ]
+    ];
+    if ainda_recusa(&nitidez, true) {
+        v.push(r("motor/clipe.rs", "nitidez e1", (Some("c2"), Some("e1")), base(vec![congelado(json!([nitidez]))], json!({}), false), &fim));
+    }
+    // prévia de uma janela que não pega a transição nem o congelado: só o som e a proveniência recusam
+    if crate::edicao::motor::audio::recusa("transicao") {
+        v.push(r("motor/audio.rs", "transicao", (Some("c1"), None), base(vec![tr("c1", json!([]))], json!({ "fecho": { "tipo": "fundir", "duracao_s": 0.2, "audio": "acompanhar" } }), true), &Alvo::Previa { altura: 90, de_q: 5, ate_q: 10 }));
+    }
+    v
 }
 
 /// Sítios de recusa no código (fora dos testes e dos comentários): linhas com `nao_suportado` ou com
@@ -557,22 +610,38 @@ fn validacao_acusa_antes_tudo_o_que_o_motor_recusa() {
     let plano = crate::edicao::motor::compilar(&oculta, &ctx, &alvo_final("cpu")).expect("trilha oculta compila");
     assert!(plano.audio.is_some());
     // cada sítio de recusa do código tem caso
-    let fontes: [(&str, &str); 9] = [
+    let fontes: [(&str, &str); 12] = [
         ("motor/audio.rs", include_str!("../motor/audio.rs")),
         ("motor/clipe.rs", include_str!("../motor/clipe.rs")),
         ("motor/mod.rs", include_str!("../motor/mod.rs")),
         ("motor/juncao.rs", include_str!("../motor/juncao.rs")),
+        ("motor/legendas.rs", include_str!("../motor/legendas.rs")),
         ("motor/saida.rs", include_str!("../motor/saida.rs")),
         ("motor/sobrepor.rs", include_str!("../motor/sobrepor.rs")),
         ("motor/efeitos/enquadramento.rs", include_str!("../motor/efeitos/enquadramento.rs")),
         ("motor/efeitos/regiao.rs", include_str!("../motor/efeitos/regiao.rs")),
         ("camada/formas.rs", include_str!("../camada/formas.rs")),
+        ("camada/lupa.rs", include_str!("../camada/lupa.rs")),
+        ("camada/medidas.rs", include_str!("../camada/medidas.rs")),
     ];
+    // o despacho por tipo do `clipe.rs` (`recusar_de_outra_fase`) serve aos efeitos de origem, à lupa, à régua e à
+    // velocidade: um sítio enquanto algum deles ainda for recusado (os de lupa, régua e velocidade levam o nome
+    // do sítio do rasterizador)
+    let despachados = casos.iter().filter(|c| c.arquivo == "motor/clipe.rs" && origem_do_clipe().contains(&c.motor)).count()
+        + casos.iter().filter(|c| c.arquivo == "camada/lupa.rs" || c.arquivo == "camada/medidas.rs").count();
     for (arquivo, fonte) in fontes {
-        let no_codigo = sitios_no_codigo(fonte);
+        let mut no_codigo = sitios_no_codigo(fonte);
         let com_caso = casos.iter().filter(|c| c.arquivo == arquivo).count();
-        // a recusa por tipo do `clipe.rs` serve a seis efeitos de origem: conta como um sítio
-        let com_caso = if arquivo == "motor/clipe.rs" { com_caso - origem_do_clipe() + 1 } else { com_caso };
+        let com_caso = if arquivo == "motor/clipe.rs" {
+            let origem = casos.iter().filter(|c| c.arquivo == arquivo && origem_do_clipe().contains(&c.motor)).count();
+            if despachados == 0 {
+                // nada mais a despachar: o sítio fica para fases seguintes sem pesar aqui
+                no_codigo -= sitios_de_despacho(fonte);
+            }
+            com_caso - origem + usize::from(despachados > 0)
+        } else {
+            com_caso
+        };
         assert_eq!(no_codigo, com_caso, "{arquivo}: {no_codigo} sítios de recusa no código, {com_caso} com caso aqui");
     }
 }
@@ -660,6 +729,68 @@ fn proveniencia_com_periciais_em_todo_alvo() {
     }
 }
 
+/// Os campos que a abertura da Fase 1 pôs no `feito` (contratos-fase1 (b) B22) saem do projeto, no programa inteiro:
+/// `fecho`, som de cada trecho (nenhum na foto), mixagem e trilhas que tocam (só com áudio na saída), ausências aceitas
+/// do rastreio e margem, borda, cor e rastreio da ocultação da mídia.
+#[test]
+fn proveniencia_leva_os_campos_da_abertura_da_fase_1() {
+    use crate::edicao::modelo::{Animavel, MotivoAusencia, PapelAudio};
+    let (mundo, mut midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let mut r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(30), Some(t.pts[30]), [0.1, 0.1, 0.2, 0.2]), ancora(t.tempo(60), Some(t.pts[60]), [0.5, 0.1, 0.2, 0.2])]);
+    r["ausencias"] = json!([{ "de_s": 1.2, "ate_s": 1.5, "motivo": "fora_de_cena", "aceita_em": "2026-11-14T10:00:00Z", "por": "Perito" }]);
+    midias[0]["ocultacoes"] = json!([ocultar("om", "r1", "solido", json!({ "cor": "#112233ff",
+        "alvo": { "rastreio": "r1", "forma": "elipse", "vertices": null, "margem": 0.15, "borda_suave": 0.2, "inverter": false } }))]);
+    let mut c1 = trecho("c1", "m1", t, 30, 90, 1.0, json!([]));
+    c1["audio"] = json!({ "volume": 0.5, "mudo": false, "manter_tom": true, "silencios": [] });
+    let foto = json!({ "tipo": "imagem", "id": "c2", "rotulo": "", "midia": "foto", "duracao_s": 1.0, "efeitos": [] });
+    let fecho = json!({ "tipo": "escurecer", "duracao_s": 0.3, "audio": "acompanhar" });
+    let narracao = json!([{ "id": "a1", "nome": "Narração do perito", "papel": "narracao", "volume": 0.9, "mudo": false, "abaixa_original": false,
+        "clipes": [{ "id": "ca1", "nome": "fala", "midia": "n1", "pos": { "ref": "programa", "t": 0.5 }, "de_s": 0.25, "ate_s": 1.0, "volume": 0.7, "entrada_s": 0.1, "saida_s": 0.2 }] }]);
+    let mut p = projeto(320, 180, (30, 1), midias, vec![c1, foto], json!({ "rastreios": [r], "fecho": fecho, "audios": narracao }));
+    p.saida.audio = true;
+    let pv = mundo.compilar(&p, &alvo_final("cpu")).expect("compila").proveniencia;
+    assert_eq!(pv.fecho.as_ref().map(|f| (f.tipo.as_str(), f.duracao_s)), Some(("escurecer", 0.3)));
+    assert_eq!(pv.roteiro[0].audio.as_ref().map(|a| (a.volume.clone(), a.mudo)), Some((Animavel::Fixo(0.5), false)));
+    assert_eq!(pv.roteiro[1].audio, None, "foto não tem som de fonte");
+    assert_eq!(pv.audio.mixagem.as_ref(), Some(&p.mixagem));
+    let tr = &pv.audio.trilhas;
+    assert_eq!((tr.len(), tr[0].id.as_str(), &tr[0].papel, tr[0].volume, tr[0].clipes.len()), (1, "a1", &PapelAudio::Narracao, 0.9, 1));
+    let ca = &tr[0].clipes[0];
+    // 0,5 s a 30 qps = slot 15; 0,75 s de som = 23 slots (o resolvedor arredonda)
+    assert_eq!((ca.id.as_str(), ca.midia.as_str(), ca.de_q, ca.de_s, ca.ate_s, ca.entrada_s, ca.saida_s), ("ca1", "n1", 15, 0.25, Some(1.0), 0.1, 0.2));
+    assert!(ca.n_q > 0);
+    assert_eq!(ca.volume, Animavel::Fixo(0.7));
+    let feito = serde_json::to_string(&pv).unwrap();
+    assert!(!feito.contains("Narração do perito") && !feito.contains("\"fala\""), "nome de trilha e de clipe de áudio é texto livre: fora do feito");
+    assert_eq!(pv.rastreios.len(), 1);
+    assert_eq!(pv.rastreios[0].ausencias.iter().map(|a| (a.de_s, a.ate_s, a.motivo)).collect::<Vec<_>>(), vec![(1.2, 1.5, MotivoAusencia::ForaDeCena)]);
+    let o = &pv.ocultacoes[0];
+    assert_eq!((o.margem, o.borda_suave, o.cor.as_str(), o.rastreio.as_str()), (0.15, 0.2, "#112233ff", "r1"));
+    // sem áudio na saída: nem mixagem nem trilhas (o som do trecho segue no roteiro, como os silêncios)
+    p.saida.audio = false;
+    let sem = mundo.compilar(&p, &alvo_final("cpu")).expect("compila").proveniencia;
+    assert_eq!((sem.audio.mixagem.is_none(), sem.audio.trilhas.len()), (true, 0));
+}
+
+/// Congelado da Fase 0 depois da abertura (a leitura vem de `realce::leitura` antes de ler, contratos-fase1 (b) B5):
+/// o mesmo corte de um quadro só (com pts repetido, o primeiro) e a mesma conferência (1 lido, o pts dele).
+#[test]
+fn congelado_le_um_quadro_so_como_na_fase_0() {
+    let (mundo, midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let congelado = json!({ "tipo": "congelar", "id": "c2", "rotulo": "", "midia": "m1", "instante_s": t.tempo(40), "instante_pts": t.pts[40], "duracao_s": 1.0, "efeitos": [] });
+    let p = projeto(320, 180, (30, 1), midias, vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([])), congelado], json!({}));
+    let plano = mundo.compilar(&p, &alvo_final("cpu")).expect("compila");
+    let (pj, b) = (t.pts[40], &plano.blocos[0]);
+    assert!(b.grafo.contains(&format!("trim=start_pts={pj}:end_pts={},trim=end_frame=1,showinfo@c001=", pj + 1)), "{}", b.grafo);
+    let c2 = b.conferir.iter().find(|c| c.clipe == "c2").expect("conferência do congelado");
+    assert_eq!((c2.lidos, c2.pts.clone()), (1, vec![pj]));
+    // a prévia não confere pts
+    let previa = mundo.compilar(&p, &Alvo::Previa { altura: 90, de_q: 30, ate_q: 40 }).expect("prévia");
+    assert_eq!(previa.blocos[0].conferir.iter().find(|c| c.clipe == "c2").map(|c| (c.lidos, c.pts.len())), Some((1, 0)));
+}
+
 /// `processamentos[].ordem` é a da cadeia que o grafo aplica (doc de `ProvProcessamento`), não a da lista do clipe:
 /// ocultar → giro → enquadramento → holofote → anotações. O `ocultar` do congelado que não pega nenhum slot não
 /// entra na cadeia e não sai como processamento.
@@ -723,8 +854,14 @@ fn destaque_com_id(id: &str) -> Value {
 }
 
 /// Casos de efeito de origem (todos no mesmo sítio de `clipe.rs`).
-fn origem_do_clipe() -> usize {
-    6
+/// Os efeitos de origem do despacho do `clipe.rs`.
+fn origem_do_clipe() -> [&'static str; 6] {
+    ["estabilizar", "lente", "desentrelacar", "media_temporal", "ajustes", "nitidez"]
+}
+
+/// Linhas do despacho por tipo (`recusar_de_outra_fase`, marcada com `// despacho`).
+fn sitios_de_despacho(fonte: &str) -> usize {
+    fonte.split("#[cfg(test)]").next().unwrap_or("").lines().filter(|l| l.contains("nao_suportado") && l.contains("// despacho")).count()
 }
 
 // ------------------------------------------------------------------ com ffmpeg

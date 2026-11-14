@@ -1,5 +1,5 @@
-//! Edição profissional (módulo `edicao`, arquitetura §5.1). Fase 0: contratos.
-//! Dono de cada arquivo e decisões além da arquitetura: `contratos-fase0.md` no dossiê.
+//! Edição profissional (módulo `edicao`, arquitetura §5.1).
+//! Dono de cada arquivo e decisões além da arquitetura: `contratos-fase0.md` e `contratos-fase1.md` no dossiê.
 //! Assinatura pública e tipo do modelo só mudam pelo orquestrador (marcar com `// CONTRATO:`).
 //! Códigos de erro (`mapa_grande`, `filtro_ausente`…) viajam em `SicroError::Validation("<código>")`.
 
@@ -14,12 +14,19 @@ pub mod fila;
 pub mod fundo;
 pub mod geometria;
 pub mod importar_v1;
+pub mod legendas;
+pub mod medidas;
 pub mod mensagens;
 pub mod modelo;
 pub mod motor;
+pub mod ondas;
+pub mod origem;
+pub mod pacote;
 pub mod previa;
+pub mod proxy;
 pub mod quadros;
 pub mod rastreio;
+pub mod refazer;
 pub mod relatorio;
 pub mod tempo;
 pub mod validar;

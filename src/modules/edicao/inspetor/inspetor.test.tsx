@@ -33,6 +33,7 @@ import { marcacoesNoEspaco, removerEfeito } from "./acoes";
 import { useInspetorUi } from "./ui";
 import { arrastar, botao, campo, clicar, desmontarTudo, digitar, entradaDe, escolher, esperar, lerFixture as ler, montar, sair, tecla, textosVisiveis, type Tela } from "./testeTela";
 import { ROTULOS, textoPermitido } from "./rotulos.teste";
+import { LEGENDAS_PRONTAS } from "../legendas/PainelLegendas";
 
 const WS = "/casos/c1";
 const st = () => useEdicaoStore.getState();
@@ -85,7 +86,8 @@ describe("abas", () => {
     expect(abas).toEqual(["Clipe", "Áudio", "Legendas", "Saída"]);
     expect(tela.raiz.querySelector('[data-painel="clipe"]')!.textContent).toBe("");
     await clicar(botao(tela.raiz, "Legendas"));
-    expect(textosVisiveis(tela.raiz.querySelector('[data-painel="legendas"]')!)).toEqual([]);
+    // vazia até o P1.6 ligar a aba (contratos-fase1, regra 2)
+    if (!LEGENDAS_PRONTAS) expect(textosVisiveis(tela.raiz.querySelector('[data-painel="legendas"]')!)).toEqual([]);
   });
 
   it("foco num clipe de narração abre Áudio; num clipe, abre Clipe", async () => {
@@ -115,6 +117,23 @@ describe("Clipe · Trecho", () => {
     await tecla(nome, "Escape");
     expect(principal()[1].rotulo).toBe("Chegada do veículo");
     expect(passos()).toBe(n + 1);
+  });
+
+  it("Cor da mídia: escolher grava no MidiaRef (vale em todo clipe dela), um passo; Automática volta à da fonte (O4/F5)", async () => {
+    const c = principal()[1];
+    const midia = () => doc().midias.find((m) => m.id === c.midia)!;
+    expect(midia().cor).toBeNull();
+    const cor = entradaDe(tela.raiz, "Cor") as HTMLSelectElement;
+    expect(cor.value).toBe("");
+    const n = passos();
+    await escolher(cor, "bt709:pc");
+    expect(midia().cor).toEqual({ matriz: "bt709", faixa: "pc" });
+    expect((entradaDe(tela.raiz, "Cor") as HTMLSelectElement).value).toBe("bt709:pc");
+    expect([passos(), ultimo()]).toEqual([n + 1, "Cor"]);
+    await clicar(botao(tela.raiz, "Automática"));
+    expect(midia().cor).toBeNull();
+    expect([passos(), ultimo()]).toEqual([n + 2, "Cor"]);
+    expect(() => botao(tela.raiz, "Automática")).toThrow();
   });
 
   it("Início e Fim: um passo cada; início depois do fim não entra", async () => {
@@ -798,6 +817,27 @@ describe("revisão adversa", () => {
     await digitar(ini, "#3", { aos: 2 });
     await tecla(ini, "Enter");
     expect(principal()[1]).toMatchObject({ inicio_s: 0.1, inicio_pts: 1536 });
+  });
+
+  it("Cor da mídia sem escolha mostra a da fonte (MidiaInfo.cor), sem gravar nada (O4/F5)", async () => {
+    const info = {
+      id: "vm1", sha256: "1".repeat(64), nome: "cam1.mp4", exibido: { w: 720, h: 480 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
+      de_s: 0, ate_s: 60, n: 1800, tem_audio: false, previa: { relativo: "", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 60, largura: 720, altura: 480, pronta: true },
+      tabela: "decodificador", erros: 0, marcavel: true, cor: { matriz: "bt601", faixa: "tv" },
+    };
+    cmd.edicaoMidiaInfo.mockResolvedValue(info);
+    esquecerLeituras();
+    tela.desmontar();
+    tela = await montar(<Inspetor />);
+    await esperar(() => selecionar("clipe", principal()[1].id));
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const c = principal()[1] as ClipeTrecho;
+    const n = passos();
+    expect((entradaDe(tela.raiz, "Cor") as HTMLSelectElement).value).toBe("bt601:tv");
+    expect(tela.raiz.querySelector("[data-cor-midia]")?.getAttribute("data-cor-midia")).toBe("fonte");
+    expect(() => botao(tela.raiz, "Automática")).toThrow();
+    expect([doc().midias.find((m) => m.id === c.midia)!.cor, passos()]).toEqual([null, n]);
   });
 
   it("Fim no fim da mídia: ↑ não tira o último quadro; ↓ tira um (não dois)", async () => {

@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use super::efeitos::{self, anotacao, enquadramento, regiao, Familia};
+use super::efeitos::{self, anotacao, enquadramento, lupa, realce, regiao, Familia};
 use super::grafo::{filtro, Grafo};
 use super::plano::{ArquivoTexto, Canvas, ConferirClipe, Desenho, Entrada, ImagemCamada, ItemCamada, Papel, PedidoCamada, Previa, QuadroItem, TipoCamada, TransformacaoAvaliada};
 use super::{expr, Alvo, Contexto, FonteInfo};
@@ -189,24 +189,49 @@ pub(crate) fn caixa_da_ocultacao(rs: &mut Rastreios, o: &EfOcultar, tab: &Tabela
     }
 }
 
-/// Efeito que a Fase 0 não renderiza: erro com o tipo e o id. Desligado nunca é recusado, conhecido ou não;
+/// Detalhe do `nao_suportado` de um efeito que o motor ainda não renderiza; None = renderiza. A regra é do pacote
+/// dono do efeito (realce: P1.4; lupa: P1.2; régua e velocidade: P1.3); a validação pergunta o mesmo.
+pub(crate) fn recusa_do_efeito(e: &Efeito, com_fonte: bool) -> Option<&'static str> {
+    match e {
+        Efeito::Lupa(l) => lupa::recusa(l),
+        Efeito::Regua(_) | Efeito::VelocidadeExibida(_) => crate::edicao::medidas::recusa(e),
+        e if efeitos::familia(e) == Familia::Origem => realce::recusa(e, com_fonte),
+        _ => None,
+    }
+}
+
+/// Efeito que o motor ainda não renderiza: erro com o tipo e o id. Desligado nunca é recusado, conhecido ou não;
 /// desconhecido ligado é o `item_desconhecido` (ou `item_invalido`) da validação.
-fn recusar_de_outra_fase(efeitos: &[Tolerante<Efeito>]) -> Result<()> {
+fn recusar_de_outra_fase(efeitos: &[Tolerante<Efeito>], com_fonte: bool) -> Result<()> {
     for e in efeitos {
         match e {
             Tolerante::Desconhecido(v) if validar::efeito_desconhecido_ligado(v) => {
                 return Err(validar::erro_do_desconhecido(v, validar::TIPOS_EFEITO));
             }
             Tolerante::Conhecido(e) if efeitos::base(e).ligado => {
-                let fora = efeitos::familia(e) == Familia::Origem || matches!(e, Efeito::Lupa(_) | Efeito::Regua(_) | Efeito::VelocidadeExibida(_));
-                if fora {
-                    return Err(erro("nao_suportado", format!("efeito {} {}", efeitos::tipo(e), efeitos::base(e).id)));
+                if recusa_do_efeito(e, com_fonte).is_some() {
+                    return Err(erro("nao_suportado", format!("efeito {} {}", efeitos::tipo(e), efeitos::base(e).id))); // despacho
                 }
             }
             _ => {}
         }
     }
     Ok(())
+}
+
+/// O que um efeito do clipe pede à cadeia (lupa, realce): o grafo, camadas, prévias e arquivos auxiliares.
+pub trait Montador {
+    fn grafo(&mut self) -> &mut Grafo;
+    /// Registra um pedido de camada (`letra` entra no id) e devolve o rótulo da entrada dela no grafo.
+    fn camada(&mut self, letra: char, tipo: TipoCamada, caixa_px: [u32; 4], n: u32, itens: Vec<ItemCamada>, imagens: Vec<ImagemCamada>) -> String;
+    /// Prévia que roda antes dos blocos (`Previa::Vidstab`); repetida no plano = uma só.
+    fn previa(&mut self, p: Previa);
+    /// Arquivo auxiliar do bloco (nome simples, único no bloco: comece pelo `rotulo()`).
+    fn auxiliar(&mut self, a: ArquivoTexto);
+    fn canvas(&self) -> &Canvas;
+    /// Prefixo dos rótulos do clipe no bloco (`c003`).
+    fn rotulo(&self) -> &str;
+    fn exportacao_final(&self) -> bool;
 }
 
 struct Montagem<'a, 'g> {
@@ -219,8 +244,36 @@ struct Montagem<'a, 'g> {
     proxima_entrada: usize,
     entradas: Vec<Entrada>,
     camadas: Vec<PedidoCamada>,
+    previas: Vec<Previa>,
+    auxiliares: Vec<ArquivoTexto>,
     rastreios: Rastreios<'a>,
     exportacao_final: bool,
+}
+
+impl Montador for Montagem<'_, '_> {
+    fn grafo(&mut self) -> &mut Grafo {
+        self.g
+    }
+    fn camada(&mut self, letra: char, tipo: TipoCamada, caixa_px: [u32; 4], n: u32, itens: Vec<ItemCamada>, imagens: Vec<ImagemCamada>) -> String {
+        self.entrada_camada(letra, tipo, caixa_px, n, itens, imagens)
+    }
+    fn previa(&mut self, p: Previa) {
+        if !self.previas.contains(&p) {
+            self.previas.push(p);
+        }
+    }
+    fn auxiliar(&mut self, a: ArquivoTexto) {
+        self.auxiliares.push(a);
+    }
+    fn canvas(&self) -> &Canvas {
+        &self.canvas
+    }
+    fn rotulo(&self) -> &str {
+        &self.rot
+    }
+    fn exportacao_final(&self) -> bool {
+        self.exportacao_final
+    }
 }
 
 impl Montagem<'_, '_> {
@@ -312,6 +365,23 @@ impl Montagem<'_, '_> {
         let slots = &slots[antes..antes + (janela.ate - janela.de) as usize];
         let n = slots.len() as u32;
         let mut atual = base;
+        // lupas: cópias da base antes do enquadramento (pixels da origem do clipe)
+        let lupas: Vec<&crate::edicao::modelo::EfLupa> = efeitos::ligados(efeitos, Familia::Anotacao)
+            .into_iter()
+            .filter_map(|e| match e {
+                Efeito::Lupa(l) if lupa::recusa(l).is_none() => Some(l),
+                _ => None,
+            })
+            .collect();
+        let mut copias = Vec::new();
+        if !lupas.is_empty() {
+            let mut saidas = vec![self.g.rotulo("s")];
+            saidas.extend((0..lupas.len()).map(|_| self.g.rotulo("l")));
+            let refs: Vec<&str> = saidas.iter().map(String::as_str).collect();
+            self.g.cadeia(&[&atual], &[format!("split={}", saidas.len())], &refs);
+            atual = saidas[0].clone();
+            copias = saidas[1..].to_vec();
+        }
         if !f.is_empty() {
             let r = self.g.rotulo("e");
             self.g.cadeia(&[&atual], &[f], &[&r]);
@@ -354,6 +424,18 @@ impl Montagem<'_, '_> {
             let mk = anotacao::entrada_por_slot(self.g, &ent, fps, n, true);
             atual = regiao::holofote(self.g, &atual, h, &mk, uniao);
         }
+        for (l, copia) in lupas.iter().zip(&copias) {
+            let r = self.rastreios.achar(&l.rastreio)?;
+            let mut qs = Vec::with_capacity(slots.len());
+            for (s, q) in slots.iter().zip(&quadros) {
+                let mut q = q.clone();
+                if let Some(a) = self.rastreios.em(r, Self::instante(r, s))? {
+                    q.rastreios.insert(r.id.clone(), a.caixa);
+                }
+                qs.push(q);
+            }
+            atual = lupa::aplicar(self, &atual, copia, l, &qs, origem)?;
+        }
         // anotação: uma camada RGBA por slot com tudo que é desenhado
         let (mut itens, mut imagens, mut env, mut inteiro) = (Vec::new(), Vec::<ImagemCamada>::new(), None::<(f64, f64, f64, f64)>, false);
         for e in efeitos::ligados(efeitos, Familia::Anotacao) {
@@ -362,9 +444,9 @@ impl Montagem<'_, '_> {
                     imagens.push(imagem_da_camada(self.p, self.ctx, &i.midia)?);
                 }
             }
-            let rastreio = match e {
-                Efeito::Destaque(d) => Some(self.rastreios.achar(&d.rastreio)?),
-                _ => None,
+            let rastreio = match efeitos::rastreio_seguido(e) {
+                Some(id) => Some(self.rastreios.achar(id)?),
+                None => None,
             };
             // no quadro congelado o carimbo do original mostra o tempo de fonte do quadro, não o tempo local
             let tempo_de_fonte = matches!(e, Efeito::Carimbo(c) if matches!(c.mostra, MostraCarimbo::TempoFonte | MostraCarimbo::Relogio));
@@ -444,7 +526,7 @@ impl Montagem<'_, '_> {
     }
 
     fn fechar(self, saida: String, conferir: Option<ConferirClipe>) -> CadeiaClipe {
-        CadeiaClipe { saida, entradas: self.entradas, camadas: self.camadas, previas: Vec::new(), auxiliares: Vec::new(), conferir }
+        CadeiaClipe { saida, entradas: self.entradas, camadas: self.camadas, previas: self.previas, auxiliares: self.auxiliares, conferir }
     }
 }
 
@@ -474,13 +556,21 @@ pub(crate) fn faixa_lida(tab: &TabelaQuadros, mapa: &MapaQuadros, a: usize, b: u
 fn trecho(mut m: Montagem, t: &ClipeTrecho, res: &ClipeResolvido, janela: Janela) -> Result<CadeiaClipe> {
     let fonte = m.ctx.fontes.get(&t.midia).ok_or_else(|| erro("midia_ausente", &t.midia))?;
     let tab = &fonte.quadros;
+    // tabela do mapa: a da fonte, ou a de campos no desentrelace por campo (P1.4)
+    let tab_clipe = realce::tabela(&t.base.efeitos, tab);
     let ff = res.fonte.as_ref().ok_or_else(|| erro("intervalo", &res.id))?;
-    let mapa = tempo::mapa_trecho(tab, ff.j_in as usize, ff.j_out as usize, &t.velocidade, m.canvas.fps)?;
+    let mapa = tempo::mapa_trecho(&tab_clipe, ff.j_in as usize, ff.j_out as usize, &t.velocidade, m.canvas.fps)?;
     if mapa.n_q != res.n_q {
         return Err(erro("intervalo", format!("{}: a linha não é a desta tabela", res.id)));
     }
     let (a, b) = (janela.de as usize, janela.ate as usize);
-    let (ja, jb) = faixa_lida(tab, &mapa, a, b);
+    let faixa = faixa_lida(&tab_clipe, &mapa, a, b);
+    let leitura = realce::leitura(&t.base.efeitos, tab, &tab_clipe, faixa, (mapa.j_in, mapa.j_out))?;
+    let (ja, jb) = leitura.ler;
+    // `ler` é da fonte e nunca vazio: leitura fora dela é erro, não índice estourado
+    if ja >= jb || jb > tab.pts.len() {
+        return Err(erro("intervalo", &res.id));
+    }
     let alvo_busca = busca(tab, fonte.inicio_s, ja).map(|alvo| {
         let fim = if jb < tab.pts.len() { tab.tempo(jb) } else { tab.fim_s() } - fonte.inicio_s;
         (alvo, fim - alvo + 1.0)
@@ -497,7 +587,8 @@ fn trecho(mut m: Montagem, t: &ClipeTrecho, res: &ClipeResolvido, janela: Janela
     f.push(cor);
     let na_cor = m.g.rotulo("f");
     m.g.cadeia(&[&ent], &f, &[&na_cor]);
-    let oculto = m.ocultar(na_cor, &t.midia, &t.base.efeitos, fonte, (ja, jb), (mapa.j_in, mapa.j_out))?;
+    let oculto = m.ocultar(na_cor, &t.midia, &t.base.efeitos, fonte, (ja, jb), leitura.clipe)?;
+    let oculto = if realce::ativos(&t.base.efeitos, true) { realce::aplicar(&mut m, &oculto, &t.base.efeitos, fonte, &leitura)? } else { oculto };
     // o clone do último quadro vai sempre: sem ele o 7.0.2 perde o último no `fps` (faixa cheia, fim da mídia,
     // filtro de duas entradas); o `fps@` conta lidos + 1
     let mut f = vec![
@@ -518,14 +609,14 @@ fn trecho(mut m: Montagem, t: &ClipeTrecho, res: &ClipeResolvido, janela: Janela
     let slots: Vec<Slot> = (a - antes..fim)
         .map(|q| {
             let j = mapa.quadro_do_slot[q] as usize;
-            Slot { q: res.inicio_q + q as u64, tau: tab.tempo(j), fonte: Some((tab.tempo(j), tab.pts[j], j)) }
+            Slot { q: res.inicio_q + q as u64, tau: tab_clipe.tempo(j), fonte: Some((tab_clipe.tempo(j), tab_clipe.pts[j], j)) }
         })
         .collect();
     let saida = m.cauda(base, TamanhoPx { w: fonte.exibido.0, h: fonte.exibido.1 }, &t.base.efeitos, &slots, antes, janela)?;
     let conferir = ConferirClipe {
         rotulo: m.rot.clone(),
         clipe: res.id.clone(),
-        lidos: (jb - ja) as u32,
+        lidos: leitura.lidos,
         pts: if m.exportacao_final { tab.pts[ja..jb].to_vec() } else { Vec::new() },
     };
     Ok(m.fechar(saida, Some(conferir)))
@@ -536,14 +627,20 @@ fn congelar(mut m: Montagem, c: &ClipeCongelar, res: &ClipeResolvido, janela: Ja
     let tab = &fonte.quadros;
     let j = res.fonte.as_ref().map(|f| f.j_in as usize).filter(|&j| j < tab.pts.len()).ok_or_else(|| erro("intervalo", &res.id))?;
     let pj = tab.pts[j];
-    let alvo_busca = busca(tab, fonte.inicio_s, j).map(|alvo| {
-        let fim = if j + 1 < tab.pts.len() { tab.tempo(j + 1) } else { tab.fim_s() } - fonte.inicio_s;
+    // o que se lê para entregar o quadro j: só ele, ou mais (média centrada, desentrelace) pela regra do P1.4
+    let leitura = realce::leitura(&c.base.efeitos, tab, tab, (j, j + 1), (j, j + 1))?;
+    let (ja, jb) = leitura.ler;
+    if ja >= jb || jb > tab.pts.len() {
+        return Err(erro("intervalo", &res.id));
+    }
+    let alvo_busca = busca(tab, fonte.inicio_s, ja).map(|alvo| {
+        let fim = if jb < tab.pts.len() { tab.tempo(jb) } else { tab.fim_s() } - fonte.inicio_s;
         (alvo, fim - alvo + 1.0)
     });
     let ent = m.entrada_midia(fonte, &c.midia, alvo_busca);
     let cor = cor::cadeia_fonte(fonte.matriz, fonte.faixa, &fonte.pix_fmt, fonte.exibido).ok_or_else(|| erro("pixel_nao_suportado", &c.midia))?;
     // com pts repetido vale o primeiro quadro desse pts
-    let mut f = vec![format!("trim=start_pts={pj}:end_pts={}", pj.saturating_add(1)), "trim=end_frame=1".to_string()];
+    let mut f = vec![format!("trim=start_pts={}:end_pts={}", tab.pts[ja], tab.pts[jb - 1].saturating_add(1)), format!("trim=end_frame={}", jb - ja)];
     if m.exportacao_final {
         f.push(format!("showinfo@{}=checksum=0", m.rot));
     }
@@ -551,7 +648,9 @@ fn congelar(mut m: Montagem, c: &ClipeCongelar, res: &ClipeResolvido, janela: Ja
     let na_cor = m.g.rotulo("f");
     m.g.cadeia(&[&ent], &f, &[&na_cor]);
     let efeitos_oc = efeitos_do_congelado(&c.base.efeitos, res.n_q, m.canvas.fps)?;
-    let oculto = m.ocultar(na_cor, &c.midia, &efeitos_oc, fonte, (j, j + 1), (j, j + 1))?;
+    let oculto = m.ocultar(na_cor, &c.midia, &efeitos_oc, fonte, (ja, jb), leitura.clipe)?;
+    // média de quadros e desentrelace no congelado (P1.4): de `leitura.ler` para o quadro j (`leitura.lidos`)
+    let oculto = if realce::ativos(&c.base.efeitos, true) { realce::aplicar(&mut m, &oculto, &c.base.efeitos, fonte, &leitura)? } else { oculto };
     let n = janela.ate - janela.de;
     let f = vec![
         "tpad=stop_mode=clone:stop=1".to_string(),
@@ -569,7 +668,7 @@ fn congelar(mut m: Montagem, c: &ClipeCongelar, res: &ClipeResolvido, janela: Ja
         .map(|q| Slot { q: res.inicio_q + q as u64, tau: tempo::instante_do_slot(q as u64, fps), fonte: Some((tab.tempo(j), pj, j)) })
         .collect();
     let saida = m.cauda(base, TamanhoPx { w: fonte.exibido.0, h: fonte.exibido.1 }, &c.base.efeitos, &slots, antes, janela)?;
-    let conferir = ConferirClipe { rotulo: m.rot.clone(), clipe: res.id.clone(), lidos: 1, pts: if m.exportacao_final { vec![pj] } else { Vec::new() } };
+    let conferir = ConferirClipe { rotulo: m.rot.clone(), clipe: res.id.clone(), lidos: leitura.lidos, pts: if m.exportacao_final { tab.pts[ja..jb].to_vec() } else { Vec::new() } };
     Ok(m.fechar(saida, Some(conferir)))
 }
 
@@ -649,7 +748,7 @@ pub fn cadeia(
         ClipePrincipal::Titulo(x) => &x.base.efeitos,
         ClipePrincipal::Tela(x) => &x.base.efeitos,
     };
-    recusar_de_outra_fase(efeitos)?;
+    recusar_de_outra_fase(efeitos, matches!(clipe, ClipePrincipal::Trecho(_) | ClipePrincipal::Congelar(_)))?;
     let m = Montagem {
         g,
         p,
@@ -660,6 +759,8 @@ pub fn cadeia(
         proxima_entrada: primeira_entrada,
         entradas: Vec::new(),
         camadas: Vec::new(),
+        previas: Vec::new(),
+        auxiliares: Vec::new(),
         rastreios: Rastreios::novo(p, ctx),
         exportacao_final: matches!(alvo, Alvo::Final { .. }),
     };

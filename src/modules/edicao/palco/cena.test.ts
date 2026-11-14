@@ -1,7 +1,7 @@
 /** Cena do palco (o que se desenha num instante) e o pintor, com um contexto 2D falso que registra as chamadas. */
 
 import { describe, expect, it } from "vitest";
-import type { ClipeCongelar, ClipeTrecho, EfDestaque, EfLupa, EfOcultar, MidiaRef, Primitiva, ProjetoEdicao, Rastreio } from "@domain/edicao";
+import type { ClipeCongelar, ClipeTrecho, EfDestaque, EfOcultar, MidiaRef, Primitiva, ProjetoEdicao, Rastreio } from "@domain/edicao";
 import { novoProjeto, novoTrecho } from "../modelo/projeto";
 import { ativoEm, bordasDoClipe, cenaDoClipe, duracaoLocal, instanteDaAncora, instanteDaChave, type FontesCena, type Instante } from "./cena";
 import { comRegiao } from "./alcas";
@@ -77,8 +77,9 @@ describe("cena", () => {
     const { p, c } = projeto();
     const oc: EfOcultar = { ...base, id: "oc", tipo: "ocultar", modo: "solido", alvo: { rastreio: "r1", forma: "retangulo", vertices: null, margem: 0, borda_suave: 0, inverter: false }, intensidade: 1, cor: "#000000ff", conteudo: "placa", motivo: "", ativo: { de: 0, ate: 100 } };
     (p.midias[0] as MidiaRef).ocultacoes = [oc];
-    const lupa: EfLupa = { ...base, id: "lu", tipo: "lupa", rastreio: "r1", janela: 0.2, fator: 2, forma: "circulo", interpolacao: "bilinear", onde: { modo: "fixa", x: 0.8, y: 0.2 }, moldura: { cor: "#fff", espessura: 0.004, contorno: true }, ligacao: true };
-    c.efeitos = [destaque("d1"), lupa, destaque("d2", { de: 15, ate: null })];
+    // o efeito com erro: ocultar por silhueta (Fase 5), que nenhum pacote da Fase 1 converte
+    const silhueta: EfOcultar = { ...oc, id: "lu", ativo: null, alvo: { ...oc.alvo, forma: "silhueta" } };
+    c.efeitos = [destaque("d1"), silhueta, destaque("d2", { de: 15, ate: null })];
     const cena = cenaDoClipe(p, c, inst(12, 360), { w: 1280, h: 720 }, fontes);
     expect(cena.primitivas.map((x) => x.k)).toEqual(["regiao", "caminho"]);
     expect(cena.erros).toEqual([{ efeito: "lu", codigo: "nao_suportado" }]);
