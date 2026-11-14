@@ -45,8 +45,20 @@ describe("CampoTempo: texto", () => {
     const p = passoQuadro(2 + 10 / 30, 1, fonte);
     expect(p).toEqual({ t: (30720 + 11 * 512) / 15360, pts: 30720 + 11 * 512 });
     expect(passoQuadro(2, -1, fonte)).toEqual({ t: 2, pts: 30720 });
-    expect(passoQuadro(99, 1, fonte).pts).toBe(30720 + 399 * 512);
+    // além do fim da mídia é o fim (↑ fica, sem pts)
+    expect(passoQuadro(99, 1, fonte)).toEqual({ t: 99, pts: null });
     expect(passoQuadro(1, 1, { base: "fonte" })).toEqual({ t: 1.001, pts: null });
+  });
+});
+
+describe("CampoTempo: fim da mídia", () => {
+  it("no fim (o Fim de um trecho até o fim), ↓ vai ao último quadro e ↑ fica; nunca anda para o lado errado", () => {
+    // 400 quadros a partir de 2 s: o fim é a fronteira depois do quadro 399
+    const fim = (30720 + 400 * 512) / 15360;
+    expect(passoQuadro(fim, -1, fonte)).toEqual({ t: (30720 + 399 * 512) / 15360, pts: 30720 + 399 * 512 });
+    expect(passoQuadro(fim, 1, fonte)).toEqual({ t: fim, pts: null });
+    // do último quadro, ↓ vai ao penúltimo
+    expect(passoQuadro((30720 + 399 * 512) / 15360, -1, fonte).pts).toBe(30720 + 398 * 512);
   });
 });
 

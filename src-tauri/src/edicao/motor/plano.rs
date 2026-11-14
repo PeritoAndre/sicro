@@ -404,6 +404,10 @@ pub struct ProvOcultacao {
     pub conteudo: ConteudoOculto,
     pub motivo: String,
     pub quadros: ProvQuadrosOcultos,
+    /// `alvo.inverter`: cobre o que está FORA da forma (contratos (g) 6).
+    // CONTRATO: acréscimo da verificação da Fase 0; sem ele a invertida saía no `tecnico.json` como a comum.
+    #[serde(default)]
+    pub inverter: bool,
 }
 
 /// Trecho silenciado, em tempo de fonte (s).

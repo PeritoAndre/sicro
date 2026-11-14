@@ -67,7 +67,7 @@ const MOSTRA: { v: EfCarimbo["mostra"]; r: string }[] = [
 export function CarimboEditor({ valor: e }: EditorEfeitoProps<EfCarimbo>) {
   return (
     <Grade>
-      <Lista rotulo="Mostrar" larga valor={e.mostra} opcoes={MOSTRA} aplicar={(v) => noEfeito<EfCarimbo>(e.id, (x) => void (x.mostra = v))} />
+      <Lista rotulo="Mostrar" larga valor={e.mostra} opcoes={MOSTRA.filter((o) => o.v !== "relogio" || e.mostra === "relogio")} aplicar={(v) => noEfeito<EfCarimbo>(e.id, (x) => void (x.mostra = v))} />
       <EstiloELugar e={e} />
     </Grade>
   );

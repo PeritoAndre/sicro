@@ -588,6 +588,53 @@ describe("revisão adversa", () => {
     }
   });
 
+  it("Gravar e trocar de edição antes de parar: a narração vai para o projeto em que começou, não para o novo", async () => {
+    const trilha = { stop: vi.fn() };
+    class Gravador {
+      mimeType = "audio/webm";
+      ondataavailable: ((e: { data: Blob }) => void) | null = null;
+      onstop: (() => void) | null = null;
+      start() {}
+      stop() {
+        this.ondataavailable?.({ data: new Blob(["abc"]) });
+        this.onstop?.();
+      }
+    }
+    vi.stubGlobal("MediaRecorder", Gravador);
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [trilha] })) } });
+    const a = doc();
+    const b: ProjetoEdicao = { ...ler<ProjetoEdicao>("projeto-do-store.json"), id: "f".repeat(8) + "-0000-4000-8000-" + "0".repeat(12), titulo: "B" };
+    const m: MidiaRef = { ...a.midias[2]!, id: "m8", nome: "", sha256: "8".repeat(64) };
+    cmd.edicaoGravacaoSalvar.mockResolvedValue(m);
+    const salvos: ProjetoEdicao[] = [];
+    cmd.edicaoSalvar.mockImplementation(async (_ws: string, p: ProjetoEdicao) => (salvos.push(p), { updated_at: new Date().toISOString() }));
+    cmd.edicaoAbrir.mockImplementation(async (_ws: string, id: string) => ({ projeto: id === a.id ? a : b, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "/cache/c1" }));
+    try {
+      await clicar(botao(tela.raiz, "Áudio"));
+      await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="gravar"]')!);
+      await esperar(() => new Promise((r) => setTimeout(r, 0)));
+      // a Central abre outra edição com a gravação em curso (no app a tela passa pelo projeto fechado e o Gravador sai;
+      // aqui o React pode juntar as duas mudanças: então o perito para já no projeto novo)
+      await esperar(() => st().abrir(WS, b.id));
+      await esperar(() => new Promise((r) => setTimeout(r, 10)));
+      expect(st().aberta?.projetoId).toBe(b.id);
+      const parar = tela.raiz.querySelector<HTMLButtonElement>('[data-acao="parar"]');
+      if (parar) await clicar(parar);
+      await esperar(() => new Promise((r) => setTimeout(r, 10)));
+      expect(cmd.edicaoGravacaoSalvar).toHaveBeenCalledTimes(1);
+      expect(cmd.edicaoGravacaoSalvar.mock.calls[0]!.slice(0, 2)).toEqual([WS, a.id]);
+      expect(doc().audios.flatMap((t) => t.clipes).some((c) => c.midia === "m8" || c.nome === m.nome && c.midia === m.id)).toBe(false);
+      expect(doc().midias.some((x) => x.sha256 === m.sha256)).toBe(false);
+      const deA = salvos.filter((p) => p.id === a.id).at(-1)!;
+      expect(deA.midias.some((x) => x.sha256 === m.sha256)).toBe(true);
+      const id = deA.midias.find((x) => x.sha256 === m.sha256)!.id;
+      expect(deA.audios.flatMap((t) => t.clipes).some((c) => c.midia === id)).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+      delete (navigator as unknown as { mediaDevices?: unknown }).mediaDevices;
+    }
+  });
+
   it("Parar com o projeto sem conseguir gravar: a narração entra assim mesmo", async () => {
     const trilha = { stop: vi.fn() };
     class Gravador {
@@ -751,6 +798,62 @@ describe("revisão adversa", () => {
     await digitar(ini, "#3", { aos: 2 });
     await tecla(ini, "Enter");
     expect(principal()[1]).toMatchObject({ inicio_s: 0.1, inicio_pts: 1536 });
+  });
+
+  it("Fim no fim da mídia: ↑ não tira o último quadro; ↓ tira um (não dois)", async () => {
+    const info = {
+      id: "vm1", sha256: "1".repeat(64), nome: "cam1.mp4", exibido: { w: 1920, h: 1080 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
+      de_s: 0, ate_s: 60, n: 1800, tem_audio: false, previa: { relativo: "", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 60, largura: 1920, altura: 1080, pronta: true },
+      tabela: "decodificador", erros: 0, marcavel: true,
+    };
+    cmd.edicaoMidiaInfo.mockResolvedValue(info);
+    cmd.edicaoTabelaQuadros.mockResolvedValue({ tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(1799).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem: "decodificador" });
+    esquecerLeituras();
+    tela.desmontar();
+    tela = await montar(<Inspetor />);
+    const id = principal()[1].id;
+    // trecho até o fim da mídia (como nasce da mídia inteira)
+    st().alterar("x", (d) => {
+      const c = d.principal[1] as ClipeTrecho;
+      c.fim_s = 60;
+      c.fim_pts = null;
+    });
+    await esperar(() => selecionar("clipe", id));
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const fim = () => entradaDe(tela.raiz, "Fim") as HTMLInputElement;
+    await tecla(fim(), "ArrowUp");
+    expect(principal()[1]).toMatchObject({ fim_s: 60, fim_pts: null });
+    await tecla(fim(), "ArrowDown");
+    expect(principal()[1]).toMatchObject({ fim_s: (1799 * 512) / 15360, fim_pts: 1799 * 512 });
+  });
+
+  it("De e Até das marcações: #n e setas só com a mídia marcável (h 17)", async () => {
+    const info = (marcavel: boolean) => ({
+      id: "vm1", sha256: "1".repeat(64), nome: "cam1.h264", exibido: { w: 1920, h: 1080 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
+      de_s: 0, ate_s: 60, n: 1800, tem_audio: false, previa: { relativo: "", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 60, largura: 1920, altura: 1080, pronta: true },
+      tabela: marcavel ? "decodificador" : "pacotes", erros: 0, marcavel,
+    });
+    const tab = (origem: "pacotes" | "decodificador") => ({ tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(1799).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem });
+    const espera = () => esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const destaque = () => principal()[1].efeitos.find((e) => (e as { tipo: string }).tipo === "destaque") as EfDestaque;
+    const de = () => entradaDe(tela.raiz.querySelector<HTMLElement>('[data-efeito="destaque"]')!, "De") as HTMLInputElement;
+    for (const marcavel of [false, true]) {
+      cmd.edicaoMidiaInfo.mockResolvedValue(info(marcavel));
+      cmd.edicaoTabelaQuadros.mockResolvedValue(tab(marcavel ? "decodificador" : "pacotes"));
+      esquecerLeituras();
+      tela.desmontar();
+      tela = await montar(<Inspetor />);
+      await esperar(() => selecionar("clipe", principal()[1].id));
+      await esperar(() => selecionarEfeitoAberto(destaque().id));
+      await espera();
+      await espera();
+      const antes = destaque().ativo;
+      await digitar(de(), "#3", { aos: 2 });
+      await tecla(de(), "Enter");
+      if (marcavel) expect(destaque().ativo?.de).toBe(0.1);
+      else expect(destaque().ativo).toEqual(antes);
+    }
   });
 
   it("estabilizar e lente: ligar, desligar e Remover pedem confirmação com a contagem de marcações (h 27)", async () => {

@@ -5,7 +5,7 @@
  */
 
 import { useLayoutEffect, useRef, useState, type PointerEvent as PE } from "react";
-import { Aperture, Check, ChevronFirst, ChevronLast, Clapperboard, Film, Loader2, Maximize2, Minimize2, MonitorPlay, Pause, Play, Scan, Square, StepBack, StepForward } from "lucide-react";
+import { Aperture, Check, ChevronFirst, ChevronLast, Clapperboard, Film, Loader2, Maximize2, Minimize2, MonitorPlay, Pause, Play, Scan, Square, StepBack, StepForward, TriangleAlert } from "lucide-react";
 import type { Seg } from "@domain/edicao";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import { tempoDoX, xDoTempo, type Escala } from "./faixa";
@@ -14,7 +14,8 @@ import styles from "./Palco.module.css";
 import { capturar } from "./capturar";
 
 export type Fase = "inicio" | "move" | "fim";
-export type EstadoRender = "nada" | "pedindo" | "tocando";
+/** "falhou": a última prévia do render não saiu (ícone até pedir de novo ou trocar de clipe). */
+export type EstadoRender = "nada" | "pedindo" | "tocando" | "falhou";
 
 export interface TransporteProps {
   de: Seg;
@@ -128,8 +129,16 @@ export function Transporte(p: TransporteProps) {
             <IconeEstado fiel={p.fiel} />
             <span className={styles.rotuloMini}>Quadro final</span>
           </button>
-          <button type="button" className={`${styles.mini} ${p.render !== "nada" ? styles.ativo : ""}`} onClick={p.onPreviaRender} disabled={p.desligado} title="Prévia do render" data-acao="previa-render">
-            {p.render === "pedindo" ? <Loader2 size={14} className={styles.gira} aria-hidden /> : p.render === "tocando" ? <Square size={14} aria-hidden /> : <MonitorPlay size={14} aria-hidden />}
+          <button type="button" className={`${styles.mini} ${p.render === "pedindo" || p.render === "tocando" ? styles.ativo : ""}`} onClick={p.onPreviaRender} disabled={p.desligado} title="Prévia do render" data-acao="previa-render">
+            {p.render === "pedindo" ? (
+              <Loader2 size={14} className={styles.gira} aria-hidden />
+            ) : p.render === "tocando" ? (
+              <Square size={14} aria-hidden />
+            ) : p.render === "falhou" ? (
+              <TriangleAlert size={14} className={styles.falhou} aria-hidden data-render-falhou="" />
+            ) : (
+              <MonitorPlay size={14} aria-hidden />
+            )}
             <span className={styles.rotuloMini}>Prévia do render</span>
           </button>
           <button type="button" className={styles.icone} title="Ajustar à tela" aria-label="Ajustar à tela" onClick={p.onAjustar}>

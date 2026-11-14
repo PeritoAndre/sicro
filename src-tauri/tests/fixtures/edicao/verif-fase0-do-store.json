@@ -1,0 +1,1070 @@
+{
+  "esquema": 2,
+  "esquema_menor": 0,
+  "id": "00000000-0000-4000-8000-000000000001",
+  "titulo": "Edição",
+  "created_at": "2026-11-14T12:00:00.000Z",
+  "updated_at": "2026-11-14T12:00:00.000Z",
+  "gravado_por": "",
+  "saida": {
+    "largura": 640,
+    "altura": 360,
+    "fps": {
+      "num": 30,
+      "den": 1
+    },
+    "auto": false,
+    "cor_fundo": "#101820",
+    "audio": true,
+    "selos": {
+      "velocidade": true,
+      "ampliacao": true,
+      "realce": true
+    },
+    "exportacao": {
+      "predefinicao": "juri",
+      "codificador": "cpu",
+      "legendas": "nenhuma",
+      "pacote": null,
+      "pdf": "a3",
+      "revisado_por": "",
+      "personalizada": null
+    }
+  },
+  "midias": [
+    {
+      "id": "m1",
+      "tipo": "video",
+      "origem": "caso",
+      "media_id": "vm-1",
+      "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "nome": "cam1.mp4",
+      "relativo": "Mídias/Vídeos/cam1.mp4",
+      "duracao_s": 15,
+      "inicio_s": 0,
+      "largura": 320,
+      "altura": 180,
+      "taxa": {
+        "num": 30,
+        "den": 1
+      },
+      "vfr": false,
+      "tem_audio": true,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": [
+        {
+          "id": "00000000-0000-4000-8000-000000000009",
+          "ligado": true,
+          "nome": "",
+          "ativo": {
+            "de": 4,
+            "ate": 4
+          },
+          "tipo": "ocultar",
+          "modo": "solido",
+          "alvo": {
+            "rastreio": "00000000-0000-4000-8000-000000000008",
+            "forma": "retangulo",
+            "vertices": null,
+            "margem": 0.1,
+            "borda_suave": 0,
+            "inverter": false
+          },
+          "intensidade": 1,
+          "cor": "#000000",
+          "conteudo": "rosto",
+          "motivo": ""
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000015",
+          "ligado": true,
+          "nome": "",
+          "ativo": {
+            "de": 2,
+            "ate": 4
+          },
+          "tipo": "ocultar",
+          "modo": "solido",
+          "alvo": {
+            "rastreio": "00000000-0000-4000-8000-000000000014",
+            "forma": "elipse",
+            "vertices": null,
+            "margem": 0.1,
+            "borda_suave": 0.1,
+            "inverter": false
+          },
+          "intensidade": 1,
+          "cor": "#000000",
+          "conteudo": "placa",
+          "motivo": "Placa de terceiro"
+        }
+      ]
+    },
+    {
+      "id": "m2",
+      "tipo": "video",
+      "origem": "caso",
+      "media_id": "vm-2",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "nome": "cam2.mp4",
+      "relativo": "Mídias/Vídeos/cam2.mp4",
+      "duracao_s": 15,
+      "inicio_s": 0,
+      "largura": 320,
+      "altura": 180,
+      "taxa": {
+        "num": 30,
+        "den": 1
+      },
+      "vfr": false,
+      "tem_audio": true,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    },
+    {
+      "id": "m3",
+      "tipo": "imagem",
+      "origem": "projeto",
+      "media_id": null,
+      "sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+      "nome": "brasao.png",
+      "relativo": "Sistema/videos/edicao/00000000-0000-4000-8000-000000000001/midias/3333333333333333333333333333333333333333333333333333333333333333.png",
+      "duracao_s": null,
+      "inicio_s": null,
+      "largura": 64,
+      "altura": 32,
+      "taxa": null,
+      "vfr": false,
+      "tem_audio": false,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    },
+    {
+      "id": "m4",
+      "tipo": "audio",
+      "origem": "projeto",
+      "media_id": null,
+      "sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+      "nome": "narracao.wav",
+      "relativo": "Sistema/videos/edicao/00000000-0000-4000-8000-000000000001/midias/4444444444444444444444444444444444444444444444444444444444444444.wav",
+      "duracao_s": 2,
+      "inicio_s": null,
+      "largura": null,
+      "altura": null,
+      "taxa": null,
+      "vfr": false,
+      "tem_audio": true,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    }
+  ],
+  "principal": [
+    {
+      "tipo": "titulo",
+      "id": "00000000-0000-4000-8000-000000000028",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [],
+      "duracao_s": 2,
+      "titulo": {
+        "modelo": "cartela",
+        "fundo": {
+          "tipo": "cor",
+          "cor": "#1b2a41"
+        },
+        "blocos": [
+          {
+            "id": "00000000-0000-4000-8000-000000000026",
+            "papel": "titulo",
+            "conteudo": "Ocorrência 123/2026",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": true,
+              "italico": false,
+              "tamanho": 0.078,
+              "cor": "#ffffff",
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null
+            },
+            "lugar": {
+              "x": 0.5,
+              "y": 0.47,
+              "h": "centro",
+              "v": "base"
+            },
+            "largura_max": 0.9
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000027",
+            "papel": "subtitulo",
+            "conteudo": "Perícia de vídeo",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": false,
+              "italico": false,
+              "tamanho": 0.052,
+              "cor": "#ffffff",
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null
+            },
+            "lugar": {
+              "x": 0.5,
+              "y": 0.53,
+              "h": "centro",
+              "v": "topo"
+            },
+            "largura_max": 0.9
+          },
+          {
+            "id": "00000000-0000-4000-8000-000000000029",
+            "papel": "rodape",
+            "conteudo": "Laudo 77/2026",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": false,
+              "italico": false,
+              "tamanho": 0.033,
+              "cor": "#ffffff",
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null
+            },
+            "lugar": {
+              "x": 0.5,
+              "y": 0.93,
+              "h": "centro",
+              "v": "base"
+            },
+            "largura_max": 0.86
+          }
+        ]
+      }
+    },
+    {
+      "tipo": "trecho",
+      "id": "00000000-0000-4000-8000-000000000002",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [
+        {
+          "id": "00000000-0000-4000-8000-000000000011",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "destaque",
+          "forma": "seta",
+          "rastreio": "00000000-0000-4000-8000-000000000010",
+          "traco": {
+            "cor": "#ffd84a",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "tamanho": 0.12,
+          "angulo_graus": 45,
+          "margem": 0,
+          "rotulo": {
+            "texto": "Suspeito",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": false,
+              "italico": false,
+              "tamanho": 0.033,
+              "cor": "#ffd84a",
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.003
+              }
+            },
+            "lado": "baixo"
+          }
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000013",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "destaque",
+          "forma": "colchetes",
+          "rastreio": "00000000-0000-4000-8000-000000000012",
+          "traco": {
+            "cor": "#ffd84a",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "tamanho": 0.12,
+          "angulo_graus": 45,
+          "margem": 0.1,
+          "rotulo": null
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000016",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "texto",
+          "conteudo": "Veículo branco",
+          "estilo": {
+            "fonte": "serifa",
+            "negrito": false,
+            "italico": true,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.01,
+              "raio": 0.005
+            },
+            "contorno": {
+              "cor": "#000000",
+              "largura": 0.003
+            }
+          },
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "centro",
+            "v": "base"
+          },
+          "largura_max": 0.9
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000017",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "carimbo",
+          "mostra": "tempo_fonte",
+          "formato": "hms_ms",
+          "relogio": null,
+          "estilo": {
+            "fonte": "sans",
+            "negrito": false,
+            "italico": false,
+            "tamanho": 0.033,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.008,
+              "raio": 0
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.02,
+            "y": 0.03,
+            "h": "esq",
+            "v": "topo"
+          }
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000018",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "carimbo",
+          "mostra": "quadro",
+          "formato": "hms_ms",
+          "relogio": null,
+          "estilo": {
+            "fonte": "sans",
+            "negrito": false,
+            "italico": false,
+            "tamanho": 0.033,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.008,
+              "raio": 0
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.02,
+            "y": 0.03,
+            "h": "esq",
+            "v": "topo"
+          }
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000019",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "carimbo",
+          "mostra": "tempo_programa",
+          "formato": "hms",
+          "relogio": null,
+          "estilo": {
+            "fonte": "sans",
+            "negrito": false,
+            "italico": false,
+            "tamanho": 0.033,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.008,
+              "raio": 0
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.98,
+            "y": 0.97,
+            "h": "dir",
+            "v": "base"
+          }
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000020",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "imagem",
+          "midia": "m3",
+          "lugar": {
+            "x": 0.98,
+            "y": 0.03,
+            "h": "dir",
+            "v": "topo"
+          },
+          "largura": 0.15,
+          "opacidade": 1
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000021",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "enquadramento",
+          "regiao": {
+            "x": 0.1,
+            "y": 0.1,
+            "w": 0.8,
+            "h": 0.8
+          },
+          "ajuste": "conter",
+          "interpolacao": "bilinear"
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000022",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "girar",
+          "graus": 90,
+          "espelhar_h": true,
+          "espelhar_v": false
+        }
+      ],
+      "midia": "m1",
+      "inicio_s": 2,
+      "fim_s": 4,
+      "inicio_pts": 30720,
+      "fim_pts": 61440,
+      "velocidade": {
+        "tipo": "constante",
+        "fator": 0.5
+      },
+      "audio": {
+        "volume": 0.8,
+        "mudo": false,
+        "manter_tom": true,
+        "silencios": []
+      }
+    },
+    {
+      "tipo": "congelar",
+      "id": "00000000-0000-4000-8000-000000000004",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [
+        {
+          "id": "00000000-0000-4000-8000-000000000007",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "destaque",
+          "forma": "retangulo",
+          "rastreio": "00000000-0000-4000-8000-000000000006",
+          "traco": {
+            "cor": "#ffd84a",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "tamanho": 0.12,
+          "angulo_graus": 45,
+          "margem": 0,
+          "rotulo": null
+        }
+      ],
+      "midia": "m1",
+      "instante_s": 4,
+      "instante_pts": 61440,
+      "duracao_s": 1.5
+    },
+    {
+      "tipo": "trecho",
+      "id": "00000000-0000-4000-8000-000000000005",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [],
+      "midia": "m1",
+      "inicio_s": 4,
+      "fim_s": 7,
+      "inicio_pts": 61440,
+      "fim_pts": 107520,
+      "velocidade": {
+        "tipo": "constante",
+        "fator": 1
+      },
+      "audio": {
+        "volume": 1,
+        "mudo": false,
+        "manter_tom": true,
+        "silencios": []
+      }
+    },
+    {
+      "tipo": "trecho",
+      "id": "00000000-0000-4000-8000-000000000003",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": {
+        "tipo": "escurecer",
+        "duracao_s": 0.4,
+        "audio": "acompanhar"
+      },
+      "efeitos": [
+        {
+          "id": "00000000-0000-4000-8000-000000000024",
+          "ligado": true,
+          "nome": "",
+          "ativo": {
+            "de": 1,
+            "ate": 5
+          },
+          "tipo": "ocultar",
+          "modo": "mosaico",
+          "alvo": {
+            "rastreio": "00000000-0000-4000-8000-000000000023",
+            "forma": "retangulo",
+            "vertices": null,
+            "margem": 0.1,
+            "borda_suave": 0,
+            "inverter": false
+          },
+          "intensidade": 0.5,
+          "cor": "#000000",
+          "conteudo": "rosto",
+          "motivo": ""
+        },
+        {
+          "id": "00000000-0000-4000-8000-000000000025",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "enquadramento",
+          "regiao": [
+            {
+              "t": 1,
+              "v": {
+                "x": 0,
+                "y": 0,
+                "w": 1,
+                "h": 1
+              }
+            },
+            {
+              "t": 4.5,
+              "pts": 69120,
+              "v": {
+                "x": 0.25,
+                "y": 0.25,
+                "w": 0.5,
+                "h": 0.5
+              }
+            }
+          ],
+          "ajuste": "cobrir",
+          "interpolacao": "bilinear"
+        }
+      ],
+      "midia": "m2",
+      "inicio_s": 1,
+      "fim_s": 5,
+      "inicio_pts": 15360,
+      "fim_pts": 76800,
+      "velocidade": {
+        "tipo": "constante",
+        "fator": 1
+      },
+      "audio": {
+        "volume": 1,
+        "mudo": true,
+        "manter_tom": true,
+        "silencios": []
+      }
+    },
+    {
+      "tipo": "imagem",
+      "id": "00000000-0000-4000-8000-000000000030",
+      "rotulo": "",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [
+        {
+          "id": "00000000-0000-4000-8000-000000000031",
+          "ligado": true,
+          "nome": "",
+          "ativo": null,
+          "tipo": "texto",
+          "conteudo": "Brasão",
+          "estilo": {
+            "fonte": "sans",
+            "negrito": false,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": {
+              "cor": "#000000",
+              "largura": 0.003
+            }
+          },
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "centro",
+            "v": "base"
+          },
+          "largura_max": 0.9
+        }
+      ],
+      "midia": "m3",
+      "duracao_s": 1
+    }
+  ],
+  "fecho": null,
+  "sobreposicoes": [
+    {
+      "id": "00000000-0000-4000-8000-000000000032",
+      "nome": "",
+      "oculta": false,
+      "clipes": [
+        {
+          "tipo": "titulo",
+          "id": "00000000-0000-4000-8000-000000000033",
+          "rotulo": "",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "00000000-0000-4000-8000-000000000002",
+            "desloc": 0
+          },
+          "duracao_s": 1.5,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 1,
+            "rotacao": 0,
+            "opacidade": 1
+          },
+          "entrada_s": 0,
+          "saida_s": 0,
+          "efeitos": [],
+          "titulo": {
+            "modelo": "evento",
+            "fundo": {
+              "tipo": "transparente"
+            },
+            "blocos": [
+              {
+                "id": "00000000-0000-4000-8000-000000000035",
+                "papel": "titulo",
+                "conteudo": "Chegada do veículo",
+                "estilo": {
+                  "fonte": "sans",
+                  "negrito": true,
+                  "italico": false,
+                  "tamanho": 0.078,
+                  "cor": "#ffffff",
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null
+                },
+                "lugar": {
+                  "x": 0.5,
+                  "y": 0.44,
+                  "h": "centro",
+                  "v": "base"
+                },
+                "largura_max": 0.86
+              }
+            ]
+          }
+        },
+        {
+          "tipo": "titulo",
+          "id": "00000000-0000-4000-8000-000000000034",
+          "rotulo": "",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "00000000-0000-4000-8000-000000000003",
+            "desloc": 0
+          },
+          "duracao_s": null,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 1,
+            "rotacao": 0,
+            "opacidade": 1
+          },
+          "entrada_s": 0,
+          "saida_s": 0,
+          "efeitos": [],
+          "titulo": {
+            "modelo": "terco_inferior",
+            "fundo": {
+              "tipo": "transparente"
+            },
+            "blocos": [
+              {
+                "id": "00000000-0000-4000-8000-000000000036",
+                "papel": "titulo",
+                "conteudo": "Câmera 2",
+                "estilo": {
+                  "fonte": "sans",
+                  "negrito": true,
+                  "italico": false,
+                  "tamanho": 0.078,
+                  "cor": "#ffffff",
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null
+                },
+                "lugar": {
+                  "x": 0.5,
+                  "y": 0.44,
+                  "h": "centro",
+                  "v": "base"
+                },
+                "largura_max": 0.86
+              }
+            ]
+          }
+        },
+        {
+          "tipo": "imagem",
+          "id": "00000000-0000-4000-8000-000000000037",
+          "rotulo": "",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "00000000-0000-4000-8000-000000000028",
+            "desloc": 0
+          },
+          "duracao_s": null,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 0.2,
+            "rotacao": 0,
+            "opacidade": 1
+          },
+          "entrada_s": 0,
+          "saida_s": 0,
+          "efeitos": [],
+          "midia": "m3"
+        }
+      ]
+    }
+  ],
+  "audios": [
+    {
+      "id": "00000000-0000-4000-8000-000000000039",
+      "nome": "",
+      "papel": "narracao",
+      "volume": 0.9,
+      "mudo": false,
+      "abaixa_original": false,
+      "clipes": [
+        {
+          "id": "00000000-0000-4000-8000-000000000038",
+          "nome": "narracao.wav",
+          "midia": "m4",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "00000000-0000-4000-8000-000000000002",
+            "desloc": 0
+          },
+          "de_s": 0.5,
+          "ate_s": 1.5,
+          "volume": 1,
+          "entrada_s": 0.1,
+          "saida_s": 0.1
+        }
+      ]
+    }
+  ],
+  "legendas": {
+    "estilo": {
+      "fonte": "sans",
+      "negrito": false,
+      "italico": false,
+      "tamanho": 0.052,
+      "cor": "#ffffff",
+      "alinhamento": "centro",
+      "caixa": {
+        "cor": "#0000008c",
+        "margem": 0.013,
+        "raio": 0
+      },
+      "contorno": null
+    },
+    "lugar": {
+      "x": 0.5,
+      "y": 0.94,
+      "h": "centro",
+      "v": "base"
+    },
+    "linhas_max": 2,
+    "origem": null,
+    "itens": []
+  },
+  "rastreios": [
+    {
+      "id": "00000000-0000-4000-8000-000000000006",
+      "nome": "",
+      "cor": "#ffd84a",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 4,
+          "pts": 61440,
+          "v": {
+            "x": 0.4,
+            "y": 0.4,
+            "w": 0.2,
+            "h": 0.2
+          }
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000008",
+      "nome": "",
+      "cor": "#ffd84a",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 4,
+          "pts": 61440,
+          "v": {
+            "x": 0.4,
+            "y": 0.4,
+            "w": 0.2,
+            "h": 0.2
+          }
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000010",
+      "nome": "",
+      "cor": "#ffd84a",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 2,
+          "pts": 30720,
+          "v": {
+            "x": 0.5,
+            "y": 0.5,
+            "w": 0,
+            "h": 0
+          }
+        },
+        {
+          "t": 3,
+          "pts": 46080,
+          "v": {
+            "x": 0.6,
+            "y": 0.45,
+            "w": 0,
+            "h": 0
+          }
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000012",
+      "nome": "",
+      "cor": "#ffd84a",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 2,
+          "pts": 30720,
+          "v": {
+            "x": 0.2,
+            "y": 0.2,
+            "w": 0.2,
+            "h": 0.3
+          }
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000014",
+      "nome": "",
+      "cor": "#ffd84a",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 2,
+          "pts": 30720,
+          "v": {
+            "x": 0.1,
+            "y": 0.6,
+            "w": 0.2,
+            "h": 0.15
+          }
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000023",
+      "nome": "",
+      "cor": "#ffd84a",
+      "midia": "m2",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 1,
+          "pts": 15360,
+          "v": {
+            "x": 0.4,
+            "y": 0.4,
+            "w": 0.2,
+            "h": 0.2
+          }
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    }
+  ],
+  "marcadores": [],
+  "sincronias": [],
+  "mixagem": {
+    "volume_original": 0.7,
+    "abaixar": {
+      "db": -12,
+      "ataque_s": 0.3,
+      "soltura_s": 0.5
+    },
+    "normalizar": null,
+    "limitador": false
+  }
+}

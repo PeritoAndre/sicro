@@ -471,7 +471,7 @@ fn conferir_par(v: &mut Vec<Prender>, onde: OndePrender, tab: &TabelaQuadros, j:
 /// Tempos presos a quadro que faltam ou não batem com a tabela: o front grava cada um por `alterar()`.
 pub fn prender(p: &ProjetoEdicao, ctx: &Contexto) -> Vec<Prender> {
     let mut v = Vec::new();
-    let tabela = |midia: &str| ctx.fontes.get(midia).map(|f| &*f.quadros).filter(|t| !t.pts.is_empty());
+    let tabela = |midia: &str| ctx.fontes.get(midia).filter(|f| crate::edicao::previa::marcavel(f)).map(|f| &*f.quadros).filter(|t| !t.pts.is_empty());
     let analise = |v: &mut Vec<Prender>, clipe: &str, efeitos: &[Tolerante<Efeito>], tab: &TabelaQuadros| {
         for e in efeitos {
             let Tolerante::Conhecido(Efeito::Estabilizar(e)) = e else { continue };
@@ -1136,6 +1136,16 @@ print(json.dumps(saida))
             trecho("c1", "a", (1.0, Some(15360)), (3.0, Some(46080)), 1.0, json!(null)),
             trecho("c2", "b", (4.0, Some(4000)), (fim_b, None), 1.0, json!(null)),
         ] }));
+        assert!(com_contexto(&m, &apoio::cap_falsa(), |ctx| prender(&p, ctx)).is_empty());
+        // mídia não marcável (tabela de pacotes de h264 cru): nada é preso por ela (contratos (h) 17)
+        let p = projeto(json!({ "principal": [trecho("c1", "a", (1.0, None), (3.0, None), 1.0, json!(null))] }));
+        assert!(!com_contexto(&m, &apoio::cap_falsa(), |ctx| prender(&p, ctx)).is_empty());
+        let mut m = m;
+        let a = m.get_mut("a").unwrap();
+        a.conteiner = "h264".into();
+        let mut q = (*a.quadros).clone();
+        q.origem = crate::edicao::quadros::OrigemTabela::Pacotes;
+        a.quadros = q.into();
         assert!(com_contexto(&m, &apoio::cap_falsa(), |ctx| prender(&p, ctx)).is_empty());
     }
 

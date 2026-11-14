@@ -13,12 +13,15 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::armazem;
-use super::executar::{self, abrir_banco, codigo_de, sha256_bytes, sha_valido, Ambiente, Autor, Ciencia, Limitador, Progresso, Resultado};
+use super::executar::{
+    self, abrir_banco, codigo_de, sha256_bytes, sha_valido, Ambiente, Autor, Ciencia, Limitador, Preparado, Progresso, Resultado,
+};
+use super::ffmpeg::sonda::Capacidades;
 use super::fundo::{self, texto_do_erro, TipoFundo};
 use super::mensagens::codigo;
-use super::modelo::{EscolhaCodificador, Predefinicao};
+use super::modelo::{EscolhaCodificador, Predefinicao, ProjetoEdicao};
 use super::motor::plano::Plano;
-use super::motor::Alvo;
+use super::motor::{Alvo, Contexto};
 use super::relatorio::tecnico::{ConferenciaOcultacoes, Fecho};
 use crate::database::repositories::{occurrence_repo, video_edit_output_repo, video_repo};
 use crate::error::{Result, SicroError};
@@ -674,13 +677,7 @@ impl Motor for MotorReal {
             identidade: identidade(&pedido.ws, &prep.cap),
             ciencias: pedido.ciencias.iter().map(|c| Ciencia { codigo: c.clone(), ciente_em: tarefa.criado_em.clone() }).collect(),
         };
-        let compilar = |cpu: bool| {
-            let mut alvo = pedido.alvo.clone();
-            if let (true, Alvo::Final { exportacao }) = (cpu, &mut alvo) {
-                exportacao.codificador = EscolhaCodificador::Cpu;
-            }
-            super::motor::compilar(&p, &ctx, &alvo)
-        };
+        let compilar = |cpu: bool| compilar_alvo(&p, &prep, &pedido.alvo, cpu);
         let (plano, res) = executar::executar_com_queda(&compilar, &amb, cancelar, progresso)?;
         if res.queda_para_cpu.is_some() {
             // §5.6: a sonda de GPU é refeita depois de falha de render por GPU
@@ -704,9 +701,27 @@ impl Motor for MotorReal {
                     EstadoSaida::Concluida => Estado::Concluida { saida_id: s.id },
                 })
             }
-            Alvo::Previa { .. } | Alvo::Quadro { .. } => Ok(Estado::Pronta { relativo: rel(&res.arquivo) }),
+            Alvo::Previa { .. } | Alvo::Quadro { .. } => {
+                // o som já está no arquivo tocado
+                apagar_pcm(trabalho, &plano);
+                Ok(Estado::Pronta { relativo: rel(&res.arquivo) })
+            }
         }
     }
+}
+
+/// Plano do alvo. `cpu` = queda de GPU (§5.7): o plano sai sem GPU em qualquer alvo (a prévia do render também
+/// codifica pela GPU aprovada, e não tem escolha de codificador para trocar) e a exportação grava a escolha `cpu`.
+pub(crate) fn compilar_alvo(p: &ProjetoEdicao, prep: &Preparado, alvo: &Alvo, cpu: bool) -> Result<Plano> {
+    if !cpu {
+        return super::motor::compilar(p, &prep.contexto(), alvo);
+    }
+    let mut alvo = alvo.clone();
+    if let Alvo::Final { exportacao } = &mut alvo {
+        exportacao.codificador = EscolhaCodificador::Cpu;
+    }
+    let sem_gpu = Capacidades { gpu: None, ..(*prep.cap).clone() };
+    super::motor::compilar(p, &Contexto { cap: &sem_gpu, ..prep.contexto() }, &alvo)
 }
 
 /// Antes de renderizar a exportação final: a pasta das exportações do caso aceita gravação? Caso em pasta só de
@@ -764,11 +779,43 @@ pub(crate) fn identidade(ws: &Path, cap: &super::ffmpeg::sonda::Capacidades) -> 
     }
 }
 
+/// `/proc/cpuinfo` só existe no Linux: no Windows o nome vem da CPUID (o mesmo texto do "model name").
 fn modelo_da_cpu() -> String {
     fs::read_to_string("/proc/cpuinfo")
         .ok()
         .and_then(|t| t.lines().find(|l| l.starts_with("model name")).and_then(|l| l.split_once(':')).map(|(_, v)| v.trim().to_string()))
+        .filter(|m| !m.is_empty())
+        .or_else(marca_da_cpu)
         .unwrap_or_default()
+}
+
+/// Nome comercial pela CPUID (folhas 0x80000002 a 0x80000004).
+#[cfg(any(target_arch = "x86", target_arch = "x86_64"))]
+fn marca_da_cpu() -> Option<String> {
+    #[cfg(target_arch = "x86")]
+    use std::arch::x86::__cpuid;
+    #[cfg(target_arch = "x86_64")]
+    use std::arch::x86_64::__cpuid;
+    // CPUID existe em toda CPU x86-64 e em x86 desde o Pentium
+    #[allow(unused_unsafe)]
+    let folha = |f: u32| unsafe { __cpuid(f) };
+    if folha(0x8000_0000).eax < 0x8000_0004 {
+        return None;
+    }
+    let mut b = Vec::with_capacity(48);
+    for f in 0x8000_0002u32..=0x8000_0004 {
+        let r = folha(f);
+        for x in [r.eax, r.ebx, r.ecx, r.edx] {
+            b.extend_from_slice(&x.to_le_bytes());
+        }
+    }
+    let m = String::from_utf8_lossy(&b).trim_matches(|c: char| c == '\0' || c.is_whitespace()).to_string();
+    (!m.is_empty()).then_some(m)
+}
+
+#[cfg(not(any(target_arch = "x86", target_arch = "x86_64")))]
+fn marca_da_cpu() -> Option<String> {
+    None
 }
 
 /// Conjuntos que mudam os bytes do x264 e do AAC: definem a classe de máquina (§5.7).
@@ -1476,10 +1523,7 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
         });
         occurrence_repo::record_audit(&tx, Some(&occ), "video.edicao.render", Some("video"), Some("edicao_saida"), Some(&saida), Some(&d.to_string()))?;
         tx.commit()?;
-        // o PCM do programa (centenas de MB por hora) não fica 7 dias na pasta de trabalho
-        if let Some(a) = p.plano.audio.as_ref().filter(|a| !a.saida.contains(['/', '\\']) && a.saida != "..") {
-            let _ = fs::remove_file(p.amb.trabalho.join(&a.saida));
-        }
+        apagar_pcm(&p.amb.trabalho, p.plano);
         Ok(SaidaRegistrada::from(linha))
     })();
     if r.is_err() {
@@ -1487,6 +1531,13 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
         let _ = fs::remove_dir_all(&retrato);
     }
     r
+}
+
+/// O PCM do programa (centenas de MB por hora) não fica 7 dias na pasta de trabalho, fora da conta do teto do cache.
+fn apagar_pcm(trabalho: &Path, plano: &Plano) {
+    if let Some(a) = plano.audio.as_ref().filter(|a| !a.saida.contains(['/', '\\']) && a.saida != "..") {
+        let _ = fs::remove_file(trabalho.join(&a.saida));
+    }
 }
 
 /// `edicao_conferir`: completa a conferência no `tecnico.pendente.json` do retrato, grava o `tecnico.json` final na
@@ -2616,5 +2667,17 @@ mod testes {
         assert_eq!(serde_json::to_value(EstadoSaida::AConferir).unwrap(), json!("a_conferir"));
         assert_eq!(serde_json::to_value(TipoTarefa::QuadroFinal).unwrap(), json!("quadro_final"));
         assert_eq!(serde_json::to_value(PapelRetrato::Trf).unwrap(), json!("trf"));
+    }
+
+    /// O nome da CPU do `tecnico.json` (`execucao.sistema.cpu.modelo`) sem `/proc` (Windows): o da CPUID é o mesmo
+    /// texto que o Linux mostra.
+    #[cfg(all(target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
+    #[test]
+    fn modelo_da_cpu_sem_proc_e_o_mesmo() {
+        let linux = fs::read_to_string("/proc/cpuinfo").unwrap();
+        let linux = linux.lines().find(|l| l.starts_with("model name")).and_then(|l| l.split_once(':')).map(|(_, v)| v.trim()).unwrap();
+        assert!(!linux.is_empty());
+        assert_eq!(super::marca_da_cpu().as_deref(), Some(linux));
+        assert_eq!(super::modelo_da_cpu(), linux);
     }
 }

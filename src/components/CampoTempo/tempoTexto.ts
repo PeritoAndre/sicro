@@ -4,7 +4,7 @@
  */
 
 import type { Pts, Racional, Seg, TabelaQuadros } from "@domain/edicao";
-import { exibido, nQuadros, ptsDaTabela, tempoDoQuadro } from "@modules/edicao/modelo/tempo";
+import { exibido, fimDaMidia, nQuadros, ptsDaTabela, tempoDoQuadro } from "@modules/edicao/modelo/tempo";
 
 export type BaseTempo = "fonte" | "programa";
 
@@ -74,6 +74,13 @@ export function lerTempo(texto: string, ref: RefTempo): TempoLido | null {
 
 /** Um quadro para frente ou para trás (pela tabela ou pela taxa); sem referência, 1 ms. */
 export function passoQuadro(t: Seg, sentido: 1 | -1, ref: RefTempo): TempoLido {
+  const tab = ref.base === "fonte" ? ref.tabela : null;
+  if (tab && nQuadros(tab) > 0 && Number.isFinite(t)) {
+    // no fim da mídia (o "Fim" de um trecho até o fim): ↓ vai ao último quadro, ↑ fica; o quadro exibido ali é o
+    // último, e andar a partir dele tirava um quadro com ↑ e dois com ↓
+    const fim = fimDaMidia(tab);
+    if (t >= fim - tab.tb.num / tab.tb.den / 2) return sentido < 0 ? (tempoDe(nQuadros(tab) - 1, ref) as TempoLido) : { t: Math.max(t, fim), pts: null };
+  }
   const q = quadroDe(t, ref);
   if (q !== null) {
     // fora da tabela fica no quadro atual

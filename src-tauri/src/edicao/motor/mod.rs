@@ -321,6 +321,20 @@ fn limitar_decodificadores(entradas: &mut [Entrada]) {
     }
 }
 
+/// Posição do efeito na cadeia do clipe (§5.3, `clipe.rs`): `ocultar` (domínio da fonte) → origem → giro →
+/// enquadramento → holofote → lupa → anotação (desenhada na ordem da lista).
+fn lugar_na_cadeia(e: &Efeito) -> u8 {
+    match e {
+        Efeito::Ocultar(_) => 0,
+        e if efeitos::familia(e) == efeitos::Familia::Origem => 1,
+        Efeito::Girar(_) => 2,
+        Efeito::Enquadramento(_) => 3,
+        Efeito::Holofote(_) => 4,
+        Efeito::Lupa(_) => 5,
+        _ => 6,
+    }
+}
+
 /// Faixas unidas (s) e o total delas.
 fn unir_faixas(mut v: Vec<(f64, f64)>) -> (Vec<ProvFaixa>, f64) {
     v.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.total_cmp(&b.1)));
@@ -446,6 +460,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
                         conteudo: o.conteudo,
                         motivo: o.motivo.clone(),
                         quadros: n,
+                        inverter: o.alvo.inverter,
                         });
                     }
                 }
@@ -462,11 +477,29 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             }
             _ => {}
         }
+        // no congelado, o `ocultar` do clipe que não pega nenhum slot sai desligado da cadeia
+        let desligadas: Vec<String> = match c {
+            ClipePrincipal::Congelar(_) => clipe::efeitos_do_congelado(&b.efeitos, res.n_q, fps)?
+                .iter()
+                .filter_map(|e| match e {
+                    Tolerante::Conhecido(Efeito::Ocultar(o)) if !o.base.ligado => Some(o.base.id.clone()),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let mut aplicados: Vec<&Efeito> = b
+            .efeitos
+            .iter()
+            .filter_map(|e| match e {
+                Tolerante::Conhecido(e) if efeitos::base(e).ligado && !desligadas.contains(&efeitos::base(e).id) => Some(e),
+                _ => None,
+            })
+            .collect();
+        // `ordem` é a da cadeia (§5.3), não a da lista do clipe
+        aplicados.sort_by_key(|e| lugar_na_cadeia(e));
         let mut processamentos = Vec::new();
-        for e in b.efeitos.iter().filter_map(|e| match e {
-            Tolerante::Conhecido(e) if efeitos::base(e).ligado => Some(e),
-            _ => None,
-        }) {
+        for e in aplicados {
             match e {
                 Efeito::Ocultar(o) => drop(rastreios_usados.insert(o.alvo.rastreio.clone())),
                 Efeito::Holofote(h) => drop(rastreios_usados.insert(h.alvo.rastreio.clone())),

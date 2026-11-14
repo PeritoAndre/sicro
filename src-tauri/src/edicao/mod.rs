@@ -31,3 +31,8 @@ pub mod testes;
 #[cfg(test)]
 #[path = "../../tests/edicao/ponta_a_ponta.rs"]
 mod ponta_a_ponta;
+
+// verificação da Fase 0 (lente de contratos): projeto gravado pelo store × leitura, validação e render
+#[cfg(test)]
+#[path = "../../tests/edicao/contratos.rs"]
+mod contratos_verif;

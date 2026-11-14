@@ -234,7 +234,8 @@ fn compilar_e_deterministica_e_nao_toca_o_disco() {
     let o = pr.roteiro[0].origem.as_ref().unwrap();
     assert_eq!((o.lidos, o.repetidos, o.descartados, o.j_in, o.quadro_do_slot.len(), o.pts.len()), (600, 600, 0, 330, 1200, 600));
     assert!(o.mapa.c > 0 && o.mapa.kd > 0);
-    assert_eq!(pr.roteiro[0].processamentos.iter().map(|x| x.nome.as_str()).collect::<Vec<_>>(), vec!["destaque", "enquadramento", "carimbo"]);
+    // na ordem da cadeia: o enquadramento vem antes das anotações
+    assert_eq!(pr.roteiro[0].processamentos.iter().map(|x| x.nome.as_str()).collect::<Vec<_>>(), vec!["enquadramento", "destaque", "carimbo"]);
     assert_eq!(pr.ocultacoes.len(), 1);
     let oc = &pr.ocultacoes[0];
     assert_eq!((oc.midia.as_str(), &oc.clipes, oc.quadros.ancora, oc.quadros.interpolado), ("m1", &vec!["c1".to_string(), "c2".to_string()], 501, 0));
@@ -657,6 +658,68 @@ fn proveniencia_com_periciais_em_todo_alvo() {
         let x = crate::edicao::motor::compilar(&p, &ctx, &alvo).expect("compila");
         assert_eq!(x.proveniencia, final_.proveniencia, "{alvo:?}");
     }
+}
+
+/// `processamentos[].ordem` é a da cadeia que o grafo aplica (doc de `ProvProcessamento`), não a da lista do clipe:
+/// ocultar → giro → enquadramento → holofote → anotações. O `ocultar` do congelado que não pega nenhum slot não
+/// entra na cadeia e não sai como processamento.
+#[test]
+fn processamentos_na_ordem_do_grafo() {
+    let (mundo, midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(30), Some(t.pts[30]), [0.3, 0.3, 0.2, 0.2])]);
+    let destaque = efeito("destaque", "d1", json!({ "forma": "retangulo", "rastreio": "r1", "traco": { "cor": "#00ff00", "espessura": 0.006, "contorno": true }, "tamanho": 0.1, "angulo_graus": 0.0, "margem": 0.0, "rotulo": null }));
+    let holofote = efeito("holofote", "h1", json!({ "alvo": { "rastreio": "r1", "forma": "elipse", "vertices": null, "margem": 0.0, "borda_suave": 0.0, "inverter": false }, "escurecer": 0.5, "dessaturar": 0.5 }));
+    let girar = efeito("girar", "g1", json!({ "graus": 90, "espelhar_h": false, "espelhar_v": false }));
+    let enq = enquadramento(json!({ "x": 0.1, "y": 0.1, "w": 0.6, "h": 0.6 }), "cobrir");
+    let carimbo = efeito("carimbo", "k1", json!({ "mostra": "tempo_fonte", "formato": "hms_ms", "relogio": null, "lugar": { "x": 0.05, "y": 0.95, "h": "esq", "v": "base" },
+        "estilo": { "fonte": "mono", "negrito": false, "italico": false, "tamanho": 0.04, "cor": "#ffffff", "alinhamento": "esq", "caixa": null, "contorno": null } }));
+    // a lista do clipe na ordem em que o front acrescenta (sempre no fim)
+    let lista = json!([destaque, carimbo, holofote, enq, girar, ocultar("o1", "r1", "solido", json!({}))]);
+    let congelado = json!({ "tipo": "congelar", "id": "c2", "rotulo": "", "midia": "m1", "instante_s": t.tempo(40), "instante_pts": t.pts[40], "duracao_s": 1.0,
+        "efeitos": [destaque_com_id("d2"), ocultar("o2", "r1", "solido", json!({ "ativo": { "de": 3.0, "ate": 4.0 } }))] });
+    let p = projeto(320, 180, (30, 1), midias, vec![trecho("c1", "m1", t, 30, 90, 1.0, lista), congelado], json!({ "rastreios": [r] }));
+    let plano = mundo.compilar(&p, &alvo_final("cpu")).expect("compila");
+    let nomes = |n: usize| plano.proveniencia.roteiro[n].processamentos.iter().map(|x| (x.ordem, x.nome.clone())).collect::<Vec<_>>();
+    let esperado: Vec<(u32, String)> = ["ocultar", "girar", "enquadramento", "holofote", "destaque", "carimbo"].iter().enumerate().map(|(i, n)| (i as u32 + 1, n.to_string())).collect();
+    assert_eq!(nomes(0), esperado);
+    // a mesma ordem no grafo do clipe c1 (só a parte dele: até a saída `c000v`)
+    let g = &plano.blocos[0].grafo;
+    let c1 = &g[..g.find("[c000v]").expect("saída do c1")];
+    // ocultar (alphamerge) → giro → recorte do enquadramento → holofote (lutyuv do escurecer) → anotação (overlay `pass`)
+    let mut desde = 0;
+    for marca in ["alphamerge", "transpose=dir=clock", "crop=", "lutyuv=y=clip", "eof_action=pass"] {
+        let i = c1[desde..].find(marca).unwrap_or_else(|| panic!("{marca} fora de ordem no grafo do c1:\n{c1}"));
+        desde += i + marca.len();
+    }
+    // congelado: o ocultar fora do `ativo` local não foi aplicado
+    assert_eq!(nomes(1), vec![(1, "destaque".to_string())]);
+    assert!(plano.proveniencia.ocultacoes.iter().all(|o| o.clipes != vec!["c2".to_string()]));
+}
+
+/// Ocultação invertida (contratos (g) 6: cobre o que está FORA da forma) não sai no `tecnico.json` como a comum:
+/// `feito.ocultacoes[].inverter` diz qual das duas o grafo aplicou.
+#[test]
+fn ocultacao_invertida_dita_no_feito() {
+    let (mundo, mut midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(30), Some(t.pts[30]), [0.3, 0.3, 0.2, 0.2])]);
+    let alvo = |inverter: bool| json!({ "rastreio": "r1", "forma": "elipse", "vertices": null, "margem": 0.0, "borda_suave": 0.0, "inverter": inverter });
+    midias[0]["ocultacoes"] = json!([ocultar("om", "r1", "desfoque", json!({ "alvo": alvo(true), "conteudo": "rosto" }))]);
+    let c2 = trecho("c2", "m1", t, 100, 130, 1.0, json!([ocultar("oc", "r1", "solido", json!({ "alvo": alvo(false) }))]));
+    let p = projeto(320, 180, (30, 1), midias, vec![trecho("c1", "m1", t, 30, 90, 1.0, json!([])), c2], json!({ "rastreios": [r] }));
+    let plano = mundo.compilar(&p, &alvo_final("cpu")).expect("compila");
+    let feito: Vec<(String, Value)> = plano.proveniencia.ocultacoes.iter().map(|o| (o.clipes.join(","), serde_json::to_value(o).unwrap()["inverter"].clone())).collect();
+    assert_eq!(feito, vec![("c1,c2".to_string(), json!(true)), ("c2".to_string(), json!(false))]);
+    // a máscara do grafo é a invertida: a forma desenhada é a da ocultação, com `inverter`
+    let invertida = plano.camadas.iter().filter(|c| c.tipo == TipoCamada::MascaraFonte).any(|c| {
+        c.itens.iter().any(|i| matches!(&i.desenho, crate::edicao::motor::plano::Desenho::Efeito { efeito: crate::edicao::modelo::Efeito::Ocultar(o) } if o.alvo.inverter))
+    });
+    assert!(invertida);
+}
+
+fn destaque_com_id(id: &str) -> Value {
+    efeito("destaque", id, json!({ "forma": "retangulo", "rastreio": "r1", "traco": { "cor": "#00ff00", "espessura": 0.006, "contorno": true }, "tamanho": 0.1, "angulo_graus": 0.0, "margem": 0.0, "rotulo": null }))
 }
 
 /// Casos de efeito de origem (todos no mesmo sítio de `clipe.rs`).

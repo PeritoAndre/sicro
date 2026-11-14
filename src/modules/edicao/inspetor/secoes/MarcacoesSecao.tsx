@@ -41,7 +41,9 @@ interface Item {
 /** A ocultação da mídia vale no clipe quando o `ativo` (tempo de fonte) cruza a faixa dele. */
 const cruza = (a: Intervalo | null, de: number, ate: number) => !a || ((a.de ?? -Infinity) < ate && (a.ate ?? Infinity) > de);
 
-export function MarcacoesSecao({ clipe: c, ctx, tabela }: SecaoProps<ClipeQualquer>) {
+export function MarcacoesSecao({ clipe: c, ctx, info, tabela: lida }: SecaoProps<ClipeQualquer>) {
+  // De e Até: #n e setas só com a tabela confiável (contratos (h) 17)
+  const tabela = info?.marcavel ? lida : null;
   const midias = useEdicaoStore((s) => s.doc?.midias);
   const aberto = useEdicaoStore((s) => s.selecao.efeito);
   const invalidos = useInvalidos();
@@ -94,7 +96,8 @@ export function MarcacoesSecao({ clipe: c, ctx, tabela }: SecaoProps<ClipeQualqu
 }
 
 /** Clipe · Realce: os efeitos de origem do clipe, sem editor nesta fase (o editor vem com o P1.4, `RealceSecao`). */
-export function RealceSoLeitura({ clipe: c, ctx, tabela }: SecaoProps<ClipeQualquer>) {
+export function RealceSoLeitura({ clipe: c, ctx, info, tabela: lida }: SecaoProps<ClipeQualquer>) {
+  const tabela = info?.marcavel ? lida : null;
   const invalidos = useInvalidos();
   const itens = c.efeitos.filter((e) => efeitoConhecido(e) && REGISTRO[e.tipo].familia === "origem");
   if (itens.length === 0) return null;

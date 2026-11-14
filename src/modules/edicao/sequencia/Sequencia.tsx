@@ -21,9 +21,8 @@ import { novoClipeImagem, novoClipeTitulo, prenderImagem, prenderNarracao, prend
 import { congelar, duplicar, inserir, inserirTrechos, moverPara, podeCongelar, remover, selecionarClipe } from "./acoes";
 import styles from "./Sequencia.module.css";
 import { capturar } from "../palco/capturar";
-
-const EXT_IMAGEM = ["png", "jpg", "jpeg", "webp", "bmp", "tif", "tiff"];
-const EXT_AUDIO = ["wav", "mp3", "m4a", "aac", "ogg", "opus", "flac"];
+// as listas que o Rust aceita (`armazem::{EXT_IMAGEM, EXT_AUDIO}`): o diálogo não oferece o que a importação recusa
+import { EXTENSOES } from "../inspetor/secoes/importar";
 
 /** Nome mostrado: o "Nome" do clipe, senão o arquivo da mídia sem extensão. */
 function nomeDo(c: ClipePrincipal, midias: { id: Id; nome: string }[]): string {
@@ -36,7 +35,15 @@ function nomeDo(c: ClipePrincipal, midias: { id: Id; nome: string }[]): string {
   return "";
 }
 
-export function Sequencia({ onModal }: { /** Formulário (diálogo) aberto ou fechado. */ onModal?(aberto: boolean): void }) {
+export function Sequencia({
+  onModal,
+  pararPalco,
+}: {
+  /** Formulário (diálogo) aberto ou fechado. */
+  onModal?(aberto: boolean): void;
+  /** Para o palco que toca: o cursor da store vai ao quadro mostrado antes de "Congelar aqui". */
+  pararPalco?(): void;
+}) {
   const doc = useEdicaoStore((s) => s.doc);
   const ws = useEdicaoStore((s) => s.ws);
   const analise = useEdicaoStore((s) => s.analise);
@@ -96,7 +103,7 @@ export function Sequencia({ onModal }: { /** Formulário (diálogo) aberto ou fe
   const importar = async (tipo: "imagem" | "audio"): Promise<{ id: Id; nome: string } | null> => {
     const st = useEdicaoStore.getState();
     if (!st.doc) return null;
-    const escolhido = await abrirArquivo({ multiple: false, filters: [{ name: tipo === "imagem" ? "Imagem" : "Narração", extensions: tipo === "imagem" ? EXT_IMAGEM : EXT_AUDIO }] });
+    const escolhido = await abrirArquivo({ multiple: false, filters: [{ name: tipo === "imagem" ? "Imagem" : "Narração", extensions: EXTENSOES[tipo] }] });
     if (typeof escolhido !== "string") return null;
     // a pasta do projeto precisa existir antes da mídia própria
     await st.descarregar().catch(() => {});
@@ -159,7 +166,10 @@ export function Sequencia({ onModal }: { /** Formulário (diálogo) aberto ou fe
       arrasto={arrasto}
       listaRef={listaRef}
       onForm={setForm}
-      onCongelar={congelar}
+      onCongelar={() => {
+        pararPalco?.();
+        congelar();
+      }}
       onImagem={() => void novaImagem()}
       onSelecionar={selecionarClipe}
       onDuplicar={duplicar}

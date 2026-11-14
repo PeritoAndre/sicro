@@ -69,6 +69,34 @@ describe("Trecho…", () => {
     t.desmontar();
   });
 
+  it("mídia não marcável (h 17): Início, Fim e Evento desligados, nenhum pts da tabela de pacotes; Dos eventos não adiciona", async () => {
+    const recebidos: TrechoNovo[][] = [];
+    cmd.edicaoMidiaInfo.mockResolvedValue({ ...info, tabela: "pacotes", marcavel: false });
+    cmd.edicaoTabelaQuadros.mockResolvedValue({ ...tabela, origem: "pacotes" });
+    const t = await montar(<NovoClipe qual="trecho" ws="/c2" onFechar={() => {}} onTrechos={(x) => recebidos.push(x)} onTitulo={() => {}} />);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const raiz = document.body;
+    await escolher(raiz.querySelector("select")!, "v1");
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    expect((entradaDe(raiz, "Início") as HTMLInputElement).disabled).toBe(true);
+    expect((entradaDe(raiz, "Fim") as HTMLInputElement).disabled).toBe(true);
+    expect(([...raiz.querySelectorAll("select")][1] as HTMLSelectElement).disabled).toBe(true);
+    // a mídia inteira, presa depois pelo Rust (pts nulos)
+    await clicar(botao(raiz, "Adicionar"));
+    expect(recebidos[0]).toEqual([expect.objectContaining({ inicio_s: 1, inicio_pts: null, fim_s: 41, fim_pts: null })]);
+    t.desmontar();
+    const e = await montar(<NovoClipe qual="eventos" ws="/c2" onFechar={() => {}} onTrechos={(x) => recebidos.push(x)} onTitulo={() => {}} />);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    await escolher(document.body.querySelector("select")!, "v1");
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const caixas = [...document.body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    expect(caixas).toHaveLength(2);
+    expect(caixas.every((c) => c.disabled)).toBe(true);
+    expect(botao(document.body, "Adicionar").disabled).toBe(true);
+    e.desmontar();
+  });
+
   it("tempoDoEvento: pts × time_base quando há; senão timestamp_s", () => {
     expect(tempoDoEvento({ timestamp_s: 3, pts: 9000, time_base: "1/90000" })).toBe(0.1);
     expect(tempoDoEvento({ timestamp_s: 3, pts: null, time_base: "1/90000" })).toBe(3);

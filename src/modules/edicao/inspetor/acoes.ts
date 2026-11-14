@@ -3,7 +3,8 @@
  * mudança de campo = um passo, com o rótulo do campo (§8.6). Valor inválido não chega aqui (os campos filtram).
  */
 
-import type { Draft } from "immer";
+import { produce, type Draft } from "immer";
+import { commands } from "@core/commands";
 import type {
   Caixa,
   Chave,
@@ -28,8 +29,8 @@ import type {
   Seg,
   Transicao,
 } from "@domain/edicao";
-import { useEdicaoStore, type Gesto } from "../store/edicaoStore";
-import { acharClipe, acharEfeito, clipeConhecido, efeitoConhecido, garantirMidia, porChave, sobrepostoConhecido, tirarChave } from "../modelo/projeto";
+import { emSerie, useEdicaoStore, type Gesto } from "../store/edicaoStore";
+import { acharClipe, acharEfeito, clipeConhecido, comoChegou, completar, efeitoConhecido, garantirMidia, porChave, sobrepostoConhecido, tirarChave } from "../modelo/projeto";
 import { ehChaves } from "../modelo/curva";
 import { exibido, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 import { recursoDe } from "../palco/recursos";
@@ -102,6 +103,20 @@ function quadroDoCongelado(c: ClipeCongelar): { t: Seg; pts: Pts | null } {
   return { t: tempoDoQuadro(tab, j), pts: ptsDaTabela(tab)[j] as number };
 }
 
+/** Quadro mostrado no tempo `t` do trecho, com o pts: a âncora nasce igual à que o palco marca nesse quadro. */
+function quadroDoTrecho(c: ClipeTrecho, t: Seg): { t: Seg; pts: Pts | null } | null {
+  const doc = st().doc;
+  const tab = doc ? recursoDe(doc.midias.find((m) => m.id === c.midia)?.sha256).tabela : null;
+  if (!tab) return null;
+  const j = exibido(tab, t);
+  return { t: tempoDoQuadro(tab, j), pts: ptsDaTabela(tab)[j] as number };
+}
+
+/** Instante do 1º quadro do trecho (o `ativo` é intervalo fechado no instante do quadro). */
+function inicioDoTrecho(c: ClipeTrecho): Seg {
+  return quadroDoTrecho(c, c.inicio_s)?.t ?? c.inicio_s;
+}
+
 /** "Adicionar → …" no clipe. Ocultar de trecho vai para a mídia (vale em todo uso dela, D17), com `ativo` = faixa
  *  do clipe em tempo de fonte; de quadro congelado também, com `ativo` no instante do quadro (contratos (h) 23);
  *  nos outros clipes fica no clipe. Devolve o id do efeito, já selecionado. */
@@ -115,13 +130,14 @@ export function adicionarEfeito(clipeId: Id, tipo: Exclude<TipoAdicionar, "image
   if (tipo === "destaque" || tipo === "ocultar") {
     // congelado: rastreio de base fonte amostrado no instante dele (não no tempo local do cursor)
     const q = c.tipo === "congelar" ? quadroDoCongelado(c) : null;
-    const r = novoRastreio(midia, q ? q.t : t, CAIXA_CENTRO);
-    if (q) r.ancoras = [{ t: q.t, pts: q.pts, v: CAIXA_CENTRO }];
+    const k = q ?? (c.tipo === "trecho" ? quadroDoTrecho(c, t) : null);
+    const r = novoRastreio(midia, k ? k.t : t, CAIXA_CENTRO);
+    if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: CAIXA_CENTRO }];
     extra.push((d) => void d.rastreios.push(r));
     if (tipo === "destaque") novoEf = novoDestaque(r.id);
     else if (c.tipo === "trecho" || q) {
       const m = midia as Id;
-      const ef = novoOcultar(r.id, q ? { de: q.t, ate: q.t } : { de: (c as ClipeTrecho).inicio_s, ate: (c as ClipeTrecho).fim_s });
+      const ef = novoOcultar(r.id, q ? { de: q.t, ate: q.t } : { de: inicioDoTrecho(c as ClipeTrecho), ate: (c as ClipeTrecho).fim_s });
       mudar(rotulo, (d) => {
         d.rastreios.push(r);
         d.midias.find((x) => x.id === m)?.ocultacoes.push(ef);
@@ -225,7 +241,7 @@ export function soNesteClipe(efeitoId: Id, clipeId: Id, sim: boolean, rotulo: st
     } else if (!sim && a.clipe) {
       a.lista.splice(a.indice, 1);
       // da mídia: `ativo` obrigatório, em tempo de fonte
-      ef.ativo = { de: ef.ativo?.de ?? c.inicio_s, ate: ef.ativo?.ate ?? c.fim_s };
+      ef.ativo = { de: ef.ativo?.de ?? inicioDoTrecho(c as ClipeTrecho), ate: ef.ativo?.ate ?? c.fim_s };
       m.ocultacoes.push(ef);
     }
   });
@@ -315,7 +331,11 @@ export function marcarRegiao(clipeId: Id, ponta: "inicio" | "fim", t: Seg, pts: 
       const k0 = (): Chave<Caixa> => ({ t: (c as ClipeQualquer).tipo === "trecho" ? (c as ClipeTrecho).inicio_s : 0, v: CAIXA_INTEIRA });
       if (i < 0) {
         if (ponta === "inicio") c.efeitos.push(novoEnquadramento(v));
-        else c.efeitos.push({ ...novoEnquadramento(v), regiao: [k0(), chaveEm(t, pts, v)] });
+        else {
+          // o cursor pode estar antes do começo do clipe (aparar): as chaves vão em ordem de tempo
+          const a = k0();
+          c.efeitos.push({ ...novoEnquadramento(v), regiao: t >= a.t ? [a, chaveEm(t, pts, v)] : [chaveEm(t, pts, v), a] });
+        }
         return;
       }
       const e = c.efeitos[i] as Draft<EfEnquadramento>;
@@ -369,18 +389,47 @@ export function definirTransicao(clipeId: Id, tipo: string | null, rotulo: strin
 
 /** Clipe de narração preso ao clipe da principal (desloc 0), ou no início do programa. Cria a trilha se não há. */
 export function adicionarNarracao(midia: MidiaRef, presoA: Id | null, rotulo: string, trilha?: Id): Id {
+  let id = "";
+  mudar(rotulo, (d) => {
+    id = juntarNarracao(d, midia, presoA, trilha);
+  });
+  return id;
+}
+
+/** A mudança de `adicionarNarracao` sobre um rascunho. */
+export function juntarNarracao(d: Draft<ProjetoEdicao>, midia: MidiaRef, presoA: Id | null, trilha?: Id): Id {
   const pos: Posicao = presoA ? { ref: "clipe", clipe: presoA, desloc: 0 } : { ref: "programa", t: 0 };
   const clipe = novoClipeAudio(midia.id, midia.nome, pos);
-  mudar(rotulo, (d) => {
-    const id = garantirMidia(d, midia);
-    let t = trilha ? d.audios.find((x) => x.id === trilha) : d.audios.find((x) => x.papel === "narracao");
-    if (!t) {
-      d.audios.push(novaTrilhaNarracao());
-      t = d.audios[d.audios.length - 1];
-    }
-    t!.clipes.push({ ...clipe, midia: id });
-  });
+  const id = garantirMidia(d, midia);
+  let t = trilha ? d.audios.find((x) => x.id === trilha) : d.audios.find((x) => x.papel === "narracao");
+  if (!t) {
+    d.audios.push(novaTrilhaNarracao());
+    t = d.audios[d.audios.length - 1];
+  }
+  t!.clipes.push({ ...clipe, midia: id });
   return clipe.id;
+}
+
+/** Narração gravada no projeto `id` do caso `ws`: pela store quando ele está aberto; senão no arquivo dele (o perito
+ *  trocou de edição ou de caso gravando: a gravação não se perde nem cai no projeto que abriu depois). */
+export function narracaoNoProjeto(ws: string, id: Id, midia: MidiaRef, presoA: Id | null, rotulo: string, trilha?: Id): Promise<void> {
+  const aberto = () => st().ws === ws && st().aberta?.projetoId === id && !!st().doc;
+  if (aberto()) {
+    adicionarNarracao(midia, presoA, rotulo, trilha);
+    return Promise.resolve();
+  }
+  return emSerie(async () => {
+    if (aberto()) {
+      adicionarNarracao(midia, presoA, rotulo, trilha);
+      return;
+    }
+    const r = await commands.edicaoAbrir(ws, id);
+    // versão mais nova do arquivo: não se regrava (o áudio fica na pasta do projeto)
+    if (r.so_leitura) return;
+    const base = completar(r.projeto);
+    const novo = produce(base, (d) => void juntarNarracao(d, midia, presoA, trilha));
+    await commands.edicaoSalvar(ws, comoChegou(novo, base, r.projeto));
+  });
 }
 
 /** O que o palco marcou para um pedido sem dono próprio (`ContextoClipe.marcar`): âncora do rastreio, lugar do

@@ -1,7 +1,7 @@
 /** Sequência: textos do cartão, selos, item inválido, arrasto, dividir/congelar/duplicar e as ações pela store. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Analise, ClipeTrecho, MidiaRef, Problema, ProjetoEdicao, TabelaQuadros } from "@domain/edicao";
+import type { Analise, ClipeTrecho, MidiaInfo, MidiaRef, Problema, ProjetoEdicao, TabelaQuadros } from "@domain/edicao";
 
 const cmd = vi.hoisted(() => ({
   edicaoAbrir: vi.fn(),
@@ -148,7 +148,7 @@ describe("mudanças da lista", () => {
     ]);
     expect(d.sobreposicoes[0]!.clipes[1]).toMatchObject({ duracao_s: null, pos: { ref: "clipe", clipe: "c1", desloc: 0 } });
     expect(presosAoClipe(d, "c2").map((p) => p.tipo)).toEqual(["imagem"]);
-    expect(d.audios[0]).toMatchObject({ papel: "narracao", abaixa_original: true });
+    expect(d.audios[0]).toMatchObject({ papel: "narracao", abaixa_original: false });
   });
 
   it("títulos novos e pares de eventos", () => {
@@ -183,9 +183,12 @@ describe("ações pela store (alterar e desfazer)", () => {
     p.principal = ["a", "b", "c"].map((id, i) => ({ ...novoTrecho("m", tempoDoQuadro(t, i * 60), tempoDoQuadro(t, i * 60 + 50)), id, inicio_pts: i * 60 * 512, fim_pts: (i * 60 + 50) * 512 }));
     cmd.edicaoAbrir.mockResolvedValue({ projeto: p, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "/cache" });
     await st().abrir(WS, p.id);
-    // a tela já tem a tabela dessa mídia
-    useRecursos.setState({ midias: { [sha]: { info: null, tabela: t, erro: null, pedindo: false } } });
+    // a tela já tem a tabela dessa mídia (marcável)
+    marcar(true);
   });
+  /** MidiaInfo e tabela no cache do palco; `marcavel` falso = tabela de pacotes de contêiner sem tempo (h 17). */
+  const marcar = (marcavel: boolean) =>
+    useRecursos.setState({ midias: { [sha]: { info: { marcavel, tabela: marcavel ? "decodificador" : "pacotes" } as MidiaInfo, tabela: { ...t, origem: marcavel ? "decodificador" : "pacotes" }, erro: null, pedindo: false } } });
   afterEach(async () => {
     await st().fechar({ descartar: true }).catch(() => {});
     vi.useRealTimers();
@@ -276,5 +279,21 @@ describe("ações pela store (alterar e desfazer)", () => {
     st().posicionar({ modo: "clipe", clipe: "a", t: (55 * 512 + 256) / 15360 });
     expect(podeCongelar()).toBe(false);
     expect(st().doc!.principal.filter(clipeConhecido)).toHaveLength(4);
+  });
+
+  it("mídia não marcável (contratos (h) 17): Dividir e Congelar aqui não gravam pts da tabela de pacotes", () => {
+    marcar(false);
+    selecionarClipe("b");
+    st().posicionar({ modo: "clipe", clipe: "b", t: (75 * 512 + 256) / 15360 });
+    expect(podeCongelar()).toBe(false);
+    congelar();
+    dividir();
+    expect(ids()).toEqual(["a", "b", "c"]);
+    expect(st().passado).toHaveLength(0);
+    // a tabela do decodificador chegou: marca
+    marcar(true);
+    expect(podeCongelar()).toBe(true);
+    dividir();
+    expect(ids()).toHaveLength(4);
   });
 });

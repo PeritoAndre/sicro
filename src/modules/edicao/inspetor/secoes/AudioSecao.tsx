@@ -12,7 +12,7 @@ import { pushToast } from "@components/toast/toastStore";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import { separarErro, useEdicaoStore } from "../../store/edicaoStore";
 import { clipeConhecido } from "../../modelo/projeto";
-import { adicionarNarracao, mudar } from "../acoes";
+import { adicionarNarracao, mudar, narracaoNoProjeto } from "../acoes";
 import { Deslizante, Grade, Icone, Mini, Numero, Secao, Tempo } from "../campos";
 import { escolherMidia } from "./importar";
 import styles from "../Inspetor.module.css";
@@ -232,6 +232,10 @@ function Gravador({ presoA, trilha }: { presoA: Id | null; trilha?: Id }) {
   }, [gravando]);
   const tem = typeof MediaRecorder !== "undefined" && typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia;
   const gravar = async () => {
+    const st = useEdicaoStore.getState();
+    if (!st.ws || !st.aberta) return;
+    // a gravação é do projeto em que começou, mesmo que a tela troque de edição ou de caso antes de parar
+    const dono = { ws: st.ws, id: st.aberta.projetoId };
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (!montado.current) {
@@ -244,7 +248,7 @@ function Gravador({ presoA, trilha }: { presoA: Id | null; trilha?: Id }) {
       mr.ondataavailable = (e) => e.data.size > 0 && partes.current.push(e.data);
       mr.onstop = () => {
         stream.getTracks().forEach((x) => x.stop());
-        void salvar(new Blob(partes.current, { type: mr.mimeType }), mr.mimeType || "audio/webm");
+        void salvar(new Blob(partes.current, { type: mr.mimeType }), mr.mimeType || "audio/webm", dono);
       };
       mr.start();
       setGravando({ mr, inicio: Date.now() });
@@ -253,14 +257,13 @@ function Gravador({ presoA, trilha }: { presoA: Id | null; trilha?: Id }) {
       pushToast("error", separarErro(e).frase);
     }
   };
-  const salvar = async (b: Blob, mime: string) => {
+  const salvar = async (b: Blob, mime: string, dono: { ws: string; id: Id }) => {
     const st = useEdicaoStore.getState();
-    if (!st.ws || !st.aberta) return;
     try {
       // o projeto no disco antes do arquivo; se essa gravação falhar (ela tenta de novo), a narração não se perde
-      await st.descarregar().catch(() => {});
-      const m = await commands.edicaoGravacaoSalvar(st.ws, st.aberta.projetoId, mime, new Uint8Array(await b.arrayBuffer()));
-      adicionarNarracao(m, destino.current.presoA, "Gravar", destino.current.trilha);
+      if (st.ws === dono.ws && st.aberta?.projetoId === dono.id) await st.descarregar().catch(() => {});
+      const m = await commands.edicaoGravacaoSalvar(dono.ws, dono.id, mime, new Uint8Array(await b.arrayBuffer()));
+      await narracaoNoProjeto(dono.ws, dono.id, m, destino.current.presoA, "Gravar", destino.current.trilha);
     } catch (e) {
       pushToast("error", separarErro(e).frase);
     }

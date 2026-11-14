@@ -72,6 +72,12 @@ describe("ações", () => {
     ]);
   });
 
+  it("sem enquadramento, marcar o fim antes do começo do clipe (cursor fora da faixa) deixa as chaves em ordem", () => {
+    st().alterar("Remover", (d) => void ((d.principal[2] as ClipeTrecho).efeitos = (d.principal[2] as ClipeTrecho).efeitos.filter((x) => (x as { tipo: string }).tipo !== "enquadramento")));
+    marcarRegiao(trecho(2).id, "fim", 2, null, { x: 0.3, y: 0.3, w: 0.3, h: 0.3 }, "Marcar fim");
+    expect((efeito<EfEnquadramento>(2, "enquadramento")!.regiao as { t: number }[]).map((k) => k.t)).toEqual([2, 3]);
+  });
+
   it("girar: muda, espelha e some em 0° sem espelho", () => {
     const id = trecho(1).id;
     mudarGiro(id, { espelhar_v: true }, "Espelhar");

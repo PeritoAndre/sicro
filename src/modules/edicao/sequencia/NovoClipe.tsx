@@ -80,13 +80,15 @@ function useEventos(ws: string, video: VideoMedia | null) {
   return eventos;
 }
 
-function useMidia(ws: string, v: VideoMedia | null): { info: MidiaInfo | null; tabela: TabelaQuadros | null } {
+/** `tabela` só quando a mídia é marcável (contratos (h) 17): a de pacotes de contêiner sem tempo não dá pts nem #n;
+ *  `travado` = não marcável (Início, Fim e eventos ficam como no Inspetor). */
+function useMidia(ws: string, v: VideoMedia | null): { info: MidiaInfo | null; tabela: TabelaQuadros | null; travado: boolean } {
   useRecursos((s) => s.versao);
   useEffect(() => {
     if (v) garantirMidia(ws, v.sha256);
   }, [ws, v]);
   const r = recursoDe(v?.sha256);
-  return { info: r.info, tabela: r.tabela };
+  return { info: r.info, tabela: r.info?.marcavel ? r.tabela : null, travado: r.info?.marcavel === false };
 }
 
 function CampoVideo({ lista, valor, onChange }: { lista: VideoMedia[]; valor: string; onChange(id: string): void }) {
@@ -109,7 +111,7 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
   const lista = useVideos(ws, true);
   const [id, setId] = useState("");
   const video = lista.find((v) => v.id === id) ?? null;
-  const { info, tabela } = useMidia(ws, video);
+  const { info, tabela, travado } = useMidia(ws, video);
   const eventos = useEventos(ws, video);
   const de = info?.de_s ?? 0;
   const ate = info?.ate_s ?? video?.duration_s ?? 0;
@@ -157,7 +159,7 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
           tabela={tabela}
           min={de}
           max={ate}
-          disabled={!video}
+          disabled={!video || travado}
           onChange={(t) => {
             tocado.current = true;
             setIni(t);
@@ -170,7 +172,7 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
           tabela={tabela}
           min={de}
           max={ate}
-          disabled={!video}
+          disabled={!video || travado}
           onChange={(t) => {
             tocado.current = true;
             setFim(t);
@@ -181,7 +183,7 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
           <select
             className={styles.input}
             value={evento}
-            disabled={eventos.length === 0}
+            disabled={eventos.length === 0 || travado}
             onChange={(e) => {
               setEvento(e.target.value);
               const ev = eventos.find((x) => x.id === e.target.value);
@@ -253,7 +255,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
   const lista = useVideos(ws, true);
   const [id, setId] = useState("");
   const video = lista.find((v) => v.id === id) ?? null;
-  const { info, tabela } = useMidia(ws, video);
+  const { info, tabela, travado } = useMidia(ws, video);
   const eventos = useEventos(ws, video);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   useEffect(() => setMarcados(new Set()), [id]);
@@ -275,7 +277,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
           <Button variant="ghost" onClick={onFechar}>
             Cancelar
           </Button>
-          <Button variant="primary" leftIcon={<Plus size={14} />} disabled={pares.length === 0} onClick={adicionar}>
+          <Button variant="primary" leftIcon={<Plus size={14} />} disabled={pares.length === 0 || travado} onClick={adicionar}>
             Adicionar
           </Button>
         </>
@@ -289,6 +291,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
               <label className={styles.check}>
                 <input
                   type="checkbox"
+                  disabled={travado}
                   checked={marcados.has(ev.id)}
                   onChange={(e) =>
                     setMarcados((m) => {

@@ -94,7 +94,7 @@ export function prenderImagem(d: ProjetoEdicao, clipe: Id, midia: Id): Id {
 export function prenderNarracao(d: ProjetoEdicao, clipe: Id, midia: Id, nome: string): Id {
   let t = d.audios.find((x) => x.papel === "narracao");
   if (!t) {
-    const nova: TrilhaAudio = { id: novoId(), nome: "", papel: "narracao", volume: 1, mudo: false, abaixa_original: true, clipes: [] };
+    const nova: TrilhaAudio = { id: novoId(), nome: "", papel: "narracao", volume: 1, mudo: false, abaixa_original: false, clipes: [] };
     d.audios.push(nova);
     t = d.audios[d.audios.length - 1] as TrilhaAudio;
   }

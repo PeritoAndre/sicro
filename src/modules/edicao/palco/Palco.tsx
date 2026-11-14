@@ -187,6 +187,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const [vista, setVista] = useState<Vista>(VISTA_INICIAL);
   const [fiel, setFiel] = useState<Fiel>("viva");
   const [render, setRender] = useState<{ tarefa: Id | null; src: string | null } | null>(null);
+  /** A última prévia do render falhou (ou não entrou na fila): ícone no botão até pedir de novo ou trocar de clipe. */
+  const [renderFalhou, setRenderFalhou] = useState(false);
   /** Endereço que o elemento não conseguiu abrir (arquivo sumiu, codec sem decodificador). */
   const [falhaSrc, setFalhaSrc] = useState<string | null>(null);
   const gestoRef = useRef<{ g: Gesto } | null>(null);
@@ -445,6 +447,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     jRef.current = null;
     tLocalRef.current = 0;
     setRender(null);
+    setRenderFalhou(false);
     if (!c) {
       pintarAgora();
       return;
@@ -540,8 +543,10 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         const agora = performance.now();
         if (agora - ultimoPost >= 250) {
           ultimoPost = agora;
-          setMostra({ t: el.agora(), j });
-          postar(el.agora());
+          // o tempo do quadro mostrado (o meio dele, como parado), nunca a posição do elemento
+          const t = meioDoQuadro(tab, j);
+          setMostra({ t, j });
+          postar(t);
         }
         // o elemento parou sozinho (fim do arquivo, falha de leitura): o transporte para junto
         if (el.pausado()) return parar();
@@ -736,7 +741,10 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     const t = tarefas.find((x) => x.id === render.tarefa);
     if (!t) return;
     if (t.estado.tipo === "pronta" && raizCache) setRender({ tarefa: render.tarefa, src: mediaSrc(`${raizCache.replace(/[\\/]+$/, "")}/${t.estado.relativo}`) });
-    else if (t.estado.tipo === "falhou" || t.estado.tipo === "cancelada") setRender(null);
+    else if (t.estado.tipo === "falhou" || t.estado.tipo === "cancelada") {
+      setRender(null);
+      setRenderFalhou(t.estado.tipo === "falhou");
+    }
   }, [tarefas, render, raizCache]);
 
   const previaRender = useCallback(() => {
@@ -747,13 +755,17 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     }
     if (!v.resolvido) return;
     if (tocandoRef.current) parar();
+    setRenderFalhou(false);
     setRender({ tarefa: null, src: null });
     const de0 = Math.max(0, v.resolvido.inicio_q);
     useRenderStore
       .getState()
       .exportar({ tipo: "previa", altura: Math.min(480, v.saida.h), de_q: de0, ate_q: v.resolvido.inicio_q + v.resolvido.n_q }, [])
       .then((tarefa) => setRender((r) => (r ? { tarefa, src: null } : r)))
-      .catch(() => setRender(null));
+      .catch(() => {
+        setRender(null);
+        setRenderFalhou(true);
+      });
   }, [render, parar]);
 
   // ---- API para os atalhos e o inspetor ----
@@ -818,8 +830,10 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   // ---- estado da mídia (ícones, sem texto) ----
   const fundoDaMidia = sha && previa && !previa.pronta ? fundoPorChave(fundo, chaveFundo(previa.tipo === "proxy" ? "proxy" : "copia_previa", sha)) : null;
   const falhouElemento = !!src && falhaSrc === src;
-  const preparando = !!clipe && !!midiaId && !rec.erro && (!info || !tabela || !src);
-  const semVideo = !!clipe && !!midiaId && (!!rec.erro || falhouElemento);
+  // cópia ou proxy que falhou na fila de fundo: o ícone de vídeo ausente, não a espera sem fim
+  const previaFalhou = fundoDaMidia?.estado.tipo === "falhou";
+  const preparando = !!clipe && !!midiaId && !rec.erro && !previaFalhou && (!info || !tabela || !src);
+  const semVideo = !!clipe && !!midiaId && (!!rec.erro || falhouElemento || previaFalhou);
   const fielSrc = typeof fiel === "object" ? fiel.src : null;
   const pixelado = m.w > saida.w;
 
@@ -873,7 +887,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         tocando={tocando}
         bordas={!bloqueado}
         fiel={fiel}
-        render={render ? (render.src ? "tocando" : "pedindo") : "nada"}
+        render={render ? (render.src ? "tocando" : "pedindo") : renderFalhou ? "falhou" : "nada"}
         expandido={props.expandido}
         desligado={!clipe}
         onBuscar={buscarEm}

@@ -125,8 +125,15 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
       "edicao.proximoClipe": () => vizinho(1),
       "edicao.subir": () => mover(-1),
       "edicao.descer": () => mover(1),
-      "edicao.dividir": dividir,
-      "edicao.congelar": congelar,
+      // tocando, o cursor da store anda a cada 250 ms: o palco para antes, no quadro mostrado
+      "edicao.dividir": () => {
+        palco.current?.pausar();
+        dividir();
+      },
+      "edicao.congelar": () => {
+        palco.current?.pausar();
+        congelar();
+      },
       "edicao.remover": () => remover(),
       "edicao.duplicar": () => duplicar(),
       "edicao.quadroFinal": () => palco.current?.quadroFinal(),
@@ -242,7 +249,7 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
       </header>
       <div ref={corpoRef} className={styles.corpo} style={{ gridTemplateColumns: gradeDasColunas(colunas, expandido, disponivel) }}>
         <aside className={`${styles.coluna} ${styles.esquerda}`} hidden={expandido || colunas.seqFechada} data-coluna="sequencia">
-          <Sequencia onModal={setModal} />
+          <Sequencia onModal={setModal} pararPalco={() => palco.current?.pausar()} />
         </aside>
         <div className={styles.divisa} onPointerDown={colunas.seqFechada ? undefined : arrastarDivisa("seq")} hidden={expandido || colunas.seqFechada} />
         <main className={styles.centro} data-coluna="palco">

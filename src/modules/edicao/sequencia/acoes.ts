@@ -7,7 +7,7 @@ import type { ClipePrincipal, Id, MidiaRef, ProjetoEdicao } from "@domain/edicao
 import { useEdicaoStore } from "../store/edicaoStore";
 import { acharMidia, clipeConhecido, garantirMidia, moverClipe, novoTrecho, removerClipe } from "../modelo/projeto";
 import { exibido } from "../modelo/tempo";
-import { meioDoQuadro, faixaDoClipe } from "../palco/faixa";
+import { meioDoQuadro, faixaDoClipe, marcarBloqueado } from "../palco/faixa";
 import { recursoDe } from "../palco/recursos";
 import { congelarAqui, dividirTrecho, duplicarClipe } from "./contas";
 import type { TrechoNovo } from "./NovoClipe";
@@ -150,8 +150,10 @@ function noCursor(): { id: Id; j: number; tab: NonNullable<ReturnType<typeof rec
   const id = s.cursor.clipe;
   const c = s.doc.principal.find((x) => (x as { id?: Id }).id === id);
   if (!c || !clipeConhecido(c) || c.tipo !== "trecho") return null;
-  const tab = recursoDe(acharMidia(s.doc, c.midia)?.sha256).tabela;
-  if (!tab) return null;
+  const rec = recursoDe(acharMidia(s.doc, c.midia)?.sha256);
+  const tab = rec.tabela;
+  // dividir e congelar gravam pts da tabela: só com ela confiável (contratos (h) 17)
+  if (!tab || marcarBloqueado(rec.info, tab)) return null;
   return { id, j: exibido(tab, s.cursor.t), tab };
 }
 

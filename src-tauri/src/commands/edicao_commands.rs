@@ -408,23 +408,22 @@ pub(crate) fn quadro_final_de(e: Estado, q: u64) -> Result<QuadroFinal> {
 }
 
 /// Nome do perito do caso (quem confere); vazio = caso sem perito (`edicao_conferir` recusa com `perito_ausente`).
-pub(crate) fn perito(ws: &Path) -> String {
-    abrir_banco(ws)
-        .ok()
-        .and_then(|(c, o)| crate::database::repositories::occurrence_repo::find_by_id(&c, &o).ok().flatten())
-        .and_then(|o| o.peritos.first().cloned())
-        .unwrap_or_default()
+/// Banco que não abre é erro do banco, não caso sem perito.
+pub(crate) fn perito(ws: &Path) -> Result<String> {
+    let (c, o) = abrir_banco(ws)?;
+    let caso = crate::database::repositories::occurrence_repo::find_by_id(&c, &o)?;
+    Ok(caso.and_then(|o| o.peritos.first().cloned()).unwrap_or_default())
 }
 
 /// Fecha uma saída em "A conferir" (conferida ou não) e conclui o relatório.
 #[tauri::command]
 pub async fn edicao_conferir(app: AppHandle, workspace_path: String, saida_id: String, conferida: bool) -> Result<SaidaRegistrada> {
     let _ = app;
-    em_fundo(move || {
-        let ws = Path::new(&workspace_path);
-        fila::conferir_saida(ws, &saida_id, conferida, &perito(ws))
-    })
-    .await
+    em_fundo(move || conferir(Path::new(&workspace_path), &saida_id, conferida)).await
+}
+
+pub(crate) fn conferir(ws: &Path, saida_id: &str, conferida: bool) -> Result<SaidaRegistrada> {
+    fila::conferir_saida(ws, saida_id, conferida, &perito(ws)?)
 }
 
 /// Cancela uma tarefa da fila de render.
@@ -509,7 +508,10 @@ pub fn iniciar(app: &AppHandle) {
     };
     let edicao = paths::dir_edicao_cache_raiz(&raiz);
     sonda::configurar(&edicao);
-    std::thread::spawn(move || executar::limpar_cache(&edicao, executar::TETO_CACHE, &[]));
+    std::thread::spawn(move || {
+        executar::limpar_cache(&edicao, executar::TETO_CACHE, &[]);
+        executar::limpar_temporarias(&std::env::temp_dir());
+    });
 }
 
 /// No `ExitRequested`: cancela as filas e mata os filhos.
@@ -655,12 +657,17 @@ mod testes {
             d.path(),
         )
         .unwrap();
-        assert_eq!(perito(&criado.path), "");
-        let e = fila::conferir_saida(&criado.path, &uuid::Uuid::new_v4().to_string(), true, &perito(&criado.path)).unwrap_err();
+        assert_eq!(perito(&criado.path).unwrap(), "");
+        let e = conferir(&criado.path, &uuid::Uuid::new_v4().to_string(), true).unwrap_err();
         assert!(e.to_string().contains("perito_ausente"), "{e}");
         let e = mensagens::erro_de_comando(e).to_string();
         assert!(e.contains("perito_ausente: Caso sem perito"), "{e}");
-        assert_eq!(perito(&caso().1), "Perito");
+        let (_d, com_perito, _) = caso();
+        assert_eq!(perito(&com_perito).unwrap(), "Perito");
+        // banco que não abre não é "caso sem perito"
+        std::fs::write(paths::sqlite_path(&com_perito), b"isto nao e um banco sqlite").unwrap();
+        let e = conferir(&com_perito, &uuid::Uuid::new_v4().to_string(), true).unwrap_err().to_string();
+        assert!(!e.contains("perito_ausente"), "{e}");
     }
 
     fn json_id(id: &str) -> Value {

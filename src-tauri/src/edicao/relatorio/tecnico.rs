@@ -86,9 +86,10 @@ pub fn feito(plano: &Plano, amb: &Ambiente, fecho: &Fecho) -> Result<Value> {
         "selos_desligados": pv.selos_desligados,
         "revisado_por": pv.revisado_por,
     });
-    // raízes conhecidas primeiro (o caminho pode ter espaço); depois o que sobrou no texto gerado pela máquina
+    // raízes conhecidas primeiro (o caminho pode ter espaço); depois o que sobrou no texto gerado pela máquina.
+    // `processamentos` fica de fora: os parâmetros não têm caminho e o texto do perito sai como foi desenhado
     Raizes::de(amb).relativizar(&mut f);
-    for (lista, campo) in [("midias", "/derivacao/comando"), ("roteiro", "/processamentos"), ("rastreios", "/corridas")] {
+    for (lista, campo) in [("midias", "/derivacao/comando"), ("rastreios", "/corridas")] {
         for x in f[lista].as_array_mut().into_iter().flatten() {
             if let Some(v) = x.pointer_mut(campo) {
                 sem_absolutos(v);
@@ -491,6 +492,17 @@ mod testes {
         assert_eq!(t["feito"]["midias"][0]["recebido"]["obs"], json!("veio por pendrive"));
     }
 
+    /// O texto que o perito pôs no vídeo (texto, rótulo, motivo) sai no `feito` como foi desenhado, também com barra.
+    #[test]
+    fn texto_do_perito_nos_processamentos_nao_e_mexido() {
+        let c = Cena::nova("x");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let parametros = json!({ "tipo": "texto", "conteudo": "Macapá /AP · ofício /SEI 12", "motivo": "placa (/x)" });
+        plano.proveniencia.roteiro[1].processamentos[0].parametros = parametros.clone();
+        let t = montar(&plano, &res, &c.ambiente("t1"), &fecho(None)).unwrap();
+        assert_eq!(t["feito"]["roteiro"][1]["processamentos"][0]["parametros"], parametros);
+    }
+
     #[test]
     fn ciencia_no_feito_sem_hora_e_na_execucao_com_hora() {
         let c = Cena::nova("x");
@@ -731,7 +743,7 @@ mod testes {
             "/feito/roteiro/1/velocidade", "/feito/roteiro/1/processamentos/0/ordem", "/feito/roteiro/1/processamentos/0/parametros",
             // ocultações de imagem e de som (anexo E)
             "/feito/ocultacoes/0/de_s", "/feito/ocultacoes/0/conteudo", "/feito/ocultacoes/0/modo", "/feito/ocultacoes/0/intensidade",
-            "/feito/ocultacoes/0/motivo", "/feito/audio/silencios/0/motivo", "/execucao/conferencia/ocultacoes",
+            "/feito/ocultacoes/0/motivo", "/feito/ocultacoes/0/inverter", "/feito/audio/silencios/0/motivo", "/execucao/conferencia/ocultacoes",
             "/feito/audio/tolerancia_atempo_ms", "/feito/audio/tolerancia_buraco_ms",
             // sincronização (F), IA (ia_resumo), limites (7), reprodução e programas (H)
             "/feito/sincronias", "/feito/ia/0/modelo", "/feito/ia/0/arquivos/0/sha256", "/feito/rastreios/0/origem", "/feito/rastreios/0/confirmacao",

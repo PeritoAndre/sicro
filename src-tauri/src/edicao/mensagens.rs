@@ -165,7 +165,7 @@ const CATALOGO: &[Entrada] = &[
     e(SAIDA_AUSENTE, Erro, "Exportação não encontrada"),
     e(SAIDA_CONCLUIDA, Erro, "Exportação já concluída"),
     e(TAREFA_AUSENTE, Erro, "Tarefa não encontrada"),
-    e(CIENCIA, Erro, "Aviso sem ciência"),
+    com_detalhe(CIENCIA, Erro, "Aviso sem ciência"),
     e(PANICO, Erro, "Falha interna"),
     e(ARQUIVO_AUSENTE, Erro, "Arquivo ausente"),
     e(DISCO_CHEIO, Erro, "Disco cheio"),

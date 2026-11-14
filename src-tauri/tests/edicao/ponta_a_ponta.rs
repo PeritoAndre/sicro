@@ -257,7 +257,8 @@ fn exportar_aberto(c: &Caso, doc: &Value, codificador: &str) -> (Analise, Estado
         let tarefa = fila::enfileirar(cmd::pedido(&c.ws, doc.clone(), alvo.clone(), ciencias.clone(), &c.app).unwrap()).expect("edicao_enfileirar");
         match fila::esperar(&tarefa).expect("esperar") {
             Estado::Falhou { mensagem, .. } if vez == 0 && mensagem.starts_with("ciencia: ") => {
-                ciencias.extend(mensagem["ciencia: ".len()..].split(", ").map(String::from));
+                // `ciencia: <frase>: <códigos>`
+                ciencias.extend(mensagem.rsplit(": ").next().unwrap_or_default().split(", ").map(String::from));
             }
             fim => return (analise, fim),
         }
@@ -435,7 +436,7 @@ fn projeto_do_store_exporta_e_confere() {
     assert_eq!((s.id.as_str(), s.estado, s.exige_conferencia, s.tecnico_rel.clone()), (saida_id.as_str(), EstadoSaida::AConferir, true, None));
     let retrato = c.ws.join(&s.retrato_rel);
     assert!(retrato.join(fila::PENDENTE).is_file());
-    let s = fila::conferir_saida(&c.ws, &saida_id, true, &cmd::perito(&c.ws)).expect("edicao_conferir");
+    let s = cmd::conferir(&c.ws, &saida_id, true).expect("edicao_conferir");
     assert_eq!((s.estado, s.conferida_por.as_deref()), (EstadoSaida::Concluida, Some(PERITO)));
     assert!(!retrato.join(fila::PENDENTE).exists());
 
@@ -733,6 +734,107 @@ fn cancelar_no_meio_nao_deixa_nada() {
     }
     #[cfg(target_os = "linux")]
     assert_eq!(ffmpeg_vivos_em(&cache), 0, "processo sobrando");
+}
+
+/// Prévia do render com a GPU aprovada pela sonda falhando no render (D12): refeita em CPU pelo mesmo `compilar_alvo`
+/// da fila, com o mesmo arquivo de uma prévia feita direto em CPU. Antes, o plano "de CPU" da prévia voltava com o
+/// NVENC (a troca só existia na exportação) e a prévia falhava com `item_invalido`. A falha vem de um ffmpeg falso que
+/// recusa o NVENC (a prévia não leva os argumentos da GPU: não há como forçar a falha pela linha).
+#[cfg(unix)]
+#[test]
+fn previa_com_gpu_que_falha_cai_para_a_cpu() {
+    use std::os::unix::fs::PermissionsExt;
+    let Some(cap) = fontes::cap() else { return };
+    let v = cap.versao.clone();
+    let mt = montagem("previa-gpu", &cap);
+    let doc = projeto_do_store(&mt, &cap, false);
+    let c = &mt.caso;
+    armazem::salvar(&c.ws, &doc).unwrap();
+    let p = armazem::tipado(&doc).unwrap();
+    let cache = c.cache();
+    let mut prep = executar::preparar_com(&c.ws, &p, &cache, false, Some(&AtomicBool::new(false))).unwrap();
+    let sem_gpu = Arc::new(Capacidades { gpu: None, ..(*prep.cap).clone() });
+    let falsa = sonda::Gpu {
+        nome: "falsa".into(),
+        driver: String::new(),
+        codificador: "h264_nvenc".into(),
+        degrau: String::new(),
+        args: vec![],
+        nvdec: false,
+        scale_cuda: false,
+    };
+    prep.cap = Arc::new(Capacidades { gpu: Some(falsa), ..(*prep.cap).clone() });
+    // o ffmpeg do render: recusa o NVENC como a placa sem sessão livre; o resto vai ao verdadeiro
+    let script = fontes::pasta_temporaria("previa-gpu-ffmpeg").join("ffmpeg");
+    let real = cap.binario.to_string_lossy().replace('\'', "'\\''");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/bash\nfor a in \"$@\"; do [ \"$a\" = h264_nvenc ] && {{ echo '[h264_nvenc @ 0x0] OpenEncodeSessionEx failed: out of memory (10)' >&2; exit 1; }}; done\nexec '{real}' \"$@\"\n"
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let render = Arc::new(Capacidades { binario: script, ..(*prep.cap).clone() });
+    let alvo = Alvo::Previa { altura: 180, de_q: 0, ate_q: 45 };
+    let gpu = |pl: &Plano| pl.blocos.iter().any(|b| b.codificador.iter().any(|a| a.ends_with("_nvenc")));
+    assert!(gpu(&fila::compilar_alvo(&p, &prep, &alvo, false).unwrap()), "{v}: a prévia usa a GPU aprovada");
+    let ambiente = |cap: Arc<Capacidades>, tarefa: &str| executar::Ambiente {
+        cap,
+        trabalho: cache.join("render").join(tarefa),
+        cache: cache.clone(),
+        caso: c.ws.clone(),
+        pasta_projeto: prep.pasta_projeto.clone(),
+        paralelos: 2,
+        identidade: Default::default(),
+        ciencias: vec![],
+    };
+    let (usado, r) = executar::executar_com_queda(
+        &|cpu| fila::compilar_alvo(&p, &prep, &alvo, cpu),
+        &ambiente(render, "previa-gpu"),
+        &AtomicBool::new(false),
+        &mut |_| {},
+    )
+    .unwrap_or_else(|e| panic!("{v}: prévia não caiu para a CPU: {e}"));
+    assert!(!gpu(&usado) && r.codificador == "libx264", "{v}: {}", r.codificador);
+    assert!(r.queda_para_cpu.is_some(), "{v}: queda não registrada");
+    // o mesmo arquivo e o mesmo composto de uma prévia feita direto em CPU; quadros = slots da janela
+    let mut so_cpu = executar::preparar_com(&c.ws, &p, &cache, false, None).unwrap();
+    so_cpu.cap = sem_gpu.clone();
+    let plano_cpu = fila::compilar_alvo(&p, &so_cpu, &alvo, false).unwrap();
+    assert_eq!(usado, plano_cpu, "{v}");
+    std::fs::remove_dir_all(cache.join("blocos")).unwrap();
+    let direto = executar::executar(&plano_cpu, &ambiente(sem_gpu, "previa-cpu"), &AtomicBool::new(false), &mut |_| {}).unwrap();
+    assert_eq!((&r.sha256, &r.composto_sha256), (&direto.sha256, &direto.composto_sha256), "{v}");
+    assert_eq!(medir::framehash(&cap, &r.arquivo).unwrap().len() as u64, usado.total_q, "{v}");
+    assert_eq!(medir::framehash(&cap, &r.arquivo).unwrap(), medir::framehash(&cap, &direto.arquivo).unwrap(), "{v}");
+}
+
+/// Prévia do render pela fila real: o arquivo tocado fica (vídeo com os slots da janela e o som), o PCM intermediário
+/// sai da pasta de trabalho. Antes ficava: ~11 MB por minuto de janela, 7 dias no cache e fora da conta do teto.
+#[test]
+fn previa_do_render_nao_guarda_o_pcm() {
+    let Some(cap) = fontes::cap() else { return };
+    sonda_do_app();
+    let v = cap.versao.clone();
+    let mt = montagem("previa-pcm", &cap);
+    let doc = projeto_do_store(&mt, &cap, false);
+    let c = &mt.caso;
+    armazem::salvar(&c.ws, &doc).unwrap();
+    let fps: Racional = serde_json::from_value(doc["saida"]["fps"].clone()).unwrap();
+    let (de_q, ate_q) = (10u64, 70u64);
+    let tarefa = fila::enfileirar(cmd::pedido(&c.ws, doc, Alvo::Previa { altura: 180, de_q, ate_q }, vec![], &c.app).unwrap()).unwrap();
+    let Estado::Pronta { relativo } = fila::esperar(&tarefa).unwrap() else { panic!("{v}: prévia não ficou pronta") };
+    let arq = c.cache().join(&relativo);
+    let trabalho = c.cache().join("render").join(&tarefa);
+    assert!(arq.starts_with(&trabalho), "{relativo}");
+    assert_eq!(medir::framehash(&cap, &arq).unwrap().len() as u64, ate_q - de_q, "{v}");
+    // o som da janela no arquivo tocado (o AAC acrescenta até um quadro de 1024 amostras)
+    let esperadas = ((ate_q - de_q) as i64 * 48_000 * fps.den / fps.num) as u64;
+    let amostras = medir::amostras(&cap, &arq).unwrap_or_else(|e| panic!("{v}: prévia sem som: {e}"));
+    assert!(amostras.abs_diff(esperadas) <= 1024, "{v}: {amostras} amostras, esperadas {esperadas}");
+    let sobras: Vec<String> = std::fs::read_dir(&trabalho).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    assert!(!sobras.iter().any(|n| n.ends_with(".wav")), "{v}: PCM na pasta de trabalho: {sobras:?}");
 }
 
 /// Projeto da v1 (`v1-completo.json`, com as mídias e os tempos trocados pelos do caso) importado pelo `edicao_abrir`

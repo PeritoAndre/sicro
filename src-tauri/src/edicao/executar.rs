@@ -1450,6 +1450,41 @@ pub(crate) fn limpar_cache(raiz: &Path, teto: u64, vivas: &[String]) -> u64 {
     liberado
 }
 
+/// Pastas de trabalho que a Edição cria na pasta temporária do sistema (tabela do decodificador, sonda), com o pid
+/// no nome: `sicro-quadros-<pid>-<n>`, `sicro-sonda-<nome>-<pid>-<n>`.
+const TEMPORARIAS_DO_SISTEMA: &[&str] = &["sicro-quadros-", "sicro-sonda-"];
+
+/// Na partida: pastas de trabalho de processo morto (kill, queda de energia) na pasta temporária do sistema. O stderr
+/// da tabela do decodificador tem ~300 B por quadro (centenas de MB numa gravação de 24 h, em `/tmp` na memória).
+/// Sai a de outro pid parada há mais de `IDADE_TMP` (o arquivo mais novo dentro dela decide: outra instância do app
+/// pode estar escrevendo). Devolve os bytes liberados.
+pub(crate) fn limpar_temporarias(temp: &Path) -> u64 {
+    let meu = std::process::id().to_string();
+    let agora = SystemTime::now();
+    let mut liberado = 0;
+    for e in fs::read_dir(temp).into_iter().flatten().flatten() {
+        let nome = e.file_name().to_string_lossy().into_owned();
+        let Some(resto) = TEMPORARIAS_DO_SISTEMA.iter().find_map(|p| nome.strip_prefix(p)) else { continue };
+        // o pid é o penúltimo pedaço do nome
+        let pid = resto.rsplit('-').nth(1);
+        if pid.is_none_or(|p| p == meu || p.parse::<u32>().is_err()) || !e.file_type().is_ok_and(|t| t.is_dir()) {
+            continue;
+        }
+        let parada = mais_novo(&e.path()).and_then(|d| agora.duration_since(d).ok()).is_some_and(|i| i > IDADE_TMP);
+        if parada {
+            liberado += tamanho_de(&e.path());
+            remover(&e.path());
+        }
+    }
+    liberado
+}
+
+/// Data de modificação mais nova da pasta e do que há nela (um nível: as pastas de trabalho são planas).
+fn mais_novo(p: &Path) -> Option<SystemTime> {
+    let da_pasta = fs::metadata(p).and_then(|m| m.modified()).ok();
+    fs::read_dir(p).into_iter().flatten().flatten().filter_map(|e| e.metadata().and_then(|m| m.modified()).ok()).chain(da_pasta).max()
+}
+
 /// Chaves que uma tarefa pôs no cache, em `render/<tarefa>/`.
 pub(crate) const CHAVES: &str = "chaves.json";
 
@@ -2330,5 +2365,38 @@ mod testes {
         assert!(!antigo.exists() && novo.exists(), "acima do teto sai o mais antigo");
         assert!(tabela.exists(), "tabelas de quadros não entram no teto");
         assert_eq!(liberado, 10 + 10 + 1000);
+    }
+
+    /// Partida depois de processo morto: a pasta de trabalho da tabela do decodificador (stderr de ~300 B por quadro)
+    /// e a da sonda, de outro pid e paradas há mais de 6 h, saem da pasta temporária do sistema; a deste processo, a de
+    /// outro processo que ainda escreve, a recente e o que não é da Edição ficam. (Só Unix: muda a data de pasta.)
+    #[cfg(unix)]
+    #[test]
+    fn temporarias_de_processo_morto_saem_na_partida() {
+        let d = pasta("temporarias");
+        let t = d.path();
+        let velho = SystemTime::now() - IDADE_TMP - Duration::from_secs(600);
+        let meu = std::process::id();
+        let criar = |nome: &str, arquivo_velho: bool| {
+            let p = t.join(nome);
+            fs::create_dir_all(&p).unwrap();
+            let f = p.join("quadros.stderr");
+            fs::write(&f, vec![0u8; 300]).unwrap();
+            if arquivo_velho {
+                fs::File::options().write(true).open(&f).unwrap().set_modified(velho).unwrap();
+            }
+            fs::File::open(&p).unwrap().set_modified(velho).unwrap();
+            p
+        };
+        let morta = criar("sicro-quadros-4000000-0", true);
+        let sonda_morta = criar("sicro-sonda-gpu-serve-4000001-3", true);
+        let minha = criar(&format!("sicro-quadros-{meu}-0"), true);
+        let escrevendo = criar("sicro-quadros-4000002-0", false);
+        let alheia = criar("outro-4000003-0", true);
+        let recente = t.join("sicro-quadros-4000004-0");
+        fs::create_dir_all(&recente).unwrap();
+        assert_eq!(limpar_temporarias(t), 600);
+        assert!(!morta.exists() && !sonda_morta.exists());
+        assert!(minha.exists() && escrevendo.exists() && alheia.exists() && recente.exists());
     }
 }

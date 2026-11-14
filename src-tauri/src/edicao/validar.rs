@@ -38,8 +38,8 @@ const LIMITE_TEXTO: usize = 20_000;
 const DURACAO_MAX_S: f64 = 3600.0;
 /// Enquadramento: menor largura da região (0..1).
 const REGIAO_MIN_W: f64 = 0.02;
-/// Área segura do texto: 5 % de cada lado.
-const AREA_SEGURA: f64 = 0.05;
+/// Área segura do texto: 2 %, o canto da grade de posição de cada lado.
+const AREA_SEGURA: f64 = 0.02;
 /// Ampliação acima disso é aviso.
 const AMPLIACAO_MAX: f64 = 4.0;
 /// Desfoque abaixo disso é fraco (medido em texto, §2.3).
@@ -942,7 +942,7 @@ impl<'a> Validacao<'a> {
             let onde = uso.onde.efeito(&base.id);
             if let Some(i) = &base.ativo {
                 let finito = i.de.is_none_or(f64::is_finite) && i.ate.is_none_or(f64::is_finite);
-                if !finito || matches!((i.de, i.ate), (Some(de), Some(ate)) if ate <= de) {
+                if !finito || matches!((i.de, i.ate), (Some(de), Some(ate)) if ate < de) {
                     self.por(INTERVALO, &onde.campo("ativo"));
                 }
             }
@@ -1268,7 +1268,7 @@ impl<'a> Validacao<'a> {
             self.ocultar_estatico(oc, &estatico);
             if let Some(i) = &oc.base.ativo {
                 let finito = i.de.is_none_or(f64::is_finite) && i.ate.is_none_or(f64::is_finite);
-                if !finito || matches!((i.de, i.ate), (Some(de), Some(ate)) if ate <= de) {
+                if !finito || matches!((i.de, i.ate), (Some(de), Some(ate)) if ate < de) {
                     self.por(INTERVALO, &estatico.campo("ativo"));
                 }
             }
@@ -2924,7 +2924,7 @@ mod testes {
     fn texto_fora_e_selo_desligado() {
         let mut c = cena();
         efeito(&mut c, com(base("texto", "e2"), json!({ "conteudo": "x", "estilo": estilo(),
-            "lugar": { "x": 0.5, "y": 0.97, "h": "centro", "v": "base" }, "largura_max": 0.8 })));
+            "lugar": { "x": 0.5, "y": 0.99, "h": "centro", "v": "base" }, "largura_max": 0.8 })));
         c.so(&[TEXTO_FORA]);
         let mut c = cena();
         c.p["saida"]["selos"]["realce"] = json!(false);

@@ -216,6 +216,7 @@ pub(crate) mod apoio {
                     conteudo: ConteudoOculto::Rosto,
                     motivo: "terceiro sem relação".into(),
                     quadros: ProvQuadrosOcultos { ancora: 2, medido: 0, interpolado: 0, incerto: 0 },
+                    inverter: false,
                 }],
                 audio: ProvAudio { silencios: vec![ProvSilencio { midia: "m1".into(), de_s: 1.5, ate_s: 2.0, modo: ModoSilencio::Tom, motivo: "nome".into() }], tolerancia_atempo_ms: 0.0 },
                 legendas: ProvLegendas { origem: None, n: 0, conferidas: 0 },
