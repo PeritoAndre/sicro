@@ -35,7 +35,8 @@ pub mod titulo;
 mod testes;
 
 /// Entra no `hash` de todo `PedidoCamada`: sobe quando o desenho muda um pixel.
-pub const VERSAO_RASTERIZADOR: u32 = 1;
+/// 2: mono itálico com as oblíquas da DejaVu Sans Mono (antes saía reto).
+pub const VERSAO_RASTERIZADOR: u32 = 2;
 
 // CONTRATO: acréscimo.
 /// Nome da lista na pasta da camada.

@@ -390,6 +390,24 @@ fn cancelar_nao_deixa_pasta_e_todos_em_ordem() {
     }
 }
 
+/// Texto (`EfTexto`) com o ponto de apoio muito longe do canvas: não entra em pânico (a cópia inteira do sprite
+/// estourava o `i32` do tiny-skia; defeito aberto na revisão do P0.5t, ramo `inteiro` só perto do canvas).
+#[test]
+fn texto_longe_do_canvas_nao_derruba() {
+    let canvas = TamanhoPx { w: 640, h: 360 };
+    let cache = fontes::pasta_temporaria("p0f-texto-longe");
+    for (x, y) in [(4e6, 0.5), (-4e6, 0.5), (0.5, 3e7), (1.6e6, -1.6e6)] {
+        let texto = efeito(com(base("texto", "t1"), json!({ "conteudo": "Longe", "estilo": estilo("sans", true),
+            "lugar": { "x": x, "y": y, "h": "centro", "v": "meio" }, "largura_max": 0.8 })));
+        let p = pedido(TipoCamada::Anotacao, [0, 0, 640, 360], 1, vec![item(Desenho::Efeito { efeito: texto }, 0, vec![quadro(0, canvas, &[])])], Vec::new());
+        let c = rasterizar(&p, &cache, &AtomicBool::new(false)).unwrap_or_else(|e| panic!("({x}, {y}): {e}"));
+        // nada visível no canvas
+        let png = image::open(c.pasta.join(&c.arquivos[0].arquivo)).unwrap().to_rgba8();
+        assert!(png.pixels().all(|p| p.0[3] == 0), "({x}, {y}) desenhou no canvas");
+    }
+    let _ = std::fs::remove_dir_all(cache);
+}
+
 #[test]
 fn ate_1_ms_por_quadro_em_camada_recortada_de_304x224() {
     // o A13: elipse com traço e contorno, cada quadro diferente, numa camada de 304×224

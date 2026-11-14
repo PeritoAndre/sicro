@@ -20,6 +20,9 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
   const ate = info?.ate_s;
   const volume = c.audio.volume;
   const animado = ehChaves(volume);
+  // contratos (h) 17: #n e setas só com a tabela confiável; mídia não marcável não marca nem pelo texto
+  const tab = info?.marcavel ? tabela : null;
+  const travado = info?.marcavel === false;
   return (
     <Secao titulo="Trecho">
       <Grade>
@@ -30,7 +33,8 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
           item={id}
           valor={c.inicio_s}
           base="fonte"
-          tabela={tabela}
+          tabela={tab}
+          desligado={travado}
           valido={(t) => t < c.fim_s && (de === undefined || t >= de - 1e-9)}
           aplicar={(t, pts) =>
             noClipe<ClipeTrecho>(id, (x) => {
@@ -44,7 +48,8 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
           item={id}
           valor={c.fim_s}
           base="fonte"
-          tabela={tabela}
+          tabela={tab}
+          desligado={travado}
           valido={(t) => t > c.inicio_s && (ate === undefined || t <= ate + 1e-9)}
           aplicar={(t, pts) =>
             noClipe<ClipeTrecho>(id, (x) => {

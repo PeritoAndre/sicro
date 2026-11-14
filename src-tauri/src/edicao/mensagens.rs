@@ -51,6 +51,17 @@ pub mod codigo {
     pub const LEITURA_DIVERGENTE: &str = "leitura_divergente";
     pub const PROJETO_NAO_ENCONTRADO: &str = "projeto_nao_encontrado";
     pub const PERITO_AUSENTE: &str = "perito_ausente";
+    // fila e ffmpeg (integrador, leva 5)
+    pub const NA_FILA: &str = "na_fila";
+    pub const SAIDA_AUSENTE: &str = "saida_ausente";
+    pub const SAIDA_CONCLUIDA: &str = "saida_concluida";
+    pub const TAREFA_AUSENTE: &str = "tarefa_ausente";
+    pub const CIENCIA: &str = "ciencia";
+    pub const PANICO: &str = "panico";
+    pub const ARQUIVO_AUSENTE: &str = "arquivo_ausente";
+    pub const DISCO_CHEIO: &str = "disco_cheio";
+    pub const GPU: &str = "gpu";
+    pub const OUTRA: &str = "outra";
     pub const ORIGINAL: &str = "original";
     // periciais
     pub const TAXA_VARIAVEL: &str = "taxa_variavel";
@@ -150,6 +161,16 @@ const CATALOGO: &[Entrada] = &[
     e(LEITURA_DIVERGENTE, Erro, "Leitura diferente da prevista"),
     e(PROJETO_NAO_ENCONTRADO, Erro, "Projeto não encontrado"),
     e(PERITO_AUSENTE, Erro, "Caso sem perito"),
+    e(NA_FILA, Erro, "Em uso pela fila"),
+    e(SAIDA_AUSENTE, Erro, "Exportação não encontrada"),
+    e(SAIDA_CONCLUIDA, Erro, "Exportação já concluída"),
+    e(TAREFA_AUSENTE, Erro, "Tarefa não encontrada"),
+    e(CIENCIA, Erro, "Aviso sem ciência"),
+    e(PANICO, Erro, "Falha interna"),
+    e(ARQUIVO_AUSENTE, Erro, "Arquivo ausente"),
+    e(DISCO_CHEIO, Erro, "Disco cheio"),
+    e(GPU, Erro, "Falha na placa de vídeo"),
+    e(OUTRA, Erro, "Falha no ffmpeg"),
     e(ORIGINAL, Erro, "Prévia pelo original"),
     // periciais
     com_n(TAXA_VARIAVEL, Pericial, "Taxa variável", "Taxa variável: 1 intervalo irregular", "Taxa variável: {n} intervalos irregulares"),
@@ -189,7 +210,31 @@ const NAO_SUPORTADOS: &[(&str, &str)] = &[
     ("imagem", "imagem"),
     ("ocultar_imagem", "ocultação em imagem"),
     ("fonte sem vídeo", "mídia sem vídeo"),
+    // o que o motor da Fase 0 recusa (contratos (h) 1)
+    ("estabilizar", "estabilização"),
+    ("lente", "correção de lente"),
+    ("desentrelacar", "desentrelaçamento"),
+    ("media_temporal", "média de quadros"),
+    ("ajustes", "ajustes de imagem"),
+    ("nitidez", "nitidez"),
+    ("ocultar_sem_fonte", "ocultação em foto ou título"),
+    ("ocultar_congelado", "ocultação em parte do quadro congelado"),
+    ("efeito_sobreposto", "efeito em sobreposto"),
+    ("enquadramento_variavel", "enquadramento com proporção variável"),
+    ("transicao", "transição"),
+    ("predefinicao", "predefinição"),
+    ("normalizar", "normalização"),
+    ("limitador", "limitador"),
+    ("abaixar", "abaixar o original"),
+    ("volume_animado", "volume animado"),
+    ("silenciar", "silenciar trecho"),
+    ("legendas", "legendas"),
 ];
+
+/// Detalhes de `nao_suportado` que têm rótulo (a validação só usa estes).
+pub(crate) fn rotulo_nao_suportado(detalhe: &str) -> Option<&'static str> {
+    NAO_SUPORTADOS.iter().find(|(k, _)| *k == detalhe).map(|(_, r)| *r)
+}
 
 fn entrada(codigo: &str) -> Option<&'static Entrada> {
     CATALOGO.iter().find(|x| x.codigo == codigo)
@@ -211,8 +256,8 @@ pub fn frase(codigo: &str, n: Option<u64>, detalhe: Option<&str>) -> String {
     };
     let detalhe = detalhe.map(str::trim).filter(|d| x.detalhe && !d.is_empty());
     match detalhe {
-        Some(d) if codigo == NAO_SUPORTADO => match NAO_SUPORTADOS.iter().find(|(k, _)| *k == d) {
-            Some((_, rotulo)) => format!("{base}: {rotulo}"),
+        Some(d) if codigo == NAO_SUPORTADO => match rotulo_nao_suportado(d) {
+            Some(rotulo) => format!("{base}: {rotulo}"),
             None => base,
         },
         Some(d) => format!("{base}: {d}"),
@@ -276,7 +321,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 65, "constantes de `codigo`");
+        assert_eq!(cods.len(), 75, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {

@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use super::ffmpeg::args as ffmpeg_args;
 use super::ffmpeg::sonda::Capacidades;
 use super::modelo::{
-    ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, Nivel,
+    ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, ModoLegendas, Nivel,
     ProjetoEdicao, Racional, Tolerante,
 };
 use super::quadros::TabelaQuadros;
@@ -123,6 +123,11 @@ fn erro(codigo: &str, detalhe: impl std::fmt::Display) -> SicroError {
     SicroError::Validation(format!("{codigo}: {detalhe}"))
 }
 
+/// Erro de `compilar` quando a validação barra: `<código>: <frase do catálogo>`, como `mensagens::erro_de_comando`.
+pub(crate) fn erro_da_validacao(e: &super::modelo::Problema) -> SicroError {
+    erro(e.codigo, &e.mensagem)
+}
+
 fn base_do_clipe(c: &ClipePrincipal) -> &ClipeBase {
     match c {
         ClipePrincipal::Trecho(x) => &x.base,
@@ -153,19 +158,18 @@ fn clipe_da_principal<'a>(p: &'a ProjetoEdicao, id: &str) -> Result<&'a ClipePri
         .ok_or_else(|| erro("item_invalido", format!("clipe {id} fora da principal")))
 }
 
-/// Compila o plano de render: resolve a linha, valida com `validar::validar(p, linha, ctx, Some(alvo))`
-/// (havendo erro, `Err` sem plano), compila o vídeo e o áudio.
+/// Compila o plano de render (§5.3): `tempo::resolver` → `validar::validar(p, linha, ctx, Some(alvo))` (havendo
+/// erro, `Err` com o primeiro, sem chegar ao motor) → vídeo → áudio → proveniência com os avisos periciais.
 pub fn compilar(p: &ProjetoEdicao, ctx: &Contexto, alvo: &Alvo) -> Result<Plano> {
     let linha = tempo::resolver(p, ctx);
     let problemas = validar::validar(p, &linha, ctx, Some(alvo));
     if let Some(e) = problemas.iter().find(|x| x.nivel == Nivel::Erro) {
-        return Err(erro(e.codigo, &e.mensagem));
+        return Err(erro_da_validacao(e));
     }
     let mut plano = compilar_video(p, &linha, ctx, alvo)?;
     let (audio, previas) = audio::montar(p, &linha, ctx, alvo)?;
     plano.previas.extend(previas);
     if let Some(a) = &audio {
-        plano.proveniencia.audio.tolerancia_atempo_ms = a.tolerancia_atempo_ms;
         let cod = saida::codificacao(alvo, &plano.canvas, ctx.cap)?;
         plano.juncao = blocos::juncao(&plano.blocos, &plano.canvas, &cod, Some(a), alvo);
     }
@@ -193,16 +197,19 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
     if linha.total_q == 0 || linha.clipes.is_empty() {
         return Err(SicroError::Validation("vazio".into()));
     }
-    // clipe de versão futura na principal: nunca ignorado calado
+    // clipe de versão futura (ou inválido) na principal: nunca ignorado calado; o código é o da validação
     for c in &p.principal {
         if let Tolerante::Desconhecido(v) = c {
-            let texto = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
             if !v.get("desligado").and_then(|x| x.as_bool()).unwrap_or(false) {
-                return Err(erro("nao_suportado", format!("clipe {} {}", texto("tipo"), texto("id"))));
+                return Err(validar::erro_do_desconhecido(v, validar::TIPOS_CLIPE));
             }
         }
     }
     let cod = saida::codificacao(alvo, &canvas, ctx.cap)?;
+    // legendas queimadas ou em arquivo são do P1.6: a exportação nunca sai sem elas calada
+    if matches!(alvo, Alvo::Final { exportacao } if exportacao.legendas != ModoLegendas::Nenhuma) && !p.legendas.itens.is_empty() {
+        return Err(erro("nao_suportado", "legendas"));
+    }
     let janelas = blocos::dividir(p, linha, alvo);
     if janelas.is_empty() {
         return Err(erro("intervalo", "janela fora do programa"));
@@ -292,7 +299,7 @@ pub fn compilar_video(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto,
     }
     let total_q = blocos_prontos.iter().map(|b| b.n_q as u64).sum();
     let juncao = blocos::juncao(&blocos_prontos, &canvas, &cod, None, alvo);
-    let proveniencia = proveniencia(p, linha, ctx, alvo, &canvas, total_q)?;
+    let proveniencia = proveniencia(p, linha, ctx, alvo)?;
     Ok(Plano { alvo: alvo.clone(), canvas, total_q, previas: Vec::new(), camadas, blocos: blocos_prontos, audio: None, legendas: Vec::new(), juncao, proveniencia })
 }
 
@@ -328,9 +335,18 @@ fn unir_faixas(mut v: Vec<(f64, f64)>) -> (Vec<ProvFaixa>, f64) {
     (u, total)
 }
 
-/// O `feito` do `tecnico.json` que sai do projeto e das tabelas: sempre do programa inteiro, qualquer que seja o alvo.
-fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo: &Alvo, canvas: &Canvas, total_q: u64) -> Result<Proveniencia> {
+/// O `feito` do `tecnico.json` que sai do projeto e das tabelas: sempre do programa inteiro, qualquer que seja o alvo
+/// (prévia e quadro final dão a mesma da exportação com a exportação do projeto).
+fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo: &Alvo) -> Result<Proveniencia> {
     let fps = linha.fps;
+    let exportacao = match alvo {
+        Alvo::Final { exportacao } => exportacao.clone(),
+        _ => p.saida.exportacao.clone(),
+    };
+    let final_ = Alvo::Final { exportacao: exportacao.clone() };
+    let canvas = canvas_do_alvo(p, &final_);
+    let total_q = linha.total_q;
+    let tolerancia_atempo_ms = audio::tolerancia_atempo_do_programa(p, linha, ctx);
     let seg = |q: u64| tempo::instante_do_slot(q, fps);
     let mut rs = clipe::Rastreios::novo(p, ctx);
     let mut usados: BTreeMap<String, Vec<(f64, f64)>> = BTreeMap::new();
@@ -486,6 +502,14 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             }
         }
     }
+    // trilhas de som (narração): a mídia de cada clipe que toca também é fonte do vídeo entregue
+    if p.saida.audio {
+        for trilha in p.audios.iter().filter(|t| !t.mudo) {
+            for c in trilha.clipes.iter().filter(|c| linha.livres.iter().any(|l| l.id == c.id && l.trilha == trilha.id)) {
+                citadas.insert(c.midia.clone());
+            }
+        }
+    }
     let mut midias = Vec::new();
     for m in p.midias.iter().filter(|m| citadas.contains(&m.id)) {
         let Some(f) = ctx.fontes.get(&m.id) else { continue };
@@ -544,17 +568,21 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
     }
     let selos = &p.saida.selos;
     let selos_desligados = [("velocidade", selos.velocidade), ("ampliacao", selos.ampliacao), ("realce", selos.realce)].iter().filter(|(_, ligado)| !ligado).map(|(n, _)| n.to_string()).collect();
-    let (predefinicao, revisado_por) = match alvo {
-        Alvo::Final { exportacao } => (Some(exportacao.predefinicao), exportacao.revisado_por.clone()),
-        _ => (None, p.saida.exportacao.revisado_por.clone()),
-    };
     Ok(Proveniencia {
         projeto: ProvProjeto { id: p.id.clone(), titulo: p.titulo.clone(), esquema: p.esquema, esquema_menor: p.esquema_menor },
-        saida: ProvSaida { largura: canvas.w, altura: canvas.h, fps, duracao_s: seg(total_q), n_quadros: total_q, predefinicao, com_perdas: saida::com_perdas(alvo) },
+        saida: ProvSaida {
+            largura: canvas.w,
+            altura: canvas.h,
+            fps,
+            duracao_s: seg(total_q),
+            n_quadros: total_q,
+            predefinicao: Some(exportacao.predefinicao),
+            com_perdas: saida::com_perdas(&final_),
+        },
         midias,
         roteiro,
         ocultacoes,
-        audio: ProvAudio { silencios, tolerancia_atempo_ms: 0.0 },
+        audio: ProvAudio { silencios, tolerancia_atempo_ms },
         legendas: ProvLegendas { origem: p.legendas.origem.clone(), n: p.legendas.itens.len() as u32, conferidas: p.legendas.itens.iter().filter(|l| l.conferida).count() as u32 },
         sincronias: Vec::new(),
         rastreios,
@@ -562,7 +590,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         estabilizacoes: Vec::new(),
         avisos: Vec::new(),
         selos_desligados,
-        revisado_por,
+        revisado_por: exportacao.revisado_por.clone(),
         ffmpeg: ProvFfmpeg { versao: ctx.cap.versao.clone(), configuracao: ctx.cap.configuracao.clone(), origem: ctx.cap.origem, sha256: ctx.cap.sha256.clone() },
     })
 }

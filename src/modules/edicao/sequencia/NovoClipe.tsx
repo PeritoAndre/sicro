@@ -4,7 +4,7 @@
  * Os tempos ficam presos ao quadro pela tabela da mídia (ou pelo Rust depois, em `Analise.prender`).
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus } from "lucide-react";
 import { commands } from "@core/commands";
 import { Button } from "@components/Button/Button";
@@ -16,7 +16,7 @@ import type { VideoEvent, VideoMedia } from "@domain/video";
 import { midiaDoCaso } from "../store/coleta";
 import { exibido, fimDaMidia, fimDoPar, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 import { garantirMidia, recursoDe, useRecursos } from "../palco/recursos";
-import { MODELOS, novoTitulo, paresDeEventos, type ModeloNovo } from "./novos";
+import { MODELOS, novoTitulo, paresDeEventos, tempoDoEvento, type ModeloNovo } from "./novos";
 import styles from "./Sequencia.module.css";
 
 export type Formulario = "trecho" | "titulo" | "eventos";
@@ -71,7 +71,7 @@ function useEventos(ws: string, video: VideoMedia | null) {
     let vivo = true;
     commands
       .openVideoMedia(ws, video.id)
-      .then((b) => vivo && setEventos([...b.events].sort((a, c) => a.timestamp_s - c.timestamp_s)))
+      .then((b) => vivo && setEventos([...b.events].sort((a, c) => tempoDoEvento(a) - tempoDoEvento(c))))
       .catch(() => vivo && setEventos([]));
     return () => {
       vivo = false;
@@ -116,10 +116,16 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
   const [ini, setIni] = useState<Seg | null>(null);
   const [fim, setFim] = useState<Seg | null>(null);
   const [evento, setEvento] = useState("");
+  // o que o perito digitou ou escolheu não é trocado pela faixa da mídia quando a MidiaInfo chega (h 27)
+  const tocado = useRef(false);
   useEffect(() => {
+    tocado.current = false;
+    setEvento("");
+  }, [video?.id]);
+  useEffect(() => {
+    if (tocado.current) return;
     setIni(video ? de : null);
     setFim(video ? ate : null);
-    setEvento("");
   }, [video?.id, de, ate]); // eslint-disable-line react-hooks/exhaustive-deps
   const p = video && ini !== null && fim !== null ? pontas(tabela, ini, fim) : null;
   const adicionar = () => {
@@ -144,8 +150,32 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
     >
       <div className={styles.form}>
         <CampoVideo lista={lista} valor={id} onChange={setId} />
-        <CampoTempo label="Início" value={ini} base="fonte" tabela={tabela} min={de} max={ate} disabled={!video} onChange={(t) => setIni(t)} />
-        <CampoTempo label="Fim" value={fim} base="fonte" tabela={tabela} min={de} max={ate} disabled={!video} onChange={(t) => setFim(t)} />
+        <CampoTempo
+          label="Início"
+          value={ini}
+          base="fonte"
+          tabela={tabela}
+          min={de}
+          max={ate}
+          disabled={!video}
+          onChange={(t) => {
+            tocado.current = true;
+            setIni(t);
+          }}
+        />
+        <CampoTempo
+          label="Fim"
+          value={fim}
+          base="fonte"
+          tabela={tabela}
+          min={de}
+          max={ate}
+          disabled={!video}
+          onChange={(t) => {
+            tocado.current = true;
+            setFim(t);
+          }}
+        />
         <label className={`${styles.campo} ${styles.larga}`}>
           Evento
           <select
@@ -156,14 +186,16 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
               setEvento(e.target.value);
               const ev = eventos.find((x) => x.id === e.target.value);
               if (!ev) return;
-              setIni(ev.timestamp_s);
-              if (fim === null || fim <= ev.timestamp_s) setFim(Math.min(ate, ev.timestamp_s + 5));
+              tocado.current = true;
+              const t = tempoDoEvento(ev);
+              setIni(t);
+              if (fim === null || fim <= t) setFim(Math.min(ate, t + 5));
             }}
           >
             <option value="" />
             {eventos.map((ev) => (
               <option key={ev.id} value={ev.id}>
-                {formatarTempo(ev.timestamp_s)} {ev.title}
+                {formatarTempo(tempoDoEvento(ev))} {ev.title}
               </option>
             ))}
           </select>
@@ -225,7 +257,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
   const eventos = useEventos(ws, video);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   useEffect(() => setMarcados(new Set()), [id]);
-  const pares = useMemo(() => paresDeEventos(eventos.filter((e) => marcados.has(e.id)).map((e) => e.timestamp_s)), [eventos, marcados]);
+  const pares = useMemo(() => paresDeEventos(eventos.filter((e) => marcados.has(e.id)).map(tempoDoEvento)), [eventos, marcados]);
   const adicionar = () => {
     if (!video) return;
     const ref = midiaDoCaso(video, lista, info);
@@ -267,7 +299,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
                     })
                   }
                 />
-                <span className={styles.mono}>{formatarTempo(ev.timestamp_s)}</span>
+                <span className={styles.mono}>{formatarTempo(tempoDoEvento(ev))}</span>
                 <span>{ev.title}</span>
               </label>
             </li>

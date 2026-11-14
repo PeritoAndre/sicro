@@ -67,13 +67,16 @@ pub fn feito(plano: &Plano, amb: &Ambiente, fecho: &Fecho) -> Result<Value> {
         .map(|a| json!({ "codigo": a.codigo, "n": a.n, "ciente": amb.ciencias.iter().any(|c| c.codigo == a.codigo) }))
         .collect();
     let p = &pv.projeto;
+    // buraco de som aceito ao lado do desvio do `atempo` (contratos (h) 7)
+    let mut audio = serde_json::to_value(&pv.audio)?;
+    audio["tolerancia_buraco_ms"] = json!(crate::edicao::motor::audio::tolerancia_buraco_ms(plano.audio.as_ref()));
     let mut f = json!({
         "projeto": { "id": p.id, "titulo": p.titulo, "esquema": p.esquema, "esquema_menor": p.esquema_menor, "sha256": fecho.projeto_sha256 },
         "saida": pv.saida,
         "midias": pv.midias,
         "roteiro": roteiro,
         "ocultacoes": pv.ocultacoes,
-        "audio": pv.audio,
+        "audio": audio,
         "legendas": pv.legendas,
         "sincronias": pv.sincronias,
         "rastreios": pv.rastreios,
@@ -104,8 +107,14 @@ pub fn bytes(tecnico: &Value) -> Vec<u8> {
     b
 }
 
-/// Grava `<Título>.tecnico.json` em `pasta` (com `create_new`) e devolve o SHA-256.
+/// Grava `<Título>.tecnico.json` em `pasta` e devolve o SHA-256. Escreve num temporário da mesma pasta e só então
+/// dá o nome final, sem sobrescrever: arquivo pela metade (processo morto no meio) nunca fica com o nome final.
 pub fn gravar(pasta: &Path, titulo: &str, tecnico: &Value) -> Result<String> {
+    gravar_com(pasta, titulo, tecnico, &mut |arq, b| arq.write_all(b))
+}
+
+/// `gravar` com a escrita dada (o teste interrompe no meio).
+fn gravar_com(pasta: &Path, titulo: &str, tecnico: &Value, escrever: &mut dyn FnMut(&mut std::fs::File, &[u8]) -> std::io::Result<()>) -> Result<String> {
     // `sanitize_folder_name` corta em 100 bytes e entra em pânico se o corte cai no meio de um caractere:
     // o título já vai cortado em limite de caractere
     let aparado = titulo.trim().trim_matches('.');
@@ -115,12 +124,30 @@ pub fn gravar(pasta: &Path, titulo: &str, tecnico: &Value) -> Result<String> {
     }
     let nome = format!("{}.tecnico.json", crate::filesystem::safe_paths::sanitize_folder_name(&aparado[..fim]));
     let b = bytes(tecnico);
-    let destino = pasta.join(nome);
-    let mut arq = OpenOptions::new().write(true).create_new(true).open(&destino)?;
-    if let Err(e) = arq.write_all(&b).and_then(|_| arq.sync_all()) {
-        // nunca um `tecnico.json` pela metade
-        drop(arq);
-        let _ = std::fs::remove_file(&destino);
+    let destino = pasta.join(&nome);
+    if destino.exists() {
+        return Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, nome).into());
+    }
+    let tmp = pasta.join(format!(".{nome}.tmp-{}", std::process::id()));
+    let mut arq = OpenOptions::new().write(true).create(true).truncate(true).open(&tmp)?;
+    let escrito = escrever(&mut arq, &b).and_then(|_| arq.sync_all());
+    drop(arq);
+    if let Err(e) = escrito {
+        let _ = std::fs::remove_file(&tmp);
+        return Err(e.into());
+    }
+    // ligação física: falha se o nome final já existe (nunca sobrescreve); sem ela (FAT, alguns SMB), renomear
+    let dar_nome = match std::fs::hard_link(&tmp, &destino) {
+        Ok(()) => {
+            let _ = std::fs::remove_file(&tmp);
+            Ok(())
+        }
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => Err(e),
+        Err(_) if destino.exists() => Err(std::io::Error::new(std::io::ErrorKind::AlreadyExists, nome)),
+        Err(_) => std::fs::rename(&tmp, &destino),
+    };
+    if let Err(e) = dar_nome {
+        let _ = std::fs::remove_file(&tmp);
         return Err(e.into());
     }
     Ok(sha256_hex(&b))
@@ -617,6 +644,65 @@ mod testes {
         assert!(gravar(&c.caso.join("nao-existe"), "x", &t).is_err());
     }
 
+    /// Buraco de som aceito (contratos (h) 7): 100 ms quando o passo de áudio lê som de fonte; 0 sem som lido.
+    #[test]
+    fn tolerancia_do_buraco_de_som_no_feito() {
+        use crate::edicao::motor::plano::{Entrada, Papel, PassoAudio};
+        let c = Cena::nova("x");
+        let (mut plano, _) = apoio::plano_e_resultado(&c);
+        let amb = c.ambiente("t1");
+        assert_eq!(feito(&plano, &amb, &fecho(None)).unwrap()["audio"]["tolerancia_buraco_ms"], json!(0.0));
+        let mut passo = PassoAudio {
+            globais: vec![],
+            entradas: vec![],
+            grafo: String::new(),
+            auxiliares: vec![],
+            saida: "audio.wav".into(),
+            hash: "audio.sha256".into(),
+            amostras: 1,
+            normalizar: None,
+            tolerancia_atempo_ms: 0.0,
+        };
+        plano.audio = Some(passo.clone());
+        assert_eq!(feito(&plano, &amb, &fecho(None)).unwrap()["audio"]["tolerancia_buraco_ms"], json!(0.0), "só silêncio gerado");
+        passo.entradas.push(Entrada { antes: vec!["-vn".into()], antes_sem_busca: None, caminho: c.caso.join("a.wav"), papel: Papel::Midia { id: "m1".into(), clipe: String::new() } });
+        plano.audio = Some(passo);
+        let f = feito(&plano, &amb, &fecho(None)).unwrap();
+        assert_eq!(f["audio"]["tolerancia_buraco_ms"], json!(100.0));
+        assert_eq!(f["audio"]["tolerancia_atempo_ms"], json!(0.0));
+    }
+
+    /// Processo morto no meio da escrita (pânico depois de metade dos bytes): o nome final não existe; a tentativa
+    /// seguinte grava inteiro. Não sobrescreve um `tecnico.json` que já está lá.
+    #[test]
+    fn gravar_pela_metade_nunca_deixa_o_nome_final() {
+        let c = Cena::nova("x");
+        let (plano, res) = apoio::plano_e_resultado(&c);
+        let t = montar(&plano, &res, &c.ambiente("t1"), &fecho(None)).unwrap();
+        let final_ = c.caso.join("Caso.tecnico.json");
+        let pasta = c.caso.clone();
+        let tt = t.clone();
+        let caiu = std::panic::catch_unwind(move || {
+            let _ = gravar_com(&pasta, "Caso", &tt, &mut |arq, b| {
+                arq.write_all(&b[..b.len() / 2])?;
+                panic!("processo morto no meio");
+            });
+        });
+        assert!(caiu.is_err());
+        assert!(!final_.exists(), "tecnico.json pela metade com o nome final");
+        let sha = gravar(&c.caso, "Caso", &t).unwrap();
+        assert_eq!(std::fs::read(&final_).unwrap(), bytes(&t));
+        assert_eq!(sha, sha256_hex(&bytes(&t)));
+        // nenhum temporário sobra depois da gravação boa
+        let sobras: Vec<_> = std::fs::read_dir(&c.caso).unwrap().flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.contains(".tmp-")).collect();
+        assert!(sobras.is_empty(), "{sobras:?}");
+        // um terceiro conteúdo não troca o que está lá
+        let mut outro = t.clone();
+        outro["renderizado_em"] = json!("x");
+        assert!(gravar(&c.caso, "Caso", &outro).is_err());
+        assert_eq!(std::fs::read(&final_).unwrap(), bytes(&t));
+    }
+
     /// O que o PDF (`pdf-relatorio.md` §8, contrato `sicro.relatorio_juri/1`, e o §10.3) lê do `tecnico.json`.
     /// O que falta está no relato do P0.R (tamanho e imagem dos originais, taxa nominal, cópia de trabalho, miniatura).
     #[test]
@@ -646,6 +732,7 @@ mod testes {
             // ocultações de imagem e de som (anexo E)
             "/feito/ocultacoes/0/de_s", "/feito/ocultacoes/0/conteudo", "/feito/ocultacoes/0/modo", "/feito/ocultacoes/0/intensidade",
             "/feito/ocultacoes/0/motivo", "/feito/audio/silencios/0/motivo", "/execucao/conferencia/ocultacoes",
+            "/feito/audio/tolerancia_atempo_ms", "/feito/audio/tolerancia_buraco_ms",
             // sincronização (F), IA (ia_resumo), limites (7), reprodução e programas (H)
             "/feito/sincronias", "/feito/ia/0/modelo", "/feito/ia/0/arquivos/0/sha256", "/feito/rastreios/0/origem", "/feito/rastreios/0/confirmacao",
             "/feito/avisos", "/feito/selos_desligados", "/feito/revisado_por", "/feito/projeto/sha256",

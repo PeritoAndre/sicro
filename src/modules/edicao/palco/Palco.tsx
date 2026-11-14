@@ -26,16 +26,18 @@ import { Buscador } from "./motor/busca";
 import { pintar } from "./desenho/pintar";
 import { cenaDoClipe, duracaoLocal, instanteDaAncora, instanteDaChave, midiaDoClipe, type FontesCena, type Instante } from "./cena";
 import { LADO_MINIMO, aDaGirada, aDaOrigem, alcaDeLugar, alcasDaRegiao, alcasDeCaixa, alcasDePonto, proporcaoDaSaida } from "./alcas";
-import { bordaArrastada, entradaNoCursor, faixaDoClipe, marcarBloqueado, meioDoQuadro, saidaNoCursor } from "./faixa";
+import { bordaArrastada, entradaNoCursor, faixaDoClipe, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor } from "./faixa";
 import { QuadroFiel, type Fiel } from "./quadroFiel";
 import { CamadaEdicao, type Modificadores } from "./camadaEdicao";
 import { Transporte, type EstadoRender, type Fase } from "./Transporte";
 import { atlasDe, garantirMidia, imagemDe, recursoDe, spriteDe, urlDoCache, useRecursos } from "./recursos";
-import { PASSO_ZOOM, VISTA_INICIAL, contido, deslocar, limitar, mostrado, zoomEm, zoomMaximo, type Tamanho, type Vista } from "./vista";
+import { PASSO_ZOOM, VISTA_INICIAL, caixaMedida, contido, deslocar, limitar, mostrado, zoomEm, zoomMaximo, type Tamanho, type Vista } from "./vista";
 import styles from "./Palco.module.css";
 
 export interface PalcoApi {
   tocarPausar(): void;
+  /** Para de tocar (a Edição saiu da frente). */
+  pausar(): void;
   passo(d: 1 | -1): void;
   inicio(): void;
   fim(): void;
@@ -200,7 +202,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const efeitoSel = doc && selecao.efeito ? acharEfeito(doc, selecao.efeito) : null;
   const modoOrigem = !!clipe && (efeitoSel?.efeito.tipo === "enquadramento" || ferramenta?.tipo === "regiao");
 
-  const bloqueado = !clipe || clipe.tipo !== "trecho" || !ref_ || marcarBloqueado(ref_, tabela) || soLeitura;
+  const bloqueado = !clipe || clipe.tipo !== "trecho" || !ref_ || marcarBloqueado(info, tabela) || soLeitura;
 
   // ---- referências vivas para o laço e os eventos ----
   const vivo = useRef({ doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps });
@@ -240,6 +242,12 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       return { t: tl, pts: c.instante_pts, indice: j, ...slot(q) };
     }
     return { t: tl, pts: null, indice: null, ...slot(q) };
+  }, []);
+
+  /** Marca no quadro mostrado só com a imagem dele na tela (h 17 e 27). */
+  const livre = useCallback((): boolean => {
+    const v = vivo.current;
+    return marcaLivre(v.clipe?.tipo ?? null, v.info, v.tabela, buscadorRef.current, jRef.current);
   }, []);
 
   /** Slot que o "Quadro final" pede; null fora do clipe. */
@@ -627,7 +635,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     (qual: "entrada" | "saida") => {
       const v = vivo.current;
       const c = v.clipe;
-      if (!c || c.tipo !== "trecho" || !v.tabela || bloqueado) return;
+      if (!c || c.tipo !== "trecho" || !v.tabela || bloqueado || !livre()) return;
       const j = jRef.current;
       if (j === null) return;
       const t = meioDoQuadro(v.tabela, j);
@@ -637,12 +645,15 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         aplicarMudanca(d, { clipe: c.id, campos });
       });
     },
-    [bloqueado],
+    [bloqueado, livre],
   );
 
   // ---- alças e ferramenta ----
   const onArrasto = useCallback((a: Alca, de0: Ponto, para: Ponto, mod: Modificadores, fase: Fase) => {
-    if (fase === "inicio") gestoRef.current = { g: useEdicaoStore.getState().iniciarGesto("Marcar") };
+    if (fase === "inicio") {
+      if (!livre()) return;
+      gestoRef.current = { g: useEdicaoStore.getState().iniciarGesto("Marcar") };
+    }
     const g = gestoRef.current;
     if (!g) return;
     if (fase !== "inicio") {
@@ -655,14 +666,14 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       g.g.concluir();
       gestoRef.current = null;
     }
-  }, []);
+  }, [livre]);
 
   const onMarcar = useCallback(
     (v: Caixa | Ponto) => {
       const f = vivo.current.ferramenta;
       const c = vivo.current.clipe;
       const inst = instante();
-      if (!f || !c || !inst) return;
+      if (!f || !c || !inst || !livre()) return;
       // o par (t, pts) é o da base de quem recebe a marca (âncora do rastreio ou chave do efeito)
       const r0 = f.rastreio && vivo.current.doc ? acharRastreio(vivo.current.doc, f.rastreio) : null;
       const em = r0 ? instanteDaAncora(c, r0.base, inst) : instanteDaChave(c, inst);
@@ -690,14 +701,15 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       if (!(r.w >= LADO_MINIMO && r.h >= LADO_MINIMO)) return;
       onMarcado(r, em.t, em.pts);
     },
-    [instante, onMarcado],
+    [instante, onMarcado, livre],
   );
 
   // ---- vista ----
   useLayoutEffect(() => {
     const el = caixaRef.current;
     if (!el) return;
-    const medir = () => setCaixa({ w: el.clientWidth, h: el.clientHeight });
+    // escondido (a análise na frente) mede 0×0: a vista (zoom e deslocamento) fica como estava
+    const medir = () => setCaixa((c) => caixaMedida(c, el.clientWidth, el.clientHeight));
     medir();
     const ro = new ResizeObserver(medir);
     ro.observe(el);
@@ -749,6 +761,9 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     ref,
     (): PalcoApi => ({
       tocarPausar,
+      pausar: () => {
+        if (tocandoRef.current) parar();
+      },
       passo: (d) => {
         if (tocandoRef.current) parar();
         const v = vivo.current;
@@ -787,7 +802,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       instante: (rastreio) => {
         const i = instante();
         const v = vivo.current;
-        if (!i || !v.clipe) return null;
+        if (!i || !v.clipe || !livre()) return null;
         const r = rastreio && v.doc ? acharRastreio(v.doc, rastreio) : null;
         return r ? instanteDaAncora(v.clipe, r.base, i) : instanteDaChave(v.clipe, i);
       },
@@ -797,7 +812,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         else irLocal(t);
       },
     }),
-    [tocarPausar, parar, irQuadro, irLocal, marcarPonta, caixa, img, zMax, slotDoCursor, previaRender, render, instante],
+    [tocarPausar, parar, irQuadro, irLocal, marcarPonta, caixa, img, zMax, slotDoCursor, previaRender, render, instante, livre],
   );
 
   // ---- estado da mídia (ícones, sem texto) ----

@@ -36,6 +36,9 @@ interface VideoState {
   activeMediaId: string | null;
   bundle: VideoBundle | null;
   deleteMedia: (workspacePath: string, mediaId: string) => Promise<void>;
+  /** Edição visível no lugar da análise (§8.1): as duas ficam montadas, uma escondida. */
+  edicao: boolean;
+  mostrarEdicao: (v: boolean) => void;
 
   lastError: SicroError | null;
   warningsFromLastAction: string[];
@@ -104,6 +107,8 @@ export const useVideoStore = create<VideoState>((set) => ({
   isMutating: false,
   activeMediaId: null,
   bundle: null,
+  edicao: false,
+  mostrarEdicao: (v) => set({ edicao: v }),
   lastError: null,
   warningsFromLastAction: [],
   speedCalibrations: [],

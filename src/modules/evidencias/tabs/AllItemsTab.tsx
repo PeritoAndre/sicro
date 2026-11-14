@@ -25,6 +25,7 @@ const KIND_OPTIONS = [
   "croqui",
   "croqui_export",
   "video",
+  "video_edit",
   "storyboard_frame",
   "audio",
   "image_analysis",

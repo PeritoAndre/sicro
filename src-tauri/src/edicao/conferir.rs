@@ -23,8 +23,9 @@ pub struct ConferenciaSaida {
     pub decodificados: PathBuf,
 }
 
-/// Decodifica `arquivo` em CPU com `-xerror`, grava os hashes por quadro em `trabalho` e exige `total_q` quadros sem erro.
-/// `progresso` recebe os quadros já decodificados.
+/// Decodifica `arquivo` em CPU com `-xerror`, grava os hashes por quadro em `trabalho` e exige `total_q` quadros sem erro
+/// e com passo constante nos pts (o 7.0.2 já gravou passo 0 entre blocos com a contagem certa: quadro adiantado em
+/// relação ao som). `progresso` recebe os quadros já decodificados.
 pub fn conferir(
     cap: &Capacidades,
     arquivo: &Path,
@@ -73,13 +74,20 @@ pub fn conferir(
     exec::exigir_sucesso(&cmd, &fim)?;
     // com `-loglevel error`, toda linha do stderr é erro do decodificador
     let erros = exec::ultimas_linhas(&cmd.stderr, usize::MAX).len() as u32;
-    let hashes = coluna_de_hash(&std::fs::read_to_string(&framehash)?);
+    let texto = std::fs::read_to_string(&framehash)?;
     let _ = std::fs::remove_file(&framehash);
+    let hashes = coluna_de_hash(&texto);
     let quadros = hashes.len() as u64;
     progresso(quadros);
     if erros > 0 || quadros != total_q {
         return Err(SicroError::Validation(format!(
             "{}: conferência da saída com {quadros} quadros de {total_q} e {erros} erros",
+            super::mensagens::codigo::LEITURA_DIVERGENTE
+        )));
+    }
+    if let Some(q) = passo_irregular(&texto) {
+        return Err(SicroError::Validation(format!(
+            "{}: conferência da saída com passo irregular nos pts no quadro {q}",
             super::mensagens::codigo::LEITURA_DIVERGENTE
         )));
     }
@@ -96,6 +104,28 @@ pub fn coluna_de_hash(framehash: &str) -> Vec<String> {
         .filter(|l| !l.is_empty() && !l.starts_with('#'))
         .filter_map(|l| l.rsplit(',').next().map(|h| h.trim().to_string()))
         .collect()
+}
+
+/// Primeiro quadro em que o passo dos pts (coluna `pts` do `framehash`) foge do constante: passo nulo ou negativo, ou
+/// passo diferente. Só com base fina (passo de 10 tiques ou mais) a variação de 1 tique passa: a base em ms do
+/// Matroska arredonda 33/34. None = constante.
+pub(crate) fn passo_irregular(framehash: &str) -> Option<usize> {
+    let pts: Vec<i64> = framehash
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty() && !l.starts_with('#'))
+        .map(|l| l.split(',').nth(2).and_then(|p| p.trim().parse().ok()).unwrap_or(i64::MIN))
+        .collect();
+    let mut faixa: Option<(i64, i64)> = None;
+    for (i, w) in pts.windows(2).enumerate() {
+        let d = w[1].checked_sub(w[0]).unwrap_or(0);
+        let (lo, hi) = faixa.map_or((d, d), |(lo, hi)| (lo.min(d), hi.max(d)));
+        if lo <= 0 || hi - lo > if lo >= 10 { 1 } else { 0 } {
+            return Some(i + 1);
+        }
+        faixa = Some((lo, hi));
+    }
+    None
 }
 
 fn texto_de_hashes(hashes: &[String]) -> String {
@@ -142,6 +172,25 @@ mod testes {
     }
 
     #[test]
+    fn passo_dos_pts() {
+        let linhas = |pts: &[i64]| -> String {
+            pts.iter().enumerate().map(|(i, p)| format!("0, {i}, {p}, 1, 10, h{i}\n")).collect::<String>()
+        };
+        assert_eq!(passo_irregular(FH), None);
+        assert_eq!(passo_irregular(&linhas(&[0, 512, 1024, 1536])), None);
+        // ms do Matroska a 30 qps
+        assert_eq!(passo_irregular(&linhas(&[0, 33, 67, 100, 133])), None);
+        // passo 0 entre blocos (o defeito do 7.0.2), salto e volta
+        assert_eq!(passo_irregular(&linhas(&[0, 1, 2, 2, 3])), Some(3));
+        assert_eq!(passo_irregular(&linhas(&[0, 1, 2, 4, 5])), Some(3));
+        assert_eq!(passo_irregular(&linhas(&[0, 512, 1024, 2048])), Some(3));
+        assert_eq!(passo_irregular(&linhas(&[0, 33, 66, 100, 167])), Some(4));
+        assert_eq!(passo_irregular(&linhas(&[0, 2, 1])), Some(2));
+        assert_eq!(passo_irregular(&linhas(&[0, 1, 2, 3]).replace(", 2, 1,", ", x, 1,")), Some(2));
+        assert_eq!(passo_irregular(""), None);
+    }
+
+    #[test]
     fn hash_de_conteudo_e_o_do_texto_com_um_por_linha() {
         let h = vec!["aa11".to_string(), "bb22".to_string()];
         assert_eq!(hash_de_conteudo(&h), format!("{:x}", Sha256::digest(b"aa11\nbb22\n")));
@@ -167,7 +216,7 @@ mod testes {
         let saida = pasta.join("sintetico.mp4");
         let args: Vec<String> = [
             "-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i", &format!("testsrc2=s=320x180:r=30:d={}", n as f64 / 30.0),
-            "-frames:v", &n.to_string(), "-c:v", "libx264", "-preset", "veryfast", "-g", "15", "-pix_fmt", "yuv420p",
+            "-frames:v", &n.to_string(), "-c:v", "libx264", "-preset", "veryfast", "-g", "15", "-bf", "0", "-pix_fmt", "yuv420p",
             &saida.to_string_lossy(),
         ]
         .iter()
@@ -223,5 +272,19 @@ mod testes {
         let cancelado = AtomicBool::new(true);
         let e = conferir(&cap, &arq, 60, &d.path().join("t4"), &cancelado, &mut |_| {}).unwrap_err().to_string();
         assert!(e.starts_with("validation error: cancelado"), "{e}");
+
+        // contagem certa com um passo dobrado no meio (quadro 30 em diante um quadro adiante): recusado
+        let saltado = d.path().join("saltado.mp4");
+        let args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-i", &arq.to_string_lossy(), "-c", "copy",
+            "-bsf:v", "setts=ts=TS+if(gte(N\\,30)\\,DURATION\\,0)", &saltado.to_string_lossy()]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let cmd = Comando { nome: "saltado".into(), programa: cap.binario.clone(), args, pasta: d.path().to_path_buf(), ambiente: vec![], sem_ambiente: vec![], stderr: d.path().join("saltado.log") };
+        let t = exec::rodar(&cmd, &nao).unwrap();
+        exec::exigir_sucesso(&cmd, &t).unwrap();
+        assert_eq!(medir::framehash(&cap, &saltado).unwrap().len(), 60, "{}", cap.versao);
+        let e = conferir(&cap, &saltado, 60, &d.path().join("t5"), &nao, &mut |_| {}).unwrap_err().to_string();
+        assert!(e.contains("leitura_divergente") && e.contains("passo irregular") && e.contains("quadro 30"), "{} {e}", cap.versao);
     }
 }

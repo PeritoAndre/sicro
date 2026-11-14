@@ -3,9 +3,6 @@
 //! Assinatura pública e tipo do modelo só mudam pelo orquestrador (marcar com `// CONTRATO:`).
 //! Códigos de erro (`mapa_grande`, `filtro_ausente`…) viajam em `SicroError::Validation("<código>")`.
 
-// sai no fecho da Fase 0
-#![allow(dead_code, unused_variables)]
-
 pub mod armazem;
 pub mod camada;
 pub mod conferir;
@@ -29,3 +26,8 @@ pub mod validar;
 
 #[cfg(test)]
 pub mod testes;
+
+// ponta a ponta do fecho da Fase 0: mora em `tests/` mas usa o que é `pub(crate)` e os medidores de `testes`
+#[cfg(test)]
+#[path = "../../tests/edicao/ponta_a_ponta.rs"]
+mod ponta_a_ponta;

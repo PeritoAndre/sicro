@@ -128,10 +128,11 @@ pub(crate) const RETRATO_TAREFA: &str = "projeto.json";
 const FALHA: &str = "falha.log";
 
 /// Quem roda uma tarefa: o real compila e executa; os testes usam um falso. Devolve o estado final
-/// (`AConferir`, `Concluida` ou `Pronta`); `Err` vira `Falhou` (ou `Cancelada`, se pediram).
+/// (`AConferir`, `Concluida` ou `Pronta`); `Err` vira `Falhou` (ou `Cancelada`, se pediram). `fila` = a que roda a tarefa.
 pub(crate) trait Motor: Send + Sync {
     fn rodar(
         &self,
+        fila: &Fila,
         tarefa: &Tarefa,
         pedido: &PedidoRender,
         trabalho: &Path,
@@ -163,6 +164,8 @@ struct Item {
     cancelar: Arc<AtomicBool>,
     trabalho: PathBuf,
     terminada: Option<Instant>,
+    /// Quem está em `esperar` desta tarefa: o "limpar" não a tira da lista antes de eles lerem o estado.
+    esperando: u32,
 }
 
 impl Item {
@@ -194,7 +197,13 @@ pub(crate) struct Fila {
     lim: Mutex<Limitador>,
     trabalhadores: Mutex<Vec<JoinHandle<()>>>,
     manter: Duration,
+    /// De pé da mudança de estado até o ouvinte voltar (sempre tomada ANTES de `est`): os avisos saem na ordem das
+    /// mudanças, e `esperar` passa por ela antes de devolver (o aviso do estado devolvido já saiu).
+    aviso: Mutex<()>,
 }
+
+/// Teto de espera pela prévia e pelo quadro final cancelados antes da limpeza por projeto.
+const TETO_PARAR: Duration = Duration::from_secs(60);
 
 fn agora() -> String {
     chrono::Utc::now().to_rfc3339()
@@ -218,6 +227,7 @@ impl Fila {
             lim: Mutex::new(Limitador::default()),
             trabalhadores: Mutex::new(Vec::new()),
             manter,
+            aviso: Mutex::new(()),
         })
     }
 
@@ -233,11 +243,19 @@ impl Fila {
         self.ouvinte.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
-    /// Avisa fora da trava (quem ouve pode chamar `listar`).
-    fn emitir(&self, lista: Vec<Tarefa>) {
-        if let Some(o) = self.ouvinte() {
-            o.fila(&lista);
+    /// Muda o estado (`f` devolve o resultado e se a lista mudou) e avisa a lista, fora de `est` (quem ouve pode chamar
+    /// `listar`; não pode mudar a fila). A trava dos avisos põe os avisos na ordem das mudanças.
+    fn mudar_e_avisar<R>(&self, f: impl FnOnce(&mut Interno) -> (R, bool)) -> R {
+        let _aviso = self.aviso.lock().unwrap_or_else(|e| e.into_inner());
+        let (r, lista) = {
+            let mut g = self.trava();
+            let (r, mudou) = f(&mut g);
+            (r, mudou.then(|| Self::lista(&g)))
+        };
+        if let (Some(l), Some(o)) = (lista, self.ouvinte()) {
+            o.fila(&l);
         }
+        r
     }
 
     pub(crate) fn ouvir(&self, o: Arc<dyn Ouvinte>) {
@@ -280,50 +298,52 @@ impl Fila {
             estado: Estado::NaFila,
             criado_em: agora(),
         };
-        let mut g = self.trava();
-        let mut sem_rodar: Vec<(PathBuf, String)> = Vec::new();
-        // a última vence: prévia (ou quadro final) nova cancela a anterior do mesmo tipo e projeto
-        if faixa(pedido.tipo) != Faixa::Exportacao {
-            let mesma = |i: &Item| i.tarefa.tipo == tarefa.tipo && i.tarefa.projeto_id == tarefa.projeto_id && i.tarefa.caso == tarefa.caso;
-            let manter = self.manter;
-            g.itens.retain(|i| !(mesma(i) && i.tarefa.estado.terminada() && i.terminada.is_some_and(|t| t.elapsed() >= manter)));
-            for i in g.itens.iter_mut().filter(|i| mesma(i) && !i.tarefa.estado.acabou()) {
-                i.cancelar.store(true, Ordering::SeqCst);
-                if i.tarefa.estado == Estado::NaFila {
-                    i.fechar(Estado::Cancelada);
-                    sem_rodar.push((i.trabalho.clone(), i.tarefa.projeto_id.clone()));
+        let manter = self.manter;
+        let sem_rodar = self.mudar_e_avisar(|g| {
+            let mut sem_rodar: Vec<(PathBuf, String)> = Vec::new();
+            // a última vence: prévia (ou quadro final) nova cancela a anterior do mesmo tipo e projeto
+            if faixa(pedido.tipo) != Faixa::Exportacao {
+                let mesma = |i: &Item| i.tarefa.tipo == tarefa.tipo && i.tarefa.projeto_id == tarefa.projeto_id && i.tarefa.caso == tarefa.caso;
+                g.itens.retain(|i| {
+                    !(mesma(i) && i.esperando == 0 && i.tarefa.estado.terminada() && i.terminada.is_some_and(|t| t.elapsed() >= manter))
+                });
+                for i in g.itens.iter_mut().filter(|i| mesma(i) && !i.tarefa.estado.acabou()) {
+                    i.cancelar.store(true, Ordering::SeqCst);
+                    if i.tarefa.estado == Estado::NaFila {
+                        i.fechar(Estado::Cancelada);
+                        sem_rodar.push((i.trabalho.clone(), i.tarefa.projeto_id.clone()));
+                    }
                 }
             }
-        }
-        g.itens.push(Item { tarefa, pedido, cancelar: Arc::new(AtomicBool::new(false)), trabalho, terminada: None });
-        self.iniciar(&mut g);
-        let lista = Self::lista(&g);
-        drop(g);
+            g.itens.push(Item { tarefa, pedido, cancelar: Arc::new(AtomicBool::new(false)), trabalho, terminada: None, esperando: 0 });
+            self.iniciar(g);
+            (sem_rodar, true)
+        });
         sem_rodar.iter().for_each(|(t, p)| enxugar(t, p));
         self.cv.notify_all();
-        self.emitir(lista);
         Ok(id)
     }
 
     pub(crate) fn cancelar(&self, id: &str) -> Result<()> {
-        let mut g = self.trava();
-        let it = g.itens.iter_mut().find(|i| i.tarefa.id == id).ok_or_else(|| erro(format!("tarefa_ausente: {id}")))?;
-        if it.tarefa.estado.acabou() {
-            return Ok(());
-        }
-        it.cancelar.store(true, Ordering::SeqCst);
-        let mut sem_rodar = None;
-        if it.tarefa.estado == Estado::NaFila {
-            it.fechar(Estado::Cancelada);
-            sem_rodar = Some((it.trabalho.clone(), it.tarefa.projeto_id.clone()));
-        }
-        let lista = Self::lista(&g);
-        drop(g);
+        let sem_rodar = self.mudar_e_avisar(|g| {
+            let Some(it) = g.itens.iter_mut().find(|i| i.tarefa.id == id) else {
+                return (Err(erro(format!("tarefa_ausente: {id}"))), false);
+            };
+            if it.tarefa.estado.acabou() {
+                return (Ok(None), false);
+            }
+            it.cancelar.store(true, Ordering::SeqCst);
+            let mut sem_rodar = None;
+            if it.tarefa.estado == Estado::NaFila {
+                it.fechar(Estado::Cancelada);
+                sem_rodar = Some((it.trabalho.clone(), it.tarefa.projeto_id.clone()));
+            }
+            (Ok(sem_rodar), true)
+        })?;
         if let Some((t, p)) = sem_rodar {
             enxugar(&t, &p);
         }
         self.cv.notify_all();
-        self.emitir(lista);
         Ok(())
     }
 
@@ -331,25 +351,64 @@ impl Fila {
         Self::lista(&self.trava())
     }
 
+    /// Tira as terminadas; a que alguém ainda espera fica até ele ler o estado.
     pub(crate) fn limpar(&self) -> Vec<Tarefa> {
-        let mut g = self.trava();
-        g.itens.retain(|i| !i.tarefa.estado.terminada());
-        let lista = Self::lista(&g);
-        drop(g);
-        self.emitir(lista.clone());
-        lista
+        self.mudar_e_avisar(|g| {
+            g.itens.retain(|i| i.esperando > 0 || !i.tarefa.estado.terminada());
+            (Self::lista(g), true)
+        })
     }
 
     pub(crate) fn esperar(&self, id: &str) -> Result<Estado> {
         let mut g = self.trava();
-        loop {
-            let e = g.itens.iter().find(|i| i.tarefa.id == id).map(|i| i.tarefa.estado.clone());
-            match e {
-                None => return Err(erro(format!("tarefa_ausente: {id}"))),
-                Some(e) if e.acabou() => return Ok(e),
+        let Some(it) = g.itens.iter_mut().find(|i| i.tarefa.id == id) else { return Err(erro(format!("tarefa_ausente: {id}"))) };
+        it.esperando += 1;
+        let r = loop {
+            match g.itens.iter().find(|i| i.tarefa.id == id).map(|i| i.tarefa.estado.clone()) {
+                None => break Err(erro(format!("tarefa_ausente: {id}"))),
+                Some(e) if e.acabou() => break Ok(e),
                 Some(_) => g = self.cv.wait(g).unwrap_or_else(|e| e.into_inner()),
             }
+        };
+        if let Some(it) = g.itens.iter_mut().find(|i| i.tarefa.id == id) {
+            it.esperando = it.esperando.saturating_sub(1);
         }
+        drop(g);
+        // a mudança para esse estado segura a trava dos avisos até o ouvinte voltar
+        drop(self.aviso.lock().unwrap_or_else(|e| e.into_inner()));
+        r
+    }
+
+    /// Antes da limpeza por projeto (exportação com `ocultar`, §4): cancela a prévia e o quadro final desse projeto,
+    /// na fila ou rodando, e espera os que rodam pararem (até `teto`). Devolve as tarefas do projeto ainda vivas
+    /// (entraram depois): a limpeza não mexe nelas.
+    pub(crate) fn parar_previas(&self, caso: &str, projeto_id: &str, teto: Duration) -> Vec<String> {
+        let do_projeto = |i: &Item| i.tarefa.caso == caso && i.tarefa.projeto_id == projeto_id;
+        let (alvos, sem_rodar) = self.mudar_e_avisar(|g| {
+            let (mut alvos, mut sem_rodar) = (Vec::new(), Vec::new());
+            for i in g.itens.iter_mut().filter(|i| do_projeto(i) && faixa(i.tarefa.tipo) != Faixa::Exportacao && !i.tarefa.estado.acabou()) {
+                i.cancelar.store(true, Ordering::SeqCst);
+                if i.tarefa.estado == Estado::NaFila {
+                    i.fechar(Estado::Cancelada);
+                    sem_rodar.push((i.trabalho.clone(), i.tarefa.projeto_id.clone()));
+                }
+                alvos.push(i.tarefa.id.clone());
+            }
+            let mudou = !sem_rodar.is_empty();
+            ((alvos, sem_rodar), mudou)
+        });
+        sem_rodar.iter().for_each(|(t, p)| enxugar(t, p));
+        self.cv.notify_all();
+        let t0 = Instant::now();
+        let mut g = self.trava();
+        while g.itens.iter().any(|i| alvos.contains(&i.tarefa.id) && !i.tarefa.estado.acabou()) {
+            let Some(falta) = teto.checked_sub(t0.elapsed()) else {
+                tracing::warn!("edição: prévia do projeto {projeto_id} não parou em {teto:?}");
+                break;
+            };
+            g = self.cv.wait_timeout(g, falta).unwrap_or_else(|e| e.into_inner()).0;
+        }
+        g.itens.iter().filter(|i| do_projeto(i) && !i.tarefa.estado.acabou()).map(|i| i.tarefa.id.clone()).collect()
     }
 
     /// Há tarefa que ainda vai rodar (ou roda) desse projeto?
@@ -364,25 +423,23 @@ impl Fila {
 
     /// `AConferir` → `Concluida` depois do `edicao_conferir`.
     pub(crate) fn conferida(&self, saida_id: &str) {
-        let mut g = self.trava();
-        let mut mudou = false;
-        for i in g.itens.iter_mut() {
-            if matches!(&i.tarefa.estado, Estado::AConferir { saida_id: s } if s == saida_id) {
-                i.tarefa.estado = Estado::Concluida { saida_id: saida_id.to_string() };
-                mudou = true;
+        let mudou = self.mudar_e_avisar(|g| {
+            let mut mudou = false;
+            for i in g.itens.iter_mut() {
+                if matches!(&i.tarefa.estado, Estado::AConferir { saida_id: s } if s == saida_id) {
+                    i.tarefa.estado = Estado::Concluida { saida_id: saida_id.to_string() };
+                    mudou = true;
+                }
             }
-        }
-        let lista = Self::lista(&g);
-        drop(g);
+            (mudou, mudou)
+        });
         if mudou {
             self.cv.notify_all();
-            self.emitir(lista);
         }
     }
 
     pub(crate) fn encerrar(&self) {
-        let lista = {
-            let mut g = self.trava();
+        self.mudar_e_avisar(|g| {
             g.fim = true;
             for i in g.itens.iter_mut().filter(|i| !i.tarefa.estado.acabou()) {
                 i.cancelar.store(true, Ordering::SeqCst);
@@ -390,8 +447,8 @@ impl Fila {
                     i.fechar(Estado::Cancelada);
                 }
             }
-            Self::lista(&g)
-        };
+            ((), true)
+        });
         self.cv.notify_all();
         let hs: Vec<_> = std::mem::take(&mut *self.trabalhadores.lock().unwrap_or_else(|e| e.into_inner()));
         for h in hs {
@@ -402,61 +459,83 @@ impl Fila {
         g.fim = false;
         drop(g);
         self.cv.notify_all();
-        self.emitir(lista);
     }
 
-    fn mudar(&self, id: &str, e: Estado) -> Vec<Tarefa> {
-        let mut g = self.trava();
-        if let Some(i) = g.itens.iter_mut().find(|i| i.tarefa.id == id) {
-            if e.acabou() {
-                i.fechar(e);
-            } else {
-                i.tarefa.estado = e;
+    /// Muda o estado da tarefa; `avisar` = manda a lista ao ouvinte (na mudança de fase e no fim).
+    fn mudar(&self, id: &str, e: Estado, avisar: bool) {
+        self.mudar_e_avisar(|g| {
+            if let Some(i) = g.itens.iter_mut().find(|i| i.tarefa.id == id) {
+                if e.acabou() {
+                    i.fechar(e);
+                } else {
+                    i.tarefa.estado = e;
+                }
+            }
+            ((), avisar)
+        })
+    }
+
+    /// A próxima tarefa da faixa, já em `Preparando` e avisada; None = a fila encerrou.
+    fn pegar(&self, minha: Faixa) -> Option<(Tarefa, PedidoRender, Arc<AtomicBool>, PathBuf)> {
+        let tem = |g: &Interno| g.itens.iter().any(|i| faixa(i.tarefa.tipo) == minha && i.tarefa.estado == Estado::NaFila);
+        loop {
+            // espera sem a trava dos avisos (ela é tomada antes de `est`)
+            {
+                let mut g = self.trava();
+                while !g.fim && !tem(&g) {
+                    g = self.cv.wait(g).unwrap_or_else(|e| e.into_inner());
+                }
+                if g.fim {
+                    return None;
+                }
+            }
+            let pegou = self.mudar_e_avisar(|g| {
+                if g.fim {
+                    return (Some(None), false);
+                }
+                match g.itens.iter_mut().find(|i| faixa(i.tarefa.tipo) == minha && i.tarefa.estado == Estado::NaFila) {
+                    Some(i) => {
+                        i.tarefa.estado = Estado::Preparando;
+                        (Some(Some((i.tarefa.clone(), i.pedido.clone(), i.cancelar.clone(), i.trabalho.clone()))), true)
+                    }
+                    // cancelada entre a espera e a troca: espera de novo
+                    None => (None, false),
+                }
+            });
+            match pegou {
+                Some(t) => return t,
+                None => continue,
             }
         }
-        Self::lista(&g)
     }
 
     fn trabalhar(self: Arc<Self>, minha: Faixa) {
-        loop {
-            let (tarefa, pedido, cancelar, trabalho, lista) = {
-                let mut g = self.trava();
-                loop {
-                    if g.fim {
-                        return;
-                    }
-                    if let Some(i) = g.itens.iter_mut().find(|i| faixa(i.tarefa.tipo) == minha && i.tarefa.estado == Estado::NaFila) {
-                        i.tarefa.estado = Estado::Preparando;
-                        let t = (i.tarefa.clone(), i.pedido.clone(), i.cancelar.clone(), i.trabalho.clone());
-                        let lista = Self::lista(&g);
-                        break (t.0, t.1, t.2, t.3, lista);
-                    }
-                    g = self.cv.wait(g).unwrap_or_else(|e| e.into_inner());
-                }
-            };
-            self.emitir(lista);
+        while let Some(pegou) = self.pegar(minha) {
+            let (tarefa, pedido, cancelar, trabalho) = pegou;
             let mut fase_anterior: Option<std::mem::Discriminant<Fase>> = None;
             let eu = &self;
             let id = tarefa.id.clone();
             let mut progresso = |p: Progresso| {
                 let d = std::mem::discriminant(&p.fase);
-                let lista = eu.mudar(
+                // a lista vai quando a fase muda; o avanço, no máximo 5 vezes por segundo
+                let nova_fase = fase_anterior != Some(d);
+                fase_anterior = Some(d);
+                eu.mudar(
                     &id,
                     Estado::Rodando { fase: p.fase, feito_q: p.feito_q, total_q: p.total_q, qps: p.qps, restante_s: p.restante_s },
+                    nova_fase,
                 );
-                // a lista vai quando a fase muda; o avanço, no máximo 5 vezes por segundo
-                if fase_anterior != Some(d) {
-                    fase_anterior = Some(d);
-                    eu.emitir(lista);
-                }
-                if eu.lim.lock().unwrap_or_else(|e| e.into_inner()).passa() {
+                // o aviso sai com o limitador preso: o seguinte só passa depois de este chegar
+                let mut lim = eu.lim.lock().unwrap_or_else(|e| e.into_inner());
+                if lim.passa() {
                     if let Some(o) = eu.ouvinte() {
                         o.progresso(&EventoProgresso { tarefa_id: id.clone(), progresso: p });
                     }
                 }
+                drop(lim);
             };
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                self.motor.rodar(&tarefa, &pedido, &trabalho, &cancelar, &mut progresso)
+                self.motor.rodar(&self, &tarefa, &pedido, &trabalho, &cancelar, &mut progresso)
             }));
             let final_ = match r {
                 Ok(Ok(e)) if e.acabou() && !matches!(e, Estado::Falhou { .. } | Estado::Cancelada) => e,
@@ -469,9 +548,8 @@ impl Fila {
             if final_ == Estado::Cancelada || (tarefa.tipo == TipoTarefa::QuadroFinal && matches!(final_, Estado::Pronta { .. })) {
                 enxugar(&trabalho, &tarefa.projeto_id);
             }
-            let lista = self.mudar(&tarefa.id, final_);
+            self.mudar(&tarefa.id, final_, true);
             self.cv.notify_all();
-            self.emitir(lista);
         }
     }
 }
@@ -493,12 +571,14 @@ fn enxugar(trabalho: &Path, projeto_id: &str) {
     }
 }
 
-/// `Falhou` com a mensagem (código na frente) e o registro em `render/<tarefa>/falha.log`.
+/// `Falhou` com a mensagem como a de um erro de comando (`<código>: <frase do catálogo>`; código fora do catálogo
+/// passa como está) e o texto cru em `render/<tarefa>/falha.log`: a tela mostra a frase, o registro guarda o detalhe.
 fn falhou(trabalho: &Path, cache: &Path, mensagem: &str) -> Estado {
     let log = trabalho.join(FALHA);
     let _ = fs::write(&log, format!("{mensagem}\n"));
     let log_rel = log.strip_prefix(cache).unwrap_or(&log).to_string_lossy().replace('\\', "/");
-    Estado::Falhou { mensagem: mensagem.to_string(), log_rel }
+    let mensagem = texto_do_erro(&super::mensagens::erro_de_comando(erro(mensagem)));
+    Estado::Falhou { mensagem, log_rel }
 }
 
 fn global() -> &'static Arc<Fila> {
@@ -561,6 +641,7 @@ struct MotorReal;
 impl Motor for MotorReal {
     fn rodar(
         &self,
+        fila: &Fila,
         tarefa: &Tarefa,
         pedido: &PedidoRender,
         trabalho: &Path,
@@ -569,6 +650,9 @@ impl Motor for MotorReal {
     ) -> Result<Estado> {
         let p = armazem::tipado(&pedido.projeto)?;
         let final_ = matches!(pedido.alvo, Alvo::Final { .. });
+        if final_ {
+            exigir_gravacao(&pedido.ws)?;
+        }
         let prep = executar::preparar_com(&pedido.ws, &p, &pedido.cache, final_, final_.then_some(cancelar))?;
         let ctx = prep.contexto();
         if final_ {
@@ -614,14 +698,7 @@ impl Motor for MotorReal {
                     quando: chrono::Local::now(),
                     tecnico: &TecnicoReal { plano: &plano, res: &res, amb: &amb },
                 })?;
-                if let Some(raiz) = pedido.cache.parent() {
-                    if !plano.proveniencia.ocultacoes.is_empty() {
-                        executar::limpar_do_plano(&pedido.cache, &plano);
-                        executar::limpar_do_projeto(&pedido.cache, &tarefa.projeto_id, &tarefa.id);
-                    }
-                    let vivas: Vec<String> = listar().into_iter().map(|t| t.id).collect();
-                    executar::limpar_cache(raiz, executar::TETO_CACHE, &vivas);
-                }
+                limpar_depois_de_publicar(fila, tarefa, &pedido.cache, &plano);
                 Ok(match s.estado {
                     EstadoSaida::AConferir => Estado::AConferir { saida_id: s.id },
                     EstadoSaida::Concluida => Estado::Concluida { saida_id: s.id },
@@ -630,6 +707,29 @@ impl Motor for MotorReal {
             Alvo::Previa { .. } | Alvo::Quadro { .. } => Ok(Estado::Pronta { relativo: rel(&res.arquivo) }),
         }
     }
+}
+
+/// Antes de renderizar a exportação final: a pasta das exportações do caso aceita gravação? Caso em pasta só de
+/// leitura falhava só na publicação, depois do render inteiro.
+pub(crate) fn exigir_gravacao(ws: &Path) -> Result<()> {
+    let pasta = paths::dir_edicao_saida(ws);
+    let prova = pasta.join(format!(".gravavel-{}", uuid::Uuid::new_v4()));
+    let r = fs::create_dir_all(&pasta).and_then(|_| fs::OpenOptions::new().write(true).create_new(true).open(&prova).map(drop));
+    let _ = fs::remove_file(&prova);
+    r.map_err(|e| erro(format!("{}: {}: {e}", codigo::SEM_GRAVACAO, paths::REL_EDICAO_SAIDA)))
+}
+
+/// Depois da exportação final (§4): com ocultação, a prévia e o quadro final do projeto (renderizados antes dela) param
+/// e o cache do projeto sai; sempre, o teto do cache (o mais antigo sai). `cache` = pasta da Edição do caso.
+fn limpar_depois_de_publicar(fila: &Fila, tarefa: &Tarefa, cache: &Path, plano: &Plano) {
+    let Some(raiz) = cache.parent() else { return };
+    if !plano.proveniencia.ocultacoes.is_empty() {
+        let novas = fila.parar_previas(&tarefa.caso, &tarefa.projeto_id, TETO_PARAR);
+        executar::limpar_do_plano(cache, plano);
+        executar::limpar_do_projeto(cache, &tarefa.projeto_id, &tarefa.id, &novas);
+    }
+    let vivas: Vec<String> = fila.listar().into_iter().map(|t| t.id).collect();
+    executar::limpar_cache(raiz, executar::TETO_CACHE, &vivas);
 }
 
 /// Quem, onde e com quê (`execucao.autor`, `caso`, `sicro`, `sistema`), lido do caso e da máquina.
@@ -763,7 +863,9 @@ impl From<VideoEditOutput> for SaidaRegistrada {
     }
 }
 
-/// O que é o arquivo guardado no retrato.
+/// O que é o arquivo guardado no retrato. `Grafo`, `Compostos` e `Pendente` são do próprio retrato (grafos e listas
+/// de cada passo, `quadros.compostos.sha256`, `tecnico.pendente.json`); os demais, o que o projeto cita.
+// CONTRATO: `Grafo`, `Compostos` e `Pendente` acrescentados (decisão (h)16: o manifesto cobre o retrato inteiro).
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum PapelRetrato {
@@ -771,10 +873,14 @@ pub enum PapelRetrato {
     Silhuetas,
     Trf,
     Midia,
+    Grafo,
+    Compostos,
+    Pendente,
 }
 
-/// Um arquivo que o retrato cita: guardado em `dados/<sha256>.<ext>` (ligação física, ou cópia quando o sistema
-/// de arquivos não deixa). `de` = caminho de origem relativo à pasta do projeto; `tamanho` em bytes.
+/// Um arquivo do retrato. O que o projeto cita fica em `dados/<sha256>.<ext>` (ligação física, ou cópia quando o
+/// sistema de arquivos não deixa) e `de` = caminho de origem relativo à pasta do projeto; o do próprio retrato tem
+/// `arquivo` relativo ao retrato (`grafos/b000/b000.txt`, `quadros.compostos.sha256`) e `de` vazio. `tamanho` em bytes.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ItemManifesto {
     pub papel: PapelRetrato,
@@ -812,13 +918,32 @@ fn pasta_retrato(ws: &Path, projeto_id: &str, saida_id: &str) -> Result<PathBuf>
 /// Liga (ou copia) `origem` em `destino` sem nunca sobrescrever e devolve o SHA-256 e o tamanho do que ficou.
 fn ligar_ou_copiar(origem: &Path, destino: &Path) -> Result<(String, u64)> {
     if fs::hard_link(origem, destino).is_err() {
-        let mut de = fs::File::open(origem)?;
-        let mut para = fs::OpenOptions::new().write(true).create_new(true).open(destino)?;
-        std::io::copy(&mut de, &mut para)?;
-        para.sync_all()?;
+        copiar_inteiro(&mut fs::File::open(origem)?, destino)?;
     }
     let sha = crate::hashing::sha256::sha256_file(destino)?;
     Ok((sha, fs::metadata(destino)?.len()))
+}
+
+/// Cópia (caso em outro disco ou em pasta de rede) para `<destino>.parcial`, que só ganha o nome no fim: processo
+/// morto ou erro no meio não deixa arquivo truncado com o nome da saída. Não sobrescreve.
+fn copiar_inteiro(de: &mut dyn std::io::Read, destino: &Path) -> std::io::Result<()> {
+    if fs::symlink_metadata(destino).is_ok() {
+        return Err(std::io::ErrorKind::AlreadyExists.into());
+    }
+    let mut nome = destino.file_name().unwrap_or_default().to_os_string();
+    nome.push(".parcial");
+    let parcial = destino.with_file_name(nome);
+    let r = (|| {
+        let mut para = fs::OpenOptions::new().write(true).create_new(true).open(&parcial)?;
+        std::io::copy(de, &mut para)?;
+        para.sync_all()?;
+        drop(para);
+        fs::rename(&parcial, destino)
+    })();
+    if r.is_err() {
+        let _ = fs::remove_file(&parcial);
+    }
+    r
 }
 
 /// O que o projeto cita (densos, silhuetas, `.trf`, mídia própria), lido do JSON cru: item de versão futura também vale.
@@ -882,11 +1007,19 @@ fn trf_em(v: &Value, saida: &mut Vec<String>) {
 /// Grava o retrato em `Sistema/videos/edicao/<projeto_id>/exportacoes/<saida_id>/`: o projeto como chegou,
 /// os grafos e listas do plano e tudo que o projeto cita (densos, silhuetas, `.trf`, mídia própria).
 pub fn gravar_retrato(ws: &Path, projeto_id: &str, saida_id: &str, projeto: &Value, plano: &Plano) -> Result<Manifesto> {
-    gravar_retrato_com(ws, projeto_id, saida_id, projeto, plano, &[])
+    gravar_retrato_com(ws, projeto_id, saida_id, projeto, plano, &[], None)
 }
 
-/// `gravar_retrato` com `.trf` feitos neste render (o documento ainda não os cita).
-pub(crate) fn gravar_retrato_com(ws: &Path, projeto_id: &str, saida_id: &str, projeto: &Value, plano: &Plano, trf_novos: &[String]) -> Result<Manifesto> {
+/// `gravar_retrato` com `.trf` feitos neste render (o documento ainda não os cita) e a lista por slot do composto.
+pub(crate) fn gravar_retrato_com(
+    ws: &Path,
+    projeto_id: &str,
+    saida_id: &str,
+    projeto: &Value,
+    plano: &Plano,
+    trf_novos: &[String],
+    compostos: Option<&Path>,
+) -> Result<Manifesto> {
     let dir = pasta_retrato(ws, projeto_id, saida_id)?;
     if dir.exists() {
         return Err(erro(format!("retrato_existe: {saida_id}")));
@@ -927,6 +1060,13 @@ pub(crate) fn gravar_retrato_com(ws: &Path, projeto_id: &str, saida_id: &str, pr
             itens.push(ItemManifesto { papel, sha256: sha, arquivo, de, tamanho });
         }
         gravar_grafos(&dir.join("grafos"), plano)?;
+        for rel in arquivos_em(&dir, "grafos")? {
+            itens.push(item_do_retrato(&dir, PapelRetrato::Grafo, &rel)?);
+        }
+        if let Some(c) = compostos {
+            fs::copy(c, dir.join(COMPOSTOS))?;
+            itens.push(item_do_retrato(&dir, PapelRetrato::Compostos, COMPOSTOS)?);
+        }
         let m = Manifesto {
             esquema: ESQUEMA_MANIFESTO,
             saida_id: saida_id.to_string(),
@@ -935,13 +1075,81 @@ pub(crate) fn gravar_retrato_com(ws: &Path, projeto_id: &str, saida_id: &str, pr
             alvo: plano.alvo.clone(),
             itens,
         };
-        fs::write(dir.join("manifesto.json"), serde_json::to_vec_pretty(&m)?)?;
+        gravar_manifesto(&dir, &m)?;
         Ok(m)
     })();
     if r.is_err() {
         let _ = fs::remove_dir_all(&dir);
     }
     r
+}
+
+/// Arquivos de `dir/sub`, em qualquer profundidade, relativos a `dir` com `/`, em ordem.
+fn arquivos_em(dir: &Path, sub: &str) -> Result<Vec<String>> {
+    fn andar(base: &Path, p: &Path, saida: &mut Vec<String>) -> Result<()> {
+        for e in fs::read_dir(p)? {
+            let e = e?;
+            let t = e.file_type()?;
+            if t.is_dir() {
+                andar(base, &e.path(), saida)?;
+            } else {
+                let rel = e.path().strip_prefix(base).map(|r| r.to_string_lossy().replace('\\', "/")).unwrap_or_default();
+                saida.push(rel);
+            }
+        }
+        Ok(())
+    }
+    let mut v = Vec::new();
+    if dir.join(sub).is_dir() {
+        andar(dir, &dir.join(sub), &mut v)?;
+    }
+    v.sort();
+    Ok(v)
+}
+
+fn item_do_retrato(dir: &Path, papel: PapelRetrato, rel: &str) -> Result<ItemManifesto> {
+    let a = dir.join(rel);
+    Ok(ItemManifesto {
+        papel,
+        sha256: crate::hashing::sha256::sha256_file(&a)?,
+        arquivo: rel.to_string(),
+        de: String::new(),
+        tamanho: fs::metadata(&a)?.len(),
+    })
+}
+
+/// `manifesto.json` por temporário + troca de nome: nunca fica pela metade.
+fn gravar_manifesto(dir: &Path, m: &Manifesto) -> Result<()> {
+    let tmp = dir.join("manifesto.json.tmp");
+    fs::write(&tmp, serde_json::to_vec_pretty(m)?)?;
+    fs::rename(&tmp, dir.join("manifesto.json"))?;
+    Ok(())
+}
+
+/// Põe (`pendente`) ou tira o `tecnico.pendente.json` do manifesto do retrato.
+fn manifesto_com_pendente(dir: &Path, pendente: bool) -> Result<()> {
+    let mut m: Manifesto = serde_json::from_slice(&fs::read(dir.join("manifesto.json"))?)?;
+    m.itens.retain(|i| i.papel != PapelRetrato::Pendente);
+    if pendente {
+        m.itens.push(item_do_retrato(dir, PapelRetrato::Pendente, PENDENTE)?);
+    }
+    gravar_manifesto(dir, &m)
+}
+
+/// `arquivo` de um item do manifesto, conferido: o que o projeto cita só em `dados/<sha256>…`; o do retrato só no
+/// lugar dele (grafos sem `..`). None = caminho que não vale.
+fn arquivo_do_item(it: &ItemManifesto) -> Option<&str> {
+    let a = it.arquivo.as_str();
+    let simples = |r: &str| !r.is_empty() && !r.contains('\\') && r.split('/').all(|c| !c.is_empty() && c != "." && c != "..");
+    let ok = match it.papel {
+        PapelRetrato::Denso | PapelRetrato::Silhuetas | PapelRetrato::Trf | PapelRetrato::Midia => {
+            a.strip_prefix("dados/").is_some_and(|n| n.starts_with(&it.sha256) && !n.contains(['/', '\\']) && !n.contains(".."))
+        }
+        PapelRetrato::Grafo => a.strip_prefix("grafos/").is_some_and(simples),
+        PapelRetrato::Compostos => a == COMPOSTOS,
+        PapelRetrato::Pendente => a == PENDENTE,
+    };
+    ok.then_some(a)
 }
 
 /// Grafos, listas e argumentos de cada passo (sem caminho absoluto: mídia vira `midia:<id>`).
@@ -997,14 +1205,20 @@ pub fn ler_retrato(ws: &Path, projeto_id: &str, saida_id: &str) -> Result<(Value
         return Err(erro(format!("{}: projeto.json do retrato", codigo::MIDIA_TROCADA)));
     }
     for it in &m.itens {
-        let nome = it.arquivo.strip_prefix("dados/").filter(|n| n.starts_with(&it.sha256) && !n.contains(['/', '\\']) && !n.contains(".."));
-        let Some(nome) = nome else { return Err(erro(format!("{}: {}", codigo::ITEM_INVALIDO, it.arquivo))) };
-        let arq = dir.join("dados").join(nome);
+        let Some(rel) = arquivo_do_item(it) else { return Err(erro(format!("{}: {}", codigo::ITEM_INVALIDO, it.arquivo))) };
+        let arq = dir.join(rel);
         let ok = arq.is_file()
             && fs::metadata(&arq)?.len() == it.tamanho
             && crate::hashing::sha256::sha256_file(&arq)? == it.sha256;
         if !ok {
-            return Err(erro(format!("{}: {}", codigo::MIDIA_TROCADA, it.de)));
+            let onde = if it.de.is_empty() { &it.arquivo } else { &it.de };
+            return Err(erro(format!("{}: {onde}", codigo::MIDIA_TROCADA)));
+        }
+    }
+    // arquivo a mais em `grafos/` também é adulteração
+    for rel in arquivos_em(&dir, "grafos")? {
+        if !m.itens.iter().any(|i| i.papel == PapelRetrato::Grafo && i.arquivo == rel) {
+            return Err(erro(format!("{}: {rel}", codigo::MIDIA_TROCADA)));
         }
     }
     Ok((serde_json::from_slice(&bytes)?, m))
@@ -1199,10 +1413,7 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
             somente_leitura(&destino)?;
         }
         let trf: Vec<String> = p.res.trf.iter().map(|t| t.sha256.clone()).collect();
-        let m = gravar_retrato_com(p.ws, projeto_id, &saida_id, p.projeto, p.plano, &trf)?;
-        if let Some(c) = &p.res.compostos {
-            fs::copy(c, retrato.join(COMPOSTOS))?;
-        }
+        let m = gravar_retrato_com(p.ws, projeto_id, &saida_id, p.projeto, p.plano, &trf, p.res.compostos.as_deref())?;
         let arquivo_rel = format!("{pasta_rel}/{nome_video}");
         let fecho = Fecho {
             projeto_sha256: m.projeto_sha256.clone(),
@@ -1213,6 +1424,7 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
         let (estado, tecnico_rel) = if exige_conferencia {
             // sobrevive ao reinício: `edicao_conferir` completa a conferência e grava o final
             fs::write(retrato.join(PENDENTE), p.tecnico.bytes(&tecnico))?;
+            manifesto_com_pendente(&retrato, true)?;
             (EstadoSaida::AConferir, None)
         } else {
             p.tecnico.gravar(&pasta, &base, &tecnico)?;
@@ -1280,6 +1492,10 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
 /// `edicao_conferir`: completa a conferência no `tecnico.pendente.json` do retrato, grava o `tecnico.json` final na
 /// pasta da saída, marca concluída e apaga o pendente.
 pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, por: &str, g: &dyn Gravar) -> Result<SaidaRegistrada> {
+    // quem confere (ou registra "não conferida") é o perito do caso
+    if por.trim().is_empty() {
+        return Err(erro(format!("{}: {saida_id}", codigo::PERITO_AUSENTE)));
+    }
     // uma conferência por vez: duas juntas gravariam dois relatórios com horas diferentes
     static VEZ: Mutex<()> = Mutex::new(());
     let _vez = VEZ.lock().unwrap_or_else(|e| e.into_inner());
@@ -1291,7 +1507,15 @@ pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, p
     }
     let retrato = paths::resolver_relativo(ws, &s.retrato_rel);
     let pendente = retrato.join(PENDENTE);
-    let mut tecnico: Value = serde_json::from_slice(&fs::read(&pendente)?)?;
+    let bytes = fs::read(&pendente)?;
+    // o pendente é o que a exportação gravou? (o manifesto do retrato guarda o hash dele, decisão (h)16)
+    let no_manifesto = fs::read(retrato.join("manifesto.json")).ok().and_then(|b| serde_json::from_slice::<Manifesto>(&b).ok());
+    if let Some(it) = no_manifesto.as_ref().and_then(|m| m.itens.iter().find(|i| i.papel == PapelRetrato::Pendente)) {
+        if sha256_bytes(&bytes) != it.sha256 {
+            return Err(erro(format!("{}: {PENDENTE}", codigo::MIDIA_TROCADA)));
+        }
+    }
+    let mut tecnico: Value = serde_json::from_slice(&bytes)?;
     let em = chrono::Utc::now();
     let c = serde_json::json!({
         "ocultacoes": if conferida { "conferida" } else { "nao_conferida" },
@@ -1324,6 +1548,10 @@ pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, p
     if !video_edit_output_repo::concluir(&conn, &occ, &id, conferida.then_some((por, em)), Some(&tecnico_rel))? {
         return Err(erro(format!("saida_concluida: {saida_id}")));
     }
+    // o manifesto deixa de citar o pendente antes de ele sair
+    if retrato.join("manifesto.json").is_file() {
+        manifesto_com_pendente(&retrato, false)?;
+    }
     let _ = fs::remove_file(&pendente);
     let d = serde_json::json!({ "conferida": conferida, "por": por });
     occurrence_repo::record_audit(&conn, Some(&occ), "video.edicao.conferida", Some("video"), Some("edicao_saida"), Some(&id), Some(&d.to_string()))?;
@@ -1338,8 +1566,6 @@ pub(crate) fn excluir_saida(ws: &Path, saida_id: &str) -> Result<()> {
     let id = uuid::Uuid::parse_str(saida_id).map_err(|_| erro(format!("saida_ausente: {saida_id}")))?;
     let s = video_edit_output_repo::obter(&conn, &occ, &id)?.ok_or_else(|| erro(format!("saida_ausente: {saida_id}")))?;
     let pasta = pasta_da_saida(ws, &s.pasta)?;
-    let d = serde_json::json!({ "projeto_id": s.projeto_id, "titulo": s.titulo, "arquivo": s.arquivo, "sha256": s.sha256 });
-    occurrence_repo::record_audit(&conn, Some(&occ), "video.edicao.saida_excluida", Some("video"), Some("edicao_saida"), Some(&id), Some(&d.to_string()))?;
     apagar_pasta_da_saida(&pasta)?;
     if armazem::id_valido(&s.projeto_id) {
         let proj = armazem::pasta_projeto(ws, &s.projeto_id);
@@ -1348,11 +1574,19 @@ pub(crate) fn excluir_saida(ws: &Path, saida_id: &str) -> Result<()> {
             fs::remove_dir_all(&dir)?;
         }
         let vazia = fs::read_dir(proj.join(EXPORTACOES)).map(|mut r| r.next().is_none()).unwrap_or(true);
-        if vazia && !proj.join("projeto.json").is_file() && proj.is_dir() {
-            fs::remove_dir_all(&proj)?;
+        if vazia && !proj.join("projeto.json").is_file() {
+            // só pasta vazia sai (o projeto excluído deixa só `exportacoes/`): a mídia de uma edição nova ainda não
+            // gravada (decisão (h)18) mora aqui sem `projeto.json`
+            let _ = fs::remove_dir(proj.join(EXPORTACOES));
+            let _ = fs::remove_dir(&proj);
         }
     }
-    video_edit_output_repo::excluir(&conn, &occ, &id)?;
+    // registro só do que saiu de fato: arquivo preso (Windows) deixa linha e arquivos, sem auditoria
+    let d = serde_json::json!({ "projeto_id": s.projeto_id, "titulo": s.titulo, "arquivo": s.arquivo, "sha256": s.sha256 });
+    let tx = conn.unchecked_transaction()?;
+    video_edit_output_repo::excluir(&tx, &occ, &id)?;
+    occurrence_repo::record_audit(&tx, Some(&occ), "video.edicao.saida_excluida", Some("video"), Some("edicao_saida"), Some(&id), Some(&d.to_string()))?;
+    tx.commit()?;
     Ok(())
 }
 
@@ -1407,6 +1641,8 @@ mod testes {
         ordem: Mutex<Vec<String>>,
         juntos_max: Mutex<usize>,
         progresso_ms: Mutex<Option<u64>>,
+        /// Estados das tarefas quando `parar_previas` voltou, e o que ela devolveu (tarefa de título "ocultar").
+        parada: Mutex<Option<(Vec<Tarefa>, Vec<String>)>>,
     }
 
     impl Falso {
@@ -1416,7 +1652,7 @@ mod testes {
     }
 
     impl Motor for Falso {
-        fn rodar(&self, t: &Tarefa, _: &PedidoRender, _: &Path, cancelar: &AtomicBool, progresso: &mut dyn FnMut(Progresso)) -> Result<Estado> {
+        fn rodar(&self, fila: &Fila, t: &Tarefa, _: &PedidoRender, _: &Path, cancelar: &AtomicBool, progresso: &mut dyn FnMut(Progresso)) -> Result<Estado> {
             {
                 let mut r = self.rodando.lock().unwrap();
                 r.push(t.titulo.clone());
@@ -1428,6 +1664,12 @@ mod testes {
             if t.titulo == "pânico" {
                 sair(self);
                 panic!("de propósito");
+            }
+            if t.titulo == "ocultar" {
+                let novas = fila.parar_previas(&t.caso, &t.projeto_id, Duration::from_secs(30));
+                *self.parada.lock().unwrap() = Some((fila.listar(), novas));
+                sair(self);
+                return Ok(Estado::Concluida { saida_id: "s".into() });
             }
             let t0 = Instant::now();
             let mut k = 0u64;
@@ -1591,9 +1833,18 @@ mod testes {
         assert!(mensagem.starts_with("filtro_ausente: "), "{mensagem}");
         assert_eq!(log_rel, format!("render/{x}/falha.log"));
         assert!(fs::read_to_string(d.path().join("cache-do-caso").join(&log_rel)).unwrap().contains("No such filter"));
+        // a tela recebe a frase do catálogo (como num erro de comando); o detalhe cru fica no registro
+        m.erros.lock().unwrap().insert("diverge".into(), "leitura_divergente: bloco 0: fps@c1: frames in 106, esperados 104 + 1".into());
+        let x = f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "p", "diverge")).unwrap();
+        let Estado::Falhou { mensagem, log_rel } = f.esperar(&x).unwrap() else { panic!("devia falhar") };
+        assert_eq!(mensagem, format!("leitura_divergente: {}", crate::edicao::mensagens::frase(codigo::LEITURA_DIVERGENTE, None, None)));
+        assert!(!mensagem.contains("frames in"), "{mensagem}");
+        assert!(fs::read_to_string(d.path().join("cache-do-caso").join(&log_rel)).unwrap().contains("frames in 106"));
+        // passar de novo pelo catálogo (`edicao_quadro_final`) não muda nada
+        assert_eq!(texto_do_erro(&crate::edicao::mensagens::erro_de_comando(erro(mensagem.clone()))), mensagem);
 
         let p = f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "p", "pânico")).unwrap();
-        assert!(matches!(f.esperar(&p).unwrap(), Estado::Falhou { mensagem, .. } if mensagem == "panico"));
+        assert!(matches!(f.esperar(&p).unwrap(), Estado::Falhou { mensagem, .. } if mensagem == "panico: Falha interna"));
         // a fila segue depois do pânico
         let depois = f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "p", "depois")).unwrap();
         m.liberar("depois", Estado::Concluida { saida_id: "s".into() });
@@ -1646,6 +1897,155 @@ mod testes {
         let filas = escuta.filas.lock().unwrap().len();
         assert!((4..=6).contains(&filas), "{filas} avisos da lista");
         assert!(matches!(escuta.filas.lock().unwrap().last().unwrap()[0].estado, Estado::Concluida { .. }));
+        f.encerrar();
+    }
+
+    /// O último aviso da lista é o do estado que `esperar` devolve, mesmo com um ouvinte lento (era a corrida do teste
+    /// de progresso: `esperar` voltava antes de o aviso final sair).
+    #[test]
+    fn esperar_volta_depois_do_aviso_final() {
+        /// Ouvinte lento que, antes de demorar, acorda quem espera (um despertar no meio do aviso, como o de outra
+        /// tarefa que entra na fila).
+        struct Lento(Arc<Escuta>, Arc<OnceLock<Arc<Fila>>>);
+        impl Ouvinte for Lento {
+            fn fila(&self, t: &[Tarefa]) {
+                if t.iter().any(|x| x.estado.terminada()) {
+                    if let Some(f) = self.1.get() {
+                        f.cv.notify_all();
+                    }
+                    std::thread::sleep(Duration::from_millis(300));
+                }
+                self.0.fila(t);
+            }
+            fn progresso(&self, e: &EventoProgresso) {
+                self.0.progresso(e);
+            }
+        }
+        let d = ap::pasta("fila-aviso");
+        let m = Arc::new(Falso::default());
+        let f = Fila::nova(m.clone());
+        let escuta = Arc::new(Escuta::default());
+        let propria = Arc::new(OnceLock::new());
+        let _ = propria.set(f.clone());
+        f.ouvir(Arc::new(Lento(escuta.clone(), propria.clone())));
+        for k in 0..3 {
+            let t = format!("x{k}");
+            let id = f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "p", &t)).unwrap();
+            comecou(&m, &t);
+            m.liberar(&t, Estado::Concluida { saida_id: t.clone() });
+            assert_eq!(f.esperar(&id).unwrap(), Estado::Concluida { saida_id: t.clone() });
+            let ultima = escuta.filas.lock().unwrap().last().cloned().unwrap();
+            assert_eq!(ultima.iter().find(|x| x.id == id).unwrap().estado, Estado::Concluida { saida_id: t.clone() }, "{k}");
+        }
+        // os avisos saem na ordem das mudanças: nenhuma tarefa volta de concluída para rodando na sequência
+        let filas = escuta.filas.lock().unwrap().clone();
+        for w in filas.windows(2) {
+            for t in &w[0] {
+                if t.estado.terminada() {
+                    assert!(w[1].iter().find(|x| x.id == t.id).is_none_or(|x| x.estado == t.estado), "{w:?}");
+                }
+            }
+        }
+        f.encerrar();
+    }
+
+    /// `limpar` entre o fim de uma tarefa e o despertar de quem a espera não a tira da lista: `esperar` lê o estado.
+    #[test]
+    fn limpar_nao_tira_a_que_alguem_espera() {
+        let d = ap::pasta("fila-limpar");
+        let m = Arc::new(Falso::default());
+        let f = Fila::nova(m.clone());
+        let id = f.enfileirar(pedido(d.path(), TipoTarefa::QuadroFinal, "p", "q")).unwrap();
+        comecou(&m, "q");
+        std::thread::scope(|s| {
+            let espera = s.spawn(|| f.esperar(&id));
+            let t0 = Instant::now();
+            while f.trava().itens.iter().all(|i| i.esperando == 0) {
+                assert!(t0.elapsed() < Duration::from_secs(30));
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            // terminada sem acordar quem espera: é a janela da corrida, aberta à força
+            f.trava().itens[0].fechar(Estado::Pronta { relativo: "quadro/x.bmp".into() });
+            assert_eq!(f.limpar().len(), 1, "saiu antes de quem espera ler");
+            f.cv.notify_all();
+            assert_eq!(espera.join().unwrap().unwrap(), Estado::Pronta { relativo: "quadro/x.bmp".into() });
+        });
+        m.liberar("q", Estado::Pronta { relativo: "quadro/x.bmp".into() });
+        let t0 = Instant::now();
+        while !m.rodando.lock().unwrap().is_empty() {
+            assert!(t0.elapsed() < Duration::from_secs(30));
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        assert!(f.limpar().is_empty(), "sem quem espere, sai");
+        f.encerrar();
+    }
+
+    /// Exportação com `ocultar` (decisão (h)12): antes da limpeza do cache, a prévia e o quadro final do MESMO projeto
+    /// (rodando ou na fila) ficam `Cancelada` e a parada espera os que rodam; outro projeto segue.
+    #[test]
+    fn exportacao_com_ocultar_para_previas_do_projeto() {
+        let d = ap::pasta("fila-parar");
+        let m = Arc::new(Falso::default());
+        let f = Fila::nova(m.clone());
+        let vb = f.enfileirar(pedido(d.path(), TipoTarefa::Previa, "pb", "vb")).unwrap();
+        comecou(&m, "vb");
+        let v1 = f.enfileirar(pedido(d.path(), TipoTarefa::Previa, "pa", "v1")).unwrap();
+        let q1 = f.enfileirar(pedido(d.path(), TipoTarefa::QuadroFinal, "pa", "q1")).unwrap();
+        comecou(&m, "q1");
+        assert_eq!(estado(&f, &v1), Estado::NaFila);
+        let e = f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "pa", "ocultar")).unwrap();
+        assert_eq!(f.esperar(&e).unwrap(), Estado::Concluida { saida_id: "s".into() });
+        let (lista, novas) = m.parada.lock().unwrap().clone().expect("parou as prévias");
+        let em = |id: &str| lista.iter().find(|t| t.id == id).unwrap().estado.clone();
+        // quando a parada voltou, a que rodava já tinha parado
+        assert_eq!((em(&v1), em(&q1)), (Estado::Cancelada, Estado::Cancelada));
+        assert!(!em(&vb).acabou(), "outro projeto segue");
+        assert_eq!(novas, std::slice::from_ref(&e), "só a própria exportação segue viva no projeto");
+        m.liberar("vb", Estado::Pronta { relativo: "x".into() });
+        assert!(matches!(f.esperar(&vb).unwrap(), Estado::Pronta { .. }));
+        assert!(!m.ordem.lock().unwrap().contains(&"v1".to_string()), "a da fila nem rodou");
+        f.encerrar();
+    }
+
+    /// A limpeza depois de publicar uma exportação com ocultação para a prévia do projeto que roda (fica `Cancelada`) e
+    /// tira do cache o que ela pôs; outro projeto fica. Sem ocultação, nada disso.
+    #[test]
+    fn limpeza_depois_de_publicar_com_ocultar() {
+        let d = ap::pasta("fila-depois");
+        let cache = d.path().join("cache-do-caso");
+        let m = Arc::new(Falso::default());
+        let f = Fila::nova(m.clone());
+        let bloco = |nome: &str| cache.join("blocos").join(format!("{}.mp4", nome.repeat(64)));
+        let por_no_cache = |tarefa: &str, ch: &str| {
+            fs::write(cache.join("render").join(tarefa).join(executar::CHAVES), json!({ "dir": "blocos", "blocos": [ch.repeat(64)], "camadas": [] }).to_string()).unwrap();
+            fs::create_dir_all(cache.join("blocos")).unwrap();
+            fs::write(bloco(ch), b"x").unwrap();
+        };
+        let v1 = f.enfileirar(pedido(d.path(), TipoTarefa::Previa, "pa", "v1")).unwrap();
+        let q1 = f.enfileirar(pedido(d.path(), TipoTarefa::QuadroFinal, "pb", "q1")).unwrap();
+        comecou(&m, "v1");
+        comecou(&m, "q1");
+        por_no_cache(&v1, "a");
+        por_no_cache(&q1, "b");
+        let exportacao = |id: &str| Tarefa {
+            id: id.into(),
+            tipo: TipoTarefa::Exportar,
+            caso: "cache-do-caso".into(),
+            projeto_id: "pa".into(),
+            titulo: "e".into(),
+            estado: Estado::Rodando { fase: Fase::Conferindo, feito_q: 0, total_q: 0, qps: 0.0, restante_s: 0 },
+            criado_em: agora(),
+        };
+        let (sem, _, _) = render_falso(d.path(), "e0", false);
+        limpar_depois_de_publicar(&f, &exportacao("e0"), &cache, &sem);
+        assert!(!estado(&f, &v1).acabou() && bloco("a").is_file(), "sem ocultação nada para");
+        let (com, _, _) = render_falso(d.path(), "e1", true);
+        limpar_depois_de_publicar(&f, &exportacao("e1"), &cache, &com);
+        assert_eq!(estado(&f, &v1), Estado::Cancelada);
+        assert!(!bloco("a").exists() && !cache.join("render").join(&v1).exists(), "o cache da prévia do projeto saiu");
+        assert!(!estado(&f, &q1).acabou() && bloco("b").is_file(), "outro projeto fica");
+        m.liberar("q1", Estado::Pronta { relativo: "quadro/b.bmp".into() });
+        f.esperar(&q1).unwrap();
         f.encerrar();
     }
 
@@ -1855,6 +2255,11 @@ mod testes {
             assert_eq!((v, m.projeto_sha256.as_str(), m.alvo.clone()), (projeto.clone(), s.projeto_sha256.as_str(), ap::alvo_final(EscolhaCodificador::Cpu)));
             let r = ws.join(&s.retrato_rel);
             assert_eq!(fs::read_to_string(r.join(COMPOSTOS)).unwrap(), "aa\nbb\n");
+            assert!(m.itens.iter().any(|i| i.papel == PapelRetrato::Compostos && i.arquivo == COMPOSTOS));
+            // a lista por slot mexida é acusada
+            fs::write(r.join(COMPOSTOS), "aa\nbc\n").unwrap();
+            assert!(ler_retrato(&ws, pid, &s.id).unwrap_err().to_string().contains(COMPOSTOS));
+            fs::write(r.join(COMPOSTOS), "aa\nbb\n").unwrap();
             assert!(r.join("grafos/b000/b000.txt").is_file());
             let argumentos = fs::read_to_string(r.join("grafos/argumentos.json")).unwrap();
             assert!(argumentos.contains("midia:m1") && !argumentos.contains("/caminho/da/fonte.mp4"), "{argumentos}");
@@ -1901,6 +2306,19 @@ mod testes {
             assert!(s.arquivo.ends_with("/Oculto (ocultado).mp4"), "{}", s.arquivo);
             assert!(ws.join(&s.retrato_rel).join(PENDENTE).is_file());
             assert!(!ws.join(&s.pasta).join("Oculto.tecnico.json").exists());
+            // o pendente está no manifesto: mexido, acusado
+            let (_, m) = ler_retrato(&ws, pid, &s.id).unwrap();
+            assert!(m.itens.iter().any(|i| i.papel == PapelRetrato::Pendente));
+            let pend = ws.join(&s.retrato_rel).join(PENDENTE);
+            let bom = fs::read(&pend).unwrap();
+            fs::write(&pend, String::from_utf8(bom.clone()).unwrap().replace("\"erros\": 0", "\"erros\": 1")).unwrap();
+            assert!(ler_retrato(&ws, pid, &s.id).unwrap_err().to_string().contains(PENDENTE));
+            // e a conferência não fecha em cima dele: nada muda
+            let e = concluir_conferencia(&ws, &s.id, true, "Perito Teste", &TecFalso).unwrap_err().to_string();
+            assert!(e.contains(codigo::MIDIA_TROCADA) && e.contains(PENDENTE), "{e}");
+            assert_eq!(saidas(&ws, Some(pid)).unwrap().iter().find(|x| x.id == s.id).unwrap().estado, EstadoSaida::AConferir);
+            assert!(!ws.join(&s.pasta).join("Oculto.tecnico.json").exists());
+            fs::write(&pend, &bom).unwrap();
             feitas.push(s);
         }
         // reinício: a fila nova não sabe de nada; a conferência vem do banco e do retrato
@@ -1911,7 +2329,14 @@ mod testes {
         let t: Value = serde_json::from_slice(&fs::read(ws.join(a.tecnico_rel.as_ref().unwrap())).unwrap()).unwrap();
         assert_eq!(t["execucao"]["conferencia"], json!({ "quadros": 90, "erros": 0, "ocultacoes": "conferida", "por": "Perito Teste", "em": a.conferida_em }));
         assert!(!ws.join(&a.retrato_rel).join(PENDENTE).exists());
+        // sem o pendente o retrato segue íntegro (o manifesto deixou de citá-lo)
+        let (_, m) = ler_retrato(&ws, pid, &a.id).unwrap();
+        assert!(!m.itens.iter().any(|i| i.papel == PapelRetrato::Pendente));
         assert!(fs::metadata(ws.join(a.tecnico_rel.as_ref().unwrap())).unwrap().permissions().readonly());
+        // caso sem perito: recusa, nada muda
+        let e = concluir_conferencia(&ws, &feitas[1].id, true, " ", &TecFalso).unwrap_err();
+        assert!(e.to_string().contains(codigo::PERITO_AUSENTE), "{e}");
+        assert_eq!(saidas(&ws, Some(pid)).unwrap().iter().find(|s| s.id == feitas[1].id).unwrap().estado, EstadoSaida::AConferir);
         assert!(concluir_conferencia(&ws, &feitas[0].id, true, "x", &TecFalso).unwrap_err().to_string().contains("saida_concluida"));
 
         let b = concluir_conferencia(&ws, &feitas[1].id, false, "Perito Teste", &TecFalso).unwrap();
@@ -1920,6 +2345,45 @@ mod testes {
         assert_eq!(t["execucao"]["conferencia"]["ocultacoes"], "nao_conferida");
         assert_eq!(t["execucao"]["conferencia"]["por"], Value::Null);
         assert_eq!(contar(&ws, "SELECT COUNT(*) FROM audit_logs WHERE action = 'video.edicao.conferida'"), 2);
+    }
+
+    /// Cópia da saída para o caso (quando não dá para ligar): leitura que falha no meio não deixa arquivo com o nome
+    /// final nem o parcial; inteira, fica só o arquivo; nunca sobrescreve.
+    #[test]
+    fn copia_que_falha_no_meio_nao_deixa_arquivo_com_o_nome_final() {
+        /// Entrega `ate` bytes e falha; a cada leitura anota se o nome final já existia (é o que um processo morto
+        /// nesse instante deixaria no caso).
+        struct Quebra<'a> {
+            lidos: usize,
+            ate: usize,
+            destino: &'a Path,
+            nome_final_no_meio: bool,
+        }
+        impl std::io::Read for Quebra<'_> {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.nome_final_no_meio |= self.lidos > 0 && self.destino.exists();
+                if self.lidos >= self.ate {
+                    return Err(std::io::Error::other("rede caiu"));
+                }
+                let n = buf.len().min(self.ate - self.lidos).min(4096);
+                buf[..n].fill(7);
+                self.lidos += n;
+                Ok(n)
+            }
+        }
+        let d = tempfile::tempdir().unwrap();
+        let destino = d.path().join("Saída ç.mp4");
+        let mut q = Quebra { lidos: 0, ate: 100_000, destino: &destino, nome_final_no_meio: false };
+        assert!(copiar_inteiro(&mut q, &destino).is_err());
+        assert!(q.lidos == 100_000 && !q.nome_final_no_meio, "arquivo pela metade com o nome da saída");
+        assert_eq!(fs::read_dir(d.path()).unwrap().count(), 0, "sobrou arquivo da cópia que falhou");
+        copiar_inteiro(&mut &b"inteiro"[..], &destino).unwrap();
+        let nomes: Vec<_> = fs::read_dir(d.path()).unwrap().flatten().map(|e| e.file_name()).collect();
+        assert_eq!(nomes, ["Saída ç.mp4"]);
+        assert_eq!(fs::read(&destino).unwrap(), b"inteiro");
+        let e = copiar_inteiro(&mut &b"outro"[..], &destino).unwrap_err();
+        assert_eq!(e.kind(), std::io::ErrorKind::AlreadyExists);
+        assert_eq!(fs::read(&destino).unwrap(), b"inteiro", "sobrescreveu");
     }
 
     /// Título comprido com acento no byte 100: o nome sai cortado numa letra inteira (antes: pânico no fim do render).
@@ -1985,9 +2449,50 @@ mod testes {
         }
     }
 
+    /// Edição nova ainda não gravada (pasta com a mídia importada, sem `projeto.json`) que exportou: excluir a saída
+    /// tira o retrato e deixa a mídia.
+    #[test]
+    fn excluir_saida_de_edicao_nao_gravada_preserva_a_midia() {
+        let (d, ws) = caso();
+        let pid = "3d2c3a52-0d5e-4c1b-9a43-2f7d0c1e9b10";
+        let proj = armazem::pasta_projeto(&ws, pid);
+        fs::create_dir_all(proj.join("midia")).unwrap();
+        fs::write(proj.join("midia").join("narra.wav"), b"RIFF").unwrap();
+        let projeto = json!({ "esquema": 2, "id": pid, "titulo": "Nova", "midias": [] });
+        let (plano, res, amb) = render_falso(d.path(), "t1", false);
+        let s = publicar(&Publicar { ws: &ws, projeto: &projeto, plano: &plano, res: &res, amb: &amb, quando: quando(), tecnico: &TecFalso }).unwrap();
+        excluir_saida(&ws, &s.id).unwrap();
+        assert!(proj.join("midia").join("narra.wav").is_file(), "a mídia da edição não gravada saiu com a exportação");
+        assert!(!proj.join(EXPORTACOES).exists() && !ws.join(&s.pasta).exists());
+    }
+
+    /// A auditoria da exclusão só entra depois de a pasta sair: pasta presa (aqui, sem permissão de escrita na pasta
+    /// das edições) deixa a linha e nenhum registro; repetir conclui com um registro só.
+    #[cfg(unix)]
+    #[test]
+    fn excluir_saida_audita_so_depois_de_apagar() {
+        use std::os::unix::fs::PermissionsExt;
+        let (d, ws) = caso();
+        let pid = "9c2c3a52-0d5e-4c1b-9a43-2f7d0c1e9b10";
+        let projeto = json!({ "esquema": 2, "id": pid, "titulo": "Preso", "midias": [] });
+        let (plano, res, amb) = render_falso(d.path(), "t1", false);
+        let s = publicar(&Publicar { ws: &ws, projeto: &projeto, plano: &plano, res: &res, amb: &amb, quando: quando(), tecnico: &TecFalso }).unwrap();
+        let edicoes = paths::dir_edicao_saida(&ws);
+        fs::set_permissions(&edicoes, fs::Permissions::from_mode(0o555)).unwrap();
+        let r = excluir_saida(&ws, &s.id);
+        fs::set_permissions(&edicoes, fs::Permissions::from_mode(0o755)).unwrap();
+        assert!(r.is_err(), "a pasta não podia sair");
+        assert_eq!(contar(&ws, "SELECT COUNT(*) FROM audit_logs WHERE action = 'video.edicao.saida_excluida'"), 0);
+        assert_eq!(contar(&ws, "SELECT COUNT(*) FROM video_edit_outputs"), 1);
+        excluir_saida(&ws, &s.id).unwrap();
+        assert_eq!(contar(&ws, "SELECT COUNT(*) FROM audit_logs WHERE action = 'video.edicao.saida_excluida'"), 1);
+        assert_eq!(contar(&ws, "SELECT COUNT(*) FROM video_edit_outputs"), 0);
+        assert!(!ws.join(&s.pasta).exists() && !ws.join(&s.retrato_rel).exists());
+    }
+
     struct MotorSemUso;
     impl Motor for MotorSemUso {
-        fn rodar(&self, _: &Tarefa, _: &PedidoRender, _: &Path, _: &AtomicBool, _: &mut dyn FnMut(Progresso)) -> Result<Estado> {
+        fn rodar(&self, _: &Fila, _: &Tarefa, _: &PedidoRender, _: &Path, _: &AtomicBool, _: &mut dyn FnMut(Progresso)) -> Result<Estado> {
             unreachable!()
         }
     }
@@ -2021,8 +2526,12 @@ mod testes {
         let (plano, _, _) = render_falso(d.path(), "t1", false);
         let sid = "3c4d5e6f-0d5e-4c1b-9a43-2f7d0c1e9b10";
         let m = gravar_retrato(&ws, pid, sid, &projeto, &plano).unwrap();
-        let mut papeis: Vec<(PapelRetrato, &str)> = m.itens.iter().map(|i| (i.papel, i.de.as_str())).collect();
+        let citado = |i: &&ItemManifesto| !matches!(i.papel, PapelRetrato::Grafo | PapelRetrato::Compostos | PapelRetrato::Pendente);
+        let mut papeis: Vec<(PapelRetrato, &str)> = m.itens.iter().filter(citado).map(|i| (i.papel, i.de.as_str())).collect();
         papeis.sort_by_key(|p| p.1.to_string());
+        // o próprio retrato também entra: os grafos e as listas de cada passo
+        let grafos: Vec<&str> = m.itens.iter().filter(|i| i.papel == PapelRetrato::Grafo).map(|i| i.arquivo.as_str()).collect();
+        assert!(grafos.contains(&"grafos/b000/b000.txt") && grafos.contains(&"grafos/argumentos.json"), "{grafos:?}");
         assert_eq!(
             papeis,
             [
@@ -2038,11 +2547,11 @@ mod testes {
         assert!(!proj.join("rastreios").exists() && !proj.join("projeto.json").exists() && proj.join("exportacoes").is_dir());
         let (v, m2) = ler_retrato(&ws, pid, sid).unwrap();
         assert_eq!((v, &m2), (projeto.clone(), &m));
-        for (it, bytes) in m.itens.iter().map(|i| (i, match i.papel {
+        for (it, bytes) in m.itens.iter().filter(citado).map(|i| (i, match i.papel {
             PapelRetrato::Denso => &denso,
             PapelRetrato::Silhuetas => &sil,
             PapelRetrato::Trf => &trf,
-            PapelRetrato::Midia => &wav,
+            _ => &wav,
         })) {
             assert_eq!(&fs::read(ws.join(paths::REL_EDICAO).join(pid).join("exportacoes").join(sid).join(&it.arquivo)).unwrap(), bytes);
         }
@@ -2062,6 +2571,22 @@ mod testes {
         fs::write(&pj, String::from_utf8(bom.clone()).unwrap().replace("Retrato", "Retrata")).unwrap();
         assert!(ler_retrato(&ws, pid, sid).is_err(), "projeto.json do retrato mexido");
         fs::write(&pj, &bom).unwrap();
+        // grafo mexido (mesmo tamanho), grafo a mais, grafo apagado: recusa
+        let r = armazem::pasta_projeto(&ws, pid).join("exportacoes").join(sid);
+        let g0 = r.join("grafos/b000/b000.txt");
+        let bom_g = fs::read(&g0).unwrap();
+        let mut mexido = bom_g.clone();
+        mexido[0] ^= 0x01;
+        fs::write(&g0, &mexido).unwrap();
+        assert!(ler_retrato(&ws, pid, sid).unwrap_err().to_string().contains("grafos/b000/b000.txt"));
+        fs::write(&g0, &bom_g).unwrap();
+        fs::write(r.join("grafos/b000/extra.txt"), b"x").unwrap();
+        assert!(ler_retrato(&ws, pid, sid).unwrap_err().to_string().contains("extra.txt"));
+        fs::remove_file(r.join("grafos/b000/extra.txt")).unwrap();
+        fs::remove_file(&g0).unwrap();
+        assert!(ler_retrato(&ws, pid, sid).is_err());
+        fs::write(&g0, &bom_g).unwrap();
+        assert!(ler_retrato(&ws, pid, sid).is_ok());
 
         // citado que não existe, ou com outro conteúdo: recusa e não deixa pasta
         let sid2 = "4d5e6f70-0d5e-4c1b-9a43-2f7d0c1e9b10";
@@ -2082,7 +2607,7 @@ mod testes {
             let p = json!({ "esquema": 2, "id": pid, "midias": [{ "id": "m9", "origem": "projeto", "relativo": rel, "sha256": sha_fora }] });
             let sid3 = uuid::Uuid::new_v4().to_string();
             let m = gravar_retrato(&ws, pid, &sid3, &p, &plano).unwrap();
-            assert!(m.itens.is_empty(), "{rel}: {:?}", m.itens);
+            assert!(m.itens.iter().filter(citado).count() == 0, "{rel}: {:?}", m.itens);
         }
     }
 

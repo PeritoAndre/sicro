@@ -14,6 +14,7 @@ use crate::edicao::curva;
 use crate::edicao::geometria::Afim;
 use crate::edicao::modelo::{ClipeSobreposto, LinhaResolvida, ProjetoEdicao, SobBase, TamanhoPx, Tolerante};
 use crate::edicao::tempo;
+use crate::edicao::validar;
 use crate::error::Result;
 
 /// O que a camada global põe no bloco: rótulo de saída, a entrada da camada e o pedido de rasterização (None = nada a sobrepor).
@@ -54,9 +55,7 @@ pub fn aplicar(
         for c in &trilha.clipes {
             let c = match c {
                 Tolerante::Conhecido(c) => c,
-                Tolerante::Desconhecido(v) => {
-                    return Err(erro("nao_suportado", format!("sobreposto {}", v.get("id").and_then(|x| x.as_str()).unwrap_or(""))));
-                }
+                Tolerante::Desconhecido(v) => return Err(validar::erro_do_desconhecido(v, validar::TIPOS_SOBREPOSTO)),
             };
             let (b, desenho) = match c {
                 ClipeSobreposto::Video(v) => return Err(erro("nao_suportado", format!("sobreposto video {}", v.base.id))),
@@ -69,13 +68,17 @@ pub fn aplicar(
             if a >= z {
                 continue;
             }
-            // efeito em clipe sobreposto é de outra fase: nunca ignorado calado
-            if let Some(e) = b.efeitos.iter().find(|e| !matches!(e, Tolerante::Conhecido(e) if !efeitos::base(e).ligado)) {
-                let id = match e {
-                    Tolerante::Conhecido(e) => efeitos::base(e).id.clone(),
-                    Tolerante::Desconhecido(v) => v.get("id").and_then(|x| x.as_str()).unwrap_or("").to_string(),
-                };
-                return Err(erro("nao_suportado", format!("efeito {id} em sobreposto {}", b.id)));
+            // efeito ligado em clipe sobreposto é de outra fase: nunca ignorado calado; desligado não pesa
+            for e in &b.efeitos {
+                match e {
+                    Tolerante::Conhecido(e) if efeitos::base(e).ligado => {
+                        return Err(erro("nao_suportado", format!("efeito {} em sobreposto {}", efeitos::base(e).id, b.id)));
+                    }
+                    Tolerante::Desconhecido(v) if validar::efeito_desconhecido_ligado(v) => {
+                        return Err(validar::erro_do_desconhecido(v, validar::TIPOS_EFEITO));
+                    }
+                    _ => {}
+                }
             }
             let novas = match c {
                 ClipeSobreposto::Imagem(i) => vec![imagem_da_camada(p, ctx, &i.midia)?],

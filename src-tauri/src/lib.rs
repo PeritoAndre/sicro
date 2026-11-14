@@ -87,6 +87,8 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "linux")]
             allow_local_media(app);
+            // Edição: cache da sonda, eventos das filas e limpeza do cache
+            commands::edicao_commands::iniciar(app.handle());
             Ok(())
         })
         .manage(app_state)
@@ -146,6 +148,33 @@ pub fn run() {
             // edição: diagnóstico da prévia (Configurações > Vídeo)
             commands::edicao_diagnostico_commands::edicao_diagnostico_midias,
             commands::edicao_diagnostico_commands::edicao_diagnostico_salvar,
+            // edição (a lista do teste `comandos_registraveis`)
+            commands::edicao_commands::edicao_listar,
+            commands::edicao_commands::edicao_abrir,
+            commands::edicao_commands::edicao_salvar,
+            commands::edicao_commands::edicao_excluir,
+            commands::edicao_commands::edicao_duplicar,
+            commands::edicao_commands::edicao_analisar,
+            commands::edicao_commands::edicao_midia_info,
+            commands::edicao_commands::edicao_midia_previa,
+            commands::edicao_commands::edicao_tabela_quadros,
+            commands::edicao_commands::edicao_quadro_em,
+            commands::edicao_commands::edicao_midia_importar,
+            commands::edicao_commands::edicao_usos,
+            commands::edicao_commands::edicao_gravacao_salvar,
+            commands::edicao_commands::edicao_sprite_texto,
+            commands::edicao_commands::edicao_atlas_carimbo,
+            commands::edicao_commands::edicao_capacidades,
+            commands::edicao_commands::edicao_enfileirar,
+            commands::edicao_commands::edicao_quadro_final,
+            commands::edicao_commands::edicao_conferir,
+            commands::edicao_commands::edicao_cancelar,
+            commands::edicao_commands::edicao_fila,
+            commands::edicao_commands::edicao_fila_limpar,
+            commands::edicao_commands::edicao_fundo,
+            commands::edicao_commands::edicao_saidas,
+            commands::edicao_commands::edicao_saida_excluir,
+            commands::edicao_commands::edicao_refazer,
             // áudio
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,
@@ -267,12 +296,38 @@ pub fn run() {
             commands::case_index_commands::upsert_case_index,
             commands::case_index_commands::remove_case_index,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running SICRO Desktop");
+        .build(tauri::generate_context!())
+        .expect("error while building SICRO Desktop")
+        .run(|_app, evento| {
+            // filas canceladas e filhos mortos antes de sair (ffmpeg órfão seguiria gravando no cache)
+            if let tauri::RunEvent::ExitRequested { .. } = evento {
+                commands::edicao_commands::encerrar();
+            }
+        });
 }
 
 #[cfg(test)]
 mod tests {
+    /// O `invoke_handler` registra cada comando da Edição que o teste `comandos_registraveis` monta (a mesma lista).
+    #[test]
+    fn comandos_da_edicao_registrados() {
+        let fonte = include_str!("lib.rs");
+        let teste = include_str!("commands/edicao_commands.rs");
+        let ini = teste.find("fn comandos_registraveis").unwrap();
+        let lista: Vec<&str> = teste[ini..]
+            .lines()
+            .map(str::trim)
+            .filter_map(|l| l.strip_suffix(',').filter(|n| n.starts_with("edicao_")))
+            .collect();
+        assert_eq!(lista.len(), 26, "{lista:?}");
+        // só o corpo de `run()` (este teste também traz os nomes)
+        let corpo = &fonte[fonte.find("pub fn run()").unwrap()..fonte.find("#[cfg(test)]").unwrap()];
+        for n in &lista {
+            assert!(corpo.contains(&format!("commands::edicao_commands::{n},")), "{n} fora do invoke_handler");
+        }
+        assert!(corpo.contains("edicao_commands::iniciar(app.handle())") && corpo.contains("edicao_commands::encerrar()"));
+    }
+
     /// No Unix o `**` do escopo não entra em pasta oculta (`~/.cache`): o cache da Edição
     /// precisa da própria entrada. Mesmas opções de `tauri::scope::fs::Scope`.
     #[test]

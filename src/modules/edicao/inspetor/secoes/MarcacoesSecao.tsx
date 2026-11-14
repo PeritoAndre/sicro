@@ -11,11 +11,14 @@ import { useEffect, useRef, type MouseEvent } from "react";
 import type { ContextoClipe, Desconhecido, Efeito, Intervalo, TabelaQuadros } from "@domain/edicao";
 import { useEdicaoStore } from "../../store/edicaoStore";
 import { aplicarMudanca, efeitoConhecido } from "../../modelo/projeto";
+import { askConfirm } from "@components/Dialog/ask";
 import {
   adicionarEfeito,
   adicionarImagem,
   ligarEfeito,
+  marcacoesNoEspaco,
   marcarAncora,
+  MUDA_ESPACO,
   mudarCom,
   noEfeito,
   rastreioDe,
@@ -118,6 +121,12 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
   // ocultação da mídia: `ativo` sempre em tempo de fonte
   const fonte = clipe.tipo === "trecho" || daMidia;
   const li = useRef<HTMLLIElement>(null);
+  // estabilizar e lente: mexer neles invalida as marcações do clipe; pede confirmação com a contagem (§3.2)
+  const confirmado = async (acao: string): Promise<boolean> => {
+    const doc = useEdicaoStore.getState().doc;
+    const n = efeitoConhecido(e) && MUDA_ESPACO.has(e.tipo) && doc ? marcacoesNoEspaco(doc, clipe) : 0;
+    return n === 0 || askConfirm({ title: d.rotulo, message: n === 1 ? "1 marcação" : `${n} marcações`, confirmLabel: acao, danger: true });
+  };
   // efeito aberto de fora (palco, diálogo de exportar): rola até ele
   useEffect(() => {
     if (aberta && ef) li.current?.scrollIntoView?.({ block: "nearest" });
@@ -133,12 +142,12 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
         </button>
         <span className={styles.acoes}>
           {conhecido && efeitoConhecido(e) && (
-            <Icone rotulo={d.rotulo} aria-pressed={ligado} onClick={() => ligarEfeito(e.id, !ligado, d.rotulo)}>
+            <Icone rotulo={d.rotulo} aria-pressed={ligado} onClick={() => void confirmado(d.rotulo).then((ok) => ok && ligarEfeito(e.id, !ligado, d.rotulo))}>
               {ligado ? <Eye size={13} /> : <EyeOff size={13} />}
             </Icone>
           )}
           {id && (
-            <Icone rotulo="Remover" onClick={() => removerEfeito(id, "Remover")}>
+            <Icone rotulo="Remover" onClick={() => void confirmado("Remover").then((ok) => ok && removerEfeito(id, "Remover"))}>
               <Trash2 size={13} />
             </Icone>
           )}

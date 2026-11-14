@@ -232,8 +232,9 @@
 .ativo {
   border-color: var(--sicro-accent);
 }
-/* palco estreito: só os ícones (o rótulo segue no title) */
-@container palco (max-width: 560px) {
+/* o grupo da direita desce para a segunda linha com os rótulos; só no palco muito estreito, só os ícones
+   (o rótulo segue no title) */
+@container palco (max-width: 340px) {
   .rotuloMini {
     display: none;
   }

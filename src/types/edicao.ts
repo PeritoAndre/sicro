@@ -381,7 +381,10 @@ export interface PreviaMidia { relativo: string; tipo: "original" | "copia" | "p
                                largura: number; altura: number; pronta: boolean }
 /** id = video_media.id do caso. */
 export interface MidiaInfo { id: Id; sha256: string; nome: string; exibido: { w: number; h: number }; taxa: Racional; vfr: boolean; passo: { min: Seg; max: Seg };
-                             de_s: Seg; ate_s: Seg; n: number; tem_audio: boolean; previa: PreviaMidia; tabela: OrigemTabela; erros: number | null }
+                             de_s: Seg; ate_s: Seg; n: number; tem_audio: boolean; previa: PreviaMidia; tabela: OrigemTabela; erros: number | null;
+                             // CONTRATO: contratos (h) 17. Falso enquanto a tabela é a de pacotes em contêiner sem tempo confiável
+                             // nos pacotes (h264, hevc, mpeg, mpegvideo): única regra para marcar entrada, saída e quadro-chave.
+                             marcavel: boolean }
 
 // ---- texto (camada/texto.rs) ----
 export interface PedidoSprite { blocos: BlocoTexto[]; largura_max: number; altura_canvas: number; fundo: boolean }

@@ -48,7 +48,10 @@ pub struct PassoS {
 }
 
 /// O que a tela sabe de uma mídia (`edicao_midia_info`). `id` = `video_media.id` do caso; `exibido` em px;
-/// `de_s`/`ate_s` em tempo de fonte; `n` = quadros; `erros` None = passada de integridade ainda não feita.
+/// `de_s`/`ate_s` em tempo de fonte; `n` = quadros; `erros` None = passada de integridade ainda não feita;
+/// `marcavel` false = a tabela ainda é a de pacotes num contêiner sem tempo confiável nos pacotes (H.264 e HEVC
+/// crus, MPEG-PS, MPEG de vídeo): marcar entrada, saída ou quadro tiraria o pts de uma tabela que pode errar por 2×.
+// CONTRATO: `marcavel` acrescentado (decisão (h)17; no TS: `marcavel: boolean`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct MidiaInfo {
     pub id: String,
@@ -65,6 +68,7 @@ pub struct MidiaInfo {
     pub previa: PreviaMidia,
     pub tabela: OrigemTabela,
     pub erros: Option<u32>,
+    pub marcavel: bool,
 }
 
 /// Parâmetros do proxy de CPU (O8): 720p, `libx264 veryfast crf 23`, GOP 12, sem quadros B, pts iguais aos da fonte.
@@ -225,7 +229,13 @@ fn midia_info_com(id: &str, nome: &str, fonte: &FonteInfo, previa: PreviaMidia, 
         previa,
         tabela: t.origem,
         erros: (t.origem == OrigemTabela::Decodificador).then_some(t.erros_decodificacao),
+        marcavel: marcavel(fonte),
     }
+}
+
+/// A regra única do (g)14: só a tabela de pacotes de contêiner sem tempo nos pacotes bloqueia a marcação.
+pub(crate) fn marcavel(fonte: &FonteInfo) -> bool {
+    !(fonte.quadros.origem == OrigemTabela::Pacotes && super::executar::sem_tempo_nos_pacotes(&fonte.conteiner))
 }
 
 // ---------------------------------------------------------------- cache
@@ -1122,8 +1132,32 @@ mod testes {
                 previa: pv,
                 tabela: OrigemTabela::Decodificador,
                 erros: Some(2),
+                marcavel: true,
             }
         );
+    }
+
+    /// Marcação bloqueada só com a tabela de pacotes num contêiner sem tempo nos pacotes.
+    #[test]
+    fn marcavel_pela_tabela_e_pelo_conteiner() {
+        for (conteiner, pacotes, esperado) in [
+            ("h264", true, false),
+            ("hevc", true, false),
+            ("mpeg", true, false),
+            ("mpegvideo", true, false),
+            ("h264", false, true),
+            ("mpeg", false, true),
+            ("mpegts", true, true),
+            ("mov,mp4,m4a,3gp,3g2,mj2", true, true),
+            ("matroska,webm", true, true),
+        ] {
+            let mut f = fonte_falsa(conteiner, "h264", "yuv420p", 0.0, 0);
+            let mut t = (*f.quadros).clone();
+            t.origem = if pacotes { OrigemTabela::Pacotes } else { OrigemTabela::Decodificador };
+            f.quadros = std::sync::Arc::new(t);
+            let pv = pendente(TipoPrevia::Copia, &f).unwrap();
+            assert_eq!(midia_info("m", "x", &f, pv).marcavel, esperado, "{conteiner} pacotes={pacotes}");
+        }
     }
 
     // ------------------------------------------------------------ com ffmpeg (os dois binários)

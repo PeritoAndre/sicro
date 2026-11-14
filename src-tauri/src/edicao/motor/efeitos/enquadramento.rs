@@ -3,7 +3,7 @@
 
 use crate::edicao::cor;
 use crate::edicao::geometria::{self, Afim};
-use crate::edicao::modelo::{Ajuste, Animavel, Caixa, EfEnquadramento, Efeito, Interpolacao, Ponto, TamanhoPx, Tolerante};
+use crate::edicao::modelo::{Animavel, Caixa, EfEnquadramento, Efeito, Interpolacao, Ponto, TamanhoPx, Tolerante};
 use crate::edicao::motor::expr;
 use crate::edicao::motor::grafo::{filtro, scale};
 use crate::edicao::motor::plano::Canvas;
@@ -196,14 +196,10 @@ pub fn filtros(efeitos: &[Tolerante<Efeito>], origem: TamanhoPx, canvas: &Canvas
     }
     // animado: a região vira o quadro inteiro pelo `perspective`; o destino tem de ser o mesmo em todos os slots.
     // Destino e tolerância saem das chaves (do clipe inteiro), nunca da janela: o quadro final dá a conta da exportação.
-    let chaves: Vec<f64> = match enquadramento(efeitos).map(|q| &q.regiao) {
-        Some(Animavel::Chaves(k)) if !k.is_empty() => k.iter().map(|c| c.t).collect(),
-        _ => vec![t0],
-    };
+    let chaves = tempos_das_chaves(efeitos, t0);
     let referencia = enquadre(efeitos, chaves[0], origem, alvo);
     let quadros: Vec<Enquadre> = tempos.iter().map(|&t| enquadre(efeitos, t, origem, alvo)).collect();
-    let fixo = quadros.iter().all(|q| q.destino.iter().zip(referencia.destino).all(|(a, b)| (a - b).abs() <= DESTINO_FIXO_PX));
-    if !fixo {
+    if !mesmo_destino(&quadros, &referencia) {
         let id = enquadramento(efeitos).map(|q| q.base.id.as_str()).unwrap_or("");
         return Err(SicroError::Validation(format!("nao_suportado: enquadramento {id}: destino variável")));
     }
@@ -248,9 +244,28 @@ pub fn filtros(efeitos: &[Tolerante<Efeito>], origem: TamanhoPx, canvas: &Canvas
     Ok(f.join(","))
 }
 
-/// Ajuste do enquadramento ligado (sem ele, `conter`).
-pub(crate) fn ajuste(efeitos: &[Tolerante<Efeito>]) -> Ajuste {
-    enquadramento(efeitos).map(|q| q.ajuste).unwrap_or(Ajuste::Conter)
+/// Tempos das chaves da região animada (`t0` quando não há chaves).
+fn tempos_das_chaves(efeitos: &[Tolerante<Efeito>], t0: f64) -> Vec<f64> {
+    match enquadramento(efeitos).map(|q| &q.regiao) {
+        Some(Animavel::Chaves(k)) if !k.is_empty() => k.iter().map(|c| c.t).collect(),
+        _ => vec![t0],
+    }
+}
+
+/// Todos os enquadres caem no destino da referência (até `DESTINO_FIXO_PX`)?
+fn mesmo_destino(quadros: &[Enquadre], referencia: &Enquadre) -> bool {
+    quadros.iter().all(|q| q.destino.iter().zip(referencia.destino).all(|(a, b)| (a - b).abs() <= DESTINO_FIXO_PX))
+}
+
+/// Enquadramento animado cujo destino muda entre os instantes dados (s, base do clipe): `conter` com a proporção
+/// da região variando, ou região que sai da imagem. É a regra que `filtros` recusa com `nao_suportado`; a validação
+/// a aplica a todos os slots do clipe, no canvas da saída.
+pub(crate) fn destino_variavel(efeitos: &[Tolerante<Efeito>], origem: TamanhoPx, canvas: TamanhoPx, tempos: &[f64]) -> bool {
+    if !animado(efeitos) || tempos.is_empty() {
+        return false;
+    }
+    let referencia = enquadre(efeitos, tempos_das_chaves(efeitos, tempos[0])[0], origem, canvas);
+    !tempos.iter().all(|&t| mesmo_destino(&[enquadre(efeitos, t, origem, canvas)], &referencia))
 }
 
 #[cfg(test)]

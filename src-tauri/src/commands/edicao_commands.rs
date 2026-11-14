@@ -79,12 +79,23 @@ pub async fn edicao_listar(workspace_path: String) -> Result<Vec<ResumoProjeto>>
 #[tauri::command]
 pub async fn edicao_abrir(app: AppHandle, workspace_path: String, projeto_id: String) -> Result<ProjetoAberto> {
     let raiz = app_cache(&app)?;
-    em_fundo(move || abrir(Path::new(&workspace_path), &projeto_id, &raiz)).await
+    em_fundo(move || abrir(Path::new(&workspace_path), &projeto_id, &raiz, &fila::projeto_ocupado)).await
 }
 
-pub(crate) fn abrir(ws: &Path, projeto_id: &str, app_cache: &Path) -> Result<ProjetoAberto> {
+/// Abrir também fecha a sessão anterior do projeto: densos, silhuetas e `.trf` que nada cita saem aqui (§4; o
+/// histórico da tela começa vazio). Com render do projeto na fila não sai nada (o `.trf` novo ainda não é citado).
+pub(crate) fn abrir(ws: &Path, projeto_id: &str, app_cache: &Path, ocupado: &dyn Fn(&str, &str) -> bool) -> Result<ProjetoAberto> {
     let mut a = armazem::abrir(ws, projeto_id)?;
-    a.raiz_cache = cache_do_caso(app_cache, ws)?.to_string_lossy().into_owned();
+    let cache = cache_do_caso(app_cache, ws)?;
+    let caso = cache.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    if !a.so_leitura && !ocupado(&caso, projeto_id) {
+        if let Ok(p) = armazem::tipado(&a.projeto) {
+            if let Err(e) = armazem::limpar_orfaos(ws, &p, &[]) {
+                tracing::warn!("edição: órfãos de {projeto_id}: {e}");
+            }
+        }
+    }
+    a.raiz_cache = cache.to_string_lossy().into_owned();
     Ok(a)
 }
 
@@ -396,8 +407,8 @@ pub(crate) fn quadro_final_de(e: Estado, q: u64) -> Result<QuadroFinal> {
     }
 }
 
-/// Nome do perito do caso (quem confere).
-fn perito(ws: &Path) -> String {
+/// Nome do perito do caso (quem confere); vazio = caso sem perito (`edicao_conferir` recusa com `perito_ausente`).
+pub(crate) fn perito(ws: &Path) -> String {
     abrir_banco(ws)
         .ok()
         .and_then(|(c, o)| crate::database::repositories::occurrence_repo::find_by_id(&c, &o).ok().flatten())
@@ -548,13 +559,14 @@ mod testes {
         let (_d, ws, app) = caso();
         let id = uuid::Uuid::new_v4().to_string();
         assert!(armazem::listar(&ws).unwrap().is_empty());
-        let e = abrir(&ws, &id, &app).unwrap_err();
+        let livre = |_: &str, _: &str| false;
+        let e = abrir(&ws, &id, &app, &livre).unwrap_err();
         assert!(e.to_string().contains("projeto_nao_encontrado"), "{e}");
 
         let salvo = armazem::salvar(&ws, &minimo(&id)).unwrap();
         let lista = armazem::listar(&ws).unwrap();
         assert_eq!(lista.iter().map(|r| (r.id.as_str(), r.titulo.as_str())).collect::<Vec<_>>(), [(id.as_str(), "Mínimo")]);
-        let a = abrir(&ws, &id, &app).unwrap();
+        let a = abrir(&ws, &id, &app, &livre).unwrap();
         let occ = Manifest::read(&ws).unwrap().occurrence_id;
         assert_eq!(a.raiz_cache, paths::dir_edicao_cache(&app, &occ).to_string_lossy());
         assert!(Path::new(&a.raiz_cache).is_dir());
@@ -564,7 +576,7 @@ mod testes {
         let mut v = a.projeto.clone();
         v["titulo"] = "Renomeado".into();
         armazem::salvar(&ws, &v).unwrap();
-        assert_eq!(abrir(&ws, &id, &app).unwrap().projeto["titulo"], "Renomeado");
+        assert_eq!(abrir(&ws, &id, &app, &livre).unwrap().projeto["titulo"], "Renomeado");
 
         let copia = armazem::duplicar(&ws, &id).unwrap();
         assert_ne!(copia.id, id);
@@ -582,7 +594,73 @@ mod testes {
         excluir(&ws, &id, &app, &|_, _| false).unwrap();
         assert!(!render.exists());
         assert_eq!(armazem::listar(&ws).unwrap().iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), [copia.id.as_str()]);
-        assert!(abrir(&ws, &id, &app).unwrap_err().to_string().contains("projeto_nao_encontrado"));
+        assert!(abrir(&ws, &id, &app, &livre).unwrap_err().to_string().contains("projeto_nao_encontrado"));
+    }
+
+    /// Abrir apaga o `.trf` que nada cita (o citado fica); com render do projeto na fila, não apaga nada.
+    #[test]
+    fn abrir_limpa_orfaos_da_sessao_anterior() {
+        let (_d, ws, app) = caso();
+        let id = uuid::Uuid::new_v4().to_string();
+        let (citado, orfao) = ("c".repeat(64), "e".repeat(64));
+        let mut v = minimo(&id);
+        // qualquer texto do documento que cite o arquivo o mantém
+        v["titulo"] = Value::String(citado.clone());
+        armazem::salvar(&ws, &v).unwrap();
+        let vidstab = armazem::pasta_projeto(&ws, &id).join("vidstab");
+        std::fs::create_dir_all(&vidstab).unwrap();
+        for s in [&citado, &orfao] {
+            std::fs::write(vidstab.join(format!("{s}.trf")), b"trf").unwrap();
+        }
+        abrir(&ws, &id, &app, &|_, p| p == id).unwrap();
+        assert!(vidstab.join(format!("{orfao}.trf")).is_file(), "projeto com render na fila");
+        abrir(&ws, &id, &app, &|_, _| false).unwrap();
+        assert!(vidstab.join(format!("{citado}.trf")).is_file());
+        assert!(!vidstab.join(format!("{orfao}.trf")).exists());
+    }
+
+    /// Edição nova que nunca foi gravada: importar mídia e gravar narração criam a pasta do projeto (decisão (h)18); o
+    /// projeto só entra na lista quando o documento é gravado.
+    #[test]
+    fn midia_de_edicao_nova_sem_gravacao() {
+        let (d, ws, _) = caso();
+        let id = uuid::Uuid::new_v4().to_string();
+        assert!(!armazem::pasta_projeto(&ws, &id).exists());
+        let png = d.path().join("logo.png");
+        image::RgbaImage::from_pixel(2, 2, image::Rgba([255, 0, 0, 255])).save(&png).unwrap();
+        let m = armazem::importar_midia(&ws, &id, &png, TipoMidia::Imagem).unwrap();
+        assert!(paths::resolver_relativo(&ws, &m.relativo).is_file(), "{}", m.relativo);
+        let n = armazem::gravar_midia(&ws, &uuid::Uuid::new_v4().to_string(), "audio/webm;codecs=opus", b"\x1a\x45\xdf\xa3").unwrap();
+        assert!(paths::resolver_relativo(&ws, &n.relativo).is_file(), "{}", n.relativo);
+        assert!(armazem::listar(&ws).unwrap().is_empty(), "sem projeto.json não é projeto");
+        armazem::salvar(&ws, &minimo(&id)).unwrap();
+        assert_eq!(armazem::listar(&ws).unwrap().len(), 1);
+    }
+
+    /// Caso sem perito: o nome vem vazio e a conferência recusa com `perito_ausente` (nada muda no banco).
+    #[test]
+    fn conferir_sem_perito_recusa() {
+        let d = tempfile::Builder::new().prefix("p07-sem-perito-").tempdir().unwrap();
+        let criado = crate::workspace::create::create_workspace(
+            crate::models::NewOccurrenceInput {
+                titulo: Some("Sem perito".into()),
+                numero_bo: None,
+                protocolo: None,
+                oficio: None,
+                tipo_pericia: None,
+                municipio: None,
+                peritos: vec![],
+                parent_directory: Some(d.path().to_string_lossy().into()),
+            },
+            d.path(),
+        )
+        .unwrap();
+        assert_eq!(perito(&criado.path), "");
+        let e = fila::conferir_saida(&criado.path, &uuid::Uuid::new_v4().to_string(), true, &perito(&criado.path)).unwrap_err();
+        assert!(e.to_string().contains("perito_ausente"), "{e}");
+        let e = mensagens::erro_de_comando(e).to_string();
+        assert!(e.contains("perito_ausente: Caso sem perito"), "{e}");
+        assert_eq!(perito(&caso().1), "Perito");
     }
 
     fn json_id(id: &str) -> Value {
@@ -616,6 +694,13 @@ mod testes {
         assert_eq!((q.indice, q.pts), (30, 30 * 512));
         assert!(fonte_do_caso(&ws, &"0".repeat(64), &cache).unwrap_err().to_string().contains("midia_ausente"));
         assert!(fonte_do_caso(&ws, "../x", &cache).unwrap_err().to_string().contains("sha256_invalido"));
+        // a tabela pedida ao fundo grava no cache deste caso: espera antes de a pasta temporária sair (senão sobra em /tmp)
+        let chave = fundo::chave(TipoFundo::Tabela, &vm.sha256);
+        let t0 = std::time::Instant::now();
+        while fundo::estado(&chave).is_some_and(|t| matches!(t.estado, fundo::EstadoFundo::NaFila | fundo::EstadoFundo::Rodando)) {
+            assert!(t0.elapsed() < std::time::Duration::from_secs(120), "tabela de fundo presa");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
     }
 
     #[test]

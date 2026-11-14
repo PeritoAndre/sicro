@@ -11,7 +11,9 @@ import type {
   PedidoMarcacao,
   Ponto,
   ClipePrincipal,
+  ClipeCongelar,
   ClipeSobreposto,
+  ClipeTrecho,
   Desconhecido,
   Efeito,
   EfEnquadramento,
@@ -29,6 +31,8 @@ import type {
 import { useEdicaoStore, type Gesto } from "../store/edicaoStore";
 import { acharClipe, acharEfeito, clipeConhecido, efeitoConhecido, garantirMidia, porChave, sobrepostoConhecido, tirarChave } from "../modelo/projeto";
 import { ehChaves } from "../modelo/curva";
+import { exibido, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
+import { recursoDe } from "../palco/recursos";
 import {
   CAIXA_CENTRO,
   novaTrilhaNarracao,
@@ -89,8 +93,18 @@ export const midiaDoClipe = (c: ClipeQualquer): Id | null => (c.tipo === "trecho
 
 export type TipoAdicionar = "destaque" | "ocultar" | "texto" | "carimbo" | "imagem";
 
+/** Quadro mostrado no congelado: tempo e pts dele pela tabela da mídia (a do palco); sem tabela, o do clipe. */
+function quadroDoCongelado(c: ClipeCongelar): { t: Seg; pts: Pts | null } {
+  const doc = st().doc;
+  const tab = doc ? recursoDe(doc.midias.find((m) => m.id === c.midia)?.sha256).tabela : null;
+  if (!tab) return { t: c.instante_s, pts: c.instante_pts };
+  const j = exibido(tab, c.instante_s);
+  return { t: tempoDoQuadro(tab, j), pts: ptsDaTabela(tab)[j] as number };
+}
+
 /** "Adicionar → …" no clipe. Ocultar de trecho vai para a mídia (vale em todo uso dela, D17), com `ativo` = faixa
- *  do clipe em tempo de fonte; nos outros clipes fica no clipe. Devolve o id do efeito, já selecionado. */
+ *  do clipe em tempo de fonte; de quadro congelado também, com `ativo` no instante do quadro (contratos (h) 23);
+ *  nos outros clipes fica no clipe. Devolve o id do efeito, já selecionado. */
 export function adicionarEfeito(clipeId: Id, tipo: Exclude<TipoAdicionar, "imagem">, rotulo: string): Id | null {
   const c = clipeAtual(clipeId);
   if (!c) return null;
@@ -99,14 +113,18 @@ export function adicionarEfeito(clipeId: Id, tipo: Exclude<TipoAdicionar, "image
   let novoEf: Efeito;
   const extra: Mut[] = [];
   if (tipo === "destaque" || tipo === "ocultar") {
-    const r = novoRastreio(midia, t, CAIXA_CENTRO);
+    // congelado: rastreio de base fonte amostrado no instante dele (não no tempo local do cursor)
+    const q = c.tipo === "congelar" ? quadroDoCongelado(c) : null;
+    const r = novoRastreio(midia, q ? q.t : t, CAIXA_CENTRO);
+    if (q) r.ancoras = [{ t: q.t, pts: q.pts, v: CAIXA_CENTRO }];
     extra.push((d) => void d.rastreios.push(r));
     if (tipo === "destaque") novoEf = novoDestaque(r.id);
-    else if (c.tipo === "trecho") {
-      const ef = novoOcultar(r.id, { de: c.inicio_s, ate: c.fim_s });
+    else if (c.tipo === "trecho" || q) {
+      const m = midia as Id;
+      const ef = novoOcultar(r.id, q ? { de: q.t, ate: q.t } : { de: (c as ClipeTrecho).inicio_s, ate: (c as ClipeTrecho).fim_s });
       mudar(rotulo, (d) => {
         d.rastreios.push(r);
-        d.midias.find((m) => m.id === c.midia)?.ocultacoes.push(ef);
+        d.midias.find((x) => x.id === m)?.ocultacoes.push(ef);
       });
       selecionarEfeito(ef.id);
       return ef.id;
@@ -213,6 +231,29 @@ export function soNesteClipe(efeitoId: Id, clipeId: Id, sim: boolean, rotulo: st
   });
 }
 
+/** Efeitos que mudam o espaço de origem do clipe (§3.2): ligar, desligar ou tirar invalida o que foi marcado nele. */
+export const MUDA_ESPACO = new Set(["estabilizar", "lente"]);
+
+/** Marcações feitas no espaço de origem do clipe: âncoras dos rastreios das anotações e regiões (holofote, destaque,
+ *  lupa, régua, velocidade) e as chaves da região do enquadramento. A ocultação mora no espaço original: fica fora. */
+export function marcacoesNoEspaco(d: ProjetoEdicao, c: ClipeQualquer): number {
+  let n = 0;
+  const vistos = new Set<Id>();
+  for (const e of c.efeitos) {
+    if (!efeitoConhecido(e) || e.tipo === "ocultar") continue;
+    if (e.tipo === "enquadramento") {
+      const r = e.regiao as Caixa | Chave<Caixa>[];
+      n += ehChaves(r) ? r.length : r.x === 0 && r.y === 0 && r.w === 1 && r.h === 1 ? 0 : 1;
+      continue;
+    }
+    const rid = rastreioDe(e);
+    if (!rid || vistos.has(rid)) continue;
+    vistos.add(rid);
+    n += d.rastreios.find((x) => x.id === rid)?.ancoras.length ?? 0;
+  }
+  return n;
+}
+
 export function ligarEfeito(efeitoId: Id, ligado: boolean, rotulo: string): void {
   mudar(rotulo, noEfeito(efeitoId, (e) => void (e.ligado = ligado)));
 }
@@ -261,15 +302,20 @@ export function mudarGiro(clipeId: Id, campos: Partial<Pick<EfGirar, "graus" | "
   mudar(rotulo, giroEm(clipeId, campos));
 }
 
+/** Chave com o pts do quadro quando há (o palco entrega o par de `instanteDaChave`, contratos (h) 22). */
+const chaveEm = <T>(t: Seg, pts: Pts | null, v: T): Chave<T> => (pts === null ? { t, v } : { t, pts, v });
+
 /** Região marcada no início (valor fixo, ou a primeira chave) ou no fim (vira animação de duas chaves). */
-export function marcarRegiao(clipeId: Id, ponta: "inicio" | "fim", t: Seg, v: Caixa, rotulo: string): void {
+export function marcarRegiao(clipeId: Id, ponta: "inicio" | "fim", t: Seg, pts: Pts | null, v: Caixa, rotulo: string): void {
   mudar(
     rotulo,
     noClipe(clipeId, (c) => {
       const i = c.efeitos.findIndex((e) => efeitoConhecido(e as Efeito) && (e as Efeito).tipo === "enquadramento");
+      // a chave do começo do clipe sai sem pts (o Rust prende)
+      const k0 = (): Chave<Caixa> => ({ t: (c as ClipeQualquer).tipo === "trecho" ? (c as ClipeTrecho).inicio_s : 0, v: CAIXA_INTEIRA });
       if (i < 0) {
         if (ponta === "inicio") c.efeitos.push(novoEnquadramento(v));
-        else c.efeitos.push({ ...novoEnquadramento(v), regiao: [{ t: inicioDoClipe(c as ClipeQualquer), v: CAIXA_INTEIRA }, { t, v }] });
+        else c.efeitos.push({ ...novoEnquadramento(v), regiao: [k0(), chaveEm(t, pts, v)] });
         return;
       }
       const e = c.efeitos[i] as Draft<EfEnquadramento>;
@@ -278,11 +324,11 @@ export function marcarRegiao(clipeId: Id, ponta: "inicio" | "fim", t: Seg, v: Ca
         const ks = r.slice();
         if (ponta === "inicio") ks.shift();
         else if (ks.length >= 2) ks.pop();
-        e.regiao = porChave<Caixa>(ks, { t, v });
+        e.regiao = porChave<Caixa>(ks, chaveEm(t, pts, v));
       } else if (ponta === "inicio") e.regiao = v;
       else {
-        const t0 = inicioDoClipe(c as ClipeQualquer);
-        e.regiao = t > t0 ? [{ t: t0, v: r }, { t, v }] : [{ t, v }, { t: t0, v: r }];
+        const a = { ...k0(), v: r };
+        e.regiao = t > a.t ? [a, chaveEm(t, pts, v)] : [chaveEm(t, pts, v), a];
         // "vizinho" só com região fixa
         if (e.interpolacao === "vizinho") e.interpolacao = "bilinear";
       }
@@ -305,8 +351,6 @@ export function tirarFimRegiao(clipeId: Id, rotulo: string): void {
 }
 
 export const CAIXA_INTEIRA: Caixa = { x: 0, y: 0, w: 1, h: 1 };
-const inicioDoClipe = (c: ClipeQualquer): Seg => (c.tipo === "trecho" ? c.inicio_s : 0);
-
 // ---- transição de entrada ----
 
 /** Catálogo da Fase 0 (`juncao::TRANSICOES`): só "escurecer"; null = corte. */

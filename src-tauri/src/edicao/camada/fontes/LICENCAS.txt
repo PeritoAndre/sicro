@@ -1,5 +1,6 @@
 Fontes embutidas no texto da Edição (camada/texto.rs).
-Libertinus Serif e DejaVu Sans Mono: as do relatório em PDF (typst-assets 0.15.1), licenças abaixo.
+Libertinus Serif e DejaVu Sans Mono (normal, negrito, oblíqua e negrito oblíqua): as do relatório em PDF
+(typst-assets 0.15.1, files/fonts), licenças abaixo.
 Inter 4.1 (https://github.com/rsms/inter, release v4.1, extras/ttf): SIL OFL 1.1, licença no fim.
 
 

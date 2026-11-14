@@ -296,7 +296,7 @@ pub fn mascara(regioes: &[Primitiva], espaco: TamanhoPx, caixa_px: [u32; 4]) -> 
         let fundo = if r.inverter { 255u8 } else { 0 };
         let mut v = vec![fundo; w as usize * h as usize];
         // blocos 2×2 de posição par que tocam a forma
-        let (bx0, by0) = (ax & !1, ay & !1);
+        let bx0 = ax & !1;
         let nbx = ((bx + 1 - bx0) / 2) as usize;
         let mut linha_de_blocos = vec![false; nbx];
         let mut bloco_y = u32::MAX;

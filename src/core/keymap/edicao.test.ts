@@ -36,7 +36,9 @@ describe("atalhos da Edição", () => {
   });
 
   it("os ids reaproveitados existem no Vídeo", () => {
-    expect(VIDEO_NA_EDICAO.length).toBe(24);
+    expect(VIDEO_NA_EDICAO.length).toBe(25);
+    // o trilho vale nas duas telas (§8.1): Alt+6 abre a Edição
+    expect(ACTION_BY_ID["video.mode.edicao"]?.defaultBinding).toBe("Alt+6");
     for (const id of VIDEO_NA_EDICAO) expect(ACTION_BY_ID[id]?.scope).toBe("video");
   });
 

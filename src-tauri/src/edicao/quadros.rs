@@ -185,7 +185,6 @@ struct FluxoVideo {
     avg_frame_rate: String,
     nb_frames: Option<u64>,
     duracao: Option<f64>,
-    inicio: Option<f64>,
 }
 
 /// O que uma chamada do ffprobe diz do arquivo. `video` = `v:0` quando não é capa de áudio.
@@ -239,7 +238,6 @@ fn sondar(cap: &Capacidades, video: &Path) -> Result<Info> {
             avg_frame_rate: texto(&s["avg_frame_rate"]),
             nb_frames: numero(&s["nb_frames"]).map(|n| n as u64),
             duracao: numero(&s["duration"]),
-            inicio: numero(&s["start_time"]),
         }
     });
     let inicio = numero(&j["format"]["start_time"]);

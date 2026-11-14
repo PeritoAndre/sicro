@@ -10,6 +10,15 @@ export interface CentralLamina {
   nome: string;
   arte: string;
   onClick: () => void;
+  /** Nome acessível e dica (padrão: `nome`). */
+  rotulo?: string;
+}
+
+/** Ação a mais na linha, antes do excluir (ícone com dica). */
+export interface CentralAcao {
+  rotulo: string;
+  icone: ReactNode;
+  onClick: () => void;
 }
 
 export interface CentralItem {
@@ -24,6 +33,7 @@ export interface CentralItem {
   onAbrir: () => void;
   onExcluir?: () => void;
   excluirRotulo?: string;
+  acoes?: CentralAcao[];
 }
 
 export function CentralMini({ children }: { children: ReactNode }) {
@@ -59,7 +69,7 @@ export function Central({
           style={{ ["--n" as string]: laminas.length }}
         >
           {laminas.map((l) => (
-            <button key={l.id} type="button" className={styles.lamina} onClick={l.onClick} disabled={busy}>
+            <button key={l.id} type="button" className={styles.lamina} onClick={l.onClick} disabled={busy} title={l.rotulo} aria-label={l.rotulo} data-lamina={l.id}>
               <span className={styles.arte}>
                 <img src={l.arte} alt="" />
               </span>
@@ -80,7 +90,7 @@ export function Central({
             ) : (
               <ul className={styles.list}>
                 {itens.map((c) => (
-                  <li key={c.id} className={styles.row}>
+                  <li key={c.id} className={styles.row} data-item={c.id}>
                     <button
                       type="button"
                       className={styles.rowBtn}
@@ -98,6 +108,22 @@ export function Central({
                       </span>
                       <span className={styles.quando}>{formatDateTime(c.quando)}</span>
                     </button>
+                    {c.acoes?.map((a) => (
+                      <button
+                        key={a.rotulo}
+                        type="button"
+                        className={`${styles.deleteBtn} ${styles.acaoBtn}`}
+                        title={a.rotulo}
+                        aria-label={`${a.rotulo} ${c.titulo}`}
+                        disabled={busy}
+                        onClick={(e: MouseEvent<HTMLButtonElement>) => {
+                          e.stopPropagation();
+                          a.onClick();
+                        }}
+                      >
+                        {a.icone}
+                      </button>
+                    ))}
                     {c.onExcluir && (
                       <button
                         type="button"

@@ -55,4 +55,5 @@ export const VIDEO_NA_EDICAO: readonly string[] = [
   "video.mode.distancia",
   "video.mode.pessoas",
   "video.mode.realce",
+  "video.mode.edicao",
 ];

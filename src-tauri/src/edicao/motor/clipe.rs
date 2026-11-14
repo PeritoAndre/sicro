@@ -26,6 +26,7 @@ use crate::edicao::quadros::TabelaQuadros;
 use crate::edicao::rastreio::avaliar::{self, Avaliado, Instante};
 use crate::edicao::rastreio::ArquivoDenso;
 use crate::edicao::tempo::{self, MapaQuadros};
+use crate::edicao::validar;
 use crate::error::{Result, SicroError};
 
 /// Janela de slots do bloco dentro do clipe: [de, ate) em slots locais do clipe.
@@ -73,7 +74,7 @@ impl FonteSprites for SpritesDoPlano<'_> {
 }
 
 /// Tamanho da imagem como o navegador mostra: o do `MidiaRef` (quem grava é o front); senão o exibido.
-fn tamanho_da_imagem(p: &ProjetoEdicao, ctx: &Contexto, midia: &str) -> Option<TamanhoPx> {
+pub(crate) fn tamanho_da_imagem(p: &ProjetoEdicao, ctx: &Contexto, midia: &str) -> Option<TamanhoPx> {
     let f = ctx.fontes.get(midia)?;
     let do_ref = p.midias.iter().find(|m| m.id == midia).and_then(|m| Some(TamanhoPx { w: m.largura?, h: m.altura? }));
     Some(do_ref.filter(|t| t.w > 0 && t.h > 0).unwrap_or(TamanhoPx { w: f.exibido.0, h: f.exibido.1 }))
@@ -188,14 +189,13 @@ pub(crate) fn caixa_da_ocultacao(rs: &mut Rastreios, o: &EfOcultar, tab: &Tabela
     }
 }
 
-/// Efeito que a Fase 0 não renderiza: erro com o tipo e o id.
+/// Efeito que a Fase 0 não renderiza: erro com o tipo e o id. Desligado nunca é recusado, conhecido ou não;
+/// desconhecido ligado é o `item_desconhecido` (ou `item_invalido`) da validação.
 fn recusar_de_outra_fase(efeitos: &[Tolerante<Efeito>]) -> Result<()> {
     for e in efeitos {
         match e {
-            Tolerante::Desconhecido(v) => {
-                let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("");
-                let tipo = v.get("tipo").and_then(|x| x.as_str()).unwrap_or("");
-                return Err(erro("nao_suportado", format!("efeito {tipo} {id}")));
+            Tolerante::Desconhecido(v) if validar::efeito_desconhecido_ligado(v) => {
+                return Err(validar::erro_do_desconhecido(v, validar::TIPOS_EFEITO));
             }
             Tolerante::Conhecido(e) if efeitos::base(e).ligado => {
                 let fora = efeitos::familia(e) == Familia::Origem || matches!(e, Efeito::Lupa(_) | Efeito::Regua(_) | Efeito::VelocidadeExibida(_));

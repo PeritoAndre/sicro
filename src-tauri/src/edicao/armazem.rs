@@ -24,7 +24,8 @@ use crate::workspace::manifest::APP_VERSION;
 use crate::workspace::paths;
 
 /// Linha da lista de projetos. `duracao_s` do programa; `miniatura_rel` relativo ao caso;
-/// `problema` Some = arquivo ilegível (a frase vem do catálogo), com os demais campos no que deu para ler.
+/// `problema` Some = arquivo ilegível: o CÓDIGO do catálogo (`esquema`, `item_invalido`; a tela traduz), com os demais
+/// campos no que deu para ler.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ResumoProjeto {
     pub id: String,
@@ -610,6 +611,7 @@ fn contar_entradas(pasta: &Path) -> usize {
     fs::read_dir(pasta).map(|rd| rd.flatten().count()).unwrap_or(0)
 }
 
+#[cfg(test)]
 fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }

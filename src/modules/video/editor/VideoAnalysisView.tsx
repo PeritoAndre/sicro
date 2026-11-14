@@ -33,7 +33,6 @@ import { VideoTimeline } from "./VideoTimeline";
 import { VideoEventPanel } from "./VideoEventPanel";
 import { VideoMetadataPanel } from "./VideoMetadataPanel";
 import { VideoStoryboardPanel } from "./VideoStoryboardPanel";
-import { ModeRail } from "./medir/ModeRail";
 import { MedirStage } from "./medir/MedirStage";
 import { SpeedGuide, type MedirActions } from "./medir/SpeedGuide";
 import { DistanceGuide } from "./medir/DistanceGuide";
@@ -65,8 +64,11 @@ import {
 } from "./format";
 import styles from "./VideoAnalysisView.module.css";
 import { askConfirm } from "@components/Dialog/ask";
+import { useDialogosAbertos } from "@components/Dialog/Dialog";
+import { confirmarExclusaoVideo } from "../excluirVideo";
 
-export function VideoAnalysisView() {
+/** `visivel` falso: a Edição está na frente (§8.1). Fica montada, pausada e sem atalhos. */
+export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}) {
   useImmersive();
   const workspacePath = useWorkspaceStore(selectActiveWorkspacePath);
   const occurrence = useWorkspaceStore(selectActiveOccurrence);
@@ -209,7 +211,8 @@ export function VideoAnalysisView() {
   // Galeria do storyboard e diálogo de trecho abertos: o teclado é deles.
   const [galleryIndex, setGalleryIndex] = useState<number | null>(null);
   const [clipOpen, setClipOpen] = useState(false);
-  const playerKeys = showPlayer && compareWith == null && galleryIndex == null && !clipOpen;
+  const semDialogo = useDialogosAbertos((s) => s.pilha.length === 0);
+  const playerKeys = visivel && showPlayer && compareWith == null && galleryIndex == null && !clipOpen;
   useShortcuts({ "video.fullscreen": toggleFullscreen }, { enabled: playerKeys });
   useShortcuts(
     {
@@ -218,9 +221,22 @@ export function VideoAnalysisView() {
       "video.mode.distancia": () => setModo("distancia"),
       "video.mode.pessoas": () => setModo("pessoas"),
       "video.mode.realce": () => setModo("realce"),
+      "video.mode.edicao": () => useVideoStore.getState().mostrarEdicao(true),
     },
-    { enabled: compareWith == null && galleryIndex == null && !clipOpen },
+    { enabled: visivel && semDialogo && compareWith == null && galleryIndex == null && !clipOpen },
   );
+
+  // escondida: para o som e a imagem; comparação e galeria têm teclado próprio, fecham
+  const raizRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (visivel) return;
+    raizRef.current?.querySelectorAll<HTMLMediaElement>("video, audio").forEach((m) => {
+      if (!m.paused) m.pause();
+    });
+    setCompareWith(null);
+    setGalleryIndex(null);
+    exitFullscreen();
+  }, [visivel, exitFullscreen]);
 
   // vídeos do caso: alternar e adicionar sem sair da análise
   const switchVideo = (id: string) => {
@@ -236,13 +252,7 @@ export function VideoAnalysisView() {
   };
   const excluirVideo = async () => {
     if (!workspacePath || !bundle) return;
-    const ok = await askConfirm({
-      title: "Excluir vídeo",
-      message: "Excluir este vídeo e tudo que foi marcado nele?",
-      confirmLabel: "Excluir",
-      danger: true,
-    });
-    if (!ok) return;
+    if (!(await confirmarExclusaoVideo(workspacePath, bundle.media.sha256))) return;
     try {
       await useVideoStore.getState().deleteMedia(workspacePath, bundle.media.id);
     } catch (e) {
@@ -801,7 +811,7 @@ export function VideoAnalysisView() {
   const effectiveDuration = duration ?? media.duration_s ?? 0;
 
   return (
-    <div className={styles.wrap}>
+    <div ref={raizRef} className={styles.wrap}>
       <header className={styles.topBar}>
         <button
           type="button"
@@ -925,7 +935,6 @@ export function VideoAnalysisView() {
         />
       ) : (
       <div ref={bodyRef} className={styles.body}>
-        <ModeRail modo={modo} onChange={setModo} />
         {galleryIndex != null && workspacePath && (
           <StoryboardGallery
             workspacePath={workspacePath}

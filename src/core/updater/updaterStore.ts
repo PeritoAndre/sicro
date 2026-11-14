@@ -10,6 +10,7 @@ import { open as abrirUrl } from "@tauri-apps/plugin-shell";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { create } from "zustand";
 import { pushToast } from "@/components/toast/toastStore";
+import { useEdicaoStore } from "@/modules/edicao/store/edicaoStore";
 
 const RELEASES_API = "https://api.github.com/repos/PeritoAndre/sicro/releases/latest";
 const RELEASES_PAGE = "https://github.com/PeritoAndre/sicro/releases/latest";
@@ -127,6 +128,7 @@ export async function instalarAtualizacao(): Promise<void> {
     });
     set({ status: "installed" });
     // No Windows o instalador já fecha e reabre o app; nos outros, reinicia aqui.
+    await useEdicaoStore.getState().descarregar().catch(() => undefined);
     await relaunch().catch(() => undefined);
   } catch (e) {
     set({ status: "error", erro: String(e) });

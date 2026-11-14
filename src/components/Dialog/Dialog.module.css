@@ -24,6 +24,7 @@
   overflow: hidden;
   animation: pop-in var(--t-base);
 }
+.dialog:focus { outline: none; }
 
 .header {
   display: flex;

@@ -38,24 +38,34 @@ describe("ações", () => {
       const q = (d.principal[1] as ClipeTrecho).efeitos.find((x) => (x as { tipo: string }).tipo === "enquadramento") as EfEnquadramento;
       q.interpolacao = "vizinho";
     });
-    marcarRegiao(id, "fim", 14, { x: 0.5, y: 0.5, w: 0.2, h: 0.2 }, "Marcar fim");
+    marcarRegiao(id, "fim", 14, null, { x: 0.5, y: 0.5, w: 0.2, h: 0.2 }, "Marcar fim");
     expect(e().regiao).toEqual([
       { t: 12, v: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 } },
       { t: 14, v: { x: 0.5, y: 0.5, w: 0.2, h: 0.2 } },
     ]);
     expect(e().interpolacao).toBe("bilinear");
-    marcarRegiao(id, "inicio", 12.5, { x: 0, y: 0, w: 1, h: 1 }, "Marcar início");
+    marcarRegiao(id, "inicio", 12.5, null, { x: 0, y: 0, w: 1, h: 1 }, "Marcar início");
     expect((e().regiao as { t: number }[]).map((k) => k.t)).toEqual([12.5, 14]);
-    marcarRegiao(id, "fim", 15, { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }, "Marcar fim");
+    marcarRegiao(id, "fim", 15, null, { x: 0.1, y: 0.1, w: 0.5, h: 0.5 }, "Marcar fim");
     expect((e().regiao as { t: number }[]).map((k) => k.t)).toEqual([12.5, 15]);
     tirarFimRegiao(id, "Marcar fim");
     expect(e().regiao).toEqual({ x: 0, y: 0, w: 1, h: 1 });
     expect(st().passado.slice(-5).map((p) => p.rotulo)).toEqual(["Interpolação", "Marcar fim", "Marcar início", "Marcar fim", "Marcar fim"]);
   });
 
+  it("região: a chave grava o pts que o palco entrega (contratos (h) 22)", () => {
+    const id = trecho(1).id;
+    const e = () => efeito<EfEnquadramento>(1, "enquadramento")!;
+    marcarRegiao(id, "fim", 14, 215040, { x: 0.5, y: 0.5, w: 0.2, h: 0.2 }, "Marcar fim");
+    const ks = e().regiao as { t: number; pts?: number | null }[];
+    expect(ks.at(-1)).toMatchObject({ t: 14, pts: 215040 });
+    marcarRegiao(id, "inicio", 12.5, 192000, { x: 0, y: 0, w: 1, h: 1 }, "Marcar início");
+    expect((e().regiao as { pts?: number | null }[]).map((k) => k.pts)).toEqual([192000, 215040]);
+  });
+
   it("sem enquadramento, marcar o fim cria um zoom a partir da imagem inteira", () => {
     st().alterar("Remover", (d) => void ((d.principal[2] as ClipeTrecho).efeitos = (d.principal[2] as ClipeTrecho).efeitos.filter((x) => (x as { tipo: string }).tipo !== "enquadramento")));
-    marcarRegiao(trecho(2).id, "fim", 6, { x: 0.3, y: 0.3, w: 0.3, h: 0.3 }, "Marcar fim");
+    marcarRegiao(trecho(2).id, "fim", 6, null, { x: 0.3, y: 0.3, w: 0.3, h: 0.3 }, "Marcar fim");
     expect(efeito<EfEnquadramento>(2, "enquadramento")!.regiao).toEqual([
       { t: 3, v: { x: 0, y: 0, w: 1, h: 1 } },
       { t: 6, v: { x: 0.3, y: 0.3, w: 0.3, h: 0.3 } },
@@ -84,16 +94,30 @@ describe("ações", () => {
     expect(efeito<EfEnquadramento>(1, "enquadramento")!.regiao).toEqual({ x: 0.1, y: 0.1, w: 0.8, h: 0.45 });
   });
 
-  it("remover o efeito leva o rastreio que só ele usava; ocultar de congelar fica no clipe", () => {
+  it("remover o efeito leva o rastreio que só ele usava; ocultar de congelar vai para a mídia, no instante do quadro (h 23)", () => {
     const d = efeito<{ rastreio: string; id: string }>(1, "destaque")!;
     removerEfeito(d.id, "Remover");
     expect(st().doc!.rastreios.some((r) => r.id === d.rastreio)).toBe(false);
     st().alterar("Congelar aqui", (x) =>
-      void x.principal.push({ tipo: "congelar", id: "cg", rotulo: "", desligado: false, transicao_entrada: null, efeitos: [], midia: "m1", instante_s: 13, instante_pts: null, duracao_s: 2 }),
+      void x.principal.push({ tipo: "congelar", id: "cg", rotulo: "", desligado: false, transicao_entrada: null, efeitos: [], midia: "m1", instante_s: 13, instante_pts: 199680, duracao_s: 2 }),
     );
+    // cursor no congelado em tempo LOCAL: não pode virar o tempo da âncora de base fonte
+    st().posicionar({ modo: "clipe", clipe: "cg", t: 0.5 });
+    const n0 = st().doc!.midias.find((m) => m.id === "m1")!.ocultacoes.length;
     const id = adicionarEfeito("cg", "ocultar", "Ocultar")!;
-    expect((st().doc!.principal.at(-1) as { efeitos: { id: string }[] }).efeitos.map((e) => e.id)).toEqual([id]);
+    expect((st().doc!.principal.at(-1) as { efeitos: { id: string }[] }).efeitos).toEqual([]);
+    const ocs = st().doc!.midias.find((m) => m.id === "m1")!.ocultacoes;
+    expect(ocs.length).toBe(n0 + 1);
+    const o = ocs.at(-1)!;
+    expect(o.id).toBe(id);
+    expect(o.ativo).toEqual({ de: 13, ate: 13 });
+    const r = st().doc!.rastreios.find((x) => x.id === o.alvo.rastreio)!;
+    expect([r.base, r.midia, r.ancoras]).toEqual(["fonte", "m1", [{ t: 13, pts: 199680, v: expect.any(Object) }]]);
     expect(st().selecao.efeito).toBe(id);
+    // destaque no congelado: âncora também no instante dele
+    const dz = adicionarEfeito("cg", "destaque", "Destaque")!;
+    const rd = st().doc!.rastreios.find((x) => x.id === (st().doc!.principal.at(-1) as { efeitos: { id: string; rastreio: string }[] }).efeitos.find((e) => e.id === dz)!.rastreio)!;
+    expect(rd.ancoras[0]).toMatchObject({ t: 13, pts: 199680 });
   });
 });
 

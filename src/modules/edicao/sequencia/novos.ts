@@ -110,3 +110,11 @@ export function paresDeEventos(tempos: readonly Seg[]): [Seg, Seg][] {
   for (let i = 0; i + 1 < o.length; i += 2) if ((o[i + 1] as Seg) > (o[i] as Seg)) pares.push([o[i] as Seg, o[i + 1] as Seg]);
   return pares;
 }
+
+/** Tempo de fonte do evento da análise: `pts × time_base` quando o evento os tem; senão `timestamp_s`, que a análise
+ *  grava com o tempo do reprodutor (o técnico, com o início do arquivo; contratos (h) 27). */
+export function tempoDoEvento(ev: { timestamp_s: number; pts: number | null; time_base: string | null }): Seg {
+  const m = ev.pts !== null && ev.time_base ? /^\s*(\d+)\s*\/\s*(\d+)\s*$/.exec(ev.time_base) : null;
+  if (m && Number(m[2]) > 0) return (ev.pts! * Number(m[1])) / Number(m[2]);
+  return ev.timestamp_s;
+}

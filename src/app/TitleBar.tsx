@@ -3,8 +3,9 @@
  * perde o redimensionar pelas bordas no Windows: as alças chamam `startResizeDragging`.
  */
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { guardaDeSaida } from "@modules/edicao/guarda";
 import { Brand } from "./Brand";
 import styles from "./TitleBar.module.css";
 
@@ -21,7 +22,8 @@ const RESIZE_HANDLES = [
 ] as const;
 
 export function TitleBar() {
-  const win = getCurrentWindow();
+  // uma instância só: os efeitos abaixo não reassinam a cada render
+  const win = useMemo(() => getCurrentWindow(), []);
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -37,6 +39,33 @@ export function TitleBar() {
       })
       .catch(() => {});
     return () => unlisten?.();
+  }, [win]);
+
+  // Fechar a janela (botão daqui, Alt+F4, gerenciador de janelas): a Edição grava o pendente antes (§8.1).
+  // Com um ouvinte JS o Tauri segura o fechamento; depois da guarda o ouvinte sai e o `close()` passa direto
+  // (sem precisar da permissão de `destroy`).
+  useEffect(() => {
+    let solta: (() => unknown) | null = null;
+    let vivo = true;
+    win
+      .onCloseRequested(async (ev) => {
+        ev.preventDefault();
+        if (!(await guardaDeSaida())) return;
+        const s = solta;
+        solta = null;
+        await s?.();
+        await win.close();
+      })
+      .then((u) => {
+        if (typeof u !== "function") return;
+        if (vivo) solta = u;
+        else void u();
+      })
+      .catch(() => {});
+    return () => {
+      vivo = false;
+      void solta?.();
+    };
   }, [win]);
 
   return (

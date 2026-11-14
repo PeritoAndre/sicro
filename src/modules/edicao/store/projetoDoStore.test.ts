@@ -100,6 +100,7 @@ const info = (c: string, de: number, ate: number): MidiaInfo => ({
   previa: { relativo: "", tipo: "original", desloc_s: 0, de_s: de, ate_s: ate, largura: 1920, altura: 1080, pronta: true },
   tabela: "decodificador",
   erros: 0,
+  marcavel: true,
 });
 
 /** O que o Rust devolveria em base 1/15360 a 30 qps: quadro exibido em t. */
@@ -187,9 +188,9 @@ beforeAll(async () => {
   mudar("Conteúdo", noEfeito<EfOcultar>(desfoque, (x) => void (x.conteudo = "placa")));
 
   // enquadramento fixo no trecho 1, animado no trecho 2; girar no trecho 1
-  marcarRegiao(c1.id, "inicio", 12, { x: 0.25, y: 0.25, w: 0.5, h: 0.5 }, "Marcar início");
-  marcarRegiao(c2.id, "inicio", 3, { x: 0, y: 0, w: 1, h: 1 }, "Marcar início");
-  marcarRegiao(c2.id, "fim", 7.5, { x: 0.4, y: 0.3, w: 0.4, h: 0.4 }, "Marcar fim");
+  marcarRegiao(c1.id, "inicio", 12, null, { x: 0.25, y: 0.25, w: 0.5, h: 0.5 }, "Marcar início");
+  marcarRegiao(c2.id, "inicio", 3, null, { x: 0, y: 0, w: 1, h: 1 }, "Marcar início");
+  marcarRegiao(c2.id, "fim", 7.5, null, { x: 0.4, y: 0.3, w: 0.4, h: 0.4 }, "Marcar fim");
   mudarGiro(c1.id, { graus: 90 }, "Girar");
 
   // transição Escurecer na entrada do trecho 2

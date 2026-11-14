@@ -35,6 +35,7 @@ export function textoPermitido(t: string): boolean {
   if (ROTULOS.has(t)) return true;
   if (/^Exportar com \d+ avisos?$/.test(t)) return true;
   if (/^Vídeo \d+\/\d+$/.test(t)) return true;
+  if (/^\d+ marcaç(ão|ões)$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;
   if (/^-?\d+(,\d+)?\s?(%|°|×)?$/.test(t)) return true;
   if (/^\d{2}:\d{2}(:\d{2})?(,\d{3})?$/.test(t)) return true;

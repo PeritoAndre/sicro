@@ -4,7 +4,7 @@
  * cursor e podem ALARGAR o clipe. Tudo pela tabela (D4), nunca pela taxa declarada.
  */
 
-import type { ClipeTrecho, MidiaRef, Pts, Seg, TabelaQuadros } from "@domain/edicao";
+import type { ClipeTrecho, MidiaInfo, Pts, Seg, TabelaQuadros } from "@domain/edicao";
 import { exibido, fimDaMidia, fimDoPar, doPar, nQuadros, passoDe, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 
 export interface Escala {
@@ -85,14 +85,28 @@ export function bordaArrastada(c0: Pontas, borda: "inicio" | "fim", t0: Seg, t: 
 
 /** Tecla de entrada (I): o quadro exibido no cursor passa a ser o primeiro. */
 export const entradaNoCursor = (c: Pontas, tab: TabelaQuadros, t: Seg) => aparar(c, "inicio", exibido(tab, t), tab);
-/** Tecla de saída (O): o quadro exibido no cursor passa a ser o fim (exclusivo), como o §8.5 manda. */
-export const saidaNoCursor = (c: Pontas, tab: TabelaQuadros, t: Seg) => aparar(c, "fim", exibido(tab, t), tab);
+/** Tecla de saída (O): o quadro exibido no cursor fica DENTRO; o fim (exclusivo) é o quadro seguinte. No último
+ *  quadro da mídia o fim é o fim da mídia (pts nulo). */
+export const saidaNoCursor = (c: Pontas, tab: TabelaQuadros, t: Seg) => aparar(c, "fim", exibido(tab, t) + 1, tab);
 
-/** Extensões de vídeo cru e MPEG-PS: sem tempo nos pacotes (contratos (g) 14). */
-const SEM_TEMPO_NOS_PACOTES = /\.(h264|264|avc|h265|265|hevc|mpg|mpeg|m2p|ps|vob)$/i;
+/** Marcar entrada, saída ou quadro-chave: só com `MidiaInfo.marcavel` (contratos (h) 17), a única regra. */
+export function marcarBloqueado(info: Pick<MidiaInfo, "marcavel"> | null, tab: TabelaQuadros | null): boolean {
+  return !tab || !info?.marcavel;
+}
 
-/** Marcar entrada, saída ou quadro-chave fica desligado enquanto a tabela é a de pacotes dessas mídias. */
-export function marcarBloqueado(m: Pick<MidiaRef, "nome" | "relativo">, tab: TabelaQuadros | null): boolean {
-  if (!tab) return true;
-  return tab.origem === "pacotes" && (SEM_TEMPO_NOS_PACOTES.test(m.nome) || SEM_TEMPO_NOS_PACOTES.test(m.relativo));
+/** Estado da busca do palco: quadro pedido e ainda não pintado, e o último pintado (`Buscador`). */
+export interface EstadoBusca {
+  alvo: number | null;
+  ultimo: number | null;
+}
+
+/**
+ * Marca (âncora, chave, região) no quadro mostrado. Clipe com mídia: só marcável (h 17) e com a imagem do quadro `j`
+ * já pintada; enquanto o palco busca (troca de clipe, passo), a tela ainda mostra o quadro anterior (h 27).
+ */
+export function marcaLivre(tipo: string | null, info: Pick<MidiaInfo, "marcavel"> | null, tab: TabelaQuadros | null, busca: EstadoBusca | null, j: number | null): boolean {
+  if (!tipo) return false;
+  if (tipo !== "trecho" && tipo !== "congelar") return true;
+  if (marcarBloqueado(info, tab) || !busca) return false;
+  return busca.alvo === null && busca.ultimo !== null && busca.ultimo === j;
 }

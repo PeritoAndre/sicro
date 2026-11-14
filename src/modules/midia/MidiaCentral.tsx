@@ -1,10 +1,16 @@
-/** Central de Vídeo e Áudio: duas lâminas e a lista de vídeos e áudios do caso. */
+/** Central de Vídeo e Áudio: lâminas Vídeo, Áudio e Edição, e uma lista só com vídeos, áudios e edições do caso (§8.1). */
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
-import { Central, type CentralItem, type CentralLamina } from "@components/Central/Central";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { Copy, Scissors, TriangleAlert } from "lucide-react";
+import { Central, CentralMini, type CentralItem, type CentralLamina } from "@components/Central/Central";
 import { askConfirm } from "@components/Dialog/ask";
+import type { ResumoProjeto } from "@domain/edicao";
+import { abrirEdicao, duplicarEdicao, excluirEdicao, fraseDoProblema, listarEdicoes, novaEdicao, resumoDaEdicao } from "@modules/edicao/central";
+import { separarErro } from "@modules/edicao/store/edicaoStore";
+import { confirmarExclusaoVideo } from "@modules/video/excluirVideo";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { useShortcuts } from "@core/useShortcuts";
@@ -16,6 +22,7 @@ import { formatDuration } from "@modules/video/editor/format";
 import { useMidiaCentral } from "./midiaNav";
 import videoImg from "@modules/video/assets/central/video.webp";
 import audioImg from "@modules/video/assets/central/audio.webp";
+import edicaoImg from "@modules/video/assets/central/edicao.webp";
 import thumbStyles from "@components/Central/Central.module.css";
 
 const VIDEO_EXT = ["mp4", "mov", "mkv", "avi", "webm", "m4v"];
@@ -31,11 +38,16 @@ export function MidiaCentral() {
   const registerMedia = useVideoStore((s) => s.registerMedia);
   const openMedia = useVideoStore((s) => s.openMedia);
   const deleteMedia = useVideoStore((s) => s.deleteMedia);
+  const mostrarEdicao = useVideoStore((s) => s.mostrarEdicao);
+  // a lista fica montada atrás da Edição: ao voltar, relê as edições
+  const edicaoNaFrente = useVideoStore((s) => s.edicao);
   const setEmCentral = useMidiaCentral((s) => s.setEmCentral);
   const pedirAudio = useMidiaCentral((s) => s.pedirAudio);
 
   const [audios, setAudios] = useState<AudioMedia[]>([]);
   const [loadingAudios, setLoadingAudios] = useState(true);
+  const [edicoes, setEdicoes] = useState<ResumoProjeto[]>([]);
+  const [semMiniatura, setSemMiniatura] = useState<Record<string, true>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,12 +67,62 @@ export function MidiaCentral() {
       .finally(() => setLoadingAudios(false));
   }, [workspacePath, loadList]);
 
+  const lerEdicoes = useCallback(() => {
+    if (!workspacePath) return;
+    void listarEdicoes(workspacePath)
+      .then(setEdicoes)
+      .catch(() => setEdicoes([]));
+  }, [workspacePath]);
+  useEffect(() => {
+    if (!edicaoNaFrente) lerEdicoes();
+  }, [lerEdicoes, edicaoNaFrente]);
+
+  /** Leva à Edição (no módulo Vídeo) depois de `f` abrir ou criar o projeto. */
+  const irParaEdicao = async (f: () => Promise<unknown>) => {
+    if (!workspacePath || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await f();
+      mostrarEdicao(true);
+      if (pathname !== "/video") navigate("/video");
+    } catch (err) {
+      setError(separarErro(err).frase);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const duplicar = async (id: string) => {
+    if (!workspacePath) return;
+    setError(null);
+    try {
+      await duplicarEdicao(workspacePath, id);
+    } catch (err) {
+      setError(separarErro(err).frase);
+    }
+    lerEdicoes();
+  };
+
+  const excluirEd = async (p: ResumoProjeto) => {
+    if (!workspacePath) return;
+    if (!(await askConfirm({ title: "Excluir edição", message: p.titulo, confirmLabel: "Excluir edição", danger: true }))) return;
+    setError(null);
+    try {
+      await excluirEdicao(workspacePath, p.id);
+    } catch (err) {
+      setError(separarErro(err).frase);
+    }
+    lerEdicoes();
+  };
+
   const abrirVideo = async (id: string) => {
     if (!workspacePath) return;
     setBusy(true);
     setError(null);
     try {
       await openMedia(workspacePath, id);
+      mostrarEdicao(false);
       if (pathname !== "/video") navigate("/video");
     } catch (err) {
       setError(toSicroError(err).message);
@@ -87,6 +149,7 @@ export function MidiaCentral() {
       setBusy(true);
       const media = await registerMedia(workspacePath, selected);
       await openMedia(workspacePath, media.id);
+      mostrarEdicao(false);
       if (pathname !== "/video") navigate("/video");
     } catch (err) {
       setError(toSicroError(err).message);
@@ -116,13 +179,8 @@ export function MidiaCentral() {
 
   const excluirVideo = async (id: string) => {
     if (!workspacePath) return;
-    const ok = await askConfirm({
-      title: "Excluir vídeo",
-      message: "Excluir este vídeo e tudo que foi marcado nele?",
-      confirmLabel: "Excluir",
-      danger: true,
-    });
-    if (!ok) return;
+    const v = videos.find((m) => m.id === id);
+    if (!v || !(await confirmarExclusaoVideo(workspacePath, v.sha256))) return;
     try {
       await deleteMedia(workspacePath, id);
     } catch (err) {
@@ -130,11 +188,13 @@ export function MidiaCentral() {
     }
   };
 
-  useShortcuts({ "video.addVideo": () => void adicionarVideo() }, { enabled: pathname === "/video" });
+  // escondida atrás da Edição a lista não responde ao teclado
+  useShortcuts({ "video.addVideo": () => void adicionarVideo() }, { enabled: pathname === "/video" && !edicaoNaFrente });
 
   const laminas: CentralLamina[] = [
     { id: "video", nome: "Vídeo", arte: videoImg, onClick: () => void adicionarVideo() },
     { id: "audio", nome: "Áudio", arte: audioImg, onClick: () => void adicionarAudio() },
+    { id: "edicao", nome: "Edição", rotulo: "Nova edição", arte: edicaoImg, onClick: () => workspacePath && void irParaEdicao(() => novaEdicao(workspacePath)) },
   ];
 
   const itens = useMemo<CentralItem[]>(() => {
@@ -176,11 +236,38 @@ export function MidiaCentral() {
         onAbrir: () => abrirAudio(a.id),
       } satisfies CentralItem,
     }));
-    return [...dos_videos, ...dos_audios]
+    const das_edicoes = edicoes.map((p) => ({
+      quando: p.updated_at,
+      item: {
+        id: `e-${p.id}`,
+        titulo: p.titulo,
+        miniatura: (
+          <CentralMini>
+            {p.problema ? (
+              <TriangleAlert size={18} aria-label={fraseDoProblema(p.problema)} data-problema={p.problema}>
+                <title>{fraseDoProblema(p.problema)}</title>
+              </TriangleAlert>
+            ) : p.miniatura_rel && workspacePath && !semMiniatura[p.id] ? (
+              <img src={convertFileSrc(`${workspacePath}/${p.miniatura_rel}`)} alt="" onError={() => setSemMiniatura((m) => ({ ...m, [p.id]: true }))} />
+            ) : (
+              <Scissors size={18} aria-hidden />
+            )}
+          </CentralMini>
+        ),
+        tipo: "edição",
+        resumo: p.problema ? "" : resumoDaEdicao(p),
+        quando: p.updated_at,
+        onAbrir: () => workspacePath && void irParaEdicao(() => abrirEdicao(workspacePath, p.id)),
+        acoes: p.problema ? [] : [{ rotulo: "Duplicar", icone: <Copy size={14} />, onClick: () => void duplicar(p.id) }],
+        onExcluir: () => void excluirEd(p),
+        excluirRotulo: "Excluir edição",
+      } satisfies CentralItem,
+    }));
+    return [...dos_videos, ...dos_audios, ...das_edicoes]
       .sort((x, y) => Date.parse(y.quando) - Date.parse(x.quando))
       .map((x) => x.item);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [videos, audios, workspacePath, pathname]);
+  }, [videos, audios, edicoes, semMiniatura, workspacePath, pathname]);
 
   return (
     <Central

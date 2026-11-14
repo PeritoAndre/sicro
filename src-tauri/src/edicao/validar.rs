@@ -17,15 +17,18 @@ use super::modelo::{
     Prender, Problema, ProjetoEdicao, Racional, Rastreio, RefLegenda, SituacaoMidia, TamanhoPx, TipoDerivacao, TipoMidia, TipoRastreio,
     Titulo, Fundo, Tolerante, Velocidade, ESQUEMA as ESQUEMA_DOC, ESQUEMA_MENOR as ESQUEMA_MENOR_DOC,
 };
-use super::motor::{Alvo, Contexto};
+use super::modelo::EfBase;
+use super::motor::efeitos;
+use super::motor::efeitos::enquadramento;
+use super::motor::{clipe as motor_clipe, Alvo, Contexto};
 use super::quadros::{OrigemTabela, TabelaQuadros};
 use super::rastreio::avaliar::{self as rastreio_avaliar, Como, Instante};
 use super::tempo;
 
 /// `tipo` conhecidos (o resto é item de versão mais nova).
-const TIPOS_CLIPE: &[&str] = &["trecho", "congelar", "imagem", "titulo", "tela"];
-const TIPOS_SOBREPOSTO: &[&str] = &["video", "imagem", "titulo"];
-const TIPOS_EFEITO: &[&str] = &[
+pub(crate) const TIPOS_CLIPE: &[&str] = &["trecho", "congelar", "imagem", "titulo", "tela"];
+pub(crate) const TIPOS_SOBREPOSTO: &[&str] = &["video", "imagem", "titulo"];
+pub(crate) const TIPOS_EFEITO: &[&str] = &[
     "estabilizar", "lente", "desentrelacar", "media_temporal", "ajustes", "nitidez", "girar", "enquadramento", "ocultar", "holofote",
     "destaque", "lupa", "regua", "velocidade_exibida", "texto", "carimbo", "imagem",
 ];
@@ -52,6 +55,11 @@ const VFR_PARTE: f64 = 0.005;
 const VFR_LACUNA: f64 = 1.5;
 /// Folga das comparações de tempo (s).
 const EPS: f64 = 1e-9;
+/// Ponto de apoio de texto, carimbo, imagem ou bloco de título mais longe que isto do canvas (px, 2^30): `item_invalido`.
+const MAX_LUGAR_PX: f64 = 1_073_741_824.0;
+/// Faixas dos parâmetros (§2.3): fora delas, `item_invalido` com o campo.
+const BORDA_SUAVE_MAX: f64 = 0.5;
+const MEDIA_QUADROS: std::ops::RangeInclusive<u32> = 2..=15;
 
 // ---------------------------------------------------------------------------
 // API
@@ -92,6 +100,26 @@ pub fn analisar(p: &ProjetoEdicao, ctx: &Contexto, alvo: Option<&Alvo>) -> Anali
     let prender = tempo::prender(p, ctx);
     let problemas = Validacao::nova(p, &linha, ctx, alvo).rodar(&prender);
     Analise { problemas, linha, midias: ctx.midias.to_vec(), prender, saida_auto: tempo::saida_auto(p, ctx) }
+}
+
+/// Código de um item que caiu em `Desconhecido`: `tipo` da lista = `item_invalido`; senão, de versão mais nova.
+pub(crate) fn codigo_do_desconhecido(v: &Value, tipos: &[&str]) -> &'static str {
+    if v.get("tipo").and_then(Value::as_str).is_some_and(|t| tipos.contains(&t)) {
+        ITEM_INVALIDO
+    } else {
+        ITEM_DESCONHECIDO
+    }
+}
+
+/// Erro do motor para um item desconhecido que vale no render (o mesmo código da validação).
+pub(crate) fn erro_do_desconhecido(v: &Value, tipos: &[&str]) -> crate::error::SicroError {
+    let texto = |k: &str| v.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+    crate::error::SicroError::Validation(format!("{}: {} {}", codigo_do_desconhecido(v, tipos), texto("tipo"), texto("id")))
+}
+
+/// Efeito desconhecido vale no render? Só `"ligado": false` o desliga (o campo pode faltar).
+pub(crate) fn efeito_desconhecido_ligado(v: &Value) -> bool {
+    v.get("ligado").and_then(Value::as_bool).unwrap_or(true)
 }
 
 /// Há algum problema de nível erro?
@@ -158,11 +186,11 @@ enum Base {
     Local,
 }
 
-/// Um instante avaliado: `[de, ate)` na base do `ativo`; `t`/`pts` onde o rastreio é avaliado.
+/// Um instante avaliado: `inst` = instante na base do `ativo` (o do quadro lido no trecho, o do slot nos demais);
+/// `t`/`pts` = onde o rastreio é avaliado.
 #[derive(Debug, Clone, Copy)]
 struct Amostra {
-    de: f64,
-    ate: f64,
+    inst: f64,
     t: f64,
     pts: Option<i64>,
 }
@@ -176,31 +204,31 @@ struct Uso<'a> {
     tab: Option<&'a TabelaQuadros>,
     /// Quadros lidos `[j_in, j_out)` (trecho) ou o quadro congelado.
     quadros: Option<(usize, usize)>,
-    /// Faixa de fonte (s) do trecho; o instante no congelar.
-    faixa: Option<(f64, f64)>,
-    /// Duração local (s) e slots.
-    dur_s: f64,
+    /// Slots do clipe (0 quando a duração já é inválida: nada a percorrer).
     n_q: u32,
     fps: Racional,
 }
 
 impl Uso<'_> {
-    /// Amostras do clipe, na base dos efeitos dele.
+    /// Amostras do clipe, na base dos efeitos dele: uma por quadro lido no trecho, uma por slot nos demais
+    /// (no congelado o rastreio de fonte é avaliado no quadro dele em todo slot).
     fn cada(&self, mut f: impl FnMut(Amostra)) {
         match (self.base, self.tab, self.quadros) {
             (Base::Fonte, Some(tab), Some((a, b))) => {
                 for j in a..b {
                     let t = tab.tempo(j);
-                    let ate = if j + 1 < tab.pts.len() { tab.tempo(j + 1) } else { tab.fim_s() };
-                    f(Amostra { de: t, ate, t, pts: Some(tab.pts[j]) });
+                    f(Amostra { inst: t, t, pts: Some(tab.pts[j]) });
                 }
             }
-            (Base::Congelado, Some(tab), Some((j, _))) => f(Amostra { de: 0.0, ate: self.dur_s, t: tab.tempo(j), pts: Some(tab.pts[j]) }),
+            (Base::Congelado, Some(tab), Some((j, _))) => {
+                for k in 0..self.n_q {
+                    f(Amostra { inst: tempo::instante_do_slot(k as u64, self.fps), t: tab.tempo(j), pts: Some(tab.pts[j]) });
+                }
+            }
             (Base::Local, _, _) => {
-                let passo = self.fps.den as f64 / self.fps.num as f64;
                 for k in 0..self.n_q {
                     let t = tempo::instante_do_slot(k as u64, self.fps);
-                    f(Amostra { de: t, ate: t + passo, t, pts: None });
+                    f(Amostra { inst: t, t, pts: None });
                 }
             }
             _ => {}
@@ -211,19 +239,15 @@ impl Uso<'_> {
     fn cada_na_fonte(&self, mut f: impl FnMut(Amostra)) {
         match (self.base, self.tab, self.quadros) {
             (Base::Fonte, ..) => self.cada(f),
-            (Base::Congelado, Some(tab), Some((j, _))) => {
-                f(Amostra { de: tab.tempo(j), ate: tab.tempo(j) + tab.duracao(j), t: tab.tempo(j), pts: Some(tab.pts[j]) })
-            }
+            (Base::Congelado, Some(tab), Some((j, _))) => f(Amostra { inst: tab.tempo(j), t: tab.tempo(j), pts: Some(tab.pts[j]) }),
             _ => {}
         }
     }
 }
 
-/// `ativo` (None = o clipe inteiro) vale na amostra? Conta a amostra que o intervalo toca e a que começa exatamente
-/// em `ate` (o motor testa o instante do quadro, em intervalo fechado): nunca menos quadros que o render.
-fn ativo_em(ativo: Option<&super::modelo::Intervalo>, a: &Amostra) -> bool {
-    let (de, ate) = ativo.map_or((None, None), |i| (i.de, i.ate));
-    de.is_none_or(|de| de < a.ate || de <= a.de) && ate.is_none_or(|ate| a.de <= ate)
+/// O efeito vale na amostra? A regra do motor (`efeitos::base_ativa`: intervalo fechado no instante do quadro).
+fn ativo_em(base: &EfBase, a: &Amostra) -> bool {
+    efeitos::base_ativa(base, a.inst)
 }
 
 // ---------------------------------------------------------------------------
@@ -238,6 +262,10 @@ struct Validacao<'a> {
     ctx: &'a Contexto<'a>,
     exportacao: &'a Exportacao,
     final_: bool,
+    /// Alvo que exporta (a exportação final ou a análise sem alvo): a predefinição pesa.
+    exporta: bool,
+    /// Alvo com som (todos menos o quadro final).
+    com_som: bool,
     fps: Racional,
     midias: HashMap<&'a str, &'a MidiaRef>,
     rastreios: HashMap<&'a str, &'a Rastreio>,
@@ -263,6 +291,8 @@ impl<'a> Validacao<'a> {
             ctx,
             exportacao,
             final_,
+            exporta: matches!(alvo, None | Some(Alvo::Final { .. })),
+            com_som: !matches!(alvo, Some(Alvo::Quadro { .. })),
             fps: p.saida.fps,
             midias: p.midias.iter().map(|m| (m.id.as_str(), m)).collect(),
             rastreios: p.rastreios.iter().map(|r| (r.id.as_str(), r)).collect(),
@@ -294,6 +324,7 @@ impl<'a> Validacao<'a> {
         self.transicoes();
         self.sobreposicoes();
         self.audios();
+        self.fase_0();
         self.legendas();
         self.marcadores();
         self.midias_usadas();
@@ -345,8 +376,7 @@ impl<'a> Validacao<'a> {
     /// Erro quando vale no render; aviso quando está desligado (a tela o trata como desconhecido do mesmo jeito).
     fn desconhecido<T: serde::de::DeserializeOwned>(&mut self, v: &Value, tipos: &[&str], valendo: bool, onde: &Onde) {
         let nivel = if valendo { Nivel::Erro } else { Nivel::Aviso };
-        let conhecido = v.get("tipo").and_then(Value::as_str).is_some_and(|t| tipos.contains(&t));
-        if conhecido {
+        if codigo_do_desconhecido(v, tipos) == ITEM_INVALIDO {
             let msg = serde_json::from_value::<T>(v.clone()).err().map(|e| e.to_string());
             self.add(ITEM_INVALIDO, onde, None, msg.as_deref(), Some(nivel));
         } else {
@@ -554,11 +584,14 @@ impl<'a> Validacao<'a> {
         }
     }
 
-    /// Mídia mostrada como foto. A ocultação da mídia não tem quadro lido onde entrar e o motor não a aplica:
-    /// recusada, nunca ignorada (D17).
+    /// Mídia mostrada como foto: tem de ser do tipo imagem (o rasterizador lê o arquivo como imagem). A ocultação
+    /// da mídia não tem quadro lido onde entrar e o motor não a aplica: recusada, nunca ignorada (D17).
     fn imagem_existe(&mut self, id: &'a str, onde: &Onde) -> bool {
         if self.midias.get(id).is_some_and(|m| m.ocultacoes.iter().any(|o| o.base.ligado)) {
             self.add(NAO_SUPORTADO, &onde.com_midia(id), None, Some("ocultar_imagem"), None);
+        }
+        if self.midias.get(id).is_some_and(|m| m.tipo != TipoMidia::Imagem) {
+            self.por(ITEM_INVALIDO, &onde.com_midia(id).campo("midia"));
         }
         self.midia_existe(id, onde)
     }
@@ -576,7 +609,7 @@ impl<'a> Validacao<'a> {
                 self.velocidade(&t.velocidade, Some((t.inicio_s, t.fim_s)), &onde);
                 self.audio_do_clipe(&t.audio, &onde);
                 let tab = if existe { self.tabela(&t.midia) } else { None };
-                let quadros = match tab {
+                let lido = match tab {
                     Some(tab) => self.trecho_na_tabela(tab, t.inicio_s, t.inicio_pts, t.fim_s, t.fim_pts, &t.velocidade, &onde.com_midia(&t.midia)),
                     None => {
                         let fonte_sem_quadros = existe && self.ctx.fontes.contains_key(t.midia.as_str());
@@ -586,26 +619,18 @@ impl<'a> Validacao<'a> {
                         None
                     }
                 };
-                let faixa = match (tab, quadros) {
-                    (Some(tab), Some((a, b))) => Some((tab.tempo(a), if b < tab.pts.len() { tab.tempo(b) } else { tab.fim_s() })),
-                    _ => Some((t.inicio_s, t.fim_s)),
-                };
-                let uso = Uso {
-                    onde,
-                    midia: Some(&t.midia),
-                    base: Base::Fonte,
-                    efeitos: &t.base.efeitos,
-                    tab,
-                    quadros,
-                    faixa,
-                    dur_s: 0.0,
-                    n_q: self.n_q_de(&t.base.id),
-                    fps,
-                };
+                let quadros = lido.as_ref().map(|(ab, _)| *ab);
+                let uso = Uso { onde, midia: Some(&t.midia), base: Base::Fonte, efeitos: &t.base.efeitos, tab, quadros, n_q: self.n_q_de(&t.base.id), fps };
                 self.efeitos(&uso);
                 self.da_fonte(&uso);
                 if let (Some(tab), Some((a, b))) = (tab, quadros) {
                     self.estabilizar_na_analise(&uso, tab, a, b, t.inicio_s, t.fim_s);
+                }
+                // enquadramento animado: o destino em cada slot, pelo quadro que o slot mostra
+                let animado = enquadramento::animado(&t.base.efeitos);
+                if let (true, Some(tab), Some((_, mapa)), Some(f)) = (animado, tab, &lido, self.ctx.fontes.get(t.midia.as_str())) {
+                    let tempos: Vec<f64> = mapa.iter().map(|&j| tab.tempo(j as usize)).collect();
+                    self.destino_do_enquadramento(&uso, TamanhoPx { w: f.exibido.0, h: f.exibido.1 }, &tempos);
                 }
                 self.ocultacoes_da_midia(&uso);
             }
@@ -624,20 +649,13 @@ impl<'a> Validacao<'a> {
                     let j = tab.do_par(g.instante_s, g.instante_pts);
                     Some((j, j + 1))
                 });
-                let uso = Uso {
-                    onde,
-                    midia: Some(&g.midia),
-                    base: Base::Congelado,
-                    efeitos: &g.base.efeitos,
-                    tab,
-                    quadros,
-                    faixa: Some((g.instante_s, g.instante_s)),
-                    dur_s: g.duracao_s,
-                    n_q: self.n_q_de(&g.base.id),
-                    fps,
-                };
+                let n_q = self.slots_locais(Some(g.duracao_s), self.n_q_de(&g.base.id));
+                let uso = Uso { onde, midia: Some(&g.midia), base: Base::Congelado, efeitos: &g.base.efeitos, tab, quadros, n_q, fps };
                 self.efeitos(&uso);
                 self.da_fonte(&uso);
+                if let Some(f) = self.ctx.fontes.get(g.midia.as_str()).filter(|_| enquadramento::animado(&g.base.efeitos)) {
+                    self.destino_do_enquadramento(&uso, TamanhoPx { w: f.exibido.0, h: f.exibido.1 }, &self.tempos_locais(n_q));
+                }
                 self.ocultacoes_da_midia(&uso);
             }
             ClipePrincipal::Imagem(i) => {
@@ -645,13 +663,24 @@ impl<'a> Validacao<'a> {
                 self.duracao(i.duracao_s, &onde);
                 let uso = self.uso_local(onde, &i.base.efeitos, Some(i.duracao_s), self.n_q_de(&i.base.id));
                 self.efeitos(&uso);
+                self.sem_fonte(&uso);
                 self.ampliacao(&uso, &i.midia);
+                // a origem do clipe de imagem é a foto em lados pares (a do motor)
+                if let Some(t) = motor_clipe::tamanho_da_imagem(self.p, self.ctx, &i.midia).filter(|_| enquadramento::animado(&i.base.efeitos)) {
+                    let origem = TamanhoPx { w: (t.w / 2 * 2).max(2), h: (t.h / 2 * 2).max(2) };
+                    self.destino_do_enquadramento(&uso, origem, &self.tempos_locais(uso.n_q));
+                }
             }
             ClipePrincipal::Titulo(t) => {
                 self.duracao(t.duracao_s, &onde);
                 self.titulo(&t.titulo, &onde);
                 let uso = self.uso_local(onde, &t.base.efeitos, Some(t.duracao_s), self.n_q_de(&t.base.id));
                 self.efeitos(&uso);
+                self.sem_fonte(&uso);
+                if enquadramento::animado(&t.base.efeitos) {
+                    let canvas = TamanhoPx { w: self.p.saida.largura, h: self.p.saida.altura };
+                    self.destino_do_enquadramento(&uso, canvas, &self.tempos_locais(uso.n_q));
+                }
             }
             ClipePrincipal::Tela(t) => {
                 // Fase 3: recusada antes do render; o resto só pela estrutura
@@ -670,13 +699,45 @@ impl<'a> Validacao<'a> {
 
     /// `dur_s` = duração declarada; None = até o fim da âncora ou do programa (sobreposto).
     fn uso_local(&self, onde: Onde, efeitos: &'a [Tolerante<Efeito>], dur_s: Option<f64>, n_q: u32) -> Uso<'a> {
-        let n_q = match dur_s {
-            // duração fora de faixa já é `duracao`: não percorre bilhões de slots
+        Uso { onde, midia: None, base: Base::Local, efeitos, tab: None, quadros: None, n_q: self.slots_locais(dur_s, n_q), fps: self.fps }
+    }
+
+    /// Slots a percorrer num clipe de base local: duração fora de faixa já é `duracao` e não percorre bilhões de slots.
+    fn slots_locais(&self, dur_s: Option<f64>, n_q: u32) -> u32 {
+        match dur_s {
             Some(d) if !(d.is_finite() && d <= DURACAO_MAX_S) => 0,
             _ if !self.fps_ok() => 0,
             _ => n_q.min(tempo::MAX_SLOTS),
-        };
-        Uso { onde, midia: None, base: Base::Local, efeitos, tab: None, quadros: None, faixa: None, dur_s: dur_s.unwrap_or(0.0), n_q, fps: self.fps }
+        }
+    }
+
+    /// Instantes locais dos `n` slots.
+    fn tempos_locais(&self, n: u32) -> Vec<f64> {
+        (0..n as u64).map(|k| tempo::instante_do_slot(k, self.fps)).collect()
+    }
+
+    /// Enquadramento animado em `conter` cujo destino muda entre os slots: o motor recusa (a regra é a dele,
+    /// `enquadramento::destino_variavel`, no canvas da saída).
+    fn destino_do_enquadramento(&mut self, uso: &Uso<'a>, origem: TamanhoPx, tempos: &[f64]) {
+        let s = &self.p.saida;
+        if origem.w == 0 || origem.h == 0 || s.largura == 0 || s.altura == 0 || !estrutura_do_enquadre_ok(uso.efeitos) {
+            return;
+        }
+        if enquadramento::destino_variavel(uso.efeitos, origem, TamanhoPx { w: s.largura, h: s.altura }, tempos) {
+            let id = primeiro_enquadramento(uso.efeitos).map(|q| q.base.id.as_str()).unwrap_or("");
+            self.add(NAO_SUPORTADO, &uso.onde.efeito(id).campo("regiao"), None, Some("enquadramento_variavel"), None);
+        }
+    }
+
+    /// Clipe sem fonte (foto, título): `ocultar` não tem quadro lido onde entrar e o motor recusa.
+    fn sem_fonte(&mut self, uso: &Uso<'a>) {
+        for e in uso.efeitos {
+            if let Tolerante::Conhecido(Efeito::Ocultar(o)) = e {
+                if o.base.ligado {
+                    self.add(NAO_SUPORTADO, &uso.onde.efeito(&o.base.id), None, Some("ocultar_sem_fonte"), None);
+                }
+            }
+        }
     }
 
     fn duracao(&mut self, d: f64, onde: &Onde) {
@@ -732,7 +793,7 @@ impl<'a> Validacao<'a> {
         }
     }
 
-    /// Faixa e mapa do trecho na tabela de quadros; devolve os quadros lidos quando o mapa fecha.
+    /// Faixa e mapa do trecho na tabela de quadros; devolve os quadros lidos e o quadro de cada slot quando o mapa fecha.
     #[allow(clippy::too_many_arguments)]
     fn trecho_na_tabela(
         &mut self,
@@ -743,7 +804,7 @@ impl<'a> Validacao<'a> {
         fim_pts: Option<i64>,
         v: &Velocidade,
         onde: &Onde,
-    ) -> Option<(usize, usize)> {
+    ) -> Option<((usize, usize), Vec<u32>)> {
         let sem = Onde { midia: None, ..onde.clone() };
         let inicio_na_tabela = inicio_pts.and_then(|p| tab.indice_do_pts(p)).is_some();
         let fim_na_tabela = fim_pts.and_then(|p| tab.indice_do_pts(p)).is_some();
@@ -782,7 +843,7 @@ impl<'a> Validacao<'a> {
                 if let Some(n) = taxa_variavel(tab, a, b) {
                     self.por_n(TAXA_VARIAVEL, onde, n);
                 }
-                Some((a, b))
+                Some(((a, b), m.quadro_do_slot))
             }
             Err(e) => {
                 let texto = e.to_string();
@@ -867,7 +928,7 @@ impl<'a> Validacao<'a> {
         for e in uso.efeitos {
             let e = match e {
                 Tolerante::Desconhecido(v) => {
-                    let valendo = v.get("ligado").and_then(Value::as_bool).unwrap_or(true);
+                    let valendo = efeito_desconhecido_ligado(v);
                     let o = efeito_onde(&uso.onde, v);
                     self.desconhecido::<Efeito>(v, TIPOS_EFEITO, valendo, &o);
                     continue;
@@ -885,10 +946,14 @@ impl<'a> Validacao<'a> {
                     self.por(INTERVALO, &onde.campo("ativo"));
                 }
             }
-            for filtro in filtros_de(e) {
+            for filtro in filtros_de(e, uso.efeitos) {
                 if !self.ctx.cap.filtros.contains(filtro) {
                     self.add(FILTRO_AUSENTE, &onde, None, Some(filtro), None);
                 }
+            }
+            // efeitos de origem: a Fase 0 não renderiza (o motor recusa); o rótulo é o tipo
+            if efeitos::familia(e) == efeitos::Familia::Origem {
+                self.add(NAO_SUPORTADO, &onde, None, Some(efeitos::tipo(e)), None);
             }
             match e {
                 Efeito::Enquadramento(q) => {
@@ -905,13 +970,19 @@ impl<'a> Validacao<'a> {
                         self.por(ITEM_INVALIDO, &onde.campo("graus"));
                     }
                 }
-                Efeito::MediaTemporal(_) => {
+                Efeito::MediaTemporal(m) => {
                     if uso.base == Base::Fonte {
                         self.por(MEDIA_DE_QUADROS, &onde);
+                    }
+                    if !MEDIA_QUADROS.contains(&m.quadros) {
+                        self.por(ITEM_INVALIDO, &onde.campo("quadros"));
                     }
                 }
                 Efeito::Ocultar(oc) => {
                     self.ocultar_estatico(oc, &onde);
+                    if uso.base == Base::Congelado && ocultar_do_congelado(oc, uso).is_none() {
+                        self.add(NAO_SUPORTADO, &onde.campo("ativo"), None, Some("ocultar_congelado"), None);
+                    }
                     if let Some(r) = self.rastreio_do_uso(&oc.alvo.rastreio, uso, &onde, true) {
                         self.ocultar_no_uso(oc, r, uso, &onde, false);
                     }
@@ -923,7 +994,7 @@ impl<'a> Validacao<'a> {
                     }
                     if let Some(r) = self.rastreio_do_uso(&h.alvo.rastreio, uso, &onde, false) {
                         self.tamanho_do_rastreio(r, h.alvo.forma != FormaRegiao::Silhueta, &onde);
-                        self.confirmado(r, uso, base.ativo.as_ref(), &onde);
+                        self.confirmado(r, uso, base, &onde);
                     }
                 }
                 Efeito::Destaque(d) => {
@@ -935,14 +1006,14 @@ impl<'a> Validacao<'a> {
                     if let Some(r) = self.rastreio_do_uso(&d.rastreio, uso, &onde, false) {
                         let exige = matches!(d.forma, FormaDestaque::Retangulo | FormaDestaque::Elipse | FormaDestaque::Colchetes);
                         self.tamanho_do_rastreio(r, exige, &onde);
-                        self.confirmado(r, uso, base.ativo.as_ref(), &onde);
+                        self.confirmado(r, uso, base, &onde);
                     }
                 }
                 Efeito::Lupa(l) => {
                     self.add(NAO_SUPORTADO, &onde, None, Some("lupa"), None);
                     self.cor(&l.moldura.cor, &onde.campo("moldura"));
                     if let Some(r) = self.rastreio_do_uso(&l.rastreio, uso, &onde, false) {
-                        self.confirmado(r, uso, base.ativo.as_ref(), &onde);
+                        self.confirmado(r, uso, base, &onde);
                     }
                 }
                 Efeito::Regua(rg) => {
@@ -965,7 +1036,7 @@ impl<'a> Validacao<'a> {
                     self.estilo(&v.estilo, &onde);
                     if let OndeVelocidade::Segue { rastreio, .. } = &v.onde {
                         if let Some(r) = self.rastreio_do_uso(rastreio, uso, &onde, false) {
-                            self.confirmado(r, uso, base.ativo.as_ref(), &onde);
+                            self.confirmado(r, uso, base, &onde);
                         }
                     }
                 }
@@ -975,17 +1046,21 @@ impl<'a> Validacao<'a> {
                     if !(t.largura_max.is_finite() && t.largura_max > 0.0) {
                         self.por(ITEM_INVALIDO, &onde.campo("largura_max"));
                     }
-                    self.lugar(&t.lugar, t.estilo.tamanho, &onde);
+                    if self.lugar_valido(&t.lugar, &onde) {
+                        self.lugar(&t.lugar, t.estilo.tamanho, &onde);
+                    }
                 }
                 Efeito::Carimbo(c) => {
                     self.estilo(&c.estilo, &onde);
-                    self.lugar(&c.lugar, c.estilo.tamanho, &onde);
+                    if self.lugar_valido(&c.lugar, &onde) {
+                        self.lugar(&c.lugar, c.estilo.tamanho, &onde);
+                    }
                     if c.mostra == MostraCarimbo::Relogio {
                         match &c.relogio {
                             None => self.por(ITEM_INVALIDO, &onde.campo("relogio")),
                             Some(r) => {
                                 let mut longe = false;
-                                self.cada_ativo(uso, base.ativo.as_ref(), |a| longe |= (a.t - r.media_time_s).abs() > RELOGIO_MAX_S);
+                                self.cada_ativo(uso, base, |a| longe |= (a.t - r.media_time_s).abs() > RELOGIO_MAX_S);
                                 if longe {
                                     self.por(RELOGIO_DISTANTE, &onde);
                                 }
@@ -995,6 +1070,7 @@ impl<'a> Validacao<'a> {
                 }
                 Efeito::Imagem(i) => {
                     self.imagem_existe(&i.midia, &onde);
+                    self.lugar_valido(&i.lugar, &onde);
                 }
                 Efeito::Estabilizar(_) | Efeito::Lente(_) | Efeito::Desentrelacar(_) | Efeito::Ajustes(_) | Efeito::Nitidez(_) => {}
             }
@@ -1034,6 +1110,18 @@ impl<'a> Validacao<'a> {
         }
     }
 
+    /// Ponto de apoio finito e a até 2^30 px do canvas da saída (o limite do rasterizador; mais longe a conta em
+    /// px estoura): senão `item_invalido` no `lugar`.
+    fn lugar_valido(&mut self, l: &Lugar, onde: &Onde) -> bool {
+        let s = &self.p.saida;
+        let longe = |v: f64, lado: u32| !v.is_finite() || (v * lado.max(1) as f64).abs() > MAX_LUGAR_PX;
+        let ok = !longe(l.x, s.largura) && !longe(l.y, s.altura);
+        if !ok {
+            self.por(ITEM_INVALIDO, &onde.campo("lugar"));
+        }
+        ok
+    }
+
     /// Ponto de apoio fora da área segura, ou uma linha do texto já passando dela na vertical.
     fn lugar(&mut self, l: &Lugar, tamanho: f64, onde: &Onde) {
         let dentro = |v: f64| (AREA_SEGURA - EPS..=1.0 - AREA_SEGURA + EPS).contains(&v);
@@ -1062,7 +1150,9 @@ impl<'a> Validacao<'a> {
             if !(b.largura_max.is_finite() && b.largura_max > 0.0) {
                 self.por(ITEM_INVALIDO, &onde.campo("largura_max"));
             }
-            self.lugar(&b.lugar, b.estilo.tamanho, onde);
+            if self.lugar_valido(&b.lugar, onde) {
+                self.lugar(&b.lugar, b.estilo.tamanho, onde);
+            }
         }
     }
 
@@ -1071,6 +1161,8 @@ impl<'a> Validacao<'a> {
         let o = onde.campo("alvo");
         if !(a.margem.is_finite() && a.borda_suave.is_finite()) {
             self.por(REGIAO, &o);
+        } else if !(0.0..=BORDA_SUAVE_MAX).contains(&a.borda_suave) {
+            self.por(ITEM_INVALIDO, &onde.campo("borda_suave"));
         }
         if a.forma == FormaRegiao::Poligono {
             let ok = a.vertices.as_ref().is_some_and(|v| v.len() >= 3 && v.iter().all(|p| p.x.is_finite() && p.y.is_finite()));
@@ -1096,6 +1188,10 @@ impl<'a> Validacao<'a> {
         let texto = matches!(oc.conteudo, ConteudoOculto::Placa | ConteudoOculto::Documento | ConteudoOculto::Tela);
         if oc.modo != ModoOcultar::Solido && texto {
             self.por(OCULTACAO_REVERSIVEL, onde);
+        }
+        // o motor prende a intensidade em 0..1: valor fora disso não sai como foi gravado
+        if !(0.0..=1.0).contains(&oc.intensidade) {
+            self.por(ITEM_INVALIDO, &onde.campo("intensidade"));
         }
         let i = oc.intensidade.clamp(0.0, 1.0);
         let fraca = match oc.modo {
@@ -1128,11 +1224,25 @@ impl<'a> Validacao<'a> {
                 }
             }
         };
-        let ativo = oc.base.ativo.as_ref();
-        if da_midia {
-            uso.cada_na_fonte(|a| if ativo_em(ativo, &a) { conta(a) });
-        } else {
-            uso.cada(|a| if ativo_em(ativo, &a) { conta(a) });
+        let b = &oc.base;
+        match (da_midia, uso.base) {
+            (true, _) => uso.cada_na_fonte(|a| {
+                if ativo_em(b, &a) {
+                    conta(a)
+                }
+            }),
+            // congelado: a ocultação do clipe vale por quadro lido (um só) e o `ativo` é local; vale no quadro só
+            // quando pega todos os slots (`ocultar_do_congelado`; parte é recusada lá)
+            (false, Base::Congelado) => {
+                if ocultar_do_congelado(oc, uso) == Some(true) {
+                    uso.cada_na_fonte(&mut conta)
+                }
+            }
+            (false, _) => uso.cada(|a| {
+                if ativo_em(b, &a) {
+                    conta(a)
+                }
+            }),
         }
         if nada > 0 {
             self.por_n(SEM_COBERTURA, onde, nada);
@@ -1144,9 +1254,9 @@ impl<'a> Validacao<'a> {
             self.por_n(OCULTAR_INCERTO, onde, incerto);
         }
         if da_midia {
-            self.confirmado_na_fonte(r, uso, ativo, onde);
+            self.confirmado_na_fonte(r, uso, b, onde);
         } else {
-            self.confirmado(r, uso, ativo, onde);
+            self.confirmado(r, uso, b, onde);
         }
     }
 
@@ -1244,25 +1354,25 @@ impl<'a> Validacao<'a> {
     }
 
     /// Amostras do clipe em que o efeito está ativo.
-    fn cada_ativo(&self, uso: &Uso<'a>, ativo: Option<&super::modelo::Intervalo>, mut f: impl FnMut(Amostra)) {
+    fn cada_ativo(&self, uso: &Uso<'a>, base: &EfBase, mut f: impl FnMut(Amostra)) {
         uso.cada(|a| {
-            if ativo_em(ativo, &a) {
+            if ativo_em(base, &a) {
                 f(a)
             }
         });
     }
 
     /// Detecção automática (ou Pessoas em `auto`) só vale com confirmação do mesmo conteúdo cobrindo o uso.
-    fn confirmado(&mut self, r: &Rastreio, uso: &Uso<'a>, ativo: Option<&super::modelo::Intervalo>, onde: &Onde) {
+    fn confirmado(&mut self, r: &Rastreio, uso: &Uso<'a>, base: &EfBase, onde: &Onde) {
         let mut faixa: Option<(f64, f64)> = None;
-        self.cada_ativo(uso, ativo, |a| faixa = Some(faixa.map_or((a.t, a.t), |(x, y)| (x.min(a.t), y.max(a.t)))));
+        self.cada_ativo(uso, base, |a| faixa = Some(faixa.map_or((a.t, a.t), |(x, y)| (x.min(a.t), y.max(a.t)))));
         self.confirmacao(r, faixa, onde);
     }
 
-    fn confirmado_na_fonte(&mut self, r: &Rastreio, uso: &Uso<'a>, ativo: Option<&super::modelo::Intervalo>, onde: &Onde) {
+    fn confirmado_na_fonte(&mut self, r: &Rastreio, uso: &Uso<'a>, base: &EfBase, onde: &Onde) {
         let mut faixa: Option<(f64, f64)> = None;
         uso.cada_na_fonte(|a| {
-            if ativo_em(ativo, &a) {
+            if ativo_em(base, &a) {
                 faixa = Some(faixa.map_or((a.t, a.t), |(x, y)| (x.min(a.t), y.max(a.t))));
             }
         });
@@ -1299,14 +1409,21 @@ impl<'a> Validacao<'a> {
             let b = base_clipe(c);
             let saida = if i + 1 < clipes.len() { entrada(clipes[i + 1]) } else { p.fecho.as_ref() };
             let onde = Onde::clipe(&b.id).campo("transicao_entrada");
-            let mut ok = true;
+            let (mut ok, mut de_outra_fase) = (true, false);
             for t in [b.transicao_entrada.as_ref(), if i + 1 == clipes.len() { p.fecho.as_ref() } else { None }].into_iter().flatten() {
-                if !super::motor::juncao::TRANSICOES.contains(&t.tipo.as_str()) || !(t.duracao_s.is_finite() && t.duracao_s >= 0.0) {
+                if t.tipo.trim().is_empty() || !(t.duracao_s.is_finite() && t.duracao_s >= 0.0) {
                     ok = false;
+                } else if !super::motor::juncao::TRANSICOES.contains(&t.tipo.as_str()) {
+                    // as do `xfade` (com sobreposição) entram no P1.1: o motor recusa
+                    de_outra_fase = true;
                 }
             }
             if !ok {
                 self.por(TRANSICAO, &onde);
+                continue;
+            }
+            if de_outra_fase {
+                self.add(NAO_SUPORTADO, &onde, None, Some("transicao"), None);
                 continue;
             }
             if !self.fps_ok() {
@@ -1372,13 +1489,27 @@ impl<'a> Validacao<'a> {
                     ClipeSobreposto::Imagem(i) => {
                         self.imagem_existe(&i.midia, &onde);
                         let uso = self.uso_local(onde, &b.efeitos, b.duracao_s, n_q);
+                        self.efeitos_em_sobreposto(&uso);
                         self.efeitos(&uso);
                     }
                     ClipeSobreposto::Titulo(x) => {
                         self.titulo(&x.titulo, &onde);
                         let uso = self.uso_local(onde, &b.efeitos, b.duracao_s, n_q);
+                        self.efeitos_em_sobreposto(&uso);
                         self.efeitos(&uso);
                     }
+                }
+            }
+        }
+    }
+
+    /// Efeito ligado em clipe sobreposto: a Fase 0 não aplica (o motor recusa). Um problema por efeito.
+    fn efeitos_em_sobreposto(&mut self, uso: &Uso<'a>) {
+        for e in uso.efeitos {
+            if let Tolerante::Conhecido(e) = e {
+                let b = base_efeito(e);
+                if b.ligado {
+                    self.add(NAO_SUPORTADO, &uso.onde.efeito(&b.id), None, Some("efeito_sobreposto"), None);
                 }
             }
         }
@@ -1426,6 +1557,51 @@ impl<'a> Validacao<'a> {
         }
     }
 
+    // ---- o que o motor da Fase 0 recusa fora dos efeitos (contratos (h) 1)
+
+    /// Predefinição e legendas de outra fase (só na exportação) e o som que o motor de áudio da Fase 0 não faz (só quando o
+    /// alvo tem som e a saída leva áudio): as mesmas condições de `saida::codificacao` e de `audio::montar`.
+    fn fase_0(&mut self) {
+        let p = self.p;
+        if self.exporta && self.exportacao.predefinicao != Predefinicao::Juri {
+            self.add(NAO_SUPORTADO, &Onde::default().campo("exportacao"), None, Some("predefinicao"), None);
+        }
+        // legendas queimadas ou em arquivo são do P1.6: o motor não as gera e recusa (nunca saem faltando caladas)
+        if self.exporta && self.exportacao.legendas != ModoLegendas::Nenhuma && !p.legendas.itens.is_empty() {
+            self.add(NAO_SUPORTADO, &Onde::default().campo("legendas"), None, Some("legendas"), None);
+        }
+        if !(self.com_som && p.saida.audio) {
+            return;
+        }
+        if p.mixagem.normalizar.is_some() {
+            self.add(NAO_SUPORTADO, &Onde::default().campo("normalizar"), None, Some("normalizar"), None);
+        }
+        if p.mixagem.limitador {
+            self.add(NAO_SUPORTADO, &Onde::default().campo("limitador"), None, Some("limitador"), None);
+        }
+        for c in &p.principal {
+            let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = c else { continue };
+            if t.base.desligado || t.audio.mudo {
+                continue;
+            }
+            let onde = Onde::clipe(&t.base.id).campo("audio");
+            if !t.audio.silencios.is_empty() {
+                self.add(NAO_SUPORTADO, &onde, None, Some("silenciar"), None);
+            }
+            if volume_animado(&t.audio.volume) {
+                self.add(NAO_SUPORTADO, &onde, None, Some("volume_animado"), None);
+            }
+        }
+        for t in p.audios.iter().filter(|t| !t.mudo && !t.clipes.is_empty()) {
+            if t.abaixa_original {
+                self.add(NAO_SUPORTADO, &Onde::default().trilha(&t.id).campo("abaixa_original"), None, Some("abaixar"), None);
+            }
+            for c in t.clipes.iter().filter(|c| volume_animado(&c.volume)) {
+                self.add(NAO_SUPORTADO, &Onde::clipe(&c.id).trilha(&t.id).campo("volume"), None, Some("volume_animado"), None);
+            }
+        }
+    }
+
     // ---- legendas
 
     fn legendas(&mut self) {
@@ -1447,7 +1623,8 @@ impl<'a> Validacao<'a> {
                 RefLegenda::Programa { .. } => true,
             };
             if !(de.is_finite() && ate.is_finite() && ate > de) || g.texto.trim().is_empty() || g.texto.chars().count() > LIMITE_TEXTO || !midia_ok {
-                self.por(LEGENDA, &onde);
+                // só barra quando as legendas saem; com "nenhuma" a tela avisa
+                self.add(LEGENDA, &onde, None, None, Some(if saem { Nivel::Erro } else { Nivel::Aviso }));
                 continue;
             }
             if !saem {
@@ -1688,8 +1865,9 @@ fn efeito_onde(clipe: &Onde, v: &Value) -> Onde {
     Onde { efeito: v.get("id").and_then(Value::as_str).map(str::to_string), ..clipe.clone() }
 }
 
-/// Filtros opcionais do ffmpeg que o efeito pede (os obrigatórios a sonda já exige).
-fn filtros_de(e: &Efeito) -> Vec<&'static str> {
+/// Filtros opcionais do ffmpeg que o efeito pede (os obrigatórios a sonda já exige). Enquadramento: só o que vale
+/// (o primeiro ligado) e só quando o motor o trata como animado (`enquadramento::animado`).
+fn filtros_de(e: &Efeito, todos: &[Tolerante<Efeito>]) -> Vec<&'static str> {
     match e {
         Efeito::Estabilizar(s) if s.trf_sha256.is_none() => vec!["vidstabdetect", "vidstabtransform"],
         Efeito::Estabilizar(_) => vec!["vidstabtransform"],
@@ -1697,7 +1875,7 @@ fn filtros_de(e: &Efeito) -> Vec<&'static str> {
         Efeito::Desentrelacar(_) => vec!["bwdif"],
         Efeito::MediaTemporal(_) => vec!["tmix"],
         Efeito::Nitidez(_) => vec!["unsharp"],
-        Efeito::Enquadramento(q) if matches!(&q.regiao, Animavel::Chaves(ks) if ks.len() > 1) => vec!["perspective"],
+        Efeito::Enquadramento(q) if primeiro_enquadramento(todos).is_some_and(|p| std::ptr::eq(p, q)) && enquadramento::animado(todos) => vec!["perspective"],
         _ => Vec::new(),
     }
 }
@@ -1709,6 +1887,21 @@ fn caixa_finita(c: &Caixa) -> bool {
 /// Tempos finitos e em ordem (iguais valem: a última vence).
 fn chaves_em_ordem<T>(ks: &[Chave<T>]) -> bool {
     ks.iter().all(|k| k.t.is_finite()) && ks.windows(2).all(|w| w[0].t <= w[1].t)
+}
+
+/// `ocultar` do próprio clipe congelado, pela regra do motor (`clipe::efeitos_do_congelado`): Some(true) = vale no
+/// quadro (o `ativo` local pega todos os slots), Some(false) = não vale (nenhum), None = só parte (recusado).
+fn ocultar_do_congelado(oc: &EfOcultar, uso: &Uso) -> Option<bool> {
+    let e = [Tolerante::Conhecido(Efeito::Ocultar(oc.clone()))];
+    match motor_clipe::efeitos_do_congelado(&e, uso.n_q, uso.fps) {
+        Err(_) => None,
+        Ok(v) => Some(matches!(&v[0], Tolerante::Conhecido(Efeito::Ocultar(o)) if o.base.ligado)),
+    }
+}
+
+/// Volume com chaves de valores diferentes (o motor de áudio da Fase 0 só faz volume fixo; chaves iguais valem como fixo).
+fn volume_animado(v: &Animavel<f64>) -> bool {
+    matches!(v, Animavel::Chaves(ks) if ks.windows(2).any(|w| w[0].v != w[1].v))
 }
 
 /// Estrutura de um `Animavel`: lista de chaves não vazia e em ordem (contratos (f) 7).
@@ -2045,7 +2238,8 @@ mod testes {
         e.personalizada = Some(super::super::modelo::Personalizada {
             codec: Codec::H264, conteiner: super::super::modelo::Conteiner::Mp4, qualidade: 20.0, altura_max: Some(2160), audio_kbps: 192 });
         c.alvo = Some(Alvo::Final { exportacao: e });
-        c.so(&[]);
+        // a altura máxima traz o lado para baixo de 4096; a predefinição é de outra fase
+        c.so(&[NAO_SUPORTADO]);
     }
 
     #[test]
@@ -2138,7 +2332,7 @@ mod testes {
         c.so(&[INTERVALO]);
         // ativo invertido num efeito
         let mut c = cena();
-        efeito(&mut c, com(base("nitidez", "e2"), json!({ "quantidade": 0.5, "ativo": { "de": 2.0, "ate": 1.5 } })));
+        efeito(&mut c, com(base("girar", "e2"), json!({ "graus": 0, "espelhar_h": false, "espelhar_v": false, "ativo": { "de": 2.0, "ate": 1.5 } })));
         c.so(&[INTERVALO]);
         // P passando de 2^53 (base de tempo fina demais)
         let mut c = cena();
@@ -2166,12 +2360,13 @@ mod testes {
             "ancoras": [{ "t": 5.0, "pts": null, "v": { "x": 0.1, "y": 0.1, "w": 0.2, "h": 0.2 }, "interp": "linear" }], "denso": null,
             "silhuetas": null, "ausencias": [], "origem": { "tipo": "manual" }, "confirmacao": null }]);
         let inicio = std::time::Instant::now();
-        c.so(&[DURACAO]);
+        // ocultar em título: a Fase 0 recusa (o motor não tem quadro lido onde aplicar)
+        c.so(&[DURACAO, NAO_SUPORTADO]);
         assert!(inicio.elapsed().as_secs() < LIMITE_RAPIDO_S * 3, "{:?}", inicio.elapsed());
         // com duração válida a mesma ocultação percorre os slots e acha os 150 antes da âncora
         c.p["principal"][0]["duracao_s"] = json!(10.0);
-        c.so(&[SEM_COBERTURA]);
-        assert_eq!(c.problemas()[0].n, Some(150));
+        c.so(&[SEM_COBERTURA, NAO_SUPORTADO]);
+        assert_eq!(c.problemas().iter().find(|p| p.codigo == SEM_COBERTURA).unwrap().n, Some(150));
     }
 
     /// Limite real (s) do teste acima; medido com folga de 3× enquanto houver outros agentes na máquina.
@@ -2195,7 +2390,13 @@ mod testes {
     #[test]
     fn transicao() {
         let mut c = cena();
+        // transição do `xfade` (Fase 1, com sobreposição): o motor recusa
         c.p["principal"][0]["transicao_entrada"] = json!({ "tipo": "fundir", "duracao_s": 0.5, "audio": "acompanhar" });
+        c.so(&[NAO_SUPORTADO]);
+        assert_eq!(c.problemas()[0].mensagem, "Ainda não suportado: transição");
+        c.p["principal"][0]["transicao_entrada"]["tipo"] = json!(" ");
+        c.so(&[TRANSICAO]);
+        c.p["principal"][0]["transicao_entrada"] = json!({ "tipo": "escurecer", "duracao_s": -1.0, "audio": "acompanhar" });
         c.so(&[TRANSICAO]);
         // escurecer: entrada + saída maior que o clipe (60 slots)
         let mut c = cena();
@@ -2287,10 +2488,11 @@ mod testes {
         c.p["rastreios"] = json!([rastreio(&[30])]);
         efeito(&mut c, com(base("lente", "e3"), json!({ "k1": -0.1, "k2": 0.0, "cx": 0.5, "cy": 0.5, "perfil": "" })));
         efeito(&mut c, destaque("r1"));
-        c.so(&[RASTREIO_ESPACO]);
+        // a lente é de origem: a Fase 0 também a recusa
+        c.so(&[RASTREIO_ESPACO, NAO_SUPORTADO]);
         let espaco = geometria::espaco_de_origem(SHA, &c.projeto().principal_efeitos());
         c.p["rastreios"][0]["espaco"] = json!(espaco);
-        c.so(&[]);
+        c.so(&[NAO_SUPORTADO]);
     }
 
     trait Efeitos {
@@ -2370,29 +2572,46 @@ mod testes {
         let legenda = |origem: &str, conferida: bool, texto: &str| json!({ "id": "l1", "texto": texto, "locutor": null, "origem": origem,
             "conferida": conferida, "locutor_auto": false, "ref": { "tipo": "fonte", "midia": "m1", "de": 1.6, "ate": 1.8 } });
         let mut c = cena();
+        // sem som na saída: silenciar (Fase 1) não pesa, e a regra das legendas não depende do som
+        c.p["saida"]["audio"] = json!(false);
         c.p["legendas"] = json!({ "estilo": estilo(), "lugar": { "x": 0.5, "y": 0.9, "h": "centro", "v": "base" }, "linhas_max": 2, "origem": null,
                                   "itens": [legenda("perito", true, " ")] });
         c.so(&[LEGENDA]);
         assert_eq!(c.problemas()[0].clipe.as_deref(), Some("l1"));
+        // legenda vazia: com "nenhuma" é aviso; só barra quando as legendas saem (contratos (h) 4)
+        assert_eq!(c.problemas()[0].nivel, Nivel::Aviso);
+        // quando saem, a Fase 0 também recusa (o motor não gera legenda: `nao_suportado`), ao lado das regras delas
+        let das_legendas = |c: &Cena| c.problemas().iter().filter(|p| p.codigo != NAO_SUPORTADO).map(|p| (p.codigo, p.nivel)).collect::<Vec<_>>();
+        c.p["saida"]["exportacao"]["legendas"] = json!("arquivo");
+        assert_eq!(das_legendas(&c), vec![(LEGENDA, Nivel::Erro)]);
+        let recusa: Vec<_> = c.problemas().into_iter().filter(|p| p.codigo == NAO_SUPORTADO).collect();
+        assert_eq!(recusa.iter().map(|p| (p.nivel, p.campo.as_deref(), p.mensagem.as_str())).collect::<Vec<_>>(), vec![(Nivel::Erro, Some("legendas"), "Ainda não suportado: legendas")]);
+        c.p["legendas"]["itens"][0]["ref"]["ate"] = json!(1.6);
+        assert_eq!(das_legendas(&c), vec![(LEGENDA, Nivel::Erro)]);
+        c.p["saida"]["exportacao"]["legendas"] = json!("nenhuma");
+        assert_eq!(c.problemas().iter().map(|p| (p.codigo, p.nivel)).collect::<Vec<_>>(), vec![(LEGENDA, Nivel::Aviso)]);
         // só valem quando as legendas saem
         c.p["legendas"]["itens"] = json!([legenda("ia", false, "Para!")]);
         c.so(&[]);
         c.p["saida"]["exportacao"]["legendas"] = json!("arquivo");
-        c.so(&[LEGENDA_NAO_CONFERIDA]);
+        c.so(&[LEGENDA_NAO_CONFERIDA, NAO_SUPORTADO]);
         c.p["legendas"]["itens"] = json!([legenda("perito", true, "Para!")]);
-        c.so(&[]);
+        c.so(&[NAO_SUPORTADO]);
         c.p["principal"][0]["audio"]["silencios"] = json!([{ "id": "s1", "de": 1.5, "ate": 2.0, "modo": "tom", "motivo": "nome" }]);
-        c.so(&[LEGENDA_SOB_SILENCIO]);
+        c.so(&[LEGENDA_SOB_SILENCIO, NAO_SUPORTADO]);
         // no tempo do programa: o silêncio de 1,5 a 2,0 na fonte cai em 0,5 a 1,0 no programa
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 0.9, "ate": 1.2 });
-        c.so(&[LEGENDA_SOB_SILENCIO]);
+        c.so(&[LEGENDA_SOB_SILENCIO, NAO_SUPORTADO]);
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 1.0, "ate": 1.2 });
-        c.so(&[]);
+        c.so(&[NAO_SUPORTADO]);
         // a 2× o silêncio cai em 0,25 a 0,5 s do programa
         c.p["principal"][0]["velocidade"]["fator"] = json!(2.0);
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 0.3, "ate": 0.4 });
-        c.so(&[LEGENDA_SOB_SILENCIO]);
+        c.so(&[LEGENDA_SOB_SILENCIO, NAO_SUPORTADO]);
         c.p["legendas"]["itens"][0]["ref"] = json!({ "tipo": "programa", "de": 0.5, "ate": 0.6 });
+        c.so(&[NAO_SUPORTADO]);
+        // sem itens não há o que sair: nada a recusar
+        c.p["legendas"]["itens"] = json!([]);
         c.so(&[]);
     }
 
@@ -2405,9 +2624,10 @@ mod testes {
     fn estabilizar_fora_da_analise() {
         let mut c = cena();
         efeito(&mut c, estabilizar(45, 75));
-        c.so(&[ESTABILIZAR_FORA_DA_ANALISE]);
+        // estabilizar é de origem: a Fase 0 também o recusa (a regra da faixa segue conferida)
+        c.so(&[ESTABILIZAR_FORA_DA_ANALISE, NAO_SUPORTADO]);
         c.p["principal"][0]["efeitos"] = json!([estabilizar(0, 89)]);
-        c.so(&[]);
+        c.so(&[NAO_SUPORTADO]);
     }
 
     fn regua(regiao: Value) -> Value {
@@ -2437,7 +2657,8 @@ mod testes {
         let mut c = cena();
         c.cap.filtros.remove("unsharp");
         efeito(&mut c, com(base("nitidez", "e2"), json!({ "quantidade": 0.5 })));
-        c.so(&[FILTRO_AUSENTE]);
+        // efeito de origem: a Fase 0 também recusa (contratos (h) 1)
+        c.so(&[FILTRO_AUSENTE, NAO_SUPORTADO]);
         assert_eq!(c.problemas()[0].mensagem, "Filtro ausente no ffmpeg: unsharp");
         // estabilizar sem .trf pede também o vidstabdetect
         let mut c = cena();
@@ -2445,8 +2666,18 @@ mod testes {
         let mut e = estabilizar(0, 89);
         e["trf_sha256"] = json!(null);
         efeito(&mut c, e);
-        c.so(&[FILTRO_AUSENTE]);
+        c.so(&[FILTRO_AUSENTE, NAO_SUPORTADO]);
         c.p["principal"][0]["efeitos"][0]["trf_sha256"] = json!(SHA2);
+        c.so(&[NAO_SUPORTADO]);
+        // enquadramento animado sem `perspective`: o filtro falta só quando o motor o trata como animado
+        let mut c = cena();
+        c.cap.filtros.remove("perspective");
+        let regiao = |w: f64| json!([{ "t": t(30), "v": { "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 } }, { "t": t(80), "v": { "x": 0.0, "y": 0.0, "w": w, "h": w } }]);
+        efeito(&mut c, com(base("enquadramento", "e2"), json!({ "regiao": regiao(0.5), "ajuste": "cobrir", "interpolacao": "bilinear" })));
+        c.so(&[FILTRO_AUSENTE]);
+        assert_eq!(c.problemas()[0].mensagem, "Filtro ausente no ffmpeg: perspective");
+        // chaves iguais valem como região fixa (contratos (f) 5): sem `perspective`
+        c.p["principal"][0]["efeitos"][0]["regiao"] = regiao(1.0);
         c.so(&[]);
     }
 
@@ -2457,7 +2688,8 @@ mod testes {
         c.so(&[AUDIO]);
         let mut c = cena();
         c.p["principal"][0]["audio"]["silencios"] = json!([{ "id": "s1", "de": 2.0, "ate": 1.5, "modo": "tom", "motivo": "" }]);
-        c.so(&[AUDIO]);
+        // silenciar é da Fase 1: recusado também (contratos (h) 1)
+        c.so(&[AUDIO, NAO_SUPORTADO]);
         // narração presa a clipe inexistente, recorte invertido
         let clipe_audio = |pos: Value, ate: Value| json!({ "id": "a1", "nome": "", "midia": "m1", "pos": pos, "de_s": 1.0, "ate_s": ate,
             "volume": 1.0, "entrada_s": 0.0, "saida_s": 0.0 });
@@ -2630,7 +2862,7 @@ mod testes {
     fn media_de_quadros() {
         let mut c = cena();
         efeito(&mut c, com(base("media_temporal", "e2"), json!({ "quadros": 4 })));
-        c.so(&[MEDIA_DE_QUADROS]);
+        c.so(&[MEDIA_DE_QUADROS, NAO_SUPORTADO]);
     }
 
     #[test]
@@ -2684,7 +2916,8 @@ mod testes {
         c.fontes.insert("m1".into(), f);
         c.so(&[ENTRELACADO]);
         efeito(&mut c, com(base("desentrelacar", "e2"), json!({ "modo": "quadro", "ordem": "auto" })));
-        c.so(&[]);
+        // o aviso sai; o efeito é de origem e a Fase 0 o recusa
+        c.so(&[NAO_SUPORTADO]);
     }
 
     #[test]
@@ -2824,12 +3057,15 @@ mod testes {
         // um quadro antes: nada descoberto
         c.p["principal"][0]["efeitos"][0]["ativo"]["ate"] = json!(t(59));
         c.so(&[]);
-        // `de` no meio da duração de um quadro: esse quadro conta
+        // `de` no meio da duração de um quadro: o motor testa o instante do quadro (`efeitos::base_ativa`) e esse
+        // quadro não conta; a validação usa a mesma regra (contratos (h) 3)
         let mut c = cena();
         c.p["rastreios"] = json!([rastreio(&[60])]);
         let mut o = ocultar("r1");
         o["ativo"] = json!({ "de": t(59) + 0.01, "ate": null });
         efeito(&mut c, o);
+        c.so(&[]);
+        c.p["principal"][0]["efeitos"][0]["ativo"]["de"] = json!(t(59));
         c.so(&[SEM_COBERTURA]);
         assert_eq!(c.problemas()[0].n, Some(1));
     }
@@ -2901,11 +3137,12 @@ mod testes {
             "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [d],
             "titulo": { "modelo": "terco_inferior", "fundo": { "tipo": "transparente" }, "blocos": [] } }] }]);
         let inicio = std::time::Instant::now();
-        c.so(&[RASTREIO_NAO_CONFIRMADO]);
+        // efeito em sobreposto: a Fase 0 recusa, mas a conferência dele segue (o problema aparece igual)
+        c.so(&[NAO_SUPORTADO, RASTREIO_NAO_CONFIRMADO]);
         assert!(inicio.elapsed().as_secs() < LIMITE_RAPIDO_S * 3, "{:?}", inicio.elapsed());
         r["origem"] = json!({ "tipo": "manual" });
         c.p["rastreios"] = json!([r]);
-        c.so(&[]);
+        c.so(&[NAO_SUPORTADO]);
     }
 
     /// Todo id é `[A-Za-z0-9_-]{1,80}` (vira rótulo de grafo e nome de arquivo) e não se repete onde é chave de busca.
@@ -2916,7 +3153,7 @@ mod testes {
         c.so(&[ESQUEMA]);
         assert_eq!((c.problemas()[0].clipe.as_deref(), c.problemas()[0].campo.as_deref()), (Some("a/b"), Some("id")));
         let mut c = cena();
-        efeito(&mut c, com(base("nitidez", "e 2"), json!({ "quantidade": 0.5 })));
+        efeito(&mut c, com(base("girar", "e 2"), json!({ "graus": 0, "espelhar_h": false, "espelhar_v": false })));
         c.so(&[ESQUEMA]);
         let mut c = cena();
         let mut r = rastreio(&[30]);
@@ -2965,11 +3202,11 @@ mod testes {
         // estabilização: a análise tem de alcançar o último quadro do trecho (89) e o primeiro (30)
         let mut c = cena();
         efeito(&mut c, estabilizar(30, 88));
-        c.so(&[ESTABILIZAR_FORA_DA_ANALISE]);
+        c.so(&[ESTABILIZAR_FORA_DA_ANALISE, NAO_SUPORTADO]);
         c.p["principal"][0]["efeitos"] = json!([estabilizar(31, 89)]);
-        c.so(&[ESTABILIZAR_FORA_DA_ANALISE]);
+        c.so(&[ESTABILIZAR_FORA_DA_ANALISE, NAO_SUPORTADO]);
         c.p["principal"][0]["efeitos"] = json!([estabilizar(30, 89)]);
-        c.so(&[]);
+        c.so(&[NAO_SUPORTADO]);
         // confirmação presa a outro denso
         let mut c = cena();
         let mut r = rastreio(&[30, 89]);
@@ -3100,6 +3337,132 @@ mod testes {
         let mut f = fonte(tabela());
         f.matriz = Matriz::Bt601;
         c.fontes.insert("m1".into(), f);
+        c.so(&[]);
+    }
+
+    /// Acréscimos do fecho (contratos (h) 4): lugar finito e a até 2^30 px, fundo de imagem do tipo imagem, cor do
+    /// fundo, parâmetros fora de faixa com o campo.
+    #[test]
+    fn lugar_fundo_e_parametros_fora_de_faixa() {
+        let texto = |x: f64| com(base("texto", "e2"), json!({ "conteudo": "x", "estilo": estilo(), "lugar": { "x": x, "y": 0.5, "h": "centro", "v": "meio" }, "largura_max": 0.8 }));
+        let campo = |c: &Cena, codigo: &str| c.problemas().iter().filter(|p| p.codigo == codigo).map(|p| p.campo.clone().unwrap_or_default()).collect::<Vec<_>>();
+        // 2^30 px = x · 1280: no limite passa (só a área segura avisa); além dele, e infinito, é inválido
+        let limite = MAX_LUGAR_PX / 1280.0;
+        for (x, esperado) in [(limite, vec![TEXTO_FORA]), (limite * 1.000001, vec![ITEM_INVALIDO]), (f64::MAX, vec![ITEM_INVALIDO]), (-limite * 2.0, vec![ITEM_INVALIDO])] {
+            let mut c = cena();
+            efeito(&mut c, texto(x));
+            c.so(&esperado);
+            if esperado == [ITEM_INVALIDO] {
+                assert_eq!(campo(&c, ITEM_INVALIDO), vec!["lugar"], "{x}");
+            }
+        }
+        // carimbo e bloco de título: a mesma regra
+        let mut c = cena();
+        efeito(&mut c, com(base("carimbo", "e3"), json!({ "mostra": "tempo_fonte", "formato": "hms_ms", "relogio": null, "estilo": estilo(),
+            "lugar": { "x": 1e12, "y": 0.1, "h": "dir", "v": "topo" } })));
+        c.so(&[ITEM_INVALIDO]);
+        let mut c = cena();
+        let mut t = titulo("c2", 2.0);
+        t["titulo"]["blocos"] = json!([{ "id": "b1", "papel": "titulo", "conteudo": "Fim", "largura_max": 0.8, "estilo": estilo(),
+            "lugar": { "x": 0.5, "y": -1e10, "h": "centro", "v": "meio" } }]);
+        c.p["principal"].as_array_mut().unwrap().push(t.clone());
+        c.so(&[ITEM_INVALIDO]);
+        assert_eq!(c.problemas()[0].clipe.as_deref(), Some("c2"));
+        // fundo: cor fora do formato; imagem que não existe ou que não é imagem
+        let mut c = cena();
+        t["titulo"]["blocos"] = json!([]);
+        t["titulo"]["fundo"] = json!({ "tipo": "cor", "cor": "azul" });
+        c.p["principal"].as_array_mut().unwrap().push(t.clone());
+        c.so(&[COR]);
+        let mut c = cena();
+        t["titulo"]["fundo"] = json!({ "tipo": "imagem", "midia": "m9" });
+        c.p["principal"].as_array_mut().unwrap().push(t.clone());
+        c.so(&[MIDIA_AUSENTE]);
+        t["titulo"]["fundo"] = json!({ "tipo": "imagem", "midia": "m1" });
+        c.p["principal"][1] = t.clone();
+        c.so(&[ITEM_INVALIDO]);
+        assert_eq!((campo(&c, ITEM_INVALIDO), c.problemas()[0].midia.as_deref()), (vec!["midia".to_string()], Some("m1")));
+        c.p["midias"].as_array_mut().unwrap().push(midia("m2", "imagem", SHA2));
+        c.fontes.insert("m2".into(), imagem());
+        c.midias.push(estado("m2", SituacaoMidia::Ok));
+        c.p["principal"][1]["titulo"]["fundo"]["midia"] = json!("m2");
+        c.so(&[]);
+        // parâmetros: intensidade fora de 0..1, borda suave acima de 0,5, média de quadros fora de 2..15
+        let mut c = cena();
+        c.p["rastreios"] = json!([rastreio(&[30])]);
+        efeito(&mut c, com(ocultar("r1"), json!({ "intensidade": 1.2 })));
+        c.so(&[ITEM_INVALIDO]);
+        assert_eq!(campo(&c, ITEM_INVALIDO), vec!["intensidade"]);
+        c.p["principal"][0]["efeitos"][0]["intensidade"] = json!(1.0);
+        c.p["principal"][0]["efeitos"][0]["alvo"]["borda_suave"] = json!(0.51);
+        c.so(&[ITEM_INVALIDO]);
+        assert_eq!(campo(&c, ITEM_INVALIDO), vec!["borda_suave"]);
+        c.p["principal"][0]["efeitos"][0]["alvo"]["borda_suave"] = json!(0.5);
+        c.so(&[]);
+        for (q, esperado) in [(1u32, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO, ITEM_INVALIDO]), (2, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO]), (15, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO]), (16, vec![MEDIA_DE_QUADROS, NAO_SUPORTADO, ITEM_INVALIDO])] {
+            let mut c = cena();
+            efeito(&mut c, com(base("media_temporal", "e2"), json!({ "quadros": q })));
+            c.so(&esperado);
+        }
+    }
+
+    /// Recusas da Fase 0 no item: efeito de origem, `ocultar` em foto ou título, efeito em sobreposto, transição de
+    /// outra fase, predefinição, som da Fase 1 (contratos (h) 1). O par com o motor está em `testes::aceite`.
+    #[test]
+    fn fase_0_recusa_no_item_com_rotulo() {
+        let rotulo = |c: &Cena| c.problemas().iter().filter(|p| p.codigo == NAO_SUPORTADO).map(|p| p.mensagem.clone()).collect::<Vec<_>>();
+        let mut c = cena();
+        efeito(&mut c, com(base("ajustes", "e2"), json!({ "brilho": 0.0, "contraste": 1.0, "saturacao": 1.0, "gama": 1.0 })));
+        c.so(&[NAO_SUPORTADO]);
+        assert_eq!(rotulo(&c), vec!["Ainda não suportado: ajustes de imagem"]);
+        assert_eq!(c.problemas()[0].efeito.as_deref(), Some("e2"));
+        // desligado: nada
+        c.p["principal"][0]["efeitos"][0]["ligado"] = json!(false);
+        c.so(&[]);
+        // predefinição: só na exportação (e na análise sem alvo); a prévia e o quadro final não pesam
+        let mut c = cena();
+        c.p["saida"]["exportacao"]["predefinicao"] = json!("whatsapp");
+        c.so(&[NAO_SUPORTADO]);
+        c.alvo = Some(Alvo::Previa { altura: 360, de_q: 0, ate_q: 10 });
+        c.so(&[]);
+        c.alvo = Some(Alvo::Quadro { q: 0, largura: 640 });
+        c.so(&[]);
+        // som da Fase 1: só com som na saída e fora do quadro final
+        let mut c = cena();
+        c.p["mixagem"] = json!({ "volume_original": 1.0, "abaixar": { "db": -12.0, "ataque_s": 0.3, "soltura_s": 0.5 }, "normalizar": { "lufs": -16.0, "pico_db": -1.5 }, "limitador": true });
+        c.so(&[NAO_SUPORTADO]);
+        assert_eq!(rotulo(&c), vec!["Ainda não suportado: normalização", "Ainda não suportado: limitador"]);
+        c.alvo = Some(Alvo::Quadro { q: 0, largura: 640 });
+        c.so(&[]);
+        c.alvo = None;
+        c.p["saida"]["audio"] = json!(false);
+        c.so(&[]);
+        // volume com chaves iguais vale como fixo; diferentes é volume animado
+        let mut c = cena();
+        c.p["principal"][0]["audio"]["volume"] = json!([{ "t": 0.0, "v": 0.8 }, { "t": 1.0, "v": 0.8 }]);
+        c.so(&[]);
+        c.p["principal"][0]["audio"]["volume"][1]["v"] = json!(0.4);
+        c.so(&[NAO_SUPORTADO]);
+        c.p["principal"][0]["audio"]["mudo"] = json!(true);
+        c.so(&[]);
+        // ocultar em título: no efeito do título
+        let mut c = cena();
+        let mut tit = titulo("c2", 2.0);
+        tit["efeitos"] = json!([ocultar("r2")]);
+        c.p["principal"].as_array_mut().unwrap().push(tit);
+        assert!(c.problemas().iter().any(|p| p.codigo == NAO_SUPORTADO && p.clipe.as_deref() == Some("c2") && p.efeito.as_deref() == Some("e1")
+            && p.mensagem == "Ainda não suportado: ocultação em foto ou título"), "{:#?}", c.problemas());
+        // ocultar do congelado com `ativo` local em parte dos slots
+        let mut c = cena();
+        c.p["rastreios"] = json!([rastreio(&[45])]);
+        let mut o = ocultar("r1");
+        o["ativo"] = json!({ "de": 0.0, "ate": 0.5 });
+        c.p["principal"] = json!([{ "tipo": "congelar", "id": "c1", "rotulo": "", "desligado": false, "transicao_entrada": null, "efeitos": [o],
+            "midia": "m1", "instante_s": t(45), "instante_pts": 512 * 45, "duracao_s": 1.0 }]);
+        c.so(&[NAO_SUPORTADO]);
+        c.p["principal"][0]["efeitos"][0]["ativo"]["ate"] = json!(1.0);
+        c.so(&[]);
+        c.p["principal"][0]["efeitos"][0]["ativo"] = json!({ "de": 2.0, "ate": 3.0 });
         c.so(&[]);
     }
 }

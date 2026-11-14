@@ -29,6 +29,12 @@ const PX_POR_PIXEL = 40;
 /** Passo dos atalhos de zoom. */
 export const PASSO_ZOOM = 1.25;
 
+/** Medida da caixa do palco; 0×0 = palco escondido (`hidden`): vale a anterior. */
+export function caixaMedida(anterior: Tamanho, w: number, h: number): Tamanho {
+  if (w === 0 && h === 0) return anterior;
+  return anterior.w === w && anterior.h === h ? anterior : { w, h };
+}
+
 /** Canvas da saída contido na caixa (proporção mantida, centrado). */
 export function contido(caixa: Tamanho, saida: Tamanho): Retangulo {
   if (!(caixa.w > 0 && caixa.h > 0 && saida.w > 0 && saida.h > 0)) return { x: 0, y: 0, w: 0, h: 0 };

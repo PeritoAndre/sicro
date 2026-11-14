@@ -107,6 +107,8 @@ const FONTES: &[(&str, &[u8])] = &[
     ("LibertinusSerif-BoldItalic.otf", include_bytes!("fontes/LibertinusSerif-BoldItalic.otf")),
     ("DejaVuSansMono.ttf", include_bytes!("fontes/DejaVuSansMono.ttf")),
     ("DejaVuSansMono-Bold.ttf", include_bytes!("fontes/DejaVuSansMono-Bold.ttf")),
+    ("DejaVuSansMono-Oblique.ttf", include_bytes!("fontes/DejaVuSansMono-Oblique.ttf")),
+    ("DejaVuSansMono-BoldOblique.ttf", include_bytes!("fontes/DejaVuSansMono-BoldOblique.ttf")),
 ];
 
 /// Comum aos dois modelos: família, peso, estilo, tamanho em px do canvas e o contorno por baixo do texto.
@@ -620,13 +622,46 @@ mod testes {
     #[test]
     fn fontes_embutidas() {
         let f = fontes();
-        assert_eq!(f.len(), 10);
+        assert_eq!(f.len(), 12);
         assert!(f.iter().all(|(_, h)| h.len() == 64));
         let familias: Vec<String> = base().fontes.iter().map(|f| f.info().family.to_string()).collect();
         for nome in ["Inter", "Libertinus Serif", "DejaVu Sans Mono"] {
             assert!(familias.iter().any(|f| f == nome), "{nome} em {familias:?}");
         }
     }
+    /// Mono itálico sai inclinado, com e sem negrito (sem as oblíquas da DejaVu o Typst caía na reta).
+    #[test]
+    fn mono_italico_inclina() {
+        // centro horizontal da tinta no terço de cima e no de baixo das linhas com tinta
+        let inclinacao = |b: &Bitmap| {
+            let alfa = |x: u32, y: u32| b.px[((y * b.w + x) * b.canais as u32 + b.canais as u32 - 1) as usize] as f64;
+            let linhas: Vec<u32> = (0..b.h).filter(|&y| (0..b.w).any(|x| alfa(x, y) > 128.0)).collect();
+            let (a, z) = (linhas[0], *linhas.last().unwrap());
+            let terco = (z - a) / 3;
+            let centro = |ys: std::ops::Range<u32>| {
+                let (mut s, mut n) = (0.0, 0.0);
+                for y in ys {
+                    for x in 0..b.w {
+                        let v = alfa(x, y);
+                        (s, n) = (s + v * x as f64, n + v);
+                    }
+                }
+                s / n
+            };
+            centro(a..a + terco) - centro(z - terco..z)
+        };
+        for negrito in [false, true] {
+            let mut e = estilo(Fonte::Mono, None, None);
+            e.negrito = negrito;
+            let reto = sprite_de("IIII", e.clone());
+            e.italico = true;
+            let italico = sprite_de("IIII", e);
+            assert_ne!(reto.px, italico.px, "negrito {negrito}");
+            assert!(inclinacao(&reto).abs() < 0.5, "reto inclinado: {}", inclinacao(&reto));
+            assert!(inclinacao(&italico) > 3.0, "itálico reto (negrito {negrito}): {}", inclinacao(&italico));
+        }
+    }
+
     #[test]
     fn estilo_como_dado_cor_invalida_e_tamanho_absurdo() {
         let codigo_de = |e: SicroError| match e {

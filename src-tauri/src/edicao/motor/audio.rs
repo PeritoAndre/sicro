@@ -25,6 +25,11 @@ use crate::error::{Result, SicroError};
 /// Primeiros argumentos de toda linha de áudio (O6).
 pub const CPUFLAGS: [&str; 2] = ["-cpuflags", "0"];
 
+// CONTRATO: acréscimo (contratos (h) 7), com `tolerancia_buraco_ms`.
+/// Buraco no som da fonte que o `aresample=async=1` deixa como está (ms; `min_hard_comp` padrão, 0,1 s): o som
+/// depois dele adianta até isso (medido: 60 ms → 64 ms). Vai para `feito.audio` (contratos (h) 7).
+pub const TOLERANCIA_BURACO_MS: f64 = 100.0;
+
 /// Medição do `loudnorm` (passada 1): volume integrado (LUFS), pico real (dBTP), faixa (LU) e limiar (LUFS).
 /// `integrado` None = `-inf` (silêncio): não normaliza.
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -336,7 +341,8 @@ fn recusar(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &Cl
             volume_fixo(&c.volume)?;
         }
     }
-    for t in &p.sobreposicoes {
+    // trilha oculta não entra no render (nem na imagem, `sobrepor::aplicar`): nada a recusar nela
+    for t in p.sobreposicoes.iter().filter(|t| !t.oculta) {
         for c in &t.clipes {
             if let Tolerante::Conhecido(ClipeSobreposto::Video(v)) = c {
                 if v.audio.as_ref().is_some_and(|a| !a.mudo) {
@@ -383,6 +389,35 @@ fn fades(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &Clip
         sai[n - 1] = amostras_da_transicao(t, fim - d, d, fps);
     }
     (ent, sai)
+}
+
+/// Maior desvio do `atempo` (ms) entre os trechos que tocam som no programa INTEIRO, qualquer que seja o alvo
+/// (o `PassoAudio.tolerancia_atempo_ms` é o da janela do alvo).
+pub(crate) fn tolerancia_atempo_do_programa(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto) -> f64 {
+    if !p.saida.audio {
+        return 0.0;
+    }
+    let mut atempo = 0.0f64;
+    for r in &linha.clipes {
+        let Some(Tolerante::Conhecido(ClipePrincipal::Trecho(t))) = p.principal.iter().find(|c| matches!(c, Tolerante::Conhecido(c) if base(c).id == r.id)) else {
+            continue;
+        };
+        let toca = !t.audio.mudo && volume_fixo(&t.audio.volume).is_ok_and(|v| v > 0.0);
+        if toca && ctx.fontes.get(&t.midia).is_some_and(|f| f.audio.is_some()) {
+            atempo = atempo.max(velocidade(&t.velocidade, t.audio.manter_tom).map_or(0.0, |x| x.1));
+        }
+    }
+    atempo
+}
+
+/// Buraco de som aceito (ms) num passo: `TOLERANCIA_BURACO_MS` quando ele lê som de alguma fonte; 0 sem passo
+/// ou só com silêncio gerado.
+pub fn tolerancia_buraco_ms(passo: Option<&PassoAudio>) -> f64 {
+    if passo.is_some_and(|a| !a.entradas.is_empty()) {
+        TOLERANCIA_BURACO_MS
+    } else {
+        0.0
+    }
 }
 
 /// Monta o passo de áudio do programa e a prévia de medição. (None, vazio) quando o alvo não tem som (`Alvo::Quadro`).
@@ -1127,6 +1162,12 @@ mod testes {
             }
             assert_eq!(erro_de(&p), *esperado, "caso {i}");
         }
+        // vídeo sobreposto com som em trilha OCULTA não entra no render: nada a recusar (a validação também não acusa)
+        let mut p = projeto_falso();
+        casos[casos.len() - 3].1(&mut p);
+        assert_eq!(erro_de(&p), "nao_suportado: video sobreposto");
+        p.sobreposicoes[0].oculta = true;
+        assert!(montar_com(&p, &fontes, &cap, &final_(&p)).is_ok(), "trilha oculta recusada");
         // o mesmo sem efeito no som: clipe mudo com silêncio e trilha muda com abaixar passam
         let mut p = projeto_falso();
         let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };

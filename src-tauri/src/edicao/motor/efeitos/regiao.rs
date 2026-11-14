@@ -35,6 +35,8 @@ fn variante(o: &EfOcultar, recorte: [u32; 4], lado: u32) -> Result<Vec<String>> 
 }
 
 /// `split` → recorte → variante → `alphamerge` com a máscara → `overlay` de volta. Devolve o rótulo de saída.
+/// `eof_action=repeat`: um quadro a mais numa leitura anormal (a conferência acusa, mas o bloco já existe) sai
+/// coberto pela última máscara, nunca descoberto.
 fn trocar(g: &mut Grafo, entrada: &str, recorte: [u32; 4], variante: Vec<String>, mascara: &str) -> String {
     let [x, y, w, h] = recorte;
     let (a, b, var, fx, saida) = (g.rotulo("r"), g.rotulo("r"), g.rotulo("r"), g.rotulo("r"), g.rotulo("r"));
@@ -43,7 +45,7 @@ fn trocar(g: &mut Grafo, entrada: &str, recorte: [u32; 4], variante: Vec<String>
     f.extend(variante);
     g.cadeia(&[&b], &f, &[&var]);
     g.cadeia(&[&var, mascara], &["alphamerge".to_string()], &[&fx]);
-    let o = filtro("overlay", None, &[("x", x.to_string()), ("y", y.to_string()), ("format", "yuv420".into()), ("eof_action", "pass".into())]);
+    let o = filtro("overlay", None, &[("x", x.to_string()), ("y", y.to_string()), ("format", "yuv420".into()), ("eof_action", "repeat".into())]);
     g.cadeia(&[&a, &fx], &[o], &[&saida]);
     saida
 }
@@ -108,9 +110,40 @@ mod testes {
             g.texto(),
             format!(
                 "[cor]split[r000][r001];\n[r001]crop=244:154:176:188:exact=1,lutyuv=y=16:u=128:v=128[r002];\n[r002][mk]alphamerge[r003];\n\
-                 [r000][r003]overlay=x=176:y=188:format=yuv420:eof_action=pass[{s}]"
+                 [r000][r003]overlay=x=176:y=188:format=yuv420:eof_action=repeat[{s}]"
             )
         );
+    }
+
+    /// Leitura anormal: a base traz um quadro a mais que as máscaras (6 × 5). O quadro a mais sai coberto, nos dois
+    /// binários (com `eof_action=pass` saía com o alvo à mostra).
+    #[test]
+    fn quadro_a_mais_sai_coberto() {
+        use crate::edicao::ffmpeg::{args, exec};
+        let Some(cap) = crate::edicao::testes::fontes::cap() else { return };
+        let dir = tempfile::Builder::new().prefix("p0f-regiao-").tempdir().unwrap();
+        let mut g = Grafo::novo();
+        g.cadeia(&["0:v"], &["trim=end_frame=6".into(), "format=yuv420p".into()], &["base"]);
+        g.cadeia(&["1:v"], &["trim=end_frame=5".into(), "format=gray".into()], &["mk"]);
+        let o = ocultacao("solido", 1.0);
+        let s = ocultar(&mut g, "base", &[&o], &["mk".into()], &[[20, 20, 40, 40]], &[40]).unwrap();
+        g.cadeia(&[&s], &["format=rgb24".into()], &["x"]);
+        args::gravar_texto(dir.path(), "g.txt", &g.texto()).unwrap();
+        let mut a: Vec<String> = ["-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=s=160x90:r=30:d=1", "-f", "lavfi", "-i", "color=c=white:s=40x40:r=30:d=1"]
+            .map(String::from)
+            .into();
+        a.extend(args::grafo_em_arquivo(&cap, "g.txt"));
+        a.extend(["-map", "[x]", "-fps_mode", "passthrough", "-f", "rawvideo", "-"].map(String::from));
+        let cmd = exec::Comando { nome: "ocultar".into(), programa: cap.binario.clone(), args: a, pasta: dir.path().into(), ambiente: vec![], sem_ambiente: vec![], stderr: dir.path().join("e.log") };
+        let (fim, out) = exec::rodar_com_saida(&cmd, &std::sync::atomic::AtomicBool::new(false)).unwrap();
+        exec::exigir_sucesso(&cmd, &fim).unwrap();
+        let tam = 160 * 90 * 3;
+        assert_eq!(out.len(), 6 * tam, "{}", cap.versao);
+        for (i, q) in out.chunks_exact(tam).enumerate() {
+            // dentro do recorte: o sólido preto em todo pixel, inclusive no 6º quadro
+            let fora_do_preto = (20..60).flat_map(|y| (20..60).map(move |x| (y * 160 + x) * 3)).filter(|&k| q[k..k + 3].iter().any(|&v| v > 2)).count();
+            assert_eq!(fora_do_preto, 0, "quadro {i} descoberto ({})", cap.versao);
+        }
     }
 
     #[test]

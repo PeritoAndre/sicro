@@ -526,6 +526,7 @@ describe("coleta de trechos", () => {
       previa: { relativo: "", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 600, largura: 1920, altura: 1080, pronta: true },
       tabela: "decodificador",
       erros: 0,
+      marcavel: true,
     });
     cmd.edicaoQuadroEm.mockImplementation(async (_ws: string, _s: string, alvo: { t: number }) => ({ indice: 0, pts: Math.round(alvo.t * 15360), pts_s: alvo.t, dur_s: 1 / 30 }));
   });

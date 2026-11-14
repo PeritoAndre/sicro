@@ -56,6 +56,9 @@ pub type Trabalho = Box<dyn FnOnce(&AtomicBool, &mut dyn FnMut(f32)) -> Result<(
 const TRABALHADORES: usize = 2;
 /// Terminada há mais que isso sai da lista.
 const MANTER_TERMINADA: Duration = Duration::from_secs(60);
+/// Trabalho que falhou não é refeito por esse tempo para a mesma chave, salvo pedido "na frente" (a tela pede a
+/// prévia a cada desenho do cartão: sem isso, um ffmpeg por pedido). Menor que `MANTER_TERMINADA`.
+const ESPERA_FALHA: Duration = Duration::from_secs(10);
 
 type Avisar = Arc<dyn Fn(&[TarefaFundo]) + Send + Sync>;
 
@@ -81,6 +84,7 @@ pub(crate) struct Fundo {
     lim: Mutex<Limitador>,
     trabalhadores: Mutex<Vec<JoinHandle<()>>>,
     n: usize,
+    espera_falha: Duration,
 }
 
 fn terminal(e: &EstadoFundo) -> bool {
@@ -104,6 +108,7 @@ impl Fundo {
             lim: Mutex::new(Limitador::default()),
             trabalhadores: Mutex::new(Vec::new()),
             n,
+            espera_falha: ESPERA_FALHA,
         })
     }
 
@@ -145,6 +150,11 @@ impl Fundo {
     }
 
     pub(crate) fn pedir(self: &Arc<Self>, tipo: TipoFundo, chave: &str, trabalho: Trabalho, frente: bool) -> String {
+        self.pedir_com(tipo, chave, trabalho, frente, frente)
+    }
+
+    /// `frente` = passa à frente das que esperam; `refazer` = roda de novo o que falhou há pouco.
+    pub(crate) fn pedir_com(self: &Arc<Self>, tipo: TipoFundo, chave: &str, trabalho: Trabalho, frente: bool, refazer: bool) -> String {
         let mut g = self.trava();
         Self::podar(&mut g);
         if let Some(i) = g.itens.iter().position(|i| i.tarefa.chave == chave && !terminal(&i.tarefa.estado)) {
@@ -155,6 +165,12 @@ impl Fundo {
                 g.itens.insert(0, it);
             }
             return id;
+        }
+        let falhou_ha_pouco = |i: &Item| {
+            matches!(i.tarefa.estado, EstadoFundo::Falhou { .. }) && i.terminada.is_some_and(|t| t.elapsed() < self.espera_falha)
+        };
+        if let Some(i) = g.itens.iter().find(|i| i.tarefa.chave == chave && falhou_ha_pouco(i)).filter(|_| !refazer) {
+            return i.tarefa.id.clone();
         }
         g.itens.retain(|i| i.tarefa.chave != chave);
         let id = uuid::Uuid::new_v4().to_string();
@@ -242,16 +258,19 @@ impl Fundo {
             let eu = self.clone();
             let id2 = id.clone();
             let mut progresso = move |f: f32| {
+                // o aviso sai com o limitador preso (dois trabalhadores dividem o mesmo): o seguinte passa depois
+                let mut lim = eu.lim.lock().unwrap_or_else(|e| e.into_inner());
                 let lista = {
                     let mut g = eu.trava();
                     if let Some(i) = g.itens.iter_mut().find(|i| i.tarefa.id == id2) {
                         i.tarefa.feito = f.clamp(0.0, 1.0);
                     }
-                    eu.lim.lock().unwrap_or_else(|e| e.into_inner()).passa().then(|| Self::lista(&g))
+                    lim.passa().then(|| Self::lista(&g))
                 };
                 if let Some(l) = lista {
                     eu.emitir(l);
                 }
+                drop(lim);
             };
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| trabalho(&cancelar, &mut progresso)));
             let estado = match r {
@@ -304,14 +323,21 @@ pub fn chave(tipo: TipoFundo, alvo: &str) -> String {
     format!("{t}:{alvo}")
 }
 
-/// Pede um trabalho e devolve o id da tarefa. Chave repetida (na fila ou rodando) reaproveita a tarefa e descarta `trabalho`.
+/// Pede um trabalho e devolve o id da tarefa. Chave repetida (na fila ou rodando, ou que falhou há menos de 10 s)
+/// reaproveita a tarefa e descarta `trabalho`.
 pub fn pedir(tipo: TipoFundo, chave: &str, trabalho: Trabalho) -> String {
     global().pedir(tipo, chave, trabalho, false)
 }
 
-/// `pedir`, passando à frente das que esperam (tabela de mídia sem tempo nos pacotes, decisão (g)14).
+/// `pedir`, passando à frente das que esperam e refazendo o que falhou há pouco (a exportação, que espera pela tabela).
 pub(crate) fn pedir_na_frente(tipo: TipoFundo, chave: &str, trabalho: Trabalho) -> String {
     global().pedir(tipo, chave, trabalho, true)
+}
+
+/// Passa à frente das que esperam SEM refazer o que falhou há pouco (tabela de mídia sem tempo nos pacotes, decisão
+/// (g)14: quem pede é a tela, a cada quadro; refazer a cada pedido seria um ffmpeg por pedido).
+pub(crate) fn pedir_com_prioridade(tipo: TipoFundo, chave: &str, trabalho: Trabalho) -> String {
+    global().pedir_com(tipo, chave, trabalho, true, false)
 }
 
 /// Tarefa dessa chave, se houver.
@@ -403,7 +429,9 @@ mod testes {
         let (liberar, juntos, maximo) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
         let preso = || trabalho_preso(liberar.clone(), juntos.clone(), maximo.clone());
 
-        let a = f.pedir(TipoFundo::Tabela, "tabela:a", preso(), false);
+        // `a` segura um trabalhador até o fim: `d` e `c` passam em série pelo outro, e a ordem de início não corre
+        let liberar_a = Arc::new(AtomicBool::new(false));
+        let a = f.pedir(TipoFundo::Tabela, "tabela:a", trabalho_preso(liberar_a.clone(), juntos.clone(), maximo.clone()), false);
         let b = f.pedir(TipoFundo::Tabela, "tabela:b", preso(), false);
         ate(&f, |l| l.iter().filter(|t| t.estado == EstadoFundo::Rodando).count() == 2);
         let c = f.pedir(TipoFundo::Proxy, "proxy:c", preso(), false);
@@ -420,6 +448,8 @@ mod testes {
         assert_eq!(l.iter().find(|t| t.id == a).unwrap().feito, 0.5);
 
         liberar.store(true, Ordering::SeqCst);
+        ate(&f, |l| l.iter().filter(|t| terminal(&t.estado)).count() == 3);
+        liberar_a.store(true, Ordering::SeqCst);
         let l = ate(&f, |l| l.iter().all(|t| terminal(&t.estado)));
         assert!(l.iter().all(|t| t.estado == EstadoFundo::Pronta && t.feito == 1.0), "{l:?}");
         assert_eq!(maximo.load(Ordering::SeqCst), 2, "2 trabalhadores");
@@ -436,8 +466,37 @@ mod testes {
         f.pedir(TipoFundo::Onda, "onda:p", Box::new(|_, _| panic!("de propósito")), false);
         let l = ate(&f, |l| l.iter().filter(|t| matches!(t.estado, EstadoFundo::Falhou { .. })).count() == 2);
         assert_eq!(*estado_de(&l, "sonda:gpu"), EstadoFundo::Falhou { mensagem: "sem_gpu: x".into() });
-        let id = f.pedir(TipoFundo::Sonda, "sonda:gpu", Box::new(|_, _| Ok(())), false);
+        // falhou há menos de 10 s: o pedido comum não roda de novo; o da frente (exportação) roda
+        let rodou = Arc::new(AtomicBool::new(false));
+        let r = rodou.clone();
+        let falha = estado_de(&f.listar(), "sonda:gpu").clone();
+        let mesmo = f.pedir(TipoFundo::Sonda, "sonda:gpu", Box::new(move |_, _| { r.store(true, Ordering::SeqCst); Ok(()) }), false);
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!rodou.load(Ordering::SeqCst), "refeito a cada pedido");
+        assert_eq!((estado_de(&f.listar(), "sonda:gpu"), f.listar().iter().find(|t| t.chave == "sonda:gpu").unwrap().id.clone()), (&falha, mesmo.clone()));
+        // só prioridade (a tela, em mídia sem tempo nos pacotes): também não refaz
+        let r = rodou.clone();
+        let prioridade = f.pedir_com(TipoFundo::Sonda, "sonda:gpu", Box::new(move |_, _| { r.store(true, Ordering::SeqCst); Ok(()) }), true, false);
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(!rodou.load(Ordering::SeqCst) && prioridade == mesmo, "prioridade refez o que falhou há pouco");
+        let id = f.pedir(TipoFundo::Sonda, "sonda:gpu", Box::new(|_, _| Ok(())), true);
         ate(&f, |l| l.iter().any(|t| t.id == id && t.estado == EstadoFundo::Pronta));
+        f.encerrar();
+    }
+
+    /// Depois dos 10 s (aqui encurtados) o pedido comum refaz o que falhou.
+    #[test]
+    fn falha_vence_a_espera() {
+        let mut f = Fundo::nova(1);
+        Arc::get_mut(&mut f).unwrap().espera_falha = Duration::from_millis(100);
+        f.pedir(TipoFundo::Proxy, "proxy:x", Box::new(|_, _| Err(SicroError::Validation("fonte_danificada: x".into()))), false);
+        ate(&f, |l| l.iter().any(|t| matches!(t.estado, EstadoFundo::Falhou { .. })));
+        let antes = f.pedir(TipoFundo::Proxy, "proxy:x", Box::new(|_, _| Ok(())), false);
+        assert!(matches!(estado_de(&f.listar(), "proxy:x"), EstadoFundo::Falhou { .. }));
+        std::thread::sleep(Duration::from_millis(150));
+        let depois = f.pedir(TipoFundo::Proxy, "proxy:x", Box::new(|_, _| Ok(())), false);
+        assert_ne!(antes, depois);
+        ate(&f, |l| l.iter().any(|t| t.id == depois && t.estado == EstadoFundo::Pronta));
         f.encerrar();
     }
 

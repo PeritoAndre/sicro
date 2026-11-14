@@ -24,6 +24,8 @@ pub enum EvidenceKind {
     ImageExport,
     Audio,
     Document,
+    /// Exportação final da Edição (`video_edit_outputs`).
+    VideoEdit,
     Other,
 }
 
@@ -43,6 +45,7 @@ impl EvidenceKind {
             EvidenceKind::ImageExport => "image_export",
             EvidenceKind::Audio => "audio",
             EvidenceKind::Document => "document",
+            EvidenceKind::VideoEdit => "video_edit",
             EvidenceKind::Other => "other",
         }
     }

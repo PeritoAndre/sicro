@@ -25,7 +25,8 @@ pub struct Canvas {
 
 /// Tudo que uma execução roda: `total_q` slots do canvas (o programa inteiro na exportação final; a janela na
 /// prévia; 1 no quadro final). `alvo` = o de `compilar` (só a exportação final passa por "Conferindo" e confere
-/// os pts lidos). Na prévia e no quadro final o canvas vem reduzido e a `proveniencia` segue a do programa inteiro.
+/// os pts lidos). Na prévia e no quadro final o canvas vem reduzido; a `proveniencia` é sempre a do programa
+/// inteiro, no tamanho do projeto.
 // CONTRATO: `alvo` não está no §5.2; o executor e o retrato precisam dele (P0.6a, P0.7 e o "refazer").
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Plano {
@@ -260,7 +261,8 @@ pub struct ProvProjeto {
     pub esquema_menor: u32,
 }
 
-/// `predefinicao` None fora da exportação final.
+/// Saída do programa inteiro no tamanho do projeto, para qualquer alvo; `predefinicao` = a da exportação do alvo
+/// (na prévia e no quadro final, a do projeto).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvSaida {
     pub largura: u32,
@@ -414,7 +416,8 @@ pub struct ProvSilencio {
     pub motivo: String,
 }
 
-/// `feito.audio`: trechos silenciados e o maior desvio do `atempo` (ms).
+/// `feito.audio`: trechos silenciados e o maior desvio do `atempo` (ms), do programa inteiro. O `tecnico.json`
+/// acrescenta `tolerancia_buraco_ms` (contratos (h) 7) pelo passo de áudio do plano (`relatorio::tecnico`).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvAudio {
     pub silencios: Vec<ProvSilencio>,

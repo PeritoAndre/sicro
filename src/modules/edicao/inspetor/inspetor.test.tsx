@@ -22,12 +22,14 @@ const cmd = vi.hoisted(() => ({
 vi.mock("@core/commands", () => ({ commands: cmd }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(async () => "/fora/arquivo") }));
+const ask = vi.hoisted(() => ({ askConfirm: vi.fn(async (_o: { title: string; message?: string; confirmLabel?: string; danger?: boolean }) => true) }));
+vi.mock("@components/Dialog/ask", () => ask);
 
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useFundoStore } from "../store/fundoStore";
 import { Inspetor } from "./Inspetor";
 import { esquecerLeituras, useTabela } from "./contexto";
-import { removerEfeito } from "./acoes";
+import { marcacoesNoEspaco, removerEfeito } from "./acoes";
 import { useInspetorUi } from "./ui";
 import { arrastar, botao, campo, clicar, desmontarTudo, digitar, entradaDe, escolher, esperar, lerFixture as ler, montar, sair, tecla, textosVisiveis, type Tela } from "./testeTela";
 import { ROTULOS, textoPermitido } from "./rotulos.teste";
@@ -47,6 +49,7 @@ const selecionar = (k: "clipe" | "livre" | "audio", id: string, trilha?: string)
   st().selecionar({ itens: [it], foco: it, efeito: null });
 };
 const doc = () => st().doc!;
+const selecionarEfeitoAberto = (efeito: string) => st().selecionar({ ...st().selecao, efeito });
 const principal = () => doc().principal as [ClipeTitulo, ClipeTrecho, ClipeTrecho, ...ClipeCongelar[]];
 
 let tela: Tela;
@@ -715,6 +718,74 @@ describe("revisão adversa", () => {
       expect(textosVisiveis(tela.raiz).filter((t) => !textoPermitido(t))).toEqual([]);
     }
     expect(entradaDe(tela.raiz, "Largura")).toBeTruthy();
+  });
+
+  it("Início, Fim e Posição seguem só MidiaInfo.marcavel (h 17): falso desliga; verdadeiro aceita #n com o pts da tabela", async () => {
+    const info = (marcavel: boolean) => ({
+      id: "vm1", sha256: "1".repeat(64), nome: "cam1.h264", exibido: { w: 1920, h: 1080 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
+      de_s: 0, ate_s: 60, n: 1800, tem_audio: false, previa: { relativo: "", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 60, largura: 1920, altura: 1080, pronta: true },
+      tabela: marcavel ? "decodificador" : "pacotes", erros: 0, marcavel,
+    });
+    const tab = (origem: "pacotes" | "decodificador") => ({ tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(1799).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem });
+    const espera = () => esperar(() => new Promise((r) => setTimeout(r, 0)));
+    cmd.edicaoMidiaInfo.mockResolvedValue(info(false));
+    cmd.edicaoTabelaQuadros.mockResolvedValue(tab("pacotes"));
+    esquecerLeituras();
+    tela.desmontar();
+    tela = await montar(<Inspetor />);
+    await esperar(() => selecionar("clipe", principal()[1].id));
+    await espera();
+    await espera();
+    expect((entradaDe(tela.raiz, "Início") as HTMLInputElement).disabled).toBe(true);
+    expect((entradaDe(tela.raiz, "Fim") as HTMLInputElement).disabled).toBe(true);
+    // marcável (tabela do decodificador): #3 vira o pts do quadro 3
+    cmd.edicaoMidiaInfo.mockResolvedValue(info(true));
+    cmd.edicaoTabelaQuadros.mockResolvedValue(tab("decodificador"));
+    esquecerLeituras();
+    tela.desmontar();
+    tela = await montar(<Inspetor />);
+    await espera();
+    await espera();
+    const ini = entradaDe(tela.raiz, "Início") as HTMLInputElement;
+    expect(ini.disabled).toBe(false);
+    await digitar(ini, "#3", { aos: 2 });
+    await tecla(ini, "Enter");
+    expect(principal()[1]).toMatchObject({ inicio_s: 0.1, inicio_pts: 1536 });
+  });
+
+  it("estabilizar e lente: ligar, desligar e Remover pedem confirmação com a contagem de marcações (h 27)", async () => {
+    const id = principal()[1].id;
+    st().alterar("x", (d) =>
+      void (d.principal[1] as ClipeTrecho).efeitos.push({ tipo: "estabilizar", id: "est", ligado: true, nome: "", ativo: null, suavizar: 15, borda: "preta", zoom_pct: 0, trf_sha256: null, analise: { de_s: 12, ate_s: 16, de_pts: 184320, ate_pts: 245760 } } as unknown as EfTexto),
+    );
+    await esperar(() => selecionar("clipe", id));
+    const linha = () => tela.raiz.querySelector<HTMLElement>('[data-efeito="estabilizar"]')!;
+    const marcas = marcacoesNoEspaco(doc(), principal()[1]);
+    expect(marcas).toBeGreaterThan(0);
+    ask.askConfirm.mockClear();
+    ask.askConfirm.mockResolvedValueOnce(false);
+    await clicar(botao(linha(), "Remover"));
+    await esperar();
+    expect(ask.askConfirm).toHaveBeenCalledWith({ title: "Estabilizar", message: `${marcas} marcações`, confirmLabel: "Remover", danger: true });
+    expect(principal()[1].efeitos.some((e) => (e as { id: string }).id === "est")).toBe(true);
+    ask.askConfirm.mockResolvedValueOnce(false);
+    await clicar(linha().querySelector<HTMLButtonElement>('[aria-label="Estabilizar"][aria-pressed]')!);
+    await esperar();
+    expect(ask.askConfirm).toHaveBeenLastCalledWith({ title: "Estabilizar", message: `${marcas} marcações`, confirmLabel: "Estabilizar", danger: true });
+    expect((principal()[1].efeitos.find((e) => (e as { id: string }).id === "est") as { ligado: boolean }).ligado).toBe(true);
+    await clicar(linha().querySelector<HTMLButtonElement>('[aria-label="Estabilizar"][aria-pressed]')!);
+    await esperar();
+    expect((principal()[1].efeitos.find((e) => (e as { id: string }).id === "est") as { ligado: boolean }).ligado).toBe(false);
+    await clicar(botao(linha(), "Remover"));
+    await esperar();
+    expect(principal()[1].efeitos.some((e) => (e as { id: string }).id === "est")).toBe(false);
+    // efeito que não muda o espaço não pergunta
+    ask.askConfirm.mockClear();
+    const d = principal()[1].efeitos.find((e) => (e as { tipo: string }).tipo === "destaque") as EfDestaque;
+    await esperar(() => selecionarEfeitoAberto(d.id));
+    await clicar(botao(tela.raiz.querySelector<HTMLElement>('[data-efeito="destaque"]')!, "Remover"));
+    await esperar();
+    expect(ask.askConfirm).not.toHaveBeenCalled();
   });
 
   it("só leitura: Preso a não muda", async () => {

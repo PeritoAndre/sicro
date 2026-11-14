@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as PE } from "react";
 import { Check, CircleDot, Crosshair, Loader2, PanelLeftClose, PanelLeftOpen, PanelRightClose, PanelRightOpen, Redo2, TriangleAlert, Undo2 } from "lucide-react";
 import { Button } from "@components/Button/Button";
+import { useDialogosAbertos } from "@components/Dialog/Dialog";
 import { isEditableTarget } from "@core/keymap";
 import { useShortcuts } from "@core/useShortcuts";
 import type { Caixa, Lugar, Ponto, Pts, Seg } from "@domain/edicao";
@@ -25,10 +26,15 @@ import { Inspetor } from "./inspetor/Inspetor";
 import { DialogoExportar } from "./exportar/DialogoExportar";
 import { Fila } from "./exportar/Fila";
 import { irParaProblema, useExportarUi } from "./exportar/avisos";
-import { useInspetorUi } from "./inspetor/ui";
+import { receberMarca, useInspetorUi } from "./inspetor/ui";
 import { efetivas, gradeDasColunas, LIMITES, useColunas } from "./colunas";
 import styles from "./EditorEdicao.module.css";
 import { capturar } from "./palco/capturar";
+
+/** Atalhos da tela: só na frente e sem diálogo aberto. */
+export function atalhosLigados(x: { ativo: boolean; exportando: boolean; modal: boolean; semDialogo: boolean }): boolean {
+  return x.ativo && !x.exportando && !x.modal && x.semDialogo;
+}
 
 function IconeGravacao({ estado }: { estado: "salvo" | "alterado" | "salvando" | "erro" }) {
   const r = { salvo: "Salvo", alterado: "Alterado", salvando: "Salvando…", erro: "Não salvou" }[estado];
@@ -40,7 +46,8 @@ function IconeGravacao({ estado }: { estado: "salvo" | "alterado" | "salvando" |
   );
 }
 
-export function EditorEdicao() {
+/** `ativo` falso: escondida atrás da análise (§8.1); sem atalhos. */
+export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
   const doc = useEdicaoStore((s) => s.doc);
   const salvando = useEdicaoStore((s) => s.salvando);
   const soLeitura = useEdicaoStore((s) => s.soLeitura);
@@ -56,7 +63,9 @@ export function EditorEdicao() {
   const [mudo, setMudo] = useState(false);
   /** Diálogo da Sequência aberto: os atalhos da tela ficam desligados (Enter, Del e setas são do diálogo). */
   const [modal, setModal] = useState(false);
-  const atalhos = !exportando && !modal;
+  // qualquer diálogo aberto (Sequência, Inspetor, confirmações, exportação) desliga os atalhos da tela (h 25)
+  const semDialogo = useDialogosAbertos((s) => s.pilha.length === 0);
+  const atalhos = atalhosLigados({ ativo, exportando, modal, semDialogo });
   const palco = useRef<PalcoApi | null>(null);
   // largura do corpo: as laterais cedem quando o palco ficaria estreito
   const corpoRef = useRef<HTMLDivElement | null>(null);
@@ -84,14 +93,7 @@ export function EditorEdicao() {
   const contagem = textoProblemas(problemas);
 
   // ---- marcação no palco ----
-  const onMarcado = useCallback((v: Caixa | Ponto | Lugar, t: Seg, pts: Pts | null) => {
-    const ui = useInspetorUi.getState();
-    const f = ui.ferramenta;
-    if (!f) return;
-    // rastreio: segue ligada, o perito anda e marca o quadro seguinte
-    if (f.rastreio && (f.tipo === "caixa" || f.tipo === "ponto")) ui.aoMarcar?.(v, t, pts);
-    else ui.marcado(v, t, pts);
-  }, []);
+  const onMarcado = useCallback((v: Caixa | Ponto | Lugar, t: Seg, pts: Pts | null) => receberMarca(v, t, pts), []);
 
   /** Enter: âncora no quadro mostrado com a caixa que o rastreio dá ali (interpolada ou segurada). */
   const marcarNesteQuadro = useCallback(() => {
@@ -151,6 +153,10 @@ export function EditorEdicao() {
     },
     { enabled: atalhos },
   );
+  // escondida: para de tocar (clipe sem fonte toca pelo relógio; não há <video> para o VideoModule pausar)
+  useEffect(() => {
+    if (!ativo) palco.current?.pausar();
+  }, [ativo]);
   // ←/→ um quadro e Shift+←/→ um segundo, fixos como no reprodutor (fora do catálogo)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

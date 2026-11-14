@@ -282,9 +282,10 @@ fn preparar_midia(
         return Ok((estado(SituacaoMidia::Ausente), None));
     }
     let Some(caminho) = localizar(ws, m, banco) else { return Ok((estado(SituacaoMidia::Ausente), None)) };
-    match sha_da_sessao(&caminho, conferir_sha256) {
+    match sha_da_sessao(&caminho, conferir_sha256, esperar) {
         Ok(sha) if sha == m.sha256 => {}
         Ok(_) => return Ok((estado(SituacaoMidia::Trocada), None)),
+        Err(e) if codigo_de(&e) == Some(ERRO_CANCELADO) => return Err(e),
         Err(_) => return Ok((estado(SituacaoMidia::Ausente), None)),
     }
     let mut tab = match TabelaQuadros::obter_com(cap, cache, &m.sha256, &caminho) {
@@ -348,10 +349,11 @@ pub(crate) fn fonte_info_memo(
 /// Mídia sem tempo nos pacotes (H.264 cru, MPEG-PS): a tabela de pacotes inventa os pts; a do decodificador vai na
 /// frente da fila de fundo (decisão (g)14).
 pub(crate) fn sem_tempo_nos_pacotes(conteiner: &str) -> bool {
-    conteiner.split(',').any(|c| matches!(c, "h264" | "hevc" | "mpeg"))
+    conteiner.split(',').any(|c| matches!(c, "h264" | "hevc" | "mpeg" | "mpegvideo"))
 }
 
-/// Pede a tabela do decodificador à fila de fundo (chave única) e devolve a chave.
+/// Pede a tabela do decodificador à fila de fundo (chave única) e devolve a chave. `na_frente` = a exportação, que
+/// espera por ela (refaz a que falhou há pouco).
 pub(crate) fn pedir_tabela(cap: &Arc<Capacidades>, cache: &Path, sha256: &str, video: &Path, conteiner: &str, na_frente: bool) -> String {
     let chave = fundo::chave(TipoFundo::Tabela, sha256);
     let (cap, cache, sha, video) = (cap.clone(), cache.to_path_buf(), sha256.to_string(), video.to_path_buf());
@@ -359,8 +361,11 @@ pub(crate) fn pedir_tabela(cap: &Arc<Capacidades>, cache: &Path, sha256: &str, v
         let t = TabelaQuadros::do_decodificador(&cap, &video, c, prog)?;
         t.guardar(&cache, &sha).map(|_| ())
     });
-    if na_frente || sem_tempo_nos_pacotes(conteiner) {
+    if na_frente {
         fundo::pedir_na_frente(TipoFundo::Tabela, &chave, trabalho);
+    } else if sem_tempo_nos_pacotes(conteiner) {
+        // a tela pede a cada quadro: passa à frente, mas não refaz o que acabou de falhar (decisão (h)14)
+        fundo::pedir_com_prioridade(TipoFundo::Tabela, &chave, trabalho);
     } else {
         fundo::pedir(TipoFundo::Tabela, &chave, trabalho);
     }
@@ -424,7 +429,8 @@ pub(crate) fn abrir_banco(ws: &Path) -> Result<(rusqlite::Connection, uuid::Uuid
 }
 
 /// SHA-256 do arquivo; fora da exportação final, uma vez por sessão (mesmo tamanho e mesma data = mesmo conteúdo).
-fn sha_da_sessao(caminho: &Path, sempre: bool) -> Result<String> {
+/// `cancelar` = sinal da exportação (fonte de vários GB): olhado a cada pedaço.
+fn sha_da_sessao(caminho: &Path, sempre: bool, cancelar: Option<&AtomicBool>) -> Result<String> {
     type Memo = Mutex<HashMap<PathBuf, (u64, Option<SystemTime>, String)>>;
     static MEMO: OnceLock<Memo> = OnceLock::new();
     let meta = fs::metadata(caminho)?;
@@ -437,9 +443,34 @@ fn sha_da_sessao(caminho: &Path, sempre: bool) -> Result<String> {
             }
         }
     }
-    let sha = crate::hashing::sha256::sha256_file(caminho)?;
+    let sha = sha256_em_pedacos(caminho, cancelar.unwrap_or(&AtomicBool::new(false)), &mut |_, _| {})?;
     memo.lock().unwrap_or_else(|e| e.into_inner()).insert(caminho.to_path_buf(), (tam, data, sha.clone()));
     Ok(sha)
+}
+
+/// Pedaço do SHA-256 da sessão: o cancelamento é olhado entre dois pedaços.
+const PEDACO_SHA: usize = 4 << 20;
+
+/// SHA-256 do arquivo lido em pedaços, olhando o cancelamento; `progresso(lidos, total)` a cada pedaço.
+pub(crate) fn sha256_em_pedacos(caminho: &Path, cancelar: &AtomicBool, progresso: &mut dyn FnMut(u64, u64)) -> Result<String> {
+    let mut f = fs::File::open(caminho)?;
+    let total = f.metadata()?.len();
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; PEDACO_SHA];
+    let mut lidos = 0u64;
+    loop {
+        if cancelar.load(Ordering::SeqCst) {
+            return Err(erro(format!("{ERRO_CANCELADO}: sha256")));
+        }
+        let n = f.read(&mut buf)?;
+        if n == 0 {
+            break;
+        }
+        h.update(&buf[..n]);
+        lidos += n as u64;
+        progresso(lidos, total);
+    }
+    Ok(format!("{:x}", h.finalize()))
 }
 
 /// Rastreios do disco: `rastreios/<id>/<sha256>.json`, conferido pelo SHA-256 e guardado em memória.
@@ -476,8 +507,9 @@ impl LeitorRastreios for LeitorDisco {
 
 // ---------------------------------------------------------------------------------------------- executar
 
-/// Entre dois avisos de progresso: com 210 ms nunca cabem 6 numa janela de 1 s.
-pub(crate) const INTERVALO_PROGRESSO: Duration = Duration::from_millis(210);
+/// Entre dois avisos de progresso. Quem recebe vê o aviso entre a passagem dele e a do seguinte (o aviso sai com o
+/// limitador preso, ou na mesma thread): 6 avisos vistos ocupam ao menos 4 intervalos, e 4 × 250 ms = 1 s.
+pub(crate) const INTERVALO_PROGRESSO: Duration = Duration::from_millis(250);
 
 /// Deixa passar um aviso a cada `INTERVALO_PROGRESSO`.
 #[derive(Default)]
@@ -1270,14 +1302,16 @@ fn exigir(cmd: &Comando, t: &Termino) -> Result<()> {
     Err(erro(format!("{classe}: {} (código {:?}): {}", cmd.nome, t.codigo, linhas.join(" | "))))
 }
 
-/// Conferência por execução de um bloco (§5.3): `frames in` de cada `fps@` (ÚLTIMA linha) = `lidos`; pts do
-/// `showinfo@` = os esperados quando o plano os traz; e o `framehash` com `n_q` quadros. None = confere.
+/// Conferência por execução de um bloco (§5.3): `frames in` de cada `fps@` (ÚLTIMA linha) = `lidos` + 1 (o clone do
+/// último quadro que a cadeia do clipe põe sempre, contrato de `ConferirClipe`); pts do `showinfo@` = os esperados
+/// quando o plano os traz; e o `framehash` com `n_q` quadros. None = confere.
 fn divergencia(b: &Bloco, stderr: &Path, framehash: Option<&Path>) -> Result<Option<String>> {
     let lidos = exec::quadros_lidos(stderr)?;
     for c in &b.conferir {
         let n = lidos.get(&c.rotulo).copied();
-        if n != Some(c.lidos as u64) {
-            return Ok(Some(format!("{}: frames in {}, esperados {}", c.rotulo, n.map_or("nenhum".into(), |n| n.to_string()), c.lidos)));
+        if n != Some(c.lidos as u64 + 1) {
+            let lido = n.map_or("nenhum".into(), |n| n.to_string());
+            return Ok(Some(format!("{}: frames in {lido}, esperados {} + 1", c.rotulo, c.lidos)));
         }
     }
     if b.conferir.iter().any(|c| !c.pts.is_empty()) {
@@ -1420,9 +1454,9 @@ pub(crate) fn limpar_cache(raiz: &Path, teto: u64, vivas: &[String]) -> u64 {
 pub(crate) const CHAVES: &str = "chaves.json";
 
 /// Ao concluir exportação com `ocultar` (§4): saem os blocos, camadas, quadros finais e prévias do render de todas
-/// as tarefas do projeto (o que foi renderizado antes da ocultação não fica no cache). `exceto` = tarefa que fica
-/// (a pasta dela; as chaves saem do mesmo jeito).
-pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exceto: &str) {
+/// as tarefas do projeto (o que foi renderizado antes da ocultação não fica no cache). `exportacao` = a que limpa (sai
+/// o cache, fica a pasta); `intocadas` = tarefas vivas que entraram depois da parada das prévias.
+pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exportacao: &str, intocadas: &[String]) {
     for e in fs::read_dir(cache.join("render")).into_iter().flatten().flatten() {
         let d = e.path();
         let deste = [d.join(super::fila::RETRATO_TAREFA), d.join("projeto").join(super::fila::RETRATO_TAREFA)]
@@ -1430,7 +1464,8 @@ pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exceto: &str) {
             .filter_map(|a| fs::read(a).ok())
             .filter_map(|b| serde_json::from_slice::<serde_json::Value>(&b).ok())
             .any(|v| v.get("id").and_then(serde_json::Value::as_str) == Some(projeto_id));
-        if !deste {
+        let nome = e.file_name().to_string_lossy().into_owned();
+        if !deste || (nome != exportacao && intocadas.contains(&nome)) {
             continue;
         }
         if let Some(c) = fs::read(d.join(CHAVES)).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
@@ -1454,7 +1489,7 @@ pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exceto: &str) {
                 }
             }
         }
-        if e.file_name().to_string_lossy() != exceto {
+        if nome != exportacao {
             remover(&d);
         }
     }
@@ -1565,7 +1600,8 @@ pub(crate) mod apoio {
         }
     }
 
-    /// Bloco `i`: quadros `j_in..j_in+n` da fonte (pts da tabela), um slot por quadro, `showinfo@` e `fps@` com rótulo.
+    /// Bloco `i`: quadros `j_in..j_in+n` da fonte (pts da tabela), um slot por quadro, `showinfo@` e `fps@` com rótulo,
+    /// e o clone do último quadro antes do `settb` (regra única da cadeia do clipe, contrato de `ConferirClipe`).
     /// `antes` = argumentos antes do `-i` (busca); `antes_sem_busca` Some = o executor pode refazer sem ela.
     #[allow(clippy::too_many_arguments)]
     pub fn bloco(
@@ -1582,8 +1618,8 @@ pub(crate) mod apoio {
         let rot = format!("c{i:03}");
         let fim = pts.get(j_in + n).map(|p| format!(":end_pts={p}")).unwrap_or_default();
         let grafo = format!(
-            "[0:v]trim=start_pts={}{fim},showinfo@{rot}=checksum=0,setpts=PTS-STARTPTS,settb=1/30,setpts=N,fps@{rot}=30:start_time=0,\
-             trim=end_frame={n},format=yuv420p,split[v][h]",
+            "[0:v]trim=start_pts={}{fim},showinfo@{rot}=checksum=0,setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop=1,settb=1/30,setpts=N,\
+             fps@{rot}=30:start_time=0,trim=end_frame={n},format=yuv420p,split[v][h]",
             pts[j_in]
         );
         let chave = sha256_bytes(format!("{grafo}\n{cod:?}\n{antes:?}\n{}\n{}", cap.sha256, fonte.display()).as_bytes());
@@ -1813,7 +1849,7 @@ mod testes {
         let amb = ambiente(cap.clone(), d.path(), "t1");
         let e = executar(&plano, &amb, &AtomicBool::new(false), &mut |_| {}).unwrap_err();
         assert_eq!(codigo_de(&e), Some(ERRO_LEITURA_DIVERGENTE), "{e}");
-        assert!(e.to_string().contains("frames in 30, esperados 29"), "{e}");
+        assert!(e.to_string().contains("frames in 31, esperados 29 + 1"), "{e}");
         let t = arquivos(&amb.trabalho);
         assert!(t.contains(&"b001.sem_busca.log".to_string()), "refeito sem busca: {t:?}");
         assert!(t.iter().all(|n| !n.contains(".tmp.") && !n.starts_with("saida.")), "{t:?}");
@@ -2165,6 +2201,10 @@ mod testes {
         assert_eq!(prep.fontes["m1"].quadros.origem, OrigemTabela::Decodificador, "{}", cap.versao);
         assert_eq!(prep.midias[0].erros, Some(0));
         assert_eq!(prep.fontes["m1"].quadros.pts.len(), 450);
+        // exportação cancelada durante o SHA-256 da sessão (a tabela já está pronta): para ali, não analisa
+        let cancelado = AtomicBool::new(true);
+        let e = preparar_com(&ws, &p, cache.path(), true, Some(&cancelado)).err().expect("cancelada");
+        assert_eq!(codigo_de(&e), Some(ERRO_CANCELADO), "{e}");
 
         // rastreio denso pelo SHA-256 do conteúdo
         let d = pasta("leitor");
@@ -2182,6 +2222,50 @@ mod testes {
         fs::write(d.path().join("rastreios/r1").join(format!("{}.json", "f".repeat(64))), &bytes).unwrap();
         assert!(leitor.denso("r1", &"f".repeat(64)).is_err(), "conteúdo que não bate com o nome");
         assert!(leitor.silhuetas("r1", &sha).unwrap_err().to_string().contains("nao_suportado"));
+    }
+
+    /// Tabela de mídia sem tempo nos pacotes pedida pela tela (a cada quadro): a que falhou há pouco não roda de novo a
+    /// cada pedido (decisões (g)14 e (h)14); a exportação, que espera por ela, refaz.
+    #[test]
+    fn tabela_que_falhou_nao_e_refeita_a_cada_pedido_da_tela() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = pasta("tabela-falha");
+        let sha = sha256_bytes(d.path().to_string_lossy().as_bytes());
+        let falta = d.path().join("não existe.h264");
+        let nao = AtomicBool::new(false);
+        let chave = pedir_tabela(&cap, d.path(), &sha, &falta, "h264", false);
+        esperar_fundo(&chave, &nao).unwrap();
+        let falhou = fundo::estado(&chave).expect("na lista");
+        assert!(matches!(falhou.estado, EstadoFundo::Falhou { .. }), "{falhou:?}");
+        for _ in 0..3 {
+            pedir_tabela(&cap, d.path(), &sha, &falta, "h264", false);
+        }
+        assert_eq!(fundo::estado(&chave), Some(falhou.clone()), "refeita a cada pedido da tela");
+        pedir_tabela(&cap, d.path(), &sha, &falta, "h264", true);
+        assert_ne!(fundo::estado(&chave).map(|t| t.id), Some(falhou.id), "a exportação refaz");
+        esperar_fundo(&chave, &nao).unwrap();
+    }
+
+    /// SHA-256 da sessão em pedaços: igual ao de `hashing`, um aviso por pedaço, e o cancelamento vale no pedaço seguinte.
+    #[test]
+    fn sha256_em_pedacos_olha_o_cancelamento() {
+        let d = pasta("sha-pedacos");
+        let a = d.path().join("grande.bin");
+        let n = PEDACO_SHA * 2 + 123;
+        fs::write(&a, (0..n).map(|i| (i % 251) as u8).collect::<Vec<u8>>()).unwrap();
+        let mut avisos = Vec::new();
+        let h = sha256_em_pedacos(&a, &AtomicBool::new(false), &mut |l, t| avisos.push((l, t))).unwrap();
+        assert_eq!(h, crate::hashing::sha256::sha256_file(&a).unwrap());
+        assert_eq!(avisos.len(), 3);
+        assert_eq!(avisos.last(), Some(&(n as u64, n as u64)));
+        let c = AtomicBool::new(false);
+        let mut k = 0;
+        let e = sha256_em_pedacos(&a, &c, &mut |_, _| {
+            k += 1;
+            c.store(true, Ordering::SeqCst);
+        })
+        .unwrap_err();
+        assert_eq!((codigo_de(&e), k), (Some(ERRO_CANCELADO), 1));
     }
 
     /// Exportação com ocultar: saem os blocos, camadas e prévias das tarefas do projeto; os de outro projeto ficam.
@@ -2205,10 +2289,13 @@ mod testes {
             fs::write(cache.join(dir).join(n), b"x").unwrap();
         }
         fs::create_dir_all(cache.join("camadas").join(&k)).unwrap();
-        limpar_do_projeto(cache, "p1", "t4");
-        assert_eq!(arquivos(&cache.join("blocos")), [format!("{b}.mp4")]);
+        let z = "f".repeat(64);
+        tarefa("t5", "p1", "blocos", &[&z], &[]);
+        fs::write(cache.join("blocos").join(format!("{z}.mp4")), b"x").unwrap();
+        limpar_do_projeto(cache, "p1", "t4", &["t5".to_string()]);
+        assert_eq!(arquivos(&cache.join("blocos")), [format!("{b}.mp4"), format!("{z}.mp4")]);
         assert!(arquivos(&cache.join("quadro")).is_empty() && !cache.join("camadas").join(&k).exists());
-        assert_eq!(arquivos(&cache.join("render")), ["t2", "t4"]);
+        assert_eq!(arquivos(&cache.join("render")), ["t2", "t4", "t5"], "a viva que entrou depois fica inteira");
     }
 
     /// (Só Unix: abre pasta para mudar a data, o que o Windows não deixa sem `FILE_FLAG_BACKUP_SEMANTICS`.)

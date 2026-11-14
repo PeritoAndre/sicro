@@ -9,7 +9,8 @@ use uuid::Uuid;
 
 use crate::database::repositories::{
     audio_repo, croqui_repo, documentoscopia_repo, evidence_link_repo, export_repo,
-    image_analysis_repo, import_repo, laudo_repo, media_asset_repo, video_repo,
+    image_analysis_repo, import_repo, laudo_repo, media_asset_repo, video_edit_output_repo,
+    video_repo,
 };
 use crate::error::Result;
 use crate::models::{
@@ -421,6 +422,39 @@ pub fn build_registry(
     }
 
     // ------------------------------------------------------------------
+    // Edição: exportações finais (o vídeo; o `tecnico.json` é o sidecar quando existe)
+    for s in video_edit_output_repo::listar_do_caso(conn, occurrence_id)? {
+        let metadata = serde_json::json!({
+            "projeto_id": s.projeto_id, "pasta": s.pasta, "retrato_rel": s.retrato_rel, "projeto_sha256": s.projeto_sha256,
+            "composto_sha256": s.composto_sha256, "decodificado_sha256": s.decodificado_sha256, "audio_sha256": s.audio_sha256,
+            "n_quadros": s.n_quadros, "duracao_s": s.duracao_s, "predefinicao": s.predefinicao, "codificador": s.codificador,
+            "exige_conferencia": s.exige_conferencia, "conferida_por": s.conferida_por, "conferida_em": s.conferida_em,
+        });
+        out.push(EvidenceRegistryItem {
+            id: format!("video_edit:{}", s.id),
+            occurrence_id: *occurrence_id,
+            kind: EvidenceKind::VideoEdit,
+            subtype: Some(s.predefinicao.clone()),
+            title: Some(s.titulo.clone()),
+            description: None,
+            source_module: "edicao".to_string(),
+            original_id: Some(s.projeto_id.clone()),
+            relative_path: Some(s.arquivo.clone()),
+            sidecar_relative_path: s.tecnico_rel.clone(),
+            hash_sha256: Some(s.sha256.clone()),
+            size_bytes: Some(s.tamanho),
+            mime_type: guess_video_mime(&s.arquivo),
+            created_at: Some(s.criado_em),
+            updated_at: s.conferida_em.or(Some(s.criado_em)),
+            status: Some(s.estado.as_str().to_string()),
+            integrity_status: IntegrityStatus::Unknown,
+            integrity_detail: None,
+            linked_laudos_count: 0,
+            metadata_json: metadata.to_string(),
+        });
+    }
+
+    // ------------------------------------------------------------------
     // linked_laudos_count = laudos DISTINTOS que citam o item; por laudo, não
     // por link, para não inflar quando a mesma foto entra duas vezes.
     let links = evidence_link_repo::list_for_occurrence(conn, occurrence_id)?;
@@ -453,6 +487,7 @@ pub fn build_summary(items: &[EvidenceRegistryItem]) -> RegistrySummary {
             EvidenceKind::ImageExport => s.image_exports += 1,
             EvidenceKind::Audio => {}
             EvidenceKind::Document => {}
+            EvidenceKind::VideoEdit => {}
             EvidenceKind::Other => {}
         }
         if item.relative_path.is_some() {

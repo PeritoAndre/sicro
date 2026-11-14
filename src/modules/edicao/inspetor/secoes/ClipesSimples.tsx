@@ -20,7 +20,8 @@ export function CongelarSecao({ clipe: c, info, tabela }: SecaoProps<ClipeCongel
           item={id}
           valor={c.instante_s}
           base="fonte"
-          tabela={tabela}
+          tabela={info?.marcavel ? tabela : null}
+          desligado={info?.marcavel === false}
           valido={(t) => !info || (t >= info.de_s - 1e-9 && t < info.ate_s)}
           aplicar={(t, pts) =>
             noClipe<ClipeCongelar>(id, (x) => {

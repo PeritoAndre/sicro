@@ -88,6 +88,8 @@ export function kindLabel(kind: string): string {
       return "Laudo";
     case "laudo_export":
       return "Export laudo";
+    case "video_edit":
+      return "Edição de vídeo";
     case "image_analysis":
       return "Imagem (análise)";
     case "image_export":

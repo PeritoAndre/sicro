@@ -10,7 +10,7 @@ import { revealExported } from "@core/reveal";
 import { selectActiveOccurrence, useWorkspaceStore } from "@stores/workspaceStore";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import type { EstadoTarefa, Fase, Tarefa } from "@domain/edicao";
-import { useEdicaoStore } from "../store/edicaoStore";
+import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
 import { useExportarUi } from "./avisos";
 import { Saidas, conferirSaida } from "./Saidas";
@@ -171,7 +171,7 @@ function LinhaTarefa({ t }: { t: Tarefa }) {
       )}
       {e.tipo === "falhou" && (
         <div className={styles.tarefaLinha}>
-          <span className={styles.erroLinha} data-dado>{e.mensagem}</span>
+          <span className={styles.erroLinha} data-dado>{separarErro({ kind: "validation", message: e.mensagem }).frase}</span>
           {raizCache && e.log_rel && (
             <button type="button" className={styles.mini} onClick={() => ws && revealExported(ws, `${raizCache}/${e.log_rel}`)}>
               <FileText size={12} /> Ver registro

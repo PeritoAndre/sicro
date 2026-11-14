@@ -75,6 +75,11 @@ export interface EdicaoState {
   avisos: Problema[];
   /** Revisão do documento que a `analise` descreve. */
   analiseRevisao: number;
+  // CONTRATO: acréscimo ao §8.4 (contratos (h) 27): `analiseFalhou` e `erroAnalise`.
+  /** Revisão cuja análise falhou; -1 = nenhuma. A tela para de esperar por ela. */
+  analiseFalhou: number;
+  /** Erro dessa análise (o `erro` comum é limpo pela gravação que dá certo). */
+  erroAnalise: ErroComando | null;
   erro: ErroComando | null;
 
   alterar(rotulo: string, f: (d: Draft<ProjetoEdicao>) => void, op?: OpcoesAlterar): void;
@@ -169,6 +174,8 @@ const fechado = () => ({
   salvando: "salvo" as EstadoSalvo,
   analise: null,
   analiseRevisao: -1,
+  analiseFalhou: -1,
+  erroAnalise: null,
   selecao: SELECAO_VAZIA,
   cursor: CURSOR_INICIAL,
   passado: [] as Passo[],
@@ -221,10 +228,12 @@ export const useEdicaoStore = create<EdicaoState>((set, get) => {
     try {
       const a = await commands.edicaoAnalisar(meu.ws, s.doc);
       if (rt !== meu || pedido !== meu.seq) return;
-      set({ analise: a, analiseRevisao: rev });
+      set({ analise: a, analiseRevisao: rev, analiseFalhou: -1, erroAnalise: null });
       if (rev === get().revisao) aplicarAnalise(meu, a);
     } catch (e) {
-      if (rt === meu && pedido === meu.seq) set({ erro: separarErro(e) });
+      if (rt !== meu || pedido !== meu.seq) return;
+      const x = separarErro(e);
+      set({ erro: x, analiseFalhou: rev, erroAnalise: x });
     }
   };
 

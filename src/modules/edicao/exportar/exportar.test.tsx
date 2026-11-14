@@ -23,7 +23,8 @@ const cmd = vi.hoisted(() => ({
 }));
 vi.mock("@core/commands", () => ({ commands: cmd }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
-vi.mock("@components/Dialog/ask", () => ({ askConfirm: vi.fn(async () => true) }));
+const ask = vi.hoisted(() => ({ askConfirm: vi.fn(async (_o: { title: string; confirmLabel?: string }) => true) }));
+vi.mock("@components/Dialog/ask", () => ask);
 
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
@@ -108,6 +109,24 @@ describe("Exportar", () => {
     const [ws, doc, alvo, ciencias] = cmd.edicaoEnfileirar.mock.calls[0]!;
     expect([ws, (doc as ProjetoEdicao).id, alvo, ciencias]).toEqual([WS, st().doc!.id, { tipo: "final", exportacao: st().doc!.saida.exportacao }, []]);
     expect(useExportarUi.getState()).toMatchObject({ dialogo: false, fila: true });
+  });
+
+  it("análise que falha: o botão para de girar, fica desligado e o erro aparece (contratos (h) 27)", async () => {
+    cmd.edicaoAnalisar.mockRejectedValue({ kind: "validation", message: "validation error: fonte_danificada: Vídeo danificado" });
+    await montar(<DialogoExportar />);
+    await esperar(() => abrirExportar());
+    // uma mudança pede a análise de novo (250 ms depois)
+    await esperar(() => st().alterar("Título", (d) => void (d.titulo = "x")));
+    await esperar(() => new Promise((r) => setTimeout(r, 300)));
+    expect(st().analiseFalhou).toBe(st().revisao);
+    expect(exportarBtn().disabled).toBe(true);
+    expect(exportarBtn().querySelector("svg")).toBeNull();
+    expect(corpo().querySelector("[data-erro-analise]")?.textContent).toBe("Vídeo danificado");
+    // a gravação que dá certo limpa o erro da store: o da análise fica (senão o botão voltaria a girar)
+    await esperar(() => st().salvar());
+    expect(st().erro).toBeNull();
+    expect(exportarBtn().querySelector("svg")).toBeNull();
+    expect(corpo().querySelector("[data-erro-analise]")?.textContent).toBe("Vídeo danificado");
   });
 
   it("1 aviso: Exportar com 1 aviso, sem ciência", async () => {
@@ -283,6 +302,12 @@ describe("Fila e Saídas", () => {
     expect([...corpo().querySelectorAll<HTMLElement>("[data-saidas] > li")].map((l) => l.dataset.estado)).toEqual(["a_conferir", "conferida", "nao_conferida", "pronta"]);
     semFrase();
     const primeira = corpo().querySelector<HTMLElement>("[data-saidas] > li")!;
+    // "Conferido" pede confirmação (h 24): recusada, nada é registrado
+    ask.askConfirm.mockClear();
+    ask.askConfirm.mockResolvedValueOnce(false);
+    await clicar(botao(primeira, "Conferido"));
+    expect(ask.askConfirm).toHaveBeenCalledWith({ title: "Conferido", confirmLabel: "Conferido" });
+    expect(cmd.edicaoConferir).not.toHaveBeenCalled();
     await clicar(botao(primeira, "Conferido"));
     expect(cmd.edicaoConferir).toHaveBeenCalledWith(WS, "s1", true);
     await clicar(primeira.querySelector<HTMLButtonElement>('[aria-label="Abrir pasta"]')!);

@@ -209,6 +209,11 @@
   border-color: var(--sicro-danger);
 }
 
+.acaoBtn:hover:not(:disabled) {
+  color: var(--sicro-accent);
+  border-color: var(--sicro-accent);
+}
+
 .deleteBtn:focus-visible {
   outline: 2px solid var(--sicro-accent);
   outline-offset: 1px;

@@ -26,8 +26,8 @@ export function EnquadramentoSecao({ clipe: c }: SecaoProps<ClipeQualquer>) {
   const marcar = (ponta: "inicio" | "fim") =>
     pedirMarcacao(
       { tipo: "regiao", efeito: e?.id, proporcao },
-      (v, t) => {
-        if ("w" in v) marcarRegiao(id, ponta, t, v as Caixa, ponta === "inicio" ? "Marcar início" : "Marcar fim");
+      (v, t, pts) => {
+        if ("w" in v) marcarRegiao(id, ponta, t, pts, v as Caixa, ponta === "inicio" ? "Marcar início" : "Marcar fim");
       },
       `${id}:regiao:${ponta}`,
     );

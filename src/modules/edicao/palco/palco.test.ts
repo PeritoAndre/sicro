@@ -2,8 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Caixa, EfEnquadramento, EfGirar, PreviaMidia, TabelaQuadros } from "@domain/edicao";
-import { VISTA_INICIAL, contido, daTela, deslocar, limitar, mostrado, paraTela, zoomEm, zoomMaximo } from "./vista";
-import { aparar, bordaArrastada, entradaNoCursor, faixaDoClipe, fronteira, marcarBloqueado, meioDoQuadro, saidaNoCursor, tempoDaFronteira, tempoDoX, xDoTempo } from "./faixa";
+import { VISTA_INICIAL, caixaMedida, contido, daTela, deslocar, limitar, mostrado, paraTela, zoomEm, zoomMaximo } from "./vista";
+import { aparar, bordaArrastada, entradaNoCursor, faixaDoClipe, fronteira, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor, tempoDaFronteira, tempoDoX, xDoTempo } from "./faixa";
 import { Buscador, ESPERA_MS, type Agenda } from "./motor/busca";
 import type { ElementoBusca } from "./motor/elemento";
 import { relogioMidia } from "./motor/relogioMidia";
@@ -56,6 +56,18 @@ describe("vista: zoom e deslocamento da tela", () => {
     perto(de.y, q.y);
     expect(zoomMaximo(img, saida)).toBe(Math.max(16, (40 * 1920) / 800));
     expect(zoomEm(VISTA_INICIAL, 1e6, { x: 0, y: 0 }, caixa, img, 16).s).toBe(16);
+  });
+
+  it("palco escondido mede 0×0: a caixa anterior vale e a vista não perde o deslocamento (§8.1)", () => {
+    const v = deslocar(zoomEm(VISTA_INICIAL, 4, { x: 600, y: 400 }, caixa, img), -37, -21, caixa, img);
+    const escondida = caixaMedida(caixa, 0, 0);
+    expect(escondida).toBe(caixa);
+    expect(limitar(v, escondida, contido(escondida, saida))).toEqual(v);
+    // sem a guarda a vista iria para o canto
+    expect(limitar(v, { w: 0, h: 0 }, contido({ w: 0, h: 0 }, saida))).not.toEqual(v);
+    // medida de verdade troca; igual devolve a mesma referência
+    expect(caixaMedida(caixa, 640, 360)).toEqual({ w: 640, h: 360 });
+    expect(caixaMedida(caixa, caixa.w, caixa.h)).toBe(caixa);
   });
 });
 
@@ -116,25 +128,51 @@ describe("transporte: faixa da mídia inteira, bordas e I/O", () => {
     expect(bordaArrastada(clipe, "fim", clipe.fim_s, 2, t, pista)).toBeNull();
   });
 
-  it("I e O no cursor gravam o quadro exibido e ALARGAM o clipe quando o cursor está fora", () => {
+  it("I grava o quadro exibido; O inclui o quadro exibido (fim = o seguinte); os dois ALARGAM o clipe (contratos (h) 21)", () => {
     // cursor antes do clipe: I puxa o início para trás
     expect(entradaNoCursor(clipe, t, meioDoQuadro(t, 12))).toEqual({ inicio_s: tempoDoQuadro(t, 12), inicio_pts: 30720 + 12 * 512 });
-    // cursor depois do fim: O empurra o fim (exclusivo) para o quadro exibido
-    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 140))).toEqual({ fim_s: tempoDoQuadro(t, 140), fim_pts: 30720 + 140 * 512 });
-    // dentro: encurta
-    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 60))).toEqual({ fim_s: tempoDoQuadro(t, 60), fim_pts: 30720 + 60 * 512 });
+    // cursor depois do fim: O empurra o fim; o quadro 140 fica DENTRO (fim exclusivo = 141)
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 140))).toEqual({ fim_s: tempoDoQuadro(t, 141), fim_pts: 30720 + 141 * 512 });
+    // dentro: encurta, com o quadro mostrado incluído
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 60))).toEqual({ fim_s: tempoDoQuadro(t, 61), fim_pts: 30720 + 61 * 512 });
+    // O no último quadro do clipe: o fim já é o seguinte, nada muda
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 89))).toBeNull();
+    // O no primeiro quadro: fica um quadro só
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 30))).toEqual({ fim_s: tempoDoQuadro(t, 31), fim_pts: 30720 + 31 * 512 });
+    // último quadro da mídia: até o fim (pts nulo)
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 299))).toEqual({ fim_s: (30720 + 300 * 512) / 15360, fim_pts: null });
     // O antes do início ou I depois do fim: nada
     expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 10))).toBeNull();
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 29))).toBeNull();
     expect(entradaNoCursor(clipe, t, meioDoQuadro(t, 95))).toBeNull();
   });
 
-  it("vídeo cru e MPEG-PS com tabela de pacotes: marcar desligado (contratos (g) 14)", () => {
+  it("marcar só com MidiaInfo.marcavel (contratos (h) 17): a extensão do arquivo não conta", () => {
     const pac = { ...t, origem: "pacotes" as const };
-    expect(marcarBloqueado({ nome: "dvr.h264", relativo: "Mídias/Vídeos/dvr.h264" }, pac)).toBe(true);
-    expect(marcarBloqueado({ nome: "x.mpg", relativo: "x.mpg" }, pac)).toBe(true);
-    expect(marcarBloqueado({ nome: "x.mpg", relativo: "x.mpg" }, t)).toBe(false);
-    expect(marcarBloqueado({ nome: "cam.mp4", relativo: "cam.mp4" }, pac)).toBe(false);
-    expect(marcarBloqueado({ nome: "cam.mp4", relativo: "cam.mp4" }, null)).toBe(true);
+    expect(marcarBloqueado({ marcavel: false }, pac)).toBe(true);
+    expect(marcarBloqueado({ marcavel: false }, t)).toBe(true);
+    expect(marcarBloqueado({ marcavel: true }, pac)).toBe(false);
+    expect(marcarBloqueado({ marcavel: true }, t)).toBe(false);
+    expect(marcarBloqueado(null, t)).toBe(true);
+    expect(marcarBloqueado({ marcavel: true }, null)).toBe(true);
+  });
+
+  it("marca só com a imagem do quadro na tela: busca em curso (troca de clipe) bloqueia (contratos (h) 27)", () => {
+    const ok = { marcavel: true };
+    // troca de clipe: jRef já no quadro novo (40), a imagem ainda é a do 7
+    expect(marcaLivre("trecho", ok, t, { alvo: 40, ultimo: 7 }, 40)).toBe(false);
+    // pintou o 40, sem nada pendente
+    expect(marcaLivre("trecho", ok, t, { alvo: null, ultimo: 40 }, 40)).toBe(true);
+    // passo em curso com outro pendente
+    expect(marcaLivre("trecho", ok, t, { alvo: 41, ultimo: 40 }, 40)).toBe(false);
+    // nada pintado ainda, ou sem elemento
+    expect(marcaLivre("trecho", ok, t, { alvo: null, ultimo: null }, 40)).toBe(false);
+    expect(marcaLivre("congelar", ok, t, null, 40)).toBe(false);
+    // mídia não marcável
+    expect(marcaLivre("trecho", { marcavel: false }, t, { alvo: null, ultimo: 40 }, 40)).toBe(false);
+    // clipe sem fonte: não depende de busca
+    expect(marcaLivre("titulo", null, null, null, null)).toBe(true);
+    expect(marcaLivre(null, ok, t, { alvo: null, ultimo: 40 }, 40)).toBe(false);
   });
 });
 

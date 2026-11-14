@@ -12,7 +12,7 @@ use super::executor::{self, Opcoes};
 use super::fontes::{self, Fonte};
 use super::medir::{self, QuadroRgb};
 use crate::edicao::ffmpeg::sonda::Capacidades;
-use crate::edicao::modelo::ProjetoEdicao;
+use crate::edicao::modelo::{ProjetoEdicao, Racional};
 use crate::edicao::motor::plano::{Juncao, Papel, Plano, TipoCamada};
 use crate::edicao::motor::{compilar_video, Alvo, Contexto, FonteInfo};
 use crate::edicao::quadros::apoio::{self, Medida, SemRastreios};
@@ -254,8 +254,7 @@ fn item_de_outra_fase_devolve_nao_suportado_com_o_id() {
     let casos: Vec<(&str, Vec<Value>, Value)> = vec![
         ("efeito lupa L9", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([efeito("lupa", "L9", json!({ "rastreio": "r1", "janela": 0.1, "fator": 2.0, "forma": "circulo", "interpolacao": "bilinear", "onde": { "modo": "fixa", "x": 0.8, "y": 0.2 }, "moldura": { "cor": "#ffffff", "espessura": 0.004, "contorno": false }, "ligacao": false }))]))], json!({})),
         ("efeito nitidez N1", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([efeito("nitidez", "N1", json!({ "quantidade": 0.5 }))]))], json!({})),
-        ("efeito do_futuro F7", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([{ "tipo": "do_futuro", "id": "F7", "ligado": true }]))], json!({})),
-        ("clipe holograma H1", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([])), json!({ "tipo": "holograma", "id": "H1" })], json!({})),
+
         ("efeito ocultar O4 em clipe sem fonte", vec![json!({ "tipo": "titulo", "id": "c1", "duracao_s": 1.0, "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] }, "efeitos": [ocultar("O4", "r1", "solido", json!({}))] })], json!({})),
         (
             "sobreposto video V3",
@@ -270,6 +269,26 @@ fn item_de_outra_fase_devolve_nao_suportado_com_o_id() {
         let e = mundo.compilar(&p, &alvo_final("cpu")).expect_err(esperado).to_string();
         assert!(e.contains("nao_suportado") && e.contains(esperado), "{esperado}: {e}");
     }
+    // item de versão mais nova ligado: o código da validação (contratos (h) 2), nunca ignorado
+    for (esperado, principal) in [
+        ("item_desconhecido: do_futuro F7", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([{ "tipo": "do_futuro", "id": "F7", "ligado": true }]))]),
+        ("item_desconhecido: holograma H1", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([])), json!({ "tipo": "holograma", "id": "H1" })]),
+        ("item_invalido: nitidez N2", vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([{ "tipo": "nitidez", "id": "N2" }]))]),
+    ] {
+        let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], principal, json!({}));
+        let e = mundo.compilar(&p, &alvo_final("cpu")).expect_err(esperado).to_string();
+        assert!(e.contains(esperado), "{esperado}: {e}");
+    }
+    // efeito desligado nunca é recusado, conhecido ou não (contratos (h) 2)
+    for desligado in [json!({ "tipo": "do_futuro", "id": "F7", "ligado": false }), json!({ "tipo": "nitidez", "id": "N1", "ligado": false, "nome": "", "ativo": null, "quantidade": 0.5 })] {
+        let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([desligado.clone()]))], json!({}));
+        assert!(mundo.compilar(&p, &alvo_final("cpu")).is_ok(), "{desligado}");
+        let sob = json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [{ "tipo": "titulo", "id": "x1", "rotulo": "", "pos": { "ref": "programa", "t": 0.0 },
+            "duracao_s": 0.5, "transformacao": { "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.0, "saida_s": 0.0,
+            "efeitos": [desligado.clone()], "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] } }] }] });
+        let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([]))], sob);
+        assert!(mundo.compilar(&p, &alvo_final("cpu")).is_ok(), "sobreposto com {desligado}");
+    }
     // efeito desligado de outra fase não impede
     let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([{ "tipo": "nitidez", "id": "N1", "ligado": false, "nome": "", "ativo": null, "quantidade": 0.5 }]))], json!({}));
     assert!(mundo.compilar(&p, &alvo_final("cpu")).is_ok());
@@ -280,6 +299,369 @@ fn item_de_outra_fase_devolve_nao_suportado_com_o_id() {
     let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(10), Some(10), [0.1, 0.1, 0.2, 0.2])]);
     let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([ocultar("o1", "r1", "solido", json!({}))]))], vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([]))], json!({ "rastreios": [r] }));
     assert!(mundo.compilar(&p, &alvo_final("cpu")).unwrap_err().to_string().contains("sem_cobertura: o1"));
+}
+
+// ------------------------------------------------------------------ validação = motor (contratos (h) 1 e 2)
+
+const CONTRATO: &str = include_str!("../../../tests/fixtures/edicao/contrato-todas-variantes.json");
+
+/// Pedaço da fixture de contrato (todas as variantes do modelo) pelo ponteiro JSON.
+fn da_fixture(ponteiro: &str) -> Value {
+    let v: Value = serde_json::from_str(CONTRATO).unwrap();
+    v.pointer(ponteiro).unwrap_or_else(|| panic!("{ponteiro} fora da fixture")).clone()
+}
+
+fn com_id(mut v: Value, id: &str) -> Value {
+    v["id"] = json!(id);
+    v
+}
+
+/// Efeito da fixture, ligado, sem `ativo` e com o id dado.
+fn efeito_da_fixture(ponteiro: &str, id: &str) -> Value {
+    let mut e = da_fixture(ponteiro);
+    e["id"] = json!(id);
+    e["ligado"] = json!(true);
+    e["ativo"] = Value::Null;
+    e
+}
+
+/// Uma recusa do motor: o arquivo do sítio e o pedaço da mensagem dele; o código que a validação tem de dar antes,
+/// e onde (clipe, efeito ou mídia do problema).
+struct Recusa {
+    arquivo: &'static str,
+    motor: &'static str,
+    codigo: &'static str,
+    clipe: Option<&'static str>,
+    efeito: Option<&'static str>,
+    midia: Option<&'static str>,
+    p: ProjetoEdicao,
+    alvo: Alvo,
+}
+
+/// Mídias do ensaio: m1 (vídeo com som), pc (nv12 de faixa cheia: sem cadeia de cor), foto e n1 (só som).
+fn mundo_das_recusas() -> (Mundo, Vec<Value>) {
+    let cap = {
+        let mut c = apoio::cap_falsa();
+        for f in ["perspective", "vidstabdetect", "vidstabtransform", "lenscorrection", "bwdif", "tmix", "unsharp"] {
+            c.filtros.insert(f.into());
+        }
+        Arc::new(c)
+    };
+    let mut m1 = apoio::fonte(apoio::tabela((1, 30), (0..300).collect()), (320, 180));
+    m1.audio = Some(crate::edicao::motor::AudioInfo { inicio_s: 0.0, taxa: 48000, canais: 2 });
+    let mut pc = m1.clone();
+    (pc.pix_fmt, pc.faixa) = ("nv12".into(), crate::edicao::modelo::Faixa::Pc);
+    let mut foto = apoio::fonte(apoio::tabela((1, 1), vec![0]), (400, 300));
+    foto.pix_fmt = "rgb24".into();
+    let mut n1 = apoio::fonte(apoio::tabela((1, 1), vec![]), (0, 0));
+    n1.audio = m1.audio.clone();
+    let midias = vec![midia("m1", "video", json!([])), midia("pc", "video", json!([])), midia("foto", "imagem", json!([])), midia("n1", "audio", json!([]))];
+    (Mundo::novo(&cap).com("m1", &m1).com("pc", &pc).com("foto", &foto).com("n1", &n1), midias)
+}
+
+/// Um caso por sítio de recusa do motor (`nao_suportado`, `pixel_nao_suportado` e item desconhecido).
+fn recusas(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
+    let t = &mundo.fontes["m1"].quadros;
+    let tr = |id: &str, efeitos: Value| trecho(id, "m1", t, 0, 30, 1.0, efeitos);
+    let r1 = rastreio("r1", Some("m1"), "fonte", vec![ancora(0.0, Some(0), [0.1, 0.1, 0.2, 0.2])]);
+    let base = |principal: Vec<Value>, extra: Value| {
+        let mut extra = extra;
+        if extra.get("rastreios").is_none() {
+            extra["rastreios"] = json!([r1.clone()]);
+        }
+        projeto(320, 180, (30, 1), midias.to_vec(), principal, extra)
+    };
+    let com_som = |mut p: ProjetoEdicao| {
+        p.saida.audio = true;
+        p
+    };
+    let titulo_sob = |efeitos: Value| json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [{ "tipo": "titulo", "id": "x1", "rotulo": "",
+        "pos": { "ref": "programa", "t": 0.0 }, "duracao_s": 0.5, "transformacao": { "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 },
+        "entrada_s": 0.0, "saida_s": 0.0, "efeitos": efeitos, "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] } }] }] });
+    let video_sob = |audio: Value| {
+        let mut v = da_fixture("/sobreposicoes/0/clipes/0");
+        for (k, x) in [("midia", json!("m1")), ("pos", json!({ "ref": "programa", "t": 0.0 })), ("duracao_s", json!(0.5)), ("sincronia", Value::Null), ("audio", audio), ("inicio_s", json!(0.0)), ("inicio_pts", json!(0))] {
+            v[k] = x;
+        }
+        json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [v] }] })
+    };
+    let mut tela = da_fixture("/principal/4");
+    for (k, x) in [("inicio_s", json!(0.0)), ("fim_s", json!(1.0)), ("inicio_pts", json!(0)), ("fim_pts", json!(30)), ("velocidade", json!({ "tipo": "constante", "fator": 1.0 })),
+                   ("celulas", json!([{ "midia": "m1", "sincronia": null, "rotulo": "", "efeitos": [] }, { "midia": "m1", "sincronia": null, "rotulo": "", "efeitos": [] }])),
+                   ("audio", json!({ "volume": 1.0, "mudo": false, "manter_tom": true, "silencios": [] }))] {
+        tela[k] = x;
+    }
+    let congelado = |efeitos: Value| json!({ "tipo": "congelar", "id": "c2", "rotulo": "", "midia": "m1", "instante_s": t.tempo(10), "instante_pts": t.pts[10], "duracao_s": 1.0, "efeitos": efeitos });
+    let fundir = json!({ "tipo": "fundir", "duracao_s": 0.5, "audio": "acompanhar" });
+    let mut c2_fundir = tr("c2", json!([]));
+    c2_fundir["transicao_entrada"] = fundir.clone();
+    let zoom = json!([{ "t": 0.0, "v": caixa([0.0, 0.0, 1.0, 1.0]) }, { "t": t.tempo(29), "v": caixa([0.25, 0.25, 0.25, 0.5]) }]);
+    let mut silhueta = efeito_da_fixture("/principal/0/efeitos/9", "h1");
+    silhueta["alvo"]["rastreio"] = json!("r1");
+    let mut com_silencio = tr("c1", json!([]));
+    com_silencio["audio"]["silencios"] = json!([{ "id": "s1", "de": 0.2, "ate": 0.4, "modo": "tom", "motivo": "nome" }]);
+    let mut volume_animado = tr("c1", json!([]));
+    volume_animado["audio"]["volume"] = json!([{ "t": 0.0, "v": 1.0 }, { "t": 0.5, "v": 0.5 }]);
+    let narracao = |abaixa: bool| json!({ "audios": [{ "id": "a1", "nome": "Narração", "papel": "narracao", "volume": 1.0, "mudo": false, "abaixa_original": abaixa,
+        "clipes": [{ "id": "ca1", "nome": "", "midia": "n1", "pos": { "ref": "programa", "t": 0.0 }, "de_s": 0.0, "ate_s": null, "volume": 1.0, "entrada_s": 0.0, "saida_s": 0.0 }] }] });
+    let mixagem = |normalizar: Value, limitador: bool| json!({ "mixagem": { "volume_original": 1.0, "abaixar": { "db": -12.0, "ataque_s": 0.3, "soltura_s": 0.5 }, "normalizar": normalizar, "limitador": limitador } });
+    let mut rampa = tr("c1", json!([]));
+    rampa["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": 0.0, "v": 1.0 }, { "t": 0.5, "v": 0.5 }] });
+    let fim = alvo_final("cpu");
+    let whatsapp: Alvo = serde_json::from_value(json!({ "tipo": "final", "exportacao": { "predefinicao": "whatsapp", "codificador": "cpu", "legendas": "nenhuma", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } })).unwrap();
+    let r = |arquivo, motor, codigo, (clipe, efeito, midia): (Option<&'static str>, Option<&'static str>, Option<&'static str>), p: ProjetoEdicao, alvo: &Alvo| Recusa { arquivo, motor, codigo, clipe, efeito, midia, p, alvo: alvo.clone() };
+    use crate::edicao::mensagens::codigo::{ITEM_DESCONHECIDO as DESC, NAO_SUPORTADO as NS, PIXEL_NAO_SUPORTADO as PIX};
+    let mut v = Vec::new();
+    // efeitos de origem, lupa, régua e velocidade: `clipe::recusar_de_outra_fase` (um sítio para todos)
+    let origem = [("estabilizar", "/principal/0/efeitos/0"), ("lente", "/principal/0/efeitos/1"), ("desentrelacar", "/principal/0/efeitos/2"), ("media_temporal", "/principal/0/efeitos/3"), ("ajustes", "/principal/0/efeitos/4"), ("nitidez", "/principal/0/efeitos/5")];
+    for (tipo, ponteiro) in origem {
+        v.push(r("motor/clipe.rs", tipo, NS, (Some("c1"), Some("e1"), None), base(vec![tr("c1", json!([efeito_da_fixture(ponteiro, "e1")]))], json!({})), &fim));
+    }
+    // a mesma recusa tem um sítio também no rasterizador (`camada/formas.rs`)
+    for (tipo, ponteiro) in [("lupa", "/principal/0/efeitos/12"), ("regua", "/principal/0/efeitos/13"), ("velocidade_exibida", "/principal/0/efeitos/14")] {
+        v.push(r("camada/formas.rs", tipo, NS, (Some("c1"), Some("e1"), None), base(vec![tr("c1", json!([efeito_da_fixture(ponteiro, "e1")]))], json!({})), &fim));
+    }
+    v.push(r("camada/formas.rs", "silhueta", NS, (Some("c1"), Some("h1"), None), base(vec![tr("c1", json!([silhueta]))], json!({})), &fim));
+    v.push(r("motor/clipe.rs", "em parte do congelado", NS, (Some("c2"), Some("o1"), None), base(vec![congelado(json!([ocultar("o1", "r1", "solido", json!({ "ativo": { "de": 0.0, "ate": 0.5 } }))]))], json!({})), &fim));
+    v.push(r("motor/clipe.rs", "pixel_nao_suportado", PIX, (None, None, Some("pc")), base(vec![trecho("c1", "pc", t, 0, 30, 1.0, json!([]))], json!({})), &fim));
+    v.push(r("motor/clipe.rs", "pixel_nao_suportado", PIX, (None, None, Some("pc")), base(vec![json!({ "tipo": "congelar", "id": "c2", "rotulo": "", "midia": "pc", "instante_s": t.tempo(10), "instante_pts": t.pts[10], "duracao_s": 1.0 })], json!({})), &fim));
+    v.push(r("motor/clipe.rs", "em clipe sem fonte", NS, (Some("c3"), Some("o3"), None), base(vec![json!({ "tipo": "titulo", "id": "c3", "duracao_s": 1.0, "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] }, "efeitos": [ocultar("o3", "r1", "solido", json!({}))] })], json!({})), &fim));
+    v.push(r("motor/clipe.rs", "clipe tela c5", NS, (Some("c5"), None, None), base(vec![tela.clone()], json!({})), &fim));
+    v.push(r("motor/clipe.rs", "item_desconhecido: efeito_do_futuro e99", DESC, (Some("c1"), Some("e99"), None), base(vec![tr("c1", json!([da_fixture("/principal/0/efeitos/20")]))], json!({})), &fim));
+    v.push(r("motor/mod.rs", "transicao com sobreposicao no clipe c2", NS, (Some("c2"), None, None), base(vec![tr("c1", json!([])), c2_fundir.clone()], json!({})), &fim));
+    let com_legenda = json!({ "legendas": { "estilo": da_fixture("/legendas/estilo"), "lugar": { "x": 0.5, "y": 0.9, "h": "centro", "v": "base" }, "linhas_max": 2, "origem": null,
+        "itens": [{ "id": "l1", "texto": "Para!", "locutor": null, "origem": "perito", "conferida": true, "locutor_auto": false, "ref": { "tipo": "programa", "de": 0.1, "ate": 0.5 } }] } });
+    let com_legendas: Alvo = serde_json::from_value(json!({ "tipo": "final", "exportacao": { "predefinicao": "juri", "codificador": "cpu", "legendas": "queimar", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } })).unwrap();
+    v.push(r("motor/mod.rs", "nao_suportado: legendas", NS, (None, None, None), base(vec![tr("c1", json!([]))], com_legenda), &com_legendas));
+    v.push(r("motor/mod.rs", "item_desconhecido: clipe_do_futuro c9", DESC, (Some("c9"), None, None), base(vec![tr("c1", json!([])), da_fixture("/principal/5")], json!({})), &fim));
+    v.push(r("motor/juncao.rs", "transicao fundir", NS, (Some("c1"), None, None), base(vec![tr("c1", json!([]))], json!({ "fecho": fundir.clone() })), &fim));
+    v.push(r("motor/saida.rs", "predefinicao whatsapp", NS, (None, None, None), base(vec![tr("c1", json!([]))], json!({})), &whatsapp));
+    v.push(r("motor/sobrepor.rs", "sobreposto video", NS, (Some("l1"), None, None), base(vec![tr("c1", json!([]))], video_sob(Value::Null)), &fim));
+    v.push(r("motor/sobrepor.rs", "em sobreposto x1", NS, (Some("x1"), Some("e18"), None), base(vec![tr("c1", json!([]))], titulo_sob(json!([efeito_da_fixture("/principal/0/efeitos/16", "e18")]))), &fim));
+    v.push(r("motor/sobrepor.rs", "item_desconhecido: sobreposto_do_futuro l9", DESC, (Some("l9"), None, None), base(vec![tr("c1", json!([]))], json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [da_fixture("/sobreposicoes/0/clipes/3")] }] })), &fim));
+    v.push(r("motor/sobrepor.rs", "item_desconhecido: efeito_do_futuro x9", DESC, (Some("x1"), Some("x9"), None), base(vec![tr("c1", json!([]))], titulo_sob(json!([{ "tipo": "efeito_do_futuro", "id": "x9", "ligado": true }]))), &fim));
+    v.push(r("motor/efeitos/enquadramento.rs", "destino variável", NS, (Some("c1"), Some("q1"), None), base(vec![tr("c1", json!([com_id(enquadramento(zoom, "conter"), "q1")]))], json!({})), &fim));
+    // som: `audio::montar` (Fase 1)
+    v.push(r("motor/audio.rs", "rampa", NS, (Some("c1"), None, None), com_som(base(vec![rampa.clone()], json!({}))), &fim));
+    v.push(r("motor/audio.rs", "rampa", NS, (Some("c1"), None, None), com_som(base(vec![rampa], json!({}))), &fim));
+    v.push(r("motor/audio.rs", "volume animado", NS, (Some("c1"), None, None), com_som(base(vec![volume_animado], json!({}))), &fim));
+    v.push(r("motor/audio.rs", "normalizar", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], mixagem(json!({ "lufs": -16.0, "pico_db": -1.5 }), false))), &fim));
+    v.push(r("motor/audio.rs", "limitador", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], mixagem(Value::Null, true))), &fim));
+    v.push(r("motor/audio.rs", "transicao", NS, (Some("c2"), None, None), com_som(base(vec![tr("c1", json!([])), c2_fundir], json!({}))), &fim));
+    v.push(r("motor/audio.rs", "transicao", NS, (Some("c1"), None, None), com_som(base(vec![tr("c1", json!([]))], json!({ "fecho": fundir }))), &fim));
+    v.push(r("motor/audio.rs", "tela", NS, (Some("c5"), None, None), com_som(base(vec![tela], json!({}))), &fim));
+    v.push(r("motor/audio.rs", "silenciar", NS, (Some("c1"), None, None), com_som(base(vec![com_silencio], json!({}))), &fim));
+    v.push(r("motor/audio.rs", "abaixar", NS, (None, None, None), com_som(base(vec![tr("c1", json!([]))], narracao(true))), &fim));
+    v.push(r("motor/audio.rs", "video sobreposto", NS, (Some("l1"), None, None), com_som(base(vec![tr("c1", json!([]))], video_sob(json!({ "volume": 1.0, "mudo": false, "manter_tom": true, "silencios": [] })))), &fim));
+    v
+}
+
+/// Recusas que repetem um sítio já contado em `recusas`, por outro caminho da validação: `ocultar` em FOTO, destino
+/// variável em congelado, foto e título (tempo local), efeito em IMAGEM sobreposta, e alvos de janela (prévia e
+/// quadro final em que o vídeo da janela nem passa pelo item recusado).
+fn recusas_a_mais(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
+    let t = &mundo.fontes["m1"].quadros;
+    let tr = |id: &str, efeitos: Value| trecho(id, "m1", t, 0, 30, 1.0, efeitos);
+    let r1 = rastreio("r1", Some("m1"), "fonte", vec![ancora(0.0, Some(0), [0.1, 0.1, 0.2, 0.2])]);
+    let rl = rastreio("rl", None, "local", vec![ancora(0.0, None, [0.1, 0.1, 0.2, 0.2])]);
+    let base = |principal: Vec<Value>, mut extra: Value, som: bool| {
+        extra["rastreios"] = json!([r1.clone(), rl.clone()]);
+        let mut p = projeto(320, 180, (30, 1), midias.to_vec(), principal, extra);
+        p.saida.audio = som;
+        p
+    };
+    let zoom = || com_id(enquadramento(json!([{ "t": 0.0, "v": caixa([0.0, 0.0, 1.0, 1.0]) }, { "t": 0.9, "v": caixa([0.25, 0.25, 0.25, 0.5]) }]), "conter"), "q1");
+    let congelado = |efeitos: Value| json!({ "tipo": "congelar", "id": "c2", "rotulo": "", "midia": "m1", "instante_s": t.tempo(10), "instante_pts": t.pts[10], "duracao_s": 1.0, "efeitos": efeitos });
+    let foto = |efeitos: Value| json!({ "tipo": "imagem", "id": "c3", "rotulo": "", "midia": "foto", "duracao_s": 1.0, "efeitos": efeitos });
+    let titulo = |efeitos: Value| json!({ "tipo": "titulo", "id": "c4", "rotulo": "", "duracao_s": 1.0, "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] }, "efeitos": efeitos });
+    let imagem_sob = json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [{ "tipo": "imagem", "id": "x2", "rotulo": "", "midia": "foto",
+        "pos": { "ref": "programa", "t": 0.0 }, "duracao_s": 0.5, "transformacao": { "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 },
+        "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [efeito_da_fixture("/principal/0/efeitos/16", "e18")] }] }] });
+    let fim = alvo_final("cpu");
+    use crate::edicao::mensagens::codigo::NAO_SUPORTADO as NS;
+    let r = |arquivo, motor, (clipe, efeito): (Option<&'static str>, Option<&'static str>), p: ProjetoEdicao, alvo: &Alvo| Recusa { arquivo, motor, codigo: NS, clipe, efeito, midia: None, p, alvo: alvo.clone() };
+    vec![
+        r("motor/clipe.rs", "em clipe sem fonte", (Some("c3"), Some("o3")), base(vec![foto(json!([ocultar("o3", "rl", "solido", json!({}))]))], json!({}), false), &fim),
+        r("motor/clipe.rs", "nitidez e1", (Some("c2"), Some("e1")), base(vec![congelado(json!([efeito_da_fixture("/principal/0/efeitos/5", "e1")]))], json!({}), false), &fim),
+        r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c2"), Some("q1")), base(vec![congelado(json!([zoom()]))], json!({}), false), &fim),
+        r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c3"), Some("q1")), base(vec![foto(json!([zoom()]))], json!({}), false), &fim),
+        r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c4"), Some("q1")), base(vec![titulo(json!([zoom()]))], json!({}), false), &fim),
+        // quadro final reduzido: o motor mede o destino no canvas do alvo, a validação no da saída
+        r("motor/efeitos/enquadramento.rs", "destino variável", (Some("c4"), Some("q1")), base(vec![titulo(json!([zoom()]))], json!({}), false), &Alvo::Quadro { q: 20, largura: 160 }),
+        r("motor/sobrepor.rs", "em sobreposto x2", (Some("x2"), Some("e18")), base(vec![tr("c1", json!([]))], imagem_sob, false), &fim),
+        // prévia de uma janela que não pega a transição nem o congelado: só o som e a proveniência recusam
+        r("motor/audio.rs", "transicao", (Some("c1"), None), base(vec![tr("c1", json!([]))], json!({ "fecho": { "tipo": "fundir", "duracao_s": 0.2, "audio": "acompanhar" } }), true), &Alvo::Previa { altura: 90, de_q: 5, ate_q: 10 }),
+        r("motor/clipe.rs", "em parte do congelado", (Some("c2"), Some("o1")), base(vec![tr("c1", json!([])), congelado(json!([ocultar("o1", "r1", "solido", json!({ "ativo": { "de": 0.0, "ate": 0.5 } }))]))], json!({}), false), &Alvo::Previa { altura: 90, de_q: 0, ate_q: 10 }),
+    ]
+}
+
+/// Sítios de recusa no código (fora dos testes e dos comentários): linhas com `nao_suportado` ou com
+/// `erro_do_desconhecido(`, menos as definições.
+fn sitios_no_codigo(fonte: &str) -> usize {
+    let codigo = fonte.split("#[cfg(test)]").next().unwrap_or("");
+    codigo
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.starts_with("//"))
+        .filter(|l| (l.to_lowercase().contains("nao_suportado") || l.contains("erro_do_desconhecido(")) && !l.contains("fn nao_suportado") && !l.contains("\"nao_suportado: {o_que}\"") && !l.contains("pub const NAO_SUPORTADO"))
+        .count()
+}
+
+/// Tudo o que o motor recusa a validação acusa ANTES, no item, com a frase do catálogo; `compilar` devolve o
+/// erro da validação e não chega ao motor. E nenhum sítio de recusa do motor fica sem caso aqui.
+#[test]
+fn validacao_acusa_antes_tudo_o_que_o_motor_recusa() {
+    let (mundo, midias) = mundo_das_recusas();
+    let casos = recusas(&mundo, &midias);
+    let a_mais = recusas_a_mais(&mundo, &midias);
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &mundo.cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &[] };
+    for c in casos.iter().chain(&a_mais) {
+        let rotulo = format!("{} «{}»", c.arquivo, c.motor);
+        let linha = tempo::resolver(&c.p, &ctx);
+        // o motor sozinho recusa (vídeo ou som)
+        let do_motor = if c.arquivo == "motor/audio.rs" {
+            crate::edicao::motor::audio::montar(&c.p, &linha, &ctx, &c.alvo).map(|_| ())
+        } else {
+            compilar_video(&c.p, &linha, &ctx, &c.alvo).map(|_| ())
+        }
+        .expect_err(&rotulo)
+        .to_string();
+        assert!(do_motor.contains(c.motor), "{rotulo}: o motor deu {do_motor}");
+        // a validação acusa, no item, com a frase do catálogo
+        let problemas = crate::edicao::validar::validar(&c.p, &linha, &ctx, Some(&c.alvo));
+        let achado = problemas.iter().find(|p| {
+            p.nivel == crate::edicao::modelo::Nivel::Erro
+                && p.codigo == c.codigo
+                && c.clipe.is_none_or(|x| p.clipe.as_deref() == Some(x))
+                && c.efeito.is_none_or(|x| p.efeito.as_deref() == Some(x))
+                && c.midia.is_none_or(|x| p.midia.as_deref() == Some(x))
+        });
+        let achado = achado.unwrap_or_else(|| panic!("{rotulo}: a validação não acusa {} no item: {problemas:#?}", c.codigo));
+        let frase = crate::edicao::mensagens::frase(achado.codigo, achado.n, None);
+        assert!(achado.mensagem == frase || achado.mensagem.starts_with(&format!("{frase}: ")), "{rotulo}: fora do catálogo: {}", achado.mensagem);
+        if achado.codigo == crate::edicao::mensagens::codigo::NAO_SUPORTADO {
+            assert!(achado.mensagem.starts_with("Ainda não suportado: "), "{rotulo}: sem rótulo no catálogo: {}", achado.mensagem);
+        }
+        // compilar para na validação: o erro é o primeiro da validação, nunca o do motor
+        let primeiro = problemas.iter().find(|p| p.nivel == crate::edicao::modelo::Nivel::Erro).unwrap();
+        let e = crate::edicao::motor::compilar(&c.p, &ctx, &c.alvo).expect_err(&rotulo).to_string();
+        assert_eq!(e, crate::edicao::motor::erro_da_validacao(primeiro).to_string(), "{rotulo}");
+        assert!(!e.contains(&do_motor), "{rotulo}: chegou ao motor");
+    }
+    eprintln!("validação = motor: {} recusas do motor acusadas antes pela validação", casos.len() + a_mais.len());
+    // trilha de sobreposição oculta não entra no render: vídeo sobreposto com som nela não é recusado por ninguém
+    let mut oculta = casos.iter().find(|c| c.motor == "video sobreposto").expect("caso do vídeo sobreposto com som").p.clone();
+    assert!(crate::edicao::motor::compilar(&oculta, &ctx, &alvo_final("cpu")).is_err());
+    oculta.sobreposicoes[0].oculta = true;
+    let plano = crate::edicao::motor::compilar(&oculta, &ctx, &alvo_final("cpu")).expect("trilha oculta compila");
+    assert!(plano.audio.is_some());
+    // cada sítio de recusa do código tem caso
+    let fontes: [(&str, &str); 9] = [
+        ("motor/audio.rs", include_str!("../motor/audio.rs")),
+        ("motor/clipe.rs", include_str!("../motor/clipe.rs")),
+        ("motor/mod.rs", include_str!("../motor/mod.rs")),
+        ("motor/juncao.rs", include_str!("../motor/juncao.rs")),
+        ("motor/saida.rs", include_str!("../motor/saida.rs")),
+        ("motor/sobrepor.rs", include_str!("../motor/sobrepor.rs")),
+        ("motor/efeitos/enquadramento.rs", include_str!("../motor/efeitos/enquadramento.rs")),
+        ("motor/efeitos/regiao.rs", include_str!("../motor/efeitos/regiao.rs")),
+        ("camada/formas.rs", include_str!("../camada/formas.rs")),
+    ];
+    for (arquivo, fonte) in fontes {
+        let no_codigo = sitios_no_codigo(fonte);
+        let com_caso = casos.iter().filter(|c| c.arquivo == arquivo).count();
+        // a recusa por tipo do `clipe.rs` serve a seis efeitos de origem: conta como um sítio
+        let com_caso = if arquivo == "motor/clipe.rs" { com_caso - origem_do_clipe() + 1 } else { com_caso };
+        assert_eq!(no_codigo, com_caso, "{arquivo}: {no_codigo} sítios de recusa no código, {com_caso} com caso aqui");
+    }
+}
+
+/// `ativo` por uma regra só (contratos (h) 3): a validação conta os quadros da ocultação como o motor
+/// (`efeitos::base_ativa`, intervalo fechado no instante do quadro), e o `ocultar_interpolado` bate com
+/// `feito.ocultacoes[].quadros.interpolado`. `ativo` começando no meio de um quadro: esse quadro não conta.
+#[test]
+fn ocultar_interpolado_bate_com_a_proveniencia() {
+    let (mundo, mut midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    // âncoras nos quadros 30 e 60: 31..59 por interpolação; depois do 60 o manual segura
+    let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(30), Some(t.pts[30]), [0.1, 0.1, 0.2, 0.2]), ancora(t.tempo(60), Some(t.pts[60]), [0.5, 0.1, 0.2, 0.2])]);
+    let meio = 0.5 / 30.0;
+    midias[0]["ocultacoes"] = json!([ocultar("om", "r1", "solido", json!({ "ativo": { "de": t.tempo(40) + meio, "ate": t.tempo(70) } }))]);
+    let p = projeto(
+        320,
+        180,
+        (30, 1),
+        midias,
+        vec![
+            trecho("c1", "m1", t, 30, 90, 1.0, json!([ocultar("oc", "r1", "solido", json!({ "ativo": { "de": t.tempo(50) + 0.2 / 30.0, "ate": null } }))])),
+            trecho("c2", "m1", t, 20, 80, 0.5, json!([])),
+            json!({ "tipo": "congelar", "id": "c3", "rotulo": "", "midia": "m1", "instante_s": t.tempo(45), "instante_pts": t.pts[45], "duracao_s": 1.0 }),
+        ],
+        json!({ "rastreios": [r] }),
+    );
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &mundo.cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &[] };
+    let plano = mundo.compilar(&p, &alvo_final("cpu")).expect("compila");
+    let prov: u64 = plano.proveniencia.ocultacoes.iter().map(|o| o.quadros.interpolado as u64).sum();
+    let linha = tempo::resolver(&p, &ctx);
+    let problemas = crate::edicao::validar::validar(&p, &linha, &ctx, Some(&alvo_final("cpu")));
+    let val: u64 = problemas.iter().filter(|x| x.codigo == crate::edicao::mensagens::codigo::OCULTAR_INTERPOLADO).map(|x| x.n.unwrap_or(0)).sum();
+    // om: quadros 41..59 em c1 e em c2 (19 + 19) e o 45 congelado (1); oc: 51..59 (9)
+    assert_eq!((val, prov), (48, 48), "{problemas:#?}");
+    assert!(!crate::edicao::validar::tem_erro(&problemas), "{problemas:#?}");
+    // `compilar` leva os periciais à proveniência, um por código, com a soma
+    let completo = crate::edicao::motor::compilar(&p, &ctx, &alvo_final("cpu")).expect("compila");
+    assert_eq!(
+        completo.proveniencia.avisos,
+        vec![crate::edicao::motor::plano::ProvAviso { codigo: crate::edicao::mensagens::codigo::OCULTAR_INTERPOLADO.into(), n: 48 }]
+    );
+}
+
+/// A proveniência é sempre a do programa inteiro (contratos (h) 6): a prévia e o quadro final dão a mesma da
+/// exportação com a exportação do projeto (tamanho do projeto, todos os slots, predefinição, `com_perdas`).
+#[test]
+fn proveniencia_do_programa_inteiro_em_todo_alvo() {
+    let (mundo, midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let mut p = projeto(320, 180, (30, 1), midias, vec![trecho("c1", "m1", t, 0, 60, 1.0, json!([])), trecho("c2", "m1", t, 100, 160, 0.5, json!([]))], json!({}));
+    p.saida.audio = true;
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &mundo.cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &[] };
+    let final_ = crate::edicao::motor::compilar(&p, &ctx, &Alvo::Final { exportacao: p.saida.exportacao.clone() }).expect("final");
+    assert_eq!((final_.proveniencia.saida.largura, final_.proveniencia.saida.n_quadros), (320, 180));
+    for alvo in [Alvo::Previa { altura: 90, de_q: 50, ate_q: 70 }, Alvo::Quadro { q: 130, largura: 160 }] {
+        let x = crate::edicao::motor::compilar(&p, &ctx, &alvo).expect("compila");
+        assert!(x.canvas.w < 320 && x.total_q < 180, "{alvo:?}: o render é o da janela");
+        assert_eq!(x.proveniencia, final_.proveniencia, "{alvo:?}");
+    }
+    // a tolerância do `atempo` é a do programa (o trecho a 0,5× está fora da janela da prévia)
+    assert!(final_.proveniencia.audio.tolerancia_atempo_ms > 0.0);
+    assert_eq!(final_.audio.as_ref().unwrap().tolerancia_atempo_ms, final_.proveniencia.audio.tolerancia_atempo_ms);
+}
+
+/// A proveniência do programa inteiro leva os mesmos avisos periciais em todo alvo (contratos (h) 6).
+#[test]
+fn proveniencia_com_periciais_em_todo_alvo() {
+    use crate::edicao::modelo::{EstadoMidia, SituacaoMidia};
+    use crate::edicao::quadros::{Busca, OrigemTabela};
+    let (mundo, mut midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(t.tempo(30), Some(t.pts[30]), [0.1, 0.1, 0.2, 0.2]), ancora(t.tempo(60), Some(t.pts[60]), [0.5, 0.1, 0.2, 0.2])]);
+    midias[0]["ocultacoes"] = json!([ocultar("om", "r1", "desfoque", json!({ "conteudo": "placa", "intensidade": 0.3 }))]);
+    let mut p = projeto(320, 180, (30, 1), midias, vec![trecho("c1", "m1", t, 30, 90, 1.0, json!([])), trecho("c2", "m1", t, 100, 160, 0.5, json!([]))], json!({ "rastreios": [r] }));
+    p.saida.audio = true;
+    let estados = vec![EstadoMidia { id: "m1".into(), estado: SituacaoMidia::Ok, tabela: Some(OrigemTabela::Decodificador), busca: Some(Busca::Confiavel), erros: Some(3) }];
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &mundo.cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &estados };
+    let final_ = crate::edicao::motor::compilar(&p, &ctx, &Alvo::Final { exportacao: p.saida.exportacao.clone() }).expect("final");
+    let codigos: Vec<(&str, u64)> = final_.proveniencia.avisos.iter().map(|a| (a.codigo.as_str(), a.n)).collect();
+    assert_eq!(codigos, vec![("ocultacao_reversivel", 1), ("ocultacao_fraca", 1), ("ocultar_interpolado", 29), ("fonte_danificada", 3)]);
+    for alvo in [Alvo::Previa { altura: 90, de_q: 150, ate_q: 170 }, Alvo::Quadro { q: 130, largura: 160 }, Alvo::Quadro { q: 5, largura: 160 }] {
+        let x = crate::edicao::motor::compilar(&p, &ctx, &alvo).expect("compila");
+        assert_eq!(x.proveniencia, final_.proveniencia, "{alvo:?}");
+    }
+}
+
+/// Casos de efeito de origem (todos no mesmo sítio de `clipe.rs`).
+fn origem_do_clipe() -> usize {
+    6
 }
 
 // ------------------------------------------------------------------ com ffmpeg
@@ -1164,22 +1546,6 @@ fn integrado(cap: &Arc<Capacidades>, com_titulo: bool) -> Integrado {
     Integrado { p, mundo, mp4, mkv }
 }
 
-/// Roda `f`; se o que falta é o `camada::titulo` (de outro pacote desta leva, ainda `todo!()`), registra e devolve None.
-fn com_titulo_ou_dispensa<T>(f: impl FnOnce() -> T + std::panic::UnwindSafe) -> Option<T> {
-    match std::panic::catch_unwind(f) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            let texto = e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
-            if texto.contains("not yet implemented") {
-                eprintln!("dispensado: `camada::titulo` ainda é todo!() nesta cópia (P0.5t); o ensaio roda com foto no lugar do título");
-                None
-            } else {
-                std::panic::resume_unwind(e)
-            }
-        }
-    }
-}
-
 fn conferir_integrado(cap: &Arc<Capacidades>, com_titulo: bool) {
     let it = integrado(cap, com_titulo);
     let plano = it.mundo.compilar(&it.p, &alvo_final("cpu")).expect("compila");
@@ -1235,6 +1601,16 @@ fn conferir_integrado(cap: &Arc<Capacidades>, com_titulo: bool) {
     let (de1, _) = item(1);
     let luz = |x: &QuadroRgb| x.px.iter().map(|&v| v as u64).sum::<u64>() / x.px.len() as u64;
     assert!(luz(&q[de1]) < 12 && luz(&q[de1 + 20]) > luz(&q[de1 + 5]) && luz(&q[total - 1]) < 30, "escurecer: {} {} {}", luz(&q[de1]), luz(&q[de1 + 20]), luz(&q[total - 1]));
+    if com_titulo {
+        // o texto do título no meio do canvas e o fundo de cor nos cantos, depois do escurecimento
+        let x = &q[de1 + 30];
+        let branco = (40..140u32).flat_map(|y| (40..280u32).map(move |xx| (xx, y))).filter(|&(xx, y)| pixel(x, xx, y).iter().all(|&v| v > 200)).count();
+        assert!(branco > 300, "título sem texto: {branco} px brancos ({})", cap.versao);
+        for (bx, by) in [(5, 5), (314, 174)] {
+            let c = pixel(x, bx, by);
+            assert!(c.iter().zip([0x10u8, 0x20, 0x40]).all(|(a, b)| a.abs_diff(b) <= 6), "fundo do título em ({bx}, {by}): {c:?}");
+        }
+    }
     // imagem sobreposta (amarela, canto de cima à direita) só nos slots dela, de 0,5 s a 2,5 s
     let amarelo = |x: &QuadroRgb| x.px.chunks_exact(3).filter(|p| p[0] > 180 && p[1] > 180 && p[2] < 90).count();
     assert!(amarelo(&q[5]) == 0 && amarelo(&q[40]) > 800 && amarelo(&q[80]) == 0, "sobreposta: {} {} {}", amarelo(&q[5]), amarelo(&q[40]), amarelo(&q[80]));
@@ -1244,10 +1620,8 @@ fn conferir_integrado(cap: &Arc<Capacidades>, com_titulo: bool) {
 #[test]
 fn a17_ensaio_integrado_pelo_compilador() {
     let Some(cap) = fontes::cap() else { return };
-    let c = cap.clone();
-    if com_titulo_ou_dispensa(move || conferir_integrado(&c, true)).is_none() {
-        conferir_integrado(&cap, false);
-    }
+    // com o título de verdade (Typst); a foto no lugar dele fica no ensaio do quadro final
+    conferir_integrado(&cap, true);
 }
 
 #[test]
@@ -1451,4 +1825,409 @@ fn gerar_quadro_direto(cap: &Capacidades, dir: &Path, video: &Path, pts: i64) ->
     let (_, out) = crate::edicao::ffmpeg::exec::rodar_com_saida(&cmd, &std::sync::atomic::AtomicBool::new(false)).expect("ffmpeg");
     assert_eq!(out.len(), 1920 * 1080 * 3, "quadro direto");
     QuadroRgb { w: 1920, h: 1080, px: out }
+}
+
+// ------------------------------------------------------------------ ponta a ponta: compilar → exportar → relatório
+
+/// O `escurecer` do vídeo e o do som têm a mesma duração `d` (`tempo::slots(duracao_s, fps)` limitado ao `n_q`
+/// de cada clipe, o que entra e o que sai), inclusive quando o clipe é mais curto que a transição.
+#[test]
+fn escurecer_do_video_e_do_som_com_o_mesmo_d() {
+    let (mundo, midias) = mundo_das_recusas();
+    let t = &mundo.fontes["m1"].quadros;
+    let escurecer = |d: f64| json!({ "tipo": "escurecer", "duracao_s": d, "audio": "acompanhar" });
+    // 29,97 qps: 0,5 s = 15 slots (16 683 amostras ≠ 15 × 1602); o c2 tem 8 slots e limita a saída do c1 e a entrada dele
+    for (fps, d) in [((30, 1), 0.5), ((30000, 1001), 0.5), ((25, 1), 0.7)] {
+        let mut c2 = trecho("c2", "m1", t, 100, 108, 1.0, json!([]));
+        c2["transicao_entrada"] = escurecer(d);
+        let mut c3 = trecho("c3", "m1", t, 200, 260, 1.0, json!([]));
+        c3["transicao_entrada"] = escurecer(d);
+        let mut p = projeto(320, 180, fps, midias.clone(), vec![trecho("c1", "m1", t, 0, 60, 1.0, json!([])), c2, c3], json!({ "fecho": escurecer(d) }));
+        p.saida.audio = true;
+        let ctx = Contexto { fontes: &mundo.fontes, cap: &mundo.cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &[] };
+        // o c2 curto a validação recusa (`transicao`); o motor tem de limitar igual nos dois lados mesmo assim
+        let linha = tempo::resolver(&p, &ctx);
+        let mut plano = compilar_video(&p, &linha, &ctx, &alvo_final("cpu")).expect("compila o vídeo");
+        plano.audio = crate::edicao::motor::audio::montar(&p, &linha, &ctx, &alvo_final("cpu")).expect("monta o som").0;
+        let r = Racional { num: fps.0, den: fps.1 };
+        let a = |q: u64| tempo::amostra_do_slot(q, r);
+        // fades do vídeo: (in|out, início em s no clipe, duração em s) → em slots
+        let video: Vec<(bool, u64, u64)> = plano.blocos[0]
+            .grafo
+            .split("fade=")
+            .skip(1)
+            .map(|x| {
+                let campo = |k: &str| x.split(&format!("{k}=")).nth(1).unwrap().split([':', ',', '[']).next().unwrap().parse::<f64>().unwrap();
+                let slots = |s: f64| (s * fps.0 as f64 / fps.1 as f64).round() as u64;
+                (x.starts_with("t=in"), slots(campo("st")), slots(campo("d")))
+            })
+            .collect();
+        // fades do som: (in|out, amostra de início no pedaço, amostras)
+        let grafo = &plano.audio.as_ref().unwrap().grafo;
+        let som: Vec<(bool, u64, u64)> = grafo
+            .split("afade=")
+            .skip(1)
+            .map(|x| {
+                let campo = |k: &str| x.split(&format!("{k}=")).nth(1).unwrap().split([':', ',', '[']).next().unwrap().parse::<u64>().unwrap();
+                (x.starts_with("t=in"), campo("ss"), campo("ns"))
+            })
+            .collect();
+        assert_eq!(video.len(), som.len(), "{fps:?}: {video:?} × {som:?}");
+        let clipes = &plano.proveniencia.roteiro;
+        // a ordem é a dos clipes: [c1 sai], [c2 entra, c2 sai], [c3 entra, c3 sai (fecho)]
+        let donos = [(0, false), (1, true), (1, false), (2, true), (2, false)];
+        for ((v, s), (k, entra)) in video.iter().zip(&som).zip(donos) {
+            let (de_q, n_q) = (clipes[k].na_saida.de_q, clipes[k].na_saida.n_q as u64);
+            assert_eq!((v.0, s.0), (entra, entra), "{fps:?}");
+            // o mesmo d em slots, nas mesmas fronteiras de amostra
+            let (q0, q1) = if entra { (de_q, de_q + v.2) } else { (de_q + v.1, de_q + n_q) };
+            assert_eq!(s.2, a(q1) - a(q0), "{fps:?} clipe {k}: vídeo {v:?} × som {s:?}");
+            assert_eq!(v.2, (d * fps.0 as f64 / fps.1 as f64).round().min(n_q as f64) as u64, "{fps:?} clipe {k}");
+        }
+    }
+}
+
+/// PCM s16 estéreo intercalado do `data` de um WAV.
+fn pcm_do_wav(b: &[u8]) -> Vec<i16> {
+    let mut i = 12;
+    while i + 8 <= b.len() {
+        let n = u32::from_le_bytes(b[i + 4..i + 8].try_into().unwrap()) as usize;
+        if &b[i..i + 4] == b"data" {
+            return b[i + 8..(i + 8 + n).min(b.len())].as_chunks::<2>().0.iter().map(|c| i16::from_le_bytes(*c)).collect();
+        }
+        i += 8 + n + (n & 1);
+    }
+    panic!("WAV sem data")
+}
+
+/// Amostras em que começam os cliques (canal esquerdo acima de `limiar` depois de 0,1 s abaixo dele).
+fn cliques(pcm: &[i16], limiar: i16) -> Vec<usize> {
+    let (mut v, mut ultimo) = (Vec::new(), None::<usize>);
+    for (k, x) in pcm.iter().step_by(2).enumerate() {
+        if x.unsigned_abs() > limiar as u16 {
+            if ultimo.is_none_or(|u| k - u > 4800) {
+                v.push(k);
+            }
+            ultimo = Some(k);
+        }
+    }
+    v
+}
+
+/// Cliques da matriz de fontes: 1 ms em x,5 s do conteúdo; `som_s` = onde o conteúdo começa na linha do tempo da
+/// fonte (a MKV feita pelo 7.0.2 põe o vídeo em 21 ms e o som com a pré-rolagem: os dois no mesmo lugar).
+fn cliques_previstos(de_s: f64, ate_s: f64, som_s: f64, inicio_amostra: u64) -> Vec<i64> {
+    let mut v = Vec::new();
+    let mut c = som_s + (de_s - som_s).floor() + 0.5;
+    while c < ate_s {
+        if c >= de_s {
+            v.push(inicio_amostra as i64 + ((c - de_s) * 48_000.0).round() as i64);
+        }
+        c += 1.0;
+    }
+    v
+}
+
+/// Saída de um ffmpeg (stdout) nos argumentos dados.
+fn saida_do_ffmpeg(cap: &Capacidades, pasta: &Path, a: &[&str]) -> Vec<u8> {
+    let cmd = crate::edicao::ffmpeg::exec::Comando { nome: "sonda".into(), programa: cap.binario.clone(), args: a.iter().map(|s| s.to_string()).collect(), pasta: pasta.to_path_buf(), ambiente: Vec::new(), sem_ambiente: Vec::new(), stderr: pasta.join("sonda.stderr") };
+    let (fim, out) = crate::edicao::ffmpeg::exec::rodar_com_saida(&cmd, &std::sync::atomic::AtomicBool::new(false)).expect("ffmpeg");
+    crate::edicao::ffmpeg::exec::exigir_sucesso(&cmd, &fim).expect("ffmpeg");
+    out
+}
+
+/// Tolerância dos cliques (amostras): a MKV da matriz tem pts em ms (até +8 amostras medidas pelo P0.6b).
+const CLIQUE_AMOSTRAS: i64 = 10;
+/// Marca e desenho no zoom animado (px), como no aceite do P0.6a.
+const ZOOM_PX: f64 = 1.0;
+const DESENHO_PX: f64 = 1.5;
+
+/// Ponta a ponta pelo compilador de verdade (`compilar`: resolver → validar → vídeo → som → proveniência), num
+/// projeto com título (Typst), ocultação da mídia, destaque, zoom animado, quadro congelado e narração, exportado
+/// duas vezes e uma sem perdas: quadro de origem por slot, pixel (ocultação, destaque, zoom, título) e amostras
+/// (cliques e narração no lugar, contagem exata); `tecnico.json` e `mapa.csv` do plano compilado e executado,
+/// `feito` igual nos dois renders e `mapa.csv` igual aos pts lidos e ao que o vídeo mostra.
+#[test]
+fn compilar_de_ponta_a_ponta_com_relatorio() {
+    use crate::edicao::executar::{Ambiente, Autor, Cpu, Identidade, RetratoCaso, Sistema, VersaoSicro};
+    use crate::edicao::modelo::{EstadoMidia, SituacaoMidia};
+    use crate::edicao::quadros::{Busca, OrigemTabela};
+    use crate::edicao::relatorio::{mapa, tecnico};
+    let Some(cap) = fontes::cap() else { return };
+    let dir = pasta("e2e");
+    let (m4, mk) = (apoio::medida(&cap, Fonte::Mp4), apoio::medida(&cap, Fonte::Mkv30));
+    let (t4, tk) = (&m4.info.quadros, &mk.info.quadros);
+    assert!(m4.info.audio.is_some() && mk.info.audio.is_some(), "a matriz traz som");
+    // narração: um clique em 0,25 s de um WAV mono
+    let wav = gerar(&cap, &dir, "narracao.wav", "aevalsrc=exprs=0.9*lt(mod(t+0.75\\,1)\\,0.001):s=48000:c=mono:d=1", &["-c:a", "pcm_s16le"]);
+    let tab = TabelaQuadros::de_pacotes(&cap, &wav).expect("tabela do som");
+    let narr = crate::edicao::quadros::fonte_info(&cap, &wav, &"0".repeat(64), Arc::new(tab), None).expect("fonte do som");
+    assert!(narr.audio.is_some() && narr.quadros.pts.is_empty());
+    let nome = |mut r: Value, n: &str| {
+        r["nome"] = json!(n);
+        r
+    };
+    let pula: Vec<Value> = (60..120).map(|j| ancora(t4.tempo(j), Some(t4.pts[j]), [x_que_pula(j), 0.3, 0.1, 0.2])).collect();
+    let titulo = json!({ "tipo": "titulo", "id": "c0", "rotulo": "", "duracao_s": 1.0,
+        "titulo": { "modelo": "cartela", "fundo": { "tipo": "cor", "cor": "#102040" }, "blocos": [{ "id": "b1", "papel": "titulo", "conteudo": "Câmera 1", "largura_max": 0.8,
+            "lugar": { "x": 0.5, "y": 0.5, "h": "centro", "v": "meio" },
+            "estilo": { "fonte": "sans", "negrito": true, "italico": false, "tamanho": 0.12, "cor": "#ffffff", "alinhamento": "centro", "caixa": null, "contorno": null } }] } });
+    let mut c1 = trecho("c1", "m4", t4, 60, 120, 1.0, json!([destaque("d1", "pula")]));
+    c1["transicao_entrada"] = json!({ "tipo": "escurecer", "duracao_s": 0.5, "audio": "acompanhar" });
+    let congelado = json!({ "tipo": "congelar", "id": "c3", "rotulo": "", "midia": "mk", "instante_s": tk.tempo(70), "instante_pts": tk.pts[70], "duracao_s": 0.5 });
+    let zoom = json!([{ "t": t4.tempo(200), "v": caixa([0.0, 0.0, 1.0, 1.0]), "interp": "suave" }, { "t": t4.tempo(259), "v": caixa([0.3, 0.3, 0.5, 0.5]) }]);
+    let c4 = trecho("c4", "m4", t4, 200, 260, 1.0, json!([enquadramento(zoom, "conter"), destaque("d4", "rm")]));
+    let mut midias = vec![midia("m4", "video", json!([])), midia("mk", "video", json!([ocultar("o1", "rk", "solido", json!({}))])), midia("narr", "audio", json!([]))];
+    midias[2]["nome"] = json!("narracao.wav");
+    let mut p = projeto(
+        320,
+        180,
+        (30, 1),
+        midias,
+        vec![titulo, c1, trecho("c2", "mk", tk, 40, 100, 1.0, json!([])), congelado, c4],
+        json!({
+            "rastreios": [
+                nome(rastreio("pula", Some("m4"), "fonte", pula), "Suspeito de casaco"),
+                nome(rastreio("rk", Some("mk"), "fonte", ancoras_da_marca(Fonte::Mkv30, &mk, 40, 100)), "Placa do carro"),
+                nome(rastreio("rm", Some("m4"), "fonte", ancoras_da_marca(Fonte::Mp4, &m4, 200, 260)), "Marca vermelha"),
+            ],
+            "audios": [{ "id": "a1", "nome": "Narração", "papel": "narracao", "volume": 1.0, "mudo": false, "abaixa_original": false,
+                "clipes": [{ "id": "ca1", "nome": "", "midia": "narr", "pos": { "ref": "programa", "t": 5.6 }, "de_s": 0.0, "ate_s": null, "volume": 1.0, "entrada_s": 0.0, "saida_s": 0.0 }] }]
+        }),
+    );
+    p.saida.audio = true;
+    let mundo = Mundo::novo(&cap).com("m4", &m4.info).com("mk", &mk.info).com("narr", &narr);
+    let estados: Vec<EstadoMidia> = ["m4", "mk", "narr"]
+        .iter()
+        .map(|id| EstadoMidia { id: id.to_string(), estado: SituacaoMidia::Ok, tabela: Some(OrigemTabela::Decodificador), busca: Some(Busca::Confiavel), erros: Some(0) })
+        .collect();
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe/projeto"), midias: &estados };
+    let alvo = alvo_final("cpu");
+    let plano = crate::edicao::motor::compilar(&p, &ctx, &alvo).unwrap_or_else(|e| panic!("compilar ({}): {e}", cap.versao));
+    assert_eq!(crate::edicao::motor::compilar(&p, &ctx, &alvo).unwrap(), plano, "compilar é determinística");
+    let total = plano.total_q as usize;
+    assert_eq!(total, 30 + 60 + 60 + 15 + 60);
+    let passo = plano.audio.as_ref().expect("passo de áudio");
+    assert!(passo.entradas.len() >= 3 && passo.globais[..2] == ["-cpuflags".to_string(), "0".to_string()]);
+    assert!(matches!(&plano.juncao, Juncao::Concat { args, .. } if args.windows(2).any(|w| w == ["-map", "1:a"])), "junção com o som");
+    assert!(plano.camadas.iter().any(|c| c.itens.iter().any(|i| matches!(i.desenho, crate::edicao::motor::plano::Desenho::Titulo { .. }))), "camada do título");
+    assert!(plano.proveniencia.avisos.is_empty(), "{:?}", plano.proveniencia.avisos);
+    let item = |n: usize| (plano.proveniencia.roteiro[n].na_saida.de_q as usize, plano.proveniencia.roteiro[n].na_saida.n_q as usize);
+
+    // duas exportações do mesmo plano, em pastas diferentes
+    let (r1, res1) = executor::exportar(&cap, &plano, &dir.join("t1"), "2026-11-14T10:00:00Z").unwrap_or_else(|e| panic!("exportar ({}): {e}", cap.versao));
+    let (_, res2) = executor::exportar(&cap, &plano, &dir.join("t2"), "2026-11-14T11:00:00Z").unwrap_or_else(|e| panic!("exportar de novo ({}): {e}", cap.versao));
+    let junto = r1.junto.as_ref().unwrap();
+    assert_eq!((res1.composto_sha256.as_ref(), res1.audio_sha256.as_ref()), (res2.composto_sha256.as_ref(), res2.audio_sha256.as_ref()), "composto e PCM iguais nos dois renders");
+    assert_eq!(res1.sha256, res2.sha256, "mesmo arquivo na mesma máquina, com `cpu`");
+    assert_eq!(res1.conferencia.as_ref().map(|c| (c.quadros, c.erros)), Some((plano.total_q, 0)));
+
+    // vídeo entregue: contagem, passo constante, quadro de origem por slot, ocultação, destaque, título, escurecer
+    let pts = medir::pts(&cap, junto).unwrap();
+    assert_eq!((pts.len(), pts[0]), (total, 0));
+    assert!(pts.windows(2).all(|p| p[1] - p[0] == 512), "passos do arquivo");
+    let framehash = String::from_utf8(saida_do_ffmpeg(&cap, &dir, &["-hide_banner", "-nostdin", "-loglevel", "error", "-i", &junto.to_string_lossy(), "-map", "0:v:0", "-fps_mode", "passthrough", "-f", "framehash", "-hash", "sha256", "-"])).unwrap();
+    assert_eq!(crate::edicao::conferir::passo_irregular(&framehash), None, "Conferindo ({})", cap.versao);
+    let numeros = medir::quadros_de_origem(&cap, junto).unwrap();
+    let q = quadros_709(&cap, junto, 320, 180);
+    assert_eq!(q.len(), total);
+    let (mut conferidos, mut errados) = (0, 0);
+    for (n, m, pula) in [(1, &m4, 15), (2, &mk, 0)] {
+        let (de, n_q) = item(n);
+        let previsto = previstos(&plano, n, m);
+        for s in pula..n_q {
+            conferidos += 1;
+            errados += usize::from(numeros[de + s] != previsto[s]);
+        }
+    }
+    let (de3, n3) = item(3);
+    assert!(numeros[de3..de3 + n3].iter().all(|&x| x == mk.numeros[70]), "congelado: {:?}", &numeros[de3..de3 + n3]);
+    let (de4, _) = item(4);
+    assert_eq!(numeros[de4], previstos(&plano, 4, &m4)[0], "zoom começa no quadro inteiro");
+    assert_eq!(errados, 0, "quadro de origem errado em {errados} de {conferidos} slots ({})", cap.versao);
+    let (de2, n2) = item(2);
+    assert_eq!(q[de2..de2 + n2].iter().chain(&q[de3..de3 + n3]).map(vermelho).max(), Some(0), "ocultação descoberta");
+    let (de1, n1) = item(1);
+    let mapa1 = &plano.proveniencia.roteiro[1].origem.as_ref().unwrap().quadro_do_slot;
+    for s in 15..n1 {
+        let esperado = (x_que_pula(mapa1[s] as usize) + 0.05) * 320.0;
+        let (cx, _, _) = centro_da_caixa(&q[de1 + s], eh_verde).unwrap_or_else(|| panic!("slot {s}: sem destaque"));
+        assert!((cx - esperado).abs() <= 2.5, "destaque no slot {s}: {cx} × {esperado}");
+    }
+    let branco = (40..140u32).flat_map(|y| (40..280u32).map(move |x| (x, y))).filter(|&(x, y)| pixel(&q[15], x, y).iter().all(|&v| v > 200)).count();
+    assert!(branco > 300, "título sem texto: {branco} px");
+    assert!(pixel(&q[15], 5, 5).iter().zip([0x10u8, 0x20, 0x40]).all(|(a, b)| a.abs_diff(b) <= 6), "fundo do título: {:?}", pixel(&q[15], 5, 5));
+    let luz = |x: &QuadroRgb| x.px.iter().map(|&v| v as u64).sum::<u64>() / x.px.len() as u64;
+    assert!(luz(&q[de1]) < 12 && luz(&q[de1]) < luz(&q[de1 + 5]) && luz(&q[de1 + 5]) < luz(&q[de1 + 10]) && luz(&q[de1 + 10]) < luz(&q[de1 + 14]), "escurecer de entrada");
+
+    // zoom animado e desenho por cima, sem perdas: a marca vermelha onde `A(τ)` a põe
+    let sem = executor::rodar(&cap, &plano, &dir.join("sem-perdas"), &sem_perdas()).unwrap();
+    let mut todos = Vec::new();
+    for b in &sem.blocos {
+        todos.extend(medir::quadros(&cap, b).unwrap());
+    }
+    assert_eq!(todos.len(), total);
+    let ef = efeitos_do_clipe(&p, 4);
+    let mapa4 = &plano.proveniencia.roteiro[4].origem.as_ref().unwrap().quadro_do_slot;
+    let (mut pior_zoom, mut pior_desenho, mut medidos) = (0.0f64, 0.0f64, 0);
+    for s in 0..60 {
+        let j = mapa4[s] as usize;
+        let ([px, py, pw, ph], cabe) = no_canvas(ef, t4.tempo(j), fontes::marca_esperada(Fonte::Mp4, m4.numeros[j]), m4.info.exibido, (320, 180));
+        if !cabe {
+            continue;
+        }
+        let x = &todos[de4 + s];
+        let r = centro_de(x, eh_vermelho).unwrap_or_else(|| panic!("zoom slot {s}: marca fora"));
+        let v = centro_da_caixa(x, eh_verde).unwrap_or_else(|| panic!("zoom slot {s}: destaque fora"));
+        pior_zoom = pior_zoom.max((r.0 - px - pw / 2.0).abs()).max((r.1 - py - ph / 2.0).abs());
+        pior_desenho = pior_desenho.max((v.0 - r.0).abs()).max((v.1 - r.1).abs());
+        medidos += 1;
+    }
+    assert!(medidos >= 20 && pior_zoom <= ZOOM_PX && pior_desenho <= DESENHO_PX, "zoom: {medidos} slots, marca a {pior_zoom:.2} px, destaque a {pior_desenho:.2} px ({})", cap.versao);
+    // o mesmo conteúdo da exportação (o composto vem antes do codificador)
+    assert_eq!(sem.compostos.len(), total);
+
+    // som: contagem exata e cada clique no lugar (dos trechos e da narração); título e congelado sem som
+    let pcm = pcm_do_wav(&std::fs::read(dir.join("t1").join("audio.wav")).unwrap());
+    let a = |q: u64| tempo::amostra_do_slot(q, plano.canvas.fps);
+    assert_eq!(pcm.len() as u64 / 2, a(plano.total_q), "amostras");
+    let mut previstos_som: Vec<i64> = Vec::new();
+    for n in [1, 2, 4] {
+        let o = plano.proveniencia.roteiro[n].origem.as_ref().unwrap();
+        // o som tem de cair junto do quadro que mostra o mesmo instante do conteúdo (número desenhado / 30)
+        let m = if o.midia == "m4" { &m4 } else { &mk };
+        let som_s = m.info.quadros.tempo(0) - m.numeros[0] as f64 / 30.0;
+        previstos_som.extend(cliques_previstos(o.de_s, o.ate_s, som_s, a(plano.proveniencia.roteiro[n].na_saida.de_q)));
+    }
+    previstos_som.push((5.85 * 48_000.0f64).round() as i64);
+    previstos_som.sort_unstable();
+    let achados = cliques(&pcm, 14_000);
+    assert_eq!(achados.len(), previstos_som.len(), "cliques {achados:?} × {previstos_som:?} ({})", cap.versao);
+    let pior = achados.iter().zip(&previstos_som).map(|(&x, &y)| (x as i64 - y).abs()).max().unwrap();
+    assert!(pior <= CLIQUE_AMOSTRAS, "clique a {pior} amostras do previsto: {achados:?} × {previstos_som:?}");
+    let silencio = |q0: u64, q1: u64| pcm[2 * a(q0) as usize..2 * a(q1) as usize].iter().all(|&x| x == 0);
+    assert!(silencio(0, 30) && silencio(de3 as u64, (de3 + n3) as u64), "título e congelado sem som");
+
+    // relatório do plano compilado e executado: `feito` igual nos dois renders; nenhum caminho nem nome de rastreio
+    let caso = dir.join("caso ç");
+    std::fs::create_dir_all(&caso).unwrap();
+    let ambiente = |tarefa: &str| Ambiente {
+        cap: cap.clone(),
+        trabalho: dir.join(tarefa),
+        cache: dir.join("cache"),
+        caso: caso.clone(),
+        pasta_projeto: caso.join("Sistema/videos/edicao/p-teste"),
+        paralelos: 1,
+        identidade: Identidade {
+            autor: Autor { nome: "Perito Teste".into(), matricula: String::new(), cargo: String::new() },
+            caso: RetratoCaso { numero: "0001/2026".into(), referencia: String::new(), orgao: String::new(), requisitante: String::new() },
+            sicro: VersaoSicro { versao: "6.0.0".into(), commit: "x".into(), alvo: "x86_64-unknown-linux-gnu".into() },
+            sistema: Sistema { so: "Linux".into(), cpu: Cpu { modelo: "CPU".into(), instrucoes: vec![] }, gpu: None, driver: None },
+        },
+        ciencias: vec![],
+    };
+    let fecho = tecnico::Fecho { projeto_sha256: format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(serde_json::to_vec(&p).unwrap())), arquivo_rel: "Exportações/Vídeos/Edições/Teste/Teste.mp4".into(), ocultacoes: None };
+    let t1 = tecnico::montar(&plano, &res1, &ambiente("t1"), &fecho).unwrap();
+    let t2 = tecnico::montar(&plano, &res2, &ambiente("t2"), &fecho).unwrap();
+    assert_eq!(String::from_utf8(tecnico::bytes(&t1["feito"])).unwrap(), String::from_utf8(tecnico::bytes(&t2["feito"])).unwrap(), "feito igual nos dois renders");
+    assert_ne!(tecnico::bytes(&t1["execucao"]), tecnico::bytes(&t2["execucao"]));
+    let sha = tecnico::gravar(&caso, "Teste", &t1).unwrap();
+    let texto = std::fs::read_to_string(caso.join("Teste.tecnico.json")).unwrap();
+    assert_eq!(sha, format!("{:x}", <sha2::Sha256 as sha2::Digest>::digest(texto.as_bytes())));
+    let raizes = vec![dir.to_string_lossy().to_string(), std::env::temp_dir().to_string_lossy().to_string()];
+    let achados_abs = crate::edicao::relatorio::apoio::absolutos_no_texto(&texto, &raizes, &["Suspeito de casaco", "Placa do carro", "Marca vermelha"]);
+    assert!(achados_abs.is_empty(), "{achados_abs:?}");
+    let t: Value = serde_json::from_str(&texto).unwrap();
+    assert_eq!((t["feito"]["saida"]["n_quadros"].as_u64(), t["feito"]["roteiro"].as_array().map(Vec::len)), (Some(plano.total_q), Some(5)));
+    assert_eq!(t["feito"]["audio"]["tolerancia_buraco_ms"], json!(100.0));
+    // toda fonte do vídeo entregue está no relatório, a narração inclusive
+    assert_eq!(t["feito"]["midias"].as_array().unwrap().iter().map(|m| m["id"].as_str().unwrap()).collect::<Vec<_>>(), vec!["m4", "mk", "narr"]);
+    assert_eq!(t["feito"]["ocultacoes"][0]["clipes"], json!(["c2", "c3"]));
+    assert_eq!(t["execucao"]["conteudo"]["composto_sha256"], json!(res1.composto_sha256));
+    assert_eq!(t["execucao"]["conferencia"]["ocultacoes"], json!("pendente"));
+    assert_eq!(t["execucao"]["blocos"].as_array().unwrap().len(), plano.blocos.len());
+
+    // mapa.csv: pts de cada linha = os da tabela no índice; o conjunto por clipe = os pts lidos pelo `showinfo`;
+    // e o número que o vídeo entregue mostra no slot = o do quadro do índice
+    let m1 = mapa::mapa_csv(&plano, Some(&res1)).unwrap();
+    assert_eq!(m1, mapa::mapa_csv(&plano, Some(&res2)).unwrap());
+    let (mut por_clipe, mut slots) = (std::collections::BTreeMap::<String, Vec<i64>>::new(), 0usize);
+    for l in m1.lines().skip(1) {
+        let c: Vec<&str> = l.split(',').collect();
+        if c[3].is_empty() {
+            continue;
+        }
+        let (midia, pts_l, j): (&str, i64, usize) = (c[3], c[4].parse().unwrap(), c[5].parse().unwrap());
+        let m = if midia == "m4" { &m4 } else { &mk };
+        assert_eq!(pts_l, m.info.quadros.pts[j], "{l}");
+        if c[7] != "repetido" {
+            por_clipe.entry(c[2].to_string()).or_default().push(pts_l);
+        }
+        if !c[0].is_empty() {
+            let q: usize = c[0].parse().unwrap();
+            let (de1, _) = item(1);
+            // o número não se lê no escurecer de entrada do c1 nem sob o zoom
+            if !(de1..de1 + 15).contains(&q) && q < de4 {
+                assert_eq!(numeros[q], m.numeros[j], "mapa.csv slot {q}: {l}");
+                slots += 1;
+            }
+        }
+    }
+    for (clipe, mut v) in por_clipe {
+        v.sort_unstable();
+        let mut lidos: Vec<i64> = res1.lidos.iter().filter(|x| x.clipe == clipe).flat_map(|x| x.pts.clone()).collect();
+        lidos.sort_unstable();
+        assert_eq!(v, lidos, "mapa.csv × pts lidos do clipe {clipe}");
+    }
+    // pts lido trocado: o mapa recusa
+    let mut torto = res1.clone();
+    torto.lidos[0].pts[3] += 1;
+    assert!(mapa::mapa_csv(&plano, Some(&torto)).unwrap_err().to_string().contains("leitura_divergente"));
+    eprintln!(
+        "ponta a ponta ({}): {total} slots, {conferidos} com o quadro previsto, mapa.csv conferido em {slots} slots; zoom a {pior_zoom:.2} px, destaque a {pior_desenho:.2} px; {} cliques a até {pior} amostras; feito com {} bytes igual nos dois renders",
+        cap.versao,
+        achados.len(),
+        tecnico::bytes(&t1["feito"]).len()
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `eof_action=repeat` no `overlay` da ocultação (contratos (h) 5) não muda o composto em leitura normal: os mesmos
+/// hashes de quadro do `pass`, com sólido, desfoque em elipse de borda suave, mosaico, 2×, 0,5×, congelado e fim da mídia.
+#[test]
+fn eof_repeat_da_ocultacao_nao_muda_o_composto() {
+    let Some(cap) = fontes::cap() else { return };
+    let dir = pasta("eof-repeat");
+    let mk = apoio::medida(&cap, Fonte::Mkv30);
+    let tk = &mk.info.quadros;
+    let n = tk.pts.len();
+    let congelado = json!({ "tipo": "congelar", "id": "c3", "rotulo": "", "midia": "mk", "instante_s": tk.tempo(70), "instante_pts": tk.pts[70], "duracao_s": 0.5 });
+    let elipse = json!({ "alvo": { "rastreio": "rk", "forma": "elipse", "vertices": null, "margem": 0.3, "borda_suave": 0.2, "inverter": false } });
+    let p = projeto(
+        320,
+        180,
+        (30, 1),
+        vec![midia("mk", "video", json!([ocultar("o1", "rk", "solido", json!({})), ocultar("o2", "rk", "desfoque", elipse)]))],
+        vec![
+            trecho("c1", "mk", tk, 40, 100, 1.0, json!([])),
+            trecho("c2", "mk", tk, 100, 160, 2.0, json!([])),
+            congelado,
+            trecho("c4", "mk", tk, 20, 50, 0.5, json!([ocultar("o3", "rk", "mosaico", json!({}))])),
+            trecho("c5", "mk", tk, n - 20, n, 1.0, json!([])),
+        ],
+        json!({ "rastreios": [rastreio("rk", Some("mk"), "fonte", ancoras_da_marca(Fonte::Mkv30, &mk, 0, n))] }),
+    );
+    let plano = Mundo::novo(&cap).com("mk", &mk.info).compilar(&p, &alvo_final("cpu")).unwrap();
+    let overlays: usize = plano.blocos.iter().map(|b| b.grafo.matches("eof_action=repeat").count()).sum();
+    assert_eq!(overlays, 11, "um `overlay` por ocultação de cada clipe");
+    let novo = executor::rodar(&cap, &plano, &dir.join("repeat"), &Opcoes::default()).unwrap();
+    let mut antigo = plano.clone();
+    for b in &mut antigo.blocos {
+        b.grafo = b.grafo.replace("eof_action=repeat", "eof_action=pass");
+    }
+    let velho = executor::rodar(&cap, &antigo, &dir.join("pass"), &Opcoes::default()).unwrap();
+    assert_eq!(novo.compostos.len(), plano.total_q as usize);
+    let diferentes = novo.compostos.iter().zip(&velho.compostos).filter(|(a, b)| a != b).count();
+    assert_eq!(diferentes, 0, "{diferentes} de {} quadros compostos mudaram ({})", novo.compostos.len(), cap.versao);
+    let _ = std::fs::remove_dir_all(&dir);
 }

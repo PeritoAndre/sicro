@@ -31,6 +31,8 @@ function Conteudo({ fechar }: { fechar: () => void }) {
   const so = useEdicaoStore((s) => s.soLeitura);
   const analise = useEdicaoStore((s) => s.analise);
   const atual = useEdicaoStore((s) => s.analiseRevisao === s.revisao && s.analise !== null);
+  // análise desta revisão falhou: para de girar e mostra o erro (contratos (h) 27)
+  const falhaAnalise = useEdicaoStore((s) => (s.analiseFalhou === s.revisao ? s.erroAnalise : null));
   const [ciencias, setCiencias] = useState<Set<string>>(new Set());
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<ErroComando | null>(null);
@@ -81,7 +83,7 @@ function Conteudo({ fechar }: { fechar: () => void }) {
           <Button variant="ghost" onClick={fechar}>
             Cancelar
           </Button>
-          <Button variant="primary" disabled={!pode} onClick={() => void exportar()} leftIcon={enviando || !atual ? <Loader2 size={14} className={styles.gira} /> : undefined} data-acao="exportar">
+          <Button variant="primary" disabled={!pode} onClick={() => void exportar()} leftIcon={enviando || (!atual && !falhaAnalise) ? <Loader2 size={14} className={styles.gira} /> : undefined} data-acao="exportar">
             {rotuloExportar(n)}
           </Button>
         </>
@@ -156,7 +158,11 @@ function Conteudo({ fechar }: { fechar: () => void }) {
           ))}
         </ul>
       )}
-      {erro && <p className={styles.erroLinha} data-dado>{erro.frase || erro.codigo}</p>}
+      {erro ? (
+        <p className={styles.erroLinha} data-dado>{erro.frase || erro.codigo}</p>
+      ) : (
+        falhaAnalise && <p className={styles.erroLinha} data-dado data-erro-analise="">{falhaAnalise.frase || falhaAnalise.codigo}</p>
+      )}
     </Dialog>
   );
 }

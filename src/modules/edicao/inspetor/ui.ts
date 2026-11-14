@@ -40,3 +40,13 @@ export const useInspetorUi = create<UiState>((set, get) => ({
   },
   cancelarMarcacao: () => set({ ferramenta: null, aoMarcar: null, chave: null }),
 }));
+
+/** O palco marcou (`PalcoProps.onMarcado`): a ferramenta de rastreio (caixa ou ponto) segue ligada para o quadro
+ *  seguinte; as outras desligam (contratos (h) 22). */
+export function receberMarca(v: Caixa | Ponto | Lugar, t: Seg, pts: Pts | null): void {
+  const ui = useInspetorUi.getState();
+  const f = ui.ferramenta;
+  if (!f) return;
+  if (f.rastreio && (f.tipo === "caixa" || f.tipo === "ponto")) ui.aoMarcar?.(v, t, pts);
+  else ui.marcado(v, t, pts);
+}

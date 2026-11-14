@@ -13,6 +13,7 @@ export type EvidenceKind =
   | "audio"
   | "image_analysis"
   | "image_export"
+  | "video_edit"
   | "document"
   | "other";
 

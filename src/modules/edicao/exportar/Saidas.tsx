@@ -27,8 +27,10 @@ export function estadoDaSaida(s: SaidaRegistrada): EstadoMostrado {
 const ouvintes = new Set<() => void>();
 const avisar = () => ouvintes.forEach((f) => f());
 
-/** `edicao_conferir`: conclui a saída "A conferir" (conferida ou não). */
+/** `edicao_conferir`: conclui a saída "A conferir" (conferida ou não). "Conferido" registra o perito: pede
+ *  confirmação antes (contratos (h) 24). */
 export async function conferirSaida(ws: string, saidaId: string, conferida: boolean): Promise<void> {
+  if (conferida && !(await askConfirm({ title: "Conferido", confirmLabel: "Conferido" }))) return;
   try {
     await commands.edicaoConferir(ws, saidaId, conferida);
   } catch (e) {
