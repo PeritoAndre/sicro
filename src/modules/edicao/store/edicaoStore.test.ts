@@ -370,7 +370,7 @@ describe("salvamento", () => {
     cmd.edicaoAbrir.mockResolvedValueOnce({ projeto: p, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "" });
     expect(await st().abrirCorrente(WS)).toBe(p.id);
     await st().fechar();
-    cmd.edicaoAbrir.mockRejectedValueOnce({ kind: "filesystem", message: "filesystem error: não existe" });
+    cmd.edicaoAbrir.mockRejectedValueOnce({ kind: "validation", message: "validation error: projeto_nao_encontrado: x" });
     const novo = await st().abrirCorrente(WS);
     expect(novo).not.toBe(p.id);
     expect(st().aberta?.projetoId).toBe(novo);
@@ -551,7 +551,7 @@ describe("coleta de trechos", () => {
 
   it("corrente sumida: cria outra", async () => {
     definirCorrente(WS2, "sumiu");
-    cmd.edicaoAbrir.mockRejectedValueOnce({ kind: "filesystem", message: "filesystem error: não existe" });
+    cmd.edicaoAbrir.mockRejectedValueOnce({ kind: "validation", message: "validation error: projeto_nao_encontrado: x" });
     const r = await receber(WS2, [{ sha256: sha, inicio_s: 1, fim_s: 2 }]);
     expect(r.projeto).not.toBe("sumiu");
     expect(correnteDe(WS2)).toBe(r.projeto);

@@ -1,0 +1,240 @@
+.palco {
+  container: palco / inline-size;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  background: var(--sicro-surface-1);
+}
+.caixa {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  background: #000;
+}
+.canvas,
+.fiel,
+.render {
+  position: absolute;
+  display: block;
+}
+.pixelado {
+  image-rendering: pixelated;
+}
+.fiel {
+  pointer-events: none;
+}
+.render {
+  background: #000;
+  z-index: 2;
+}
+/* elemento tocado: dentro do palco, quase invisível */
+.elemento {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0.01;
+  pointer-events: none;
+}
+.camada {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  touch-action: none;
+}
+.marcando {
+  cursor: crosshair;
+}
+.alca {
+  position: absolute;
+  box-sizing: border-box;
+  background: #fff;
+  border: 1px solid #000;
+  border-radius: 2px;
+}
+.alcaMover {
+  border-radius: 50%;
+  background: var(--sicro-accent);
+}
+.contorno {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed #ffd84a;
+  pointer-events: none;
+}
+.rascunho {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px dashed #fff;
+  outline: 1px dashed #000;
+  outline-offset: 1px;
+  pointer-events: none;
+}
+.estado {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  color: #ddd;
+  z-index: 3;
+  pointer-events: none;
+}
+.barraFundo {
+  display: block;
+  height: 3px;
+  min-width: 2px;
+  max-width: 120px;
+  background: var(--sicro-accent);
+}
+.gira {
+  animation: girar 1s linear infinite;
+}
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- transporte ---- */
+.transporte {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--sicro-border);
+  background: var(--sicro-surface-1);
+}
+.pista {
+  position: relative;
+  height: 22px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  touch-action: none;
+}
+.faixa {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--sicro-accent-soft);
+  border-left: 2px solid var(--sicro-accent);
+  border-right: 2px solid var(--sicro-accent);
+  box-sizing: border-box;
+}
+.borda {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 10px;
+  cursor: ew-resize;
+  z-index: 1;
+}
+.bordaIni {
+  left: -6px;
+}
+.bordaFim {
+  right: -6px;
+}
+.cursor {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--sicro-fg);
+  pointer-events: none;
+  z-index: 2;
+}
+.controles {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.grupo {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.direita {
+  margin-left: auto;
+  gap: var(--space-1);
+}
+.icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+}
+.icone:hover:not(:disabled) {
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+}
+.icone:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.tocar {
+  color: var(--sicro-fg);
+}
+.tempo {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  white-space: nowrap;
+}
+.base {
+  color: var(--sicro-fg-dim);
+}
+.quadroNum {
+  color: var(--sicro-fg-muted);
+}
+.mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  padding: 0 8px;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mini:hover:not(:disabled) {
+  border-color: var(--sicro-accent);
+}
+.mini:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.ativo {
+  border-color: var(--sicro-accent);
+}
+/* palco estreito: só os ícones (o rótulo segue no title) */
+@container palco (max-width: 560px) {
+  .rotuloMini {
+    display: none;
+  }
+}

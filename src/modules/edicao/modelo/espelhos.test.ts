@@ -1,6 +1,6 @@
 /**
- * Espelhos × fixtures do Rust (D14): mesmos bits. `tempo-*` e `primitivas-*` nascem na leva 3 (P0.3b e P0.5):
- * enquanto o arquivo não existe o teste é pulado; o P0.8b fecha (O1).
+ * Espelhos × fixtures do Rust (D14): mesmos bits. `tempo-*` (P0.3b) e `primitivas-*` (P0.5) existem desde a leva 3:
+ * nenhum teste é pulado (o P0.8b fechou).
  */
 
 import { describe, expect, it } from "vitest";
@@ -9,8 +9,8 @@ import { avaliar as avaliarCurva, suave } from "./curva";
 import { aDe, caixaNoCanvas, inversa, ponto, regiaoEm, type Afim, type Tamanho } from "./geometria";
 import { avaliar as avaliarRastreio, emAusencia, type Instante } from "./rastreio";
 import { amostraDoSlot, fatorRacional, instanteDoSlot, mapaTrecho, nQSemFonte, quadroEm, resolver, slots, type MapaQuadros } from "./tempo";
-import { cosSenGraus, primitivas, type QuadroPrimitivas } from "../palco/desenho/primitivas";
-import { casos, comPrefixo, conferirCasos, diferenca, existe } from "./testeFixtures";
+import { cosSenGraus, primitivas } from "../palco/desenho/primitivas";
+import { casos, comPrefixo, conferirCasos, diferenca } from "./testeFixtures";
 
 describe("curva × fixtures", () => {
   it("curva-avaliar.json", () => {
@@ -72,7 +72,7 @@ describe("rastreio × fixtures", () => {
 
 /** Arquivos que este teste sabe conferir. */
 const TEMPO = ["tempo-mapa.json", "tempo-quadro.json", "tempo-contas.json", "tempo-resolver.json"];
-const PRIMITIVAS = ["primitivas-efeitos.json", "primitivas-seno.json"];
+const PRIMITIVAS = ["primitivas-efeitos.json", "primitivas-seno.json", "primitivas-titulo.json"];
 
 /** Erro de validação do Rust vira `{ erro: "<código>[: detalhe]" }` na fixture. */
 const resultadoOuErro = (f: () => unknown) => {
@@ -85,18 +85,18 @@ const resultadoOuErro = (f: () => unknown) => {
 const mapaComoRust = (m: MapaQuadros) => ({ ...m, c: Number(m.c), r: Number(m.r), m: Number(m.m), kn: Number(m.kn), kd: Number(m.kd), e: Number(m.e), p0: Number(m.p0) });
 
 describe("tempo × fixtures (P0.3b)", () => {
-  it.skipIf(!existe("tempo-mapa.json"))("tempo-mapa.json: mapa de quadros em inteiros", () => {
+  it("tempo-mapa.json: mapa de quadros em inteiros", () => {
     type E = { tabela: TabelaQuadros; j_in: number; j_out: number; velocidade: Velocidade; fps: Racional };
     const lista = casos<E, unknown>("tempo-mapa.json");
     expect(conferirCasos(lista, (e) => resultadoOuErro(() => mapaComoRust(mapaTrecho(e.tabela, e.j_in, e.j_out, e.velocidade, e.fps))))).toEqual([]);
   });
 
-  it.skipIf(!existe("tempo-quadro.json"))("tempo-quadro.json: quadro de um tempo, índice ou pts", () => {
+  it("tempo-quadro.json: quadro de um tempo, índice ou pts", () => {
     const lista = casos<{ tabela: TabelaQuadros; alvo: AlvoQuadro }, unknown>("tempo-quadro.json");
     expect(conferirCasos(lista, (e) => resultadoOuErro(() => quadroEm(e.tabela, e.alvo)))).toEqual([]);
   });
 
-  it.skipIf(!existe("tempo-contas.json"))("tempo-contas.json: slots, amostras e fator", () => {
+  it("tempo-contas.json: slots, amostras e fator", () => {
     type E = { conta: string; duracao_s?: number; q?: number; fps?: Racional; fator?: number };
     const lista = casos<E, unknown>("tempo-contas.json");
     const contas: Record<string, (e: E) => unknown> = {
@@ -109,7 +109,7 @@ describe("tempo × fixtures (P0.3b)", () => {
     expect(conferirCasos(lista, (e) => resultadoOuErro(() => contas[e.conta]!(e)))).toEqual([]);
   });
 
-  it.skipIf(!existe("tempo-resolver.json"))("tempo-resolver.json: linha resolvida", () => {
+  it("tempo-resolver.json: linha resolvida", () => {
     type E = { projeto: ProjetoEdicao; tabelas: Record<string, TabelaQuadros> };
     const lista = casos<E, unknown>("tempo-resolver.json");
     expect(conferirCasos(lista, (e) => resolver(e.projeto, { tabela: (id) => e.tabelas[id] ?? null }))).toEqual([]);
@@ -126,7 +126,7 @@ describe("primitivas × fixtures (P0.5)", () => {
     }
   };
 
-  it.skipIf(!existe("primitivas-efeitos.json"))("primitivas-efeitos.json: uma função por efeito", () => {
+  it("primitivas-efeitos.json: uma função por efeito", () => {
     type Sprite = { relativo: string; w: number; h: number };
     type Atlas = { relativo: string; celula: { w: number; h: number }; glifos: string };
     type E = {
@@ -138,7 +138,7 @@ describe("primitivas × fixtures (P0.5)", () => {
     };
     const lista = casos<E, unknown>("primitivas-efeitos.json");
     const erros = conferirCasos(lista, (e) => {
-      const q: QuadroPrimitivas = {
+      const q: QuadroPalco = {
         q: e.quadro.q,
         t: e.quadro.t,
         pts: e.quadro.pts,
@@ -158,7 +158,7 @@ describe("primitivas × fixtures (P0.5)", () => {
     expect(erros).toEqual([]);
   });
 
-  it.skipIf(!existe("primitivas-seno.json"))("primitivas-seno.json: cos e sen sem a biblioteca", () => {
+  it("primitivas-seno.json: cos e sen sem a biblioteca", () => {
     const lista = casos<{ graus: number }, unknown>("primitivas-seno.json");
     expect(conferirCasos(lista, (e) => {
       const [cos, sen] = cosSenGraus(e.graus);

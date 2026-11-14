@@ -459,7 +459,10 @@ export type Primitiva =
 /** A = afim origem → canvas em 0..1, na ordem do canvas 2D (a, b, c, d, e, f): x' = a·x + c·y + e; y' = b·x + d·y + f.
  *  sprite, atlas e midia não estão no §8.3: são o que `primitivas()` precisa e não cabe no efeito (no Rust, `FonteSprites`);
  *  null = ainda não chegou do backend (o efeito fica sem desenho até chegar). */
-export interface QuadroPalco { q: number; t: Seg; pts: Pts | null; A: [number, number, number, number, number, number];
+// CONTRATO: `indice` e `programa_s` (contratos (g) 8), espelho de `QuadroCamada.indice`/`.programa_s`:
+// índice do quadro de fonte na tabela (null sem fonte; carimbo "Quadro") e instante do slot no programa (carimbo "Vídeo").
+export interface QuadroPalco { q: number; t: Seg; pts: Pts | null; indice: number | null; programa_s: Seg;
+                               A: [number, number, number, number, number, number];
                                canvas: { w: number; h: number }; rastreio(id: Id): Caixa | null;
                                sprite(pedido: PedidoSprite): SpriteTexto | null;
                                atlas(estilo: EstiloTexto, alturaCanvas: number): AtlasCarimbo | null;

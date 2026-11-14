@@ -1,0 +1,323 @@
+/* Diálogo Exportar, Fila e Saídas: tokens do app; estado por ícone. */
+
+.campos {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: end;
+}
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rotulo {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+}
+.entrada {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  height: 32px;
+  padding: 0 8px;
+  font: inherit;
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.entrada:focus {
+  outline: none;
+  border-color: var(--sicro-accent);
+}
+.reprodutivel {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 32px;
+  min-width: 0;
+}
+.check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.check input,
+.ciente input {
+  margin: 0;
+  accent-color: var(--sicro-accent);
+}
+.codificador {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--sicro-fg-dim);
+  min-width: 0;
+}
+.codificador code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.problemas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.problemas li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  background: var(--sicro-surface-2);
+  min-width: 0;
+}
+.erro {
+  border-color: var(--sicro-danger) !important;
+  color: var(--sicro-danger);
+}
+.pericial svg:first-child {
+  color: var(--sicro-warning);
+}
+.aviso svg:first-child {
+  color: var(--sicro-fg-dim);
+}
+.salto {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  font-size: var(--text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.salto span:not(.conta) {
+  flex: 1;
+  min-width: 0;
+}
+.salto:hover span:not(.conta) {
+  text-decoration: underline;
+}
+.seta {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+.conta {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+.ciente {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.erroLinha {
+  margin: 0;
+  color: var(--sicro-danger);
+  font-size: var(--text-xs);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* fila */
+.filaRaiz {
+  position: relative;
+  display: inline-flex;
+}
+.badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--sicro-accent);
+  color: #1a1206;
+  font-size: 10px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.painel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 60;
+  width: 380px;
+  max-width: calc(100vw - 24px);
+  max-height: min(70vh, 520px);
+  overflow-y: auto;
+  padding: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+}
+.tarefas,
+.saidas {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.saidas:not(:first-child) {
+  border-top: 1px solid var(--sicro-divider);
+  padding-top: var(--space-2);
+}
+.tarefa,
+.saida {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 8px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+.tarefaTopo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.tarefaTitulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tarefaEstado {
+  flex-shrink: 0;
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  white-space: nowrap;
+}
+.tarefaLinha {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.tarefaLinha .erroLinha {
+  flex: 1 1 100%;
+}
+.progresso {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.barraFundo {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--sicro-surface-3);
+  overflow: hidden;
+}
+.barra {
+  display: block;
+  height: 100%;
+  background: var(--sicro-accent);
+  transition: width 0.2s linear;
+}
+.icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-muted);
+  padding: 3px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
+}
+.icone:hover {
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-3);
+}
+.mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  padding: 3px 8px;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mini:hover {
+  border-color: var(--sicro-accent);
+}
+.mono {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+.dim {
+  color: var(--sicro-fg-dim);
+  flex-shrink: 0;
+}
+.acento {
+  color: var(--sicro-accent);
+  flex-shrink: 0;
+}
+.ok {
+  color: var(--sicro-success);
+  flex-shrink: 0;
+}
+.alerta {
+  color: var(--sicro-warning);
+  flex-shrink: 0;
+}
+.perigo {
+  color: var(--sicro-danger);
+  flex-shrink: 0;
+}
+.gira {
+  animation: gira 1s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes gira {
+  to {
+    transform: rotate(360deg);
+  }
+}

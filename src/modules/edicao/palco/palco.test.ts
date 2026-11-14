@@ -1,0 +1,395 @@
+/** Lógica do palco: vista, transporte (faixa e bordas), busca um-por-vez, quadro final e alças. */
+
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Caixa, EfEnquadramento, EfGirar, PreviaMidia, TabelaQuadros } from "@domain/edicao";
+import { VISTA_INICIAL, contido, daTela, deslocar, limitar, mostrado, paraTela, zoomEm, zoomMaximo } from "./vista";
+import { aparar, bordaArrastada, entradaNoCursor, faixaDoClipe, fronteira, marcarBloqueado, meioDoQuadro, saidaNoCursor, tempoDaFronteira, tempoDoX, xDoTempo } from "./faixa";
+import { Buscador, ESPERA_MS, type Agenda } from "./motor/busca";
+import type { ElementoBusca } from "./motor/elemento";
+import { relogioMidia } from "./motor/relogioMidia";
+import { QuadroFiel, type Fiel } from "./quadroFiel";
+import { aDaGirada, aDaOrigem, alcaDeLugar, alcasDaRegiao, alcasDeCaixa, alcasDePonto, caixaArrastada, comRegiao, proporcaoDaSaida } from "./alcas";
+import { caixaComProporcao } from "./camadaEdicao";
+import { aDe, ponto } from "../modelo/geometria";
+import { exibido, quadroEm, tempoDoQuadro } from "../modelo/tempo";
+
+/** 30 qps em 1/15360, começando em `pts0`. */
+const tab = (n: number, pts0 = 0, passo = 512): TabelaQuadros => ({ tb: { num: 1, den: 15360 }, pts0, passos: Array(n - 1).fill(passo), passo_mediano: passo, chaves: [0], vfr: false, origem: "decodificador" });
+const perto = (a: number, b: number, e = 1e-12) => expect(Math.abs(a - b)).toBeLessThan(e);
+
+describe("vista: zoom e deslocamento da tela", () => {
+  const caixa = { w: 800, h: 600 };
+  const saida = { w: 1920, h: 1080 };
+  const img = contido(caixa, saida);
+
+  it("a saída fica contida e centrada", () => {
+    expect(img).toEqual({ x: 0, y: 75, w: 800, h: 450 });
+    expect(contido({ w: 0, h: 10 }, saida)).toEqual({ x: 0, y: 0, w: 0, h: 0 });
+  });
+
+  it("zoom com o ponto parado; nunca abaixo de 1×; deslocamento limitado", () => {
+    const p = { x: 200, y: 300 };
+    const antes = daTela(VISTA_INICIAL, img, p);
+    const v = zoomEm(VISTA_INICIAL, 2, p, caixa, img);
+    expect(v.s).toBe(2);
+    const depois = daTela(v, img, p);
+    perto(depois.x, antes.x);
+    perto(depois.y, antes.y);
+    expect(zoomEm(v, 0.1, p, caixa, img)).toEqual(limitar(VISTA_INICIAL, caixa, img));
+    // maior que a caixa: sem borda sobrando
+    const longe = deslocar(v, 5000, 5000, caixa, img);
+    const m = mostrado(longe, img);
+    expect(m.x).toBeLessThanOrEqual(0);
+    expect(m.x + m.w).toBeGreaterThanOrEqual(caixa.w);
+    // menor que a caixa no eixo vertical (450·1,2 < 600): fica centrada
+    const v12 = limitar({ s: 1.2, tx: 0, ty: 999 }, caixa, img);
+    const m12 = mostrado(v12, img);
+    perto(m12.y + m12.h / 2, caixa.h / 2);
+  });
+
+  it("tela ↔ canvas vão e voltam; teto do zoom pela saída", () => {
+    const v = zoomEm(VISTA_INICIAL, 3, { x: 500, y: 200 }, caixa, img);
+    const q = { x: 0.31, y: 0.77 };
+    const t = paraTela(v, img, q);
+    const de = daTela(v, img, t);
+    perto(de.x, q.x);
+    perto(de.y, q.y);
+    expect(zoomMaximo(img, saida)).toBe(Math.max(16, (40 * 1920) / 800));
+    expect(zoomEm(VISTA_INICIAL, 1e6, { x: 0, y: 0 }, caixa, img, 16).s).toBe(16);
+  });
+});
+
+describe("transporte: faixa da mídia inteira, bordas e I/O", () => {
+  const t = tab(300, 30720); // começa em 2 s
+  const clipe = { inicio_s: tempoDoQuadro(t, 30), inicio_pts: 30720 + 30 * 512, fim_s: tempoDoQuadro(t, 90), fim_pts: 30720 + 90 * 512 };
+
+  it("x ↔ tempo, limitado à faixa", () => {
+    const e = { de: 2, ate: 12, largura: 1000 };
+    expect(xDoTempo(e, 7)).toBe(500);
+    expect(tempoDoX(e, 250)).toBe(4.5);
+    expect(tempoDoX(e, -10)).toBe(2);
+    expect(tempoDoX(e, 5000)).toBe(12);
+  });
+
+  it("fronteira de quadro mais próxima; a do fim da mídia não tem pts", () => {
+    expect(fronteira(t, tempoDoQuadro(t, 10) + 0.004)).toBe(10);
+    expect(fronteira(t, tempoDoQuadro(t, 10) + 0.03)).toBe(11);
+    expect(fronteira(t, 99)).toBe(300);
+    expect(tempoDaFronteira(t, 300)).toEqual({ t: (30720 + 300 * 512) / 15360, pts: null });
+  });
+
+  it("meio do quadro = o do relógio da prévia, e o quadro exibido nele é o próprio", () => {
+    const previa: PreviaMidia = { relativo: "x", tipo: "copia", desloc_s: 1.979, de_s: 2, ate_s: 12, largura: 640, altura: 360, pronta: true };
+    const r = relogioMidia(previa, t);
+    for (const j of [0, 1, 150, 299]) {
+      expect(meioDoQuadro(t, j)).toBe(r.meio(j));
+      expect(quadroEm(t, { t: meioDoQuadro(t, j) }).indice).toBe(j);
+      expect(r.quadro(r.alvo(j))).toBe(j);
+    }
+  });
+
+  it("aparar pelas bordas: preso à fronteira; nunca vazio", () => {
+    expect(faixaDoClipe(clipe, t)).toEqual([30, 90]);
+    expect(aparar(clipe, "inicio", 40, t)).toEqual({ inicio_s: tempoDoQuadro(t, 40), inicio_pts: 30720 + 40 * 512 });
+    expect(aparar(clipe, "inicio", 90, t)).toBeNull();
+    expect(aparar(clipe, "inicio", 30, t)).toBeNull();
+    expect(aparar(clipe, "fim", 30, t)).toBeNull();
+    expect(aparar(clipe, "fim", 300, t)).toEqual({ fim_s: (30720 + 300 * 512) / 15360, fim_pts: null });
+  });
+
+  it("borda arrastada: anda o que o ponteiro andou; pegar e soltar sem mover não muda nada", () => {
+    const pista = [2, 12] as const;
+    // pegou a borda do fim 0,2 s ao lado dela e não moveu
+    expect(bordaArrastada(clipe, "fim", clipe.fim_s + 0.2, clipe.fim_s + 0.2, t, pista)).toBeNull();
+    expect(bordaArrastada(clipe, "inicio", clipe.inicio_s - 0.2, clipe.inicio_s - 0.2, t, pista)).toBeNull();
+    // andou 10 quadros para a direita, a partir de onde pegou
+    const dez = 10 * (512 / 15360);
+    expect(bordaArrastada(clipe, "fim", clipe.fim_s + 0.2, clipe.fim_s + 0.2 + dez, t, pista)).toEqual({ fim_s: tempoDoQuadro(t, 100), fim_pts: 30720 + 100 * 512 });
+    expect(bordaArrastada(clipe, "inicio", clipe.inicio_s - 0.2, clipe.inicio_s - 0.2 + dez, t, pista)).toEqual({ inicio_s: tempoDoQuadro(t, 40), inicio_pts: 30720 + 40 * 512 });
+    // ponteiro na ponta da pista: ponta da mídia, mesmo pegando fora do centro
+    expect(bordaArrastada(clipe, "fim", clipe.fim_s + 0.2, 12, t, pista)).toEqual({ fim_s: (30720 + 300 * 512) / 15360, fim_pts: null });
+    expect(bordaArrastada(clipe, "inicio", clipe.inicio_s + 0.2, 2, t, pista)).toEqual({ inicio_s: 2, inicio_pts: 30720 });
+    // ponteiro já na ponta da pista ao pegar, sem mover: nada (não salta para a ponta da mídia)
+    expect(bordaArrastada(clipe, "fim", 12, 12, t, pista)).toBeNull();
+    expect(bordaArrastada(clipe, "inicio", 2, 2, t, pista)).toBeNull();
+    // nunca vazio
+    expect(bordaArrastada(clipe, "fim", clipe.fim_s, 2, t, pista)).toBeNull();
+  });
+
+  it("I e O no cursor gravam o quadro exibido e ALARGAM o clipe quando o cursor está fora", () => {
+    // cursor antes do clipe: I puxa o início para trás
+    expect(entradaNoCursor(clipe, t, meioDoQuadro(t, 12))).toEqual({ inicio_s: tempoDoQuadro(t, 12), inicio_pts: 30720 + 12 * 512 });
+    // cursor depois do fim: O empurra o fim (exclusivo) para o quadro exibido
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 140))).toEqual({ fim_s: tempoDoQuadro(t, 140), fim_pts: 30720 + 140 * 512 });
+    // dentro: encurta
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 60))).toEqual({ fim_s: tempoDoQuadro(t, 60), fim_pts: 30720 + 60 * 512 });
+    // O antes do início ou I depois do fim: nada
+    expect(saidaNoCursor(clipe, t, meioDoQuadro(t, 10))).toBeNull();
+    expect(entradaNoCursor(clipe, t, meioDoQuadro(t, 95))).toBeNull();
+  });
+
+  it("vídeo cru e MPEG-PS com tabela de pacotes: marcar desligado (contratos (g) 14)", () => {
+    const pac = { ...t, origem: "pacotes" as const };
+    expect(marcarBloqueado({ nome: "dvr.h264", relativo: "Mídias/Vídeos/dvr.h264" }, pac)).toBe(true);
+    expect(marcarBloqueado({ nome: "x.mpg", relativo: "x.mpg" }, pac)).toBe(true);
+    expect(marcarBloqueado({ nome: "x.mpg", relativo: "x.mpg" }, t)).toBe(false);
+    expect(marcarBloqueado({ nome: "cam.mp4", relativo: "cam.mp4" }, pac)).toBe(false);
+    expect(marcarBloqueado({ nome: "cam.mp4", relativo: "cam.mp4" }, null)).toBe(true);
+  });
+});
+
+describe("busca: um seek por vez, alvo pendente, pinta no seeked + rAF", () => {
+  function falso() {
+    const ouvintes = new Set<() => void>();
+    const pedidos: number[] = [];
+    const estado = { buscando: false };
+    const el: ElementoBusca = {
+      buscar: (j) => void pedidos.push(j),
+      quadro: () => pedidos.at(-1) ?? 0,
+      agora: () => 0,
+      buscando: () => estado.buscando,
+      aoBuscado: (f) => (ouvintes.add(f), () => ouvintes.delete(f)),
+      tocar: async () => {},
+      pausar: () => {},
+      pausado: () => true,
+    };
+    const rafs: (() => void)[] = [];
+    const timers = new Map<number, () => void>();
+    let n = 0;
+    const agenda: Agenda = {
+      raf: (f) => void rafs.push(f),
+      setTimeout: (f) => (timers.set(++n, f), n),
+      clearTimeout: (h) => void timers.delete(h as number),
+    };
+    const buscado = () => ouvintes.forEach((f) => f());
+    const quadro = () => rafs.splice(0).forEach((f) => f());
+    return { el, pedidos, agenda, buscado, quadro, timers, ouvintes, estado };
+  }
+
+  it("pedidos durante uma busca viram UM pendente (o último); pinta só depois do rAF", () => {
+    const f = falso();
+    const pintados: number[] = [];
+    const b = new Buscador(f.el, (j, final) => final && pintados.push(j), f.agenda);
+    b.ir(10);
+    b.ir(11);
+    b.ir(12);
+    expect(f.pedidos).toEqual([10]);
+    expect(b.alvo).toBe(12);
+    f.buscado();
+    expect(pintados).toEqual([]);
+    f.quadro();
+    // a primeira pintura não é a final: o pendente espera
+    expect(pintados).toEqual([]);
+    expect(f.pedidos).toEqual([10]);
+    f.quadro();
+    expect(pintados).toEqual([10]);
+    expect(f.pedidos).toEqual([10, 12]);
+    f.buscado();
+    f.quadro();
+    f.quadro();
+    expect(pintados).toEqual([10, 12]);
+    expect(b.alvo).toBeNull();
+    expect(b.ultimo).toBe(12);
+    b.fechar();
+    expect(f.ouvintes.size).toBe(0);
+  });
+
+  it("sem `seeked` (busca para o mesmo instante) a fila não trava", () => {
+    const f = falso();
+    const pintados: number[] = [];
+    const todas: number[] = [];
+    const b = new Buscador(f.el, (j, final) => (todas.push(j), final && pintados.push(j)), f.agenda);
+    b.ir(5);
+    b.ir(6);
+    expect(f.timers.size).toBe(1);
+    // o vigia de ESPERA_MS dispara
+    [...f.timers.values()][0]!();
+    f.quadro();
+    f.quadro();
+    expect(pintados).toEqual([5]);
+    expect(todas).toEqual([5, 5]);
+    expect(f.pedidos).toEqual([5, 6]);
+    expect(ESPERA_MS).toBeGreaterThan(0);
+  });
+
+  it("busca lenta (ainda `seeking` no fim da espera): nada é pintado até o `seeked`", () => {
+    const f = falso();
+    const todas: number[] = [];
+    const b = new Buscador(f.el, (j) => void todas.push(j), f.agenda);
+    f.estado.buscando = true;
+    b.ir(7);
+    // o vigia dispara duas vezes com o elemento ainda buscando: rearma, não pinta
+    for (let i = 0; i < 2; i++) {
+      const [h, vigia] = [...f.timers.entries()][0]!;
+      f.timers.delete(h);
+      vigia();
+      f.quadro();
+      f.quadro();
+      expect(todas).toEqual([]);
+      expect(f.timers.size).toBe(1);
+      expect(b.alvo).toBe(7);
+    }
+    f.estado.buscando = false;
+    f.buscado();
+    f.quadro();
+    f.quadro();
+    expect(todas).toEqual([7, 7]);
+    expect(f.timers.size).toBe(0);
+    expect(b.alvo).toBeNull();
+  });
+});
+
+describe("quadro final (D22, §7.2)", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  function montar(falhar = false) {
+    const estados: Fiel[] = [];
+    const pedidos: number[] = [];
+    let resolver: ((s: string) => void) | null = null;
+    const f = new QuadroFiel(
+      (q) => {
+        pedidos.push(q);
+        return falhar ? Promise.reject(new Error("x")) : new Promise<string>((r) => (resolver = r));
+      },
+      (e) => estados.push(e),
+      { agora: () => Date.now(), setTimeout: (g, ms) => setTimeout(g, ms), clearTimeout: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) },
+    );
+    return { f, estados, pedidos, responder: (s: string) => resolver?.(s) };
+  }
+
+  it("300 ms depois de pausar pede o slot; a imagem fica até tocar", async () => {
+    const m = montar();
+    m.f.pausou(40);
+    await vi.advanceTimersByTimeAsync(299);
+    expect(m.pedidos).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(m.pedidos).toEqual([40]);
+    expect(m.f.estado).toBe("pedindo");
+    m.responder("blob:40");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(m.f.estado).toEqual({ q: 40, src: "blob:40" });
+    m.f.tocou();
+    expect(m.f.estado).toBe("viva");
+  });
+
+  it("passo de quadro nos últimos 600 ms adia o pedido; a resposta velha não vale", async () => {
+    const m = montar();
+    m.f.passo(10);
+    await vi.advanceTimersByTimeAsync(400);
+    m.f.passo(11);
+    await vi.advanceTimersByTimeAsync(599);
+    expect(m.pedidos).toEqual([]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(m.pedidos).toEqual([11]);
+    m.f.passo(12);
+    m.responder("blob:11");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(m.f.estado).toBe("viva");
+  });
+
+  it("editar repete o pedido sem voltar à viva; botão pede na hora; falha volta à viva", async () => {
+    const m = montar();
+    m.f.pedirJa(7);
+    expect(m.pedidos).toEqual([7]);
+    m.responder("a");
+    await vi.advanceTimersByTimeAsync(0);
+    m.f.editou();
+    expect(m.f.estado).toEqual({ q: 7, src: "a" });
+    await vi.advanceTimersByTimeAsync(300);
+    expect(m.pedidos).toEqual([7, 7]);
+    expect(m.f.estado).toEqual({ q: 7, src: "a" });
+    const r = montar(true);
+    r.f.pedirJa(3);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(r.f.estado).toBe("viva");
+  });
+});
+
+describe("alças", () => {
+  const c: Caixa = { x: 0.2, y: 0.2, w: 0.4, h: 0.2 };
+
+  it("canto, borda, mover, Shift (proporção) e Alt (do centro)", () => {
+    const canto = caixaArrastada(c, [1, 1], { x: 0.6, y: 0.4 }, { x: 0.7, y: 0.5 }, { shift: false, alt: false }, null);
+    [canto.x, canto.y, canto.w, canto.h].forEach((v, i) => perto(v, [0.2, 0.2, 0.5, 0.3][i]!, 1e-12));
+    expect(caixaArrastada(c, [0, -1], { x: 0.4, y: 0.2 }, { x: 0.4, y: 0.1 }, { shift: false, alt: false }, null)).toMatchObject({ x: 0.2, w: 0.4 });
+    const mv = caixaArrastada(c, [0, 0], { x: 0.4, y: 0.3 }, { x: 0.9, y: 0.3 }, { shift: false, alt: false }, null);
+    expect(mv.x + mv.w).toBeLessThanOrEqual(1);
+    const prop = caixaArrastada(c, [1, 1], { x: 0.6, y: 0.4 }, { x: 0.8, y: 0.45 }, { shift: true, alt: false }, 2);
+    perto(prop.w / prop.h, 2, 1e-9);
+    const alt = caixaArrastada(c, [1, 0], { x: 0.6, y: 0.3 }, { x: 0.7, y: 0.3 }, { shift: false, alt: true }, null);
+    perto(alt.x + alt.w / 2, c.x + c.w / 2, 1e-12);
+    // proporção na borda: encolhe os dois lados, o canto fixo fica
+    const borda = caixaArrastada({ x: 0.5, y: 0.5, w: 0.2, h: 0.1 }, [1, 1], { x: 0.7, y: 0.6 }, { x: 0.99, y: 0.95 }, { shift: true, alt: false }, 2);
+    perto(borda.w / borda.h, 2, 1e-9);
+    expect([borda.x, borda.y]).toEqual([0.5, 0.5]);
+    expect(borda.x + borda.w).toBeLessThanOrEqual(1);
+    // menor que o mínimo: fica como estava
+    expect(caixaArrastada(c, [1, 1], { x: 0.6, y: 0.4 }, { x: 0.2, y: 0.2 }, { shift: false, alt: false }, null)).toEqual(c);
+  });
+
+  it("caixa de rastreio com giro de 90°: alça na tela, âncora no espaço da fonte", () => {
+    const girar: EfGirar = { id: "g", ligado: true, nome: "", ativo: null, tipo: "girar", graus: 90, espelhar_h: false, espelhar_v: false };
+    const A = aDe([girar], 0, { w: 1920, h: 1080 }, { w: 1080, h: 1920 });
+    const alcas = alcasDeCaixa("r1", c, A, 4.5, 2304);
+    expect(alcas.map((a) => a.id.split(":").pop())).toEqual(["no", "ne", "se", "so", "n", "l", "s", "o", "mover"]);
+    const mover = alcas.find((a) => a.tipo === "mover")!;
+    const de = mover.em;
+    const para = { x: de.x + 0.1, y: de.y };
+    const m = mover.arrastar(de, para, { shift: false, alt: false });
+    expect("rastreio" in m && m.rastreio).toBe("r1");
+    if (!("ancora" in m)) throw new Error("sem âncora");
+    expect([m.ancora.t, m.ancora.pts]).toEqual([4.5, 2304]);
+    // o que andou na tela, levado de volta pela inversa de A, é o que andou na fonte
+    const novo = ponto(A, { x: m.ancora.v.x + m.ancora.v.w / 2, y: m.ancora.v.y + m.ancora.v.h / 2 });
+    perto(novo.x, para.x, 1e-9);
+    perto(novo.y, para.y, 1e-9);
+    const pt = alcasDePonto("r2", { x: 0.5, y: 0.5 }, A, 1, null)[0]!;
+    expect(pt.arrastar(pt.em, pt.em, { shift: false, alt: false })).toEqual({ rastreio: "r2", ancora: { t: 1, pts: null, v: { x: 0.5, y: 0.5, w: 0, h: 0 } } });
+  });
+
+  it("região do enquadramento: fixa troca o valor, animada ganha a chave do instante", () => {
+    const e: EfEnquadramento = { id: "q", ligado: true, nome: "", ativo: null, tipo: "enquadramento", regiao: { x: 0, y: 0, w: 1, h: 1 }, ajuste: "conter", interpolacao: "bilinear" };
+    const nova = { x: 0.1, y: 0.1, w: 0.5, h: 0.5 };
+    expect(comRegiao(e, nova, 2, 60).regiao).toEqual(nova);
+    const anim = { ...e, regiao: [{ t: 1, pts: 30, v: { x: 0, y: 0, w: 1, h: 1 } }, { t: 3, pts: 90, v: { x: 0, y: 0, w: 1, h: 1 } }] };
+    const r = comRegiao(anim, nova, 2, 60).regiao;
+    expect(Array.isArray(r) && r.map((k) => k.t)).toEqual([1, 2, 3]);
+    expect(Array.isArray(r) && r[1]).toEqual({ t: 2, pts: 60, v: nova });
+    // a alça de canto da região guarda a proporção da saída
+    const g = aDaGirada([], { w: 1920, h: 1080 }, { w: 1920, h: 1080 });
+    const prop = proporcaoDaSaida([], { w: 1920, h: 1080 }, { w: 1080, h: 1080 })!;
+    const regiao = { x: 0.1, y: 0.1, w: 0.3, h: 0.3 / prop };
+    const se = alcasDaRegiao(e, regiao, 2, 60, g, prop).find((a) => a.id.endsWith(":se"))!;
+    const m = se.arrastar(se.em, { x: se.em.x + 0.05, y: se.em.y + 0.01 }, { shift: false, alt: false });
+    if (!("efeito" in m) || m.efeito.tipo !== "enquadramento" || Array.isArray(m.efeito.regiao)) throw new Error("mudança errada");
+    perto((m.efeito.regiao.w * 1920) / (m.efeito.regiao.h * 1080), 1, 1e-9);
+  });
+
+  it("vista de origem: o giro troca os lados; sem giro, a origem inteira contida", () => {
+    expect(aDaGirada([], { w: 1920, h: 1080 }, { w: 1920, h: 1080 })).toEqual([1, 0, 0, 1, 0, 0]);
+    const girar: EfGirar = { id: "g", ligado: true, nome: "", ativo: null, tipo: "girar", graus: 90, espelhar_h: false, espelhar_v: false };
+    const g = aDaGirada([girar], { w: 1920, h: 1080 }, { w: 1920, h: 1080 });
+    perto(g[0], (1080 * 1080) / (1920 * 1920));
+    // a origem girada inteira: o canto (0,0) da fonte cai na borda do encaixe
+    const A = aDaOrigem([girar], { w: 1920, h: 1080 }, { w: 1920, h: 1080 });
+    const cantos = [ponto(A, { x: 0, y: 0 }), ponto(A, { x: 1, y: 1 })];
+    for (const p of cantos) expect(p.y === 0 || p.y === 1).toBe(true);
+  });
+
+  it("lugar de texto: arrastar move o efeito", () => {
+    const e = { id: "t", ligado: true, nome: "", ativo: null, tipo: "texto" as const, conteudo: "A", estilo: { fonte: "sans" as const, negrito: false, italico: false, tamanho: 0.05, cor: "#fff", alinhamento: "centro" as const, caixa: null, contorno: null }, lugar: { x: 0.5, y: 0.9, h: "centro" as const, v: "base" as const }, largura_max: 0.8 };
+    const a = alcaDeLugar(e);
+    const m = a.arrastar({ x: 0.5, y: 0.9 }, { x: 0.6, y: 1.2 }, { shift: false, alt: false });
+    const l = "efeito" in m && m.efeito.tipo === "texto" ? m.efeito.lugar : null;
+    expect(l).toMatchObject({ y: 1, h: "centro", v: "base" });
+    perto(l!.x, 0.6, 1e-12);
+  });
+
+  it("ferramenta: caixa com a proporção pedida em px da saída", () => {
+    const r = caixaComProporcao({ x: 0.1, y: 0.1 }, { x: 0.5, y: 0.2 }, 16 / 9, { w: 1920, h: 1080 });
+    perto((r.w * 1920) / (r.h * 1080), 16 / 9, 1e-9);
+    expect(caixaComProporcao({ x: 0.5, y: 0.5 }, { x: 0.2, y: 0.4 }, undefined, { w: 1, h: 1 })).toEqual({ x: 0.2, y: 0.4, w: 0.3, h: 0.09999999999999998 });
+    void exibido;
+  });
+});

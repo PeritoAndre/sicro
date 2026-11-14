@@ -1,0 +1,527 @@
+/* Inspetor da Edição: surface-1 no painel, surface-2 nos campos, rótulo de 11 px em cima (§8.2). */
+
+.raiz {
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--sicro-surface-1);
+  color: var(--sicro-fg);
+  font-size: var(--text-sm);
+}
+
+.abas {
+  display: flex;
+  gap: 2px;
+  margin: var(--space-2);
+  padding: 2px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+.aba {
+  flex: 1;
+  min-width: 0;
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-muted);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 4px 6px;
+  border-radius: calc(var(--radius-md) - 2px);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.aba:hover {
+  color: var(--sicro-fg);
+}
+.abaOn {
+  background: var(--sicro-surface-1);
+  color: var(--sicro-accent);
+  box-shadow: var(--shadow-sm);
+}
+
+.corpo {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  border-top: 1px solid var(--sicro-divider);
+}
+
+.vazio {
+  display: flex;
+  justify-content: center;
+  padding: var(--space-8) 0;
+  color: var(--sicro-fg-faint);
+}
+
+/* ---- seções ---- */
+
+.sec {
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--sicro-divider);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.secTopo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+}
+.secTitulo {
+  margin: 0;
+  flex: 1;
+  font-size: var(--text-xs);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--sicro-fg-dim);
+}
+
+.grade {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) 10px;
+  align-items: start;
+  min-width: 0;
+}
+/* caixa de marcar ao lado de um campo: no meio da caixa do campo (38 px), não do rótulo */
+.grade > .check:not(.larga) {
+  align-self: end;
+  min-height: 38px;
+}
+.larga {
+  grid-column: 1 / -1;
+}
+
+.campo {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.rotulo {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  line-height: 1.2;
+}
+
+/* CampoNumero e CampoTempo trazem o próprio rótulo (10 px, maiúsculas): fica igual ao dos outros campos */
+.campoNum {
+  min-width: 0;
+}
+.campoNum > div > span:first-child {
+  font-size: var(--text-xs);
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--sicro-fg-muted);
+  line-height: 1.2;
+}
+.campoNum > div > span:last-child {
+  border-radius: var(--radius-sm);
+}
+.ruim > div > span:last-child {
+  border-color: var(--sicro-danger);
+}
+
+.entrada {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  padding: 6px 8px;
+  font: inherit;
+  font-size: var(--text-sm);
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+textarea.entrada {
+  resize: vertical;
+  min-height: 48px;
+  line-height: 1.4;
+}
+select.entrada {
+  height: 30px;
+  padding: 0 6px;
+}
+.entrada:focus {
+  outline: none;
+  border-color: var(--sicro-accent);
+}
+.entrada:disabled {
+  opacity: 0.6;
+}
+
+.leitura {
+  display: block;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg-muted);
+  padding: 6px 8px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.leituraRuim {
+  border-color: var(--sicro-danger);
+  font-family: var(--font-mono);
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  min-height: 24px;
+  cursor: pointer;
+}
+.check input {
+  margin: 0;
+  accent-color: var(--sicro-accent);
+}
+
+/* botões lado a lado */
+.seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+.segBtn {
+  flex: 1 1 0;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-muted);
+  font: inherit;
+  font-size: var(--text-xs);
+  padding: 4px 4px;
+  min-height: 24px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.segBtn:hover:not(:disabled) {
+  color: var(--sicro-fg);
+}
+.segBtn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.segOn {
+  background: var(--sicro-surface-1);
+  color: var(--sicro-accent);
+  box-shadow: var(--shadow-sm);
+}
+.amostra {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.deslizante {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  height: 30px;
+}
+.deslizante input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  accent-color: var(--sicro-accent);
+}
+.valor {
+  flex-shrink: 0;
+  width: 44px;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+
+.cor {
+  width: 100%;
+  height: 30px;
+  padding: 2px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  background: var(--sicro-surface-2);
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.fundoCampo {
+  position: relative;
+  min-width: 0;
+}
+.xadrez {
+  position: absolute;
+  left: 4px;
+  right: 4px;
+  bottom: 4px;
+  height: 22px;
+  border-radius: 2px;
+  pointer-events: none;
+  background: repeating-conic-gradient(#9aa6b6 0 25%, #ffffff 0 50%) 0 0 / 10px 10px;
+}
+
+/* grade 3×3 da posição no quadro */
+.posLinha {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.posGrade {
+  display: grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-template-rows: repeat(3, 16px);
+  gap: 2px;
+  padding: 3px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+}
+.posBtn {
+  display: grid;
+  padding: 3px;
+  border: 0;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+}
+.posBtn:hover:not(:disabled) {
+  background: var(--sicro-surface-hi);
+}
+.posPonto {
+  width: 6px;
+  height: 6px;
+  border-radius: 1px;
+  background: var(--sicro-fg-faint);
+}
+.posOn .posPonto {
+  background: var(--sicro-accent);
+}
+
+/* ações */
+.acoes {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.icone {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg-muted);
+  padding: 4px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.icone:hover:not(:disabled) {
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+}
+.icone:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.iconeOn {
+  color: var(--sicro-danger);
+}
+.mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  color: var(--sicro-fg);
+  padding: 3px 8px;
+  font: inherit;
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.mini:hover:not(:disabled) {
+  border-color: var(--sicro-accent);
+}
+.mini:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.miniAtivo {
+  border-color: var(--sicro-accent);
+  background: var(--sicro-accent);
+  color: #1a1206;
+}
+.barra {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.marcasLinha {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2) 10px;
+}
+.marcas {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  min-height: 26px;
+  min-width: 0;
+}
+.tempoMarca {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--sicro-fg-dim);
+  white-space: nowrap;
+}
+
+.som {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  grid-column: 1 / -1;
+}
+.somLinha {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.somLinha > label {
+  flex: 1;
+}
+
+/* lista de efeitos e de clipes de narração */
+.efeitos {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.efeito {
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  padding: 4px 6px 4px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.efeitoAberto {
+  border-color: var(--sicro-accent);
+  padding-bottom: 8px;
+}
+.efeitoApagado {
+  opacity: 0.6;
+}
+.efeitoTopo {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.efeitoNome {
+  flex: 1;
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 0;
+  color: var(--sicro-fg);
+  font: inherit;
+  font-size: var(--text-sm);
+  padding: 2px 2px;
+  text-align: left;
+  cursor: pointer;
+}
+.efeitoNome:disabled {
+  cursor: default;
+  color: var(--sicro-fg-muted);
+}
+.efeitoNome code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.semSeta {
+  width: 12px;
+  flex-shrink: 0;
+}
+.efeitoCorpo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: 0 2px 0 4px;
+  min-width: 0;
+}
+.efeito .grade {
+  padding: 0 2px 0 4px;
+}
+.cortaTexto {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.desconhecido {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sicro-fg-muted);
+  opacity: 0.75;
+}
+.desconhecido code {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+
+.dim {
+  color: var(--sicro-fg-dim);
+  font-size: var(--text-xs);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+}
+.gravando {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.rec {
+  color: var(--sicro-danger);
+  fill: var(--sicro-danger);
+}

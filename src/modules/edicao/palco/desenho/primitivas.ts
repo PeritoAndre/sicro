@@ -23,10 +23,6 @@ import { caixaNoCanvas, comMargem, ponto, type Afim } from "../../modelo/geometr
 type Seg = Extract<Primitiva, { k: "caminho" }>["d"][number];
 type Traco2 = NonNullable<Extract<Primitiva, { k: "caminho" }>["traco"]>;
 
-/** O que o Rust também recebe no quadro (`QuadroCamada.indice`, `.programa_s`): índice do quadro de fonte na tabela
- *  (carimbo "Quadro") e instante do slot no programa (carimbo "Vídeo"). Fora do `QuadroPalco` do contrato. */
-export type QuadroPrimitivas = QuadroPalco & { indice?: number | null; programa_s?: number };
-
 /** Largura do contorno do traço em relação à do traço. */
 export const CONTORNO = 1.5;
 export const COR_CONTORNO = "#000000bf";
@@ -284,12 +280,12 @@ function relogio(r: NonNullable<EfCarimbo["relogio"]>, t: number, f: EfCarimbo["
   return `${dig(d, 2)}/${dig(m, 2)}/${dig(a, 4)} ${hms(resto, false)}`;
 }
 /** Texto do carimbo, com o prefixo fixo; null = nada a mostrar (quadro sem fonte). */
-function textoCarimbo(c: EfCarimbo, q: QuadroPrimitivas): string | null {
+function textoCarimbo(c: EfCarimbo, q: QuadroPalco): string | null {
   switch (c.mostra) {
     case "tempo_fonte":
       return `Original ${tempo(q.t, c.formato)}`;
     case "tempo_programa":
-      return `Vídeo ${tempo(q.programa_s ?? 0, c.formato)}`;
+      return `Vídeo ${tempo(q.programa_s, c.formato)}`;
     case "quadro":
       return q.indice != null ? `Quadro ${q.indice}` : null;
     case "relogio":
@@ -300,7 +296,7 @@ function textoCarimbo(c: EfCarimbo, q: QuadroPrimitivas): string | null {
 
 /** Primitivas de um efeito num quadro. `ativo` não é olhado: quem chama só pede os quadros em que o efeito vale.
  *  Lupa, régua e velocidade exibida (ligadas) são da Fase 1: erro `nao_suportado`. */
-export function primitivas(e: Efeito, q: QuadroPrimitivas): Primitiva[] {
+export function primitivas(e: Efeito, q: QuadroPalco): Primitiva[] {
   // desligado vem antes de tudo (o Rust também): lupa desligada não é erro
   if (!e.ligado) return [];
   const t = tela(q.canvas);

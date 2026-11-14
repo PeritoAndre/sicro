@@ -1125,7 +1125,9 @@ pub(crate) fn pintar(
                 let (iw, ih) = (iw / k as f64, ih / k as f64);
                 let opacity = opacidade.clamp(0.0, 1.0) as f32;
                 // tamanho igual e posição inteira: cópia sem reamostrar
-                let inteiro = extra.is_none() && w == iw && h == ih && x == x.floor() && y == y.floor();
+                // longe demais do canvas a conta em i32 estoura; o outro ramo não desenha nada ali
+                let perto = x.abs() < 1e9 && y.abs() < 1e9;
+                let inteiro = perto && extra.is_none() && w == iw && h == ih && x == x.floor() && y == y.floor();
                 if inteiro {
                     let paint = PixmapPaint { opacity, quality: FilterQuality::Nearest, ..PixmapPaint::default() };
                     pm.draw_pixmap(x as i32 - caixa_px[0] as i32, y as i32 - caixa_px[1] as i32, tiny_skia::Pixmap::as_ref(&img), &paint, Transform::identity(), None);

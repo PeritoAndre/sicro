@@ -15,6 +15,7 @@ import {
   nQSemFonte,
   resolver,
   slotsDoQuadro,
+  MAX_SLOTS,
   type MapaQuadros,
 } from "./tempo";
 import { novoProjeto, novoTrecho } from "./projeto";
@@ -88,6 +89,14 @@ describe("mapa de quadros (§3.1)", () => {
     expect(() => mapaTrecho(epoca, 0, 10, constante(1), fps(7))).toThrow("mapa_grande");
     expect(mapaTrecho(epoca, 0, 10, constante(1), fps(30000, 1001)).n_q).toBe(10);
     expect(() => mapaTrecho(mp4, 0, 10, { tipo: "rampa", pontos: [] }, fps(30))).toThrow("nao_suportado");
+  });
+
+  it("teto de slots (MAX_SLOTS do Rust): mapa_grande antes de alocar", () => {
+    // 2 s a 10 milhões de qps = 2·10^7 slots, abaixo de 2^53 e acima de 2^24
+    const dois = tabela([1, 1000], 0, [1000]);
+    expect(MAX_SLOTS).toBe(2 ** 24);
+    expect(() => mapaTrecho(dois, 0, 2, constante(1), fps(10_000_000))).toThrow("mapa_grande");
+    expect(mapaTrecho(dois, 0, 2, constante(1), fps(8_000_000)).n_q).toBe(16_000_000);
   });
 
   it("fator por milésimos", () => {

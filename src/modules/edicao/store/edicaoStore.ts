@@ -469,8 +469,9 @@ export const useEdicaoStore = create<EdicaoState>((set, get) => {
           try {
             await abrirJa(ws, id);
             return id;
-          } catch {
-            // sumiu ou não abre: começa outra
+          } catch (e) {
+            // só o projeto que sumiu vira edição nova; o que não abre fica com o erro na tela
+            if (separarErro(e).codigo !== "projeto_nao_encontrado") throw e;
           }
         }
         return novoJa(ws);

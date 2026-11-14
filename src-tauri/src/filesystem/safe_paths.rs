@@ -20,11 +20,12 @@ pub fn sanitize_folder_name(raw: &str) -> String {
     }
 
     if out.len() > 100 {
-        out.truncate(100);
-        // Não cortar no meio de um char multibyte.
-        while !out.is_char_boundary(out.len()) {
-            out.pop();
+        // truncate entra em pânico fora de fronteira de caractere
+        let mut fim = 100;
+        while !out.is_char_boundary(fim) {
+            fim -= 1;
         }
+        out.truncate(fim);
     }
 
     // Nomes reservados do Windows.
@@ -43,6 +44,12 @@ pub fn sanitize_folder_name(raw: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn corta_nome_longo_em_fronteira_de_caractere() {
+        let r = sanitize_folder_name(&format!("a{}", "ç".repeat(80)));
+        assert!(r.len() <= 100 && r.starts_with("aç"));
+    }
 
     #[test]
     fn strips_illegal_chars() {

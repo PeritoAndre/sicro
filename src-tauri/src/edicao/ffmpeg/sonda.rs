@@ -1,7 +1,7 @@
 //! Sonda de capacidades e escolha do binário (§5.6). Dono: P0.4.
 //! Protótipos: `p1c/scripts/sonda_gpu.py` e `sonda_valida_saida.py`; regras em `receitas-gpu-ffmpeg.md` §1 e §9.
 
-use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::ffi::OsString;
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -116,7 +116,7 @@ const FILTROS_OBRIGATORIOS: &[&str] = &[
     "trim", "settb", "setpts", "fps", "tpad", "alphamerge", "overlay", "xfade", "concat", "scale", "crop", "pad", "boxblur",
     "lutyuv", "extractplanes", "mergeplanes", "eq", "showinfo", "atrim", "asplit", "atempo", "amix", "afade", "apad",
     "aresample", "loudnorm", "alimiter", "format", "split", "setsar", "setparams", "asetpts", "asetnsamples", "volume", "pan",
-    "aevalsrc",
+    "aevalsrc", "aformat", "asetrate", "adelay", "anullsrc", "transpose", "hflip", "vflip", "fade", "color",
 ];
 const FILTROS_OPCIONAIS: &[&str] = &["vidstabdetect", "vidstabtransform", "lenscorrection", "bwdif", "tmix", "perspective"];
 const CODIFICADORES_OBRIGATORIOS: &[&str] = &["libx264", "aac", "pcm_s16le"];
@@ -193,7 +193,8 @@ fn ordem_padrao() -> &'static [&'static str] {
 struct Estado {
     cache: Option<PathBuf>,
     por_binario: HashMap<PathBuf, Entrada>,
-    sondando: HashSet<String>,
+    /// Sondas de GPU em andamento ou esperando a vez, por SHA-256 do binário.
+    sondando: HashMap<String, u32>,
 }
 
 struct Entrada {
@@ -209,6 +210,30 @@ fn estado() -> std::sync::MutexGuard<'static, Estado> {
 
 /// Uma sonda de listas por vez (duas chamadas juntas não sondam o mesmo binário duas vezes).
 static SONDA_LISTAS: Mutex<()> = Mutex::new(());
+/// Uma sonda de GPU por vez: a de fundo e o "Testar de novo" disputariam as sessões da placa.
+static SONDA_GPU: Mutex<()> = Mutex::new(());
+
+/// Conta uma sonda de GPU de `sha` enquanto vive: `sondando` só cai quando a última acaba.
+struct Sondando(String);
+
+impl Sondando {
+    fn novo(sha: &str) -> Self {
+        *estado().sondando.entry(sha.to_string()).or_insert(0) += 1;
+        Sondando(sha.to_string())
+    }
+}
+
+impl Drop for Sondando {
+    fn drop(&mut self) {
+        let mut e = estado();
+        if let Some(n) = e.sondando.get_mut(&self.0) {
+            *n = n.saturating_sub(1);
+            if *n == 0 {
+                e.sondando.remove(&self.0);
+            }
+        }
+    }
+}
 
 /// Pasta do cache das sondas (`app_cache_dir()/edicao`). Chamada uma vez na partida; sem ela não há cache em disco
 /// nem sonda de GPU em segundo plano.
@@ -333,10 +358,17 @@ pub(crate) fn capacidades_de(bin: &Path, origem: Origem, cache: Option<&Path>, g
 }
 
 fn lancar_gpu(cap: Arc<Capacidades>, cache: Option<PathBuf>) {
-    if !estado().sondando.insert(cap.sha256.clone()) {
-        return;
-    }
+    let vez = {
+        let mut e = estado();
+        if e.sondando.get(&cap.sha256).is_some_and(|n| *n > 0) {
+            return;
+        }
+        e.sondando.insert(cap.sha256.clone(), 1);
+        Sondando(cap.sha256.clone())
+    };
     std::thread::spawn(move || {
+        let _vez = vez;
+        let _serie = SONDA_GPU.lock().unwrap_or_else(|e| e.into_inner());
         let r = sondar_gpu(&cap, ordem_padrao(), &[]);
         guardar_gpu(&cap, r, cache.as_deref());
     });
@@ -361,7 +393,6 @@ fn guardar_gpu(cap: &Capacidades, r: ResultadoGpu, cache: Option<&Path>) -> Arc<
             ent.cap = nova.clone();
         }
     }
-    e.sondando.remove(&cap.sha256);
     nova
 }
 
@@ -379,11 +410,16 @@ pub fn sondar(binario: &Path) -> Result<Capacidades> {
 pub fn testar_de_novo() -> Result<Arc<Capacidades>> {
     let (bin, origem) = escolher()?;
     let cache = estado().cache.clone();
-    let cap = capacidades_de(&bin, origem, cache.as_deref(), false)?;
+    testar_de_novo_de(&bin, origem, cache.as_deref())
+}
+
+fn testar_de_novo_de(bin: &Path, origem: Origem, cache: Option<&Path>) -> Result<Arc<Capacidades>> {
+    let cap = capacidades_de(bin, origem, cache, false)?;
     exigir(&cap)?;
-    estado().sondando.insert(cap.sha256.clone());
+    let _vez = Sondando::novo(&cap.sha256);
+    let _serie = SONDA_GPU.lock().unwrap_or_else(|e| e.into_inner());
     let r = sondar_gpu(&cap, ordem_padrao(), &[]);
-    Ok(guardar_gpu(&cap, r, cache.as_deref()))
+    Ok(guardar_gpu(&cap, r, cache))
 }
 
 /// Codificação real de 8 quadros no tamanho e na taxa do projeto com o codificador de GPU aprovado; false = usar CPU.
@@ -407,7 +443,7 @@ pub fn resumo(cap: &Capacidades) -> ResumoCapacidades {
         codificador: cap.gpu.as_ref().map(|g| g.codificador.clone()).unwrap_or_else(|| "libx264".into()),
         gpu: cap.gpu.clone(),
         reprovados: cap.reprovados.clone(),
-        sondando: estado().sondando.contains(&cap.sha256),
+        sondando: estado().sondando.get(&cap.sha256).is_some_and(|n| *n > 0),
     }
 }
 
@@ -1626,6 +1662,54 @@ for a in "$@"; do if [ "$a" = "-filters" ]; then "$REAL" "$@" | grep -v ' xfade 
             }
             None => assert!(nova.reprovados.iter().any(|r| r.classe == ClasseReprovacao::LimiteDeSessoes), "{:?}", nova.reprovados),
         }
+        estado().por_binario.remove(&bin);
+    }
+
+    /// "Testar de novo" durante a sonda de fundo: as duas não rodam juntas e `sondando` vale até a última acabar
+    /// (qualquer uma pode pegar a vez primeiro). Cada codificação do falso segura uma trava por 0,3 s e deixa uma
+    /// marca enquanto roda; duas sondas ao mesmo tempo se encontram na trava.
+    #[cfg(unix)]
+    #[test]
+    fn testar_de_novo_espera_a_sonda_de_fundo() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("trava-gpu");
+        let (trava, log) = (d.join("trava"), d.join("juntos.log"));
+        let corpo = format!(
+            r#"for a in "$@"; do if [ "$a" = "-c:v" ]; then touch '{d}/ativo.'$$; if mkdir '{t}' 2>/dev/null; then sleep 0.3; rmdir '{t}'; else echo junto >> '{l}'; fi; "$REAL" "$@"; r=$?; rm -f '{d}/ativo.'$$; exit $r; fi; done"#,
+            d = d.display(),
+            t = trava.display(),
+            l = log.display()
+        );
+        let bin = falso("trava-gpu", &cap, &corpo);
+        let ativos = || std::fs::read_dir(&d).into_iter().flatten().flatten().filter(|e| e.file_name().to_string_lossy().starts_with("ativo.")).count();
+        let cache = fontes::pasta_temporaria("cache-trava-gpu");
+        let c = capacidades_de(&bin, Origem::Path, Some(&cache), true).unwrap();
+        assert!(resumo(&c).sondando, "a sonda de fundo não começou");
+        let fim = Arc::new(AtomicBool::new(false));
+        let h = {
+            let (bin, cache, fim) = (bin.clone(), cache.clone(), fim.clone());
+            std::thread::spawn(move || {
+                let r = testar_de_novo_de(&bin, Origem::Path, Some(&cache));
+                fim.store(true, Ordering::SeqCst);
+                r
+            })
+        };
+        let t0 = Instant::now();
+        while !fim.load(Ordering::SeqCst) {
+            assert!(resumo(&c).sondando || fim.load(Ordering::SeqCst), "`sondando` caiu antes da última sonda acabar");
+            assert!(t0.elapsed() < Duration::from_secs(300));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        h.join().unwrap().unwrap();
+        // a de fundo pode ter ficado para depois: `sondando` só cai quando ela acaba, e então nada mais roda
+        while resumo(&c).sondando {
+            assert!(t0.elapsed() < Duration::from_secs(300));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(ativos(), 0, "`sondando` caiu com codificação rodando");
+        std::thread::sleep(Duration::from_millis(500));
+        assert_eq!(ativos(), 0);
+        assert!(!log.exists(), "duas sondas de GPU ao mesmo tempo ({})", cap.versao);
         estado().por_binario.remove(&bin);
     }
 

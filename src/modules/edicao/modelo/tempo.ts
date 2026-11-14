@@ -11,6 +11,8 @@ export const TAXA_AUDIO = 48_000;
 /** O `setpts` calcula em `double`: inteiro só é exato abaixo de 2^53. */
 const LIMITE_DOUBLE = 2n ** 53n;
 const U32 = 0xffffffff;
+/** Teto de slots de um trecho (`tempo::MAX_SLOTS` do Rust): acima, `mapa_grande` antes de alocar. */
+export const MAX_SLOTS = 2 ** 24;
 
 /** Constantes da fórmula e o quadro (índice da tabela) de cada slot do clipe. */
 export interface MapaQuadros {
@@ -207,6 +209,9 @@ export function mapaTrecho(tab: TabelaQuadros, jIn: number, jOut: number, v: Vel
   const p0 = P(jIn);
   // fim da mídia: o último quadro dura o passo mediano
   const pfim = jOut < n ? P(jOut) : P(n - 1) + BigInt(Math.max(tab.passo_mediano, 1)) * r;
+  // mesma ordem do Rust: vazio, depois 2^53, depois passo negativo
+  if (pfim <= p0) throw new ErroTempo("intervalo");
+  if (abs(p0) >= LIMITE_DOUBLE || abs(pfim) >= LIMITE_DOUBLE || (pfim - p0) * kn >= LIMITE_DOUBLE) throw new ErroTempo("mapa_grande");
   // menor passo positivo do trecho
   let pmin: bigint | null = null;
   for (let j = jIn; j < jOut; j++) {
@@ -215,11 +220,9 @@ export function mapaTrecho(tab: TabelaQuadros, jIn: number, jOut: number, v: Vel
     if (d > 0n) pmin = pmin === null ? d : minB(pmin, d);
   }
   const e = pmin !== null ? minB(kd, pmin * kn) / 2n : kd / 2n;
-  if (pfim <= p0) throw new ErroTempo("intervalo");
-  if ((pfim - p0) * kn >= LIMITE_DOUBLE || abs(p0) >= LIMITE_DOUBLE || abs(pfim) >= LIMITE_DOUBLE) throw new ErroTempo("mapa_grande");
   const slot = (p: number) => teto((BigInt(p) * r - p0) * kn - e, kd);
   const nqB = maxB(teto((pfim - p0) * kn - e, kd), 1n);
-  if (nqB > BigInt(U32)) throw new ErroTempo("mapa_grande");
+  if (nqB > BigInt(MAX_SLOTS) || jOut > U32) throw new ErroTempo("mapa_grande");
   const nQ = Number(nqB);
   const quadro = new Array<number>(nQ).fill(0);
   let distintos = 0;

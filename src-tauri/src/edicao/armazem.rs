@@ -168,7 +168,8 @@ pub fn abrir(ws: &Path, projeto_id: &str) -> Result<ProjetoAberto> {
     let mut importado_de = None;
     if !arq.is_file() {
         if !importar_v1::existe(ws, projeto_id) {
-            return Err(SicroError::Filesystem(format!("projeto não encontrado: {projeto_id}")));
+            // a tela só cria edição nova com este código (decisão (g)11)
+            return Err(SicroError::Validation(format!("{}: {projeto_id}", codigo::PROJETO_NAO_ENCONTRADO)));
         }
         let banco = paths::sqlite_path(ws);
         if !banco.is_file() {
@@ -613,10 +614,11 @@ fn sha256_hex(bytes: &[u8]) -> String {
     format!("{:x}", Sha256::digest(bytes))
 }
 
-/// Até o catálogo do P0.R (`mensagens::problema`) existir, a mensagem é o detalhe (texto do serde em
-/// `item_invalido`) ou vazia; o nível segue o §2.3.
 fn problema(nivel: Nivel, codigo: &'static str, mensagem: String) -> Problema {
-    Problema { nivel, codigo, mensagem, clipe: None, efeito: None, trilha: None, midia: None, campo: None, n: None }
+    // a frase vem do catálogo; o nível é o que o armazém calculou
+    let mut p = super::mensagens::problema(codigo, None, (!mensagem.is_empty()).then_some(mensagem.as_str()));
+    p.nivel = nivel;
+    p
 }
 
 /// O texto do serde depois do código (`item_invalido: <texto>`).
@@ -1198,6 +1200,66 @@ mod testes {
         v["esquema"] = json!(2);
         v.as_object_mut().unwrap().remove("saida");
         assert!(matches!(tipado(&v), Err(SicroError::Validation(c)) if c.starts_with("item_invalido: ") && c.contains("saida")));
+    }
+
+    /// A fixture que o vitest grava montando o projeto pelas portas da tela (`store/projetoDoStore.test.ts`) é lida
+    /// tipada, sem nenhum item caindo em `Desconhecido` (P0.8b-2).
+    #[test]
+    fn projeto_do_store_le_tipado() {
+        use super::super::modelo::{Animavel, ClipeAudio, ClipePrincipal, Efeito, Posicao, Tolerante};
+        let v: Value = serde_json::from_str(&fixture("projeto-do-store.json")).unwrap();
+        let p = tipado(&v).unwrap();
+        let ids: Vec<&str> = p.midias.iter().map(|m| m.id.as_str()).collect();
+        assert_eq!(ids, ["m1", "m2", "m3"]);
+        assert!(p.midias.iter().zip(["1", "2", "3"]).all(|(m, c)| m.sha256 == c.repeat(64)));
+        assert!(p.saida.auto);
+        let clipes: Vec<&ClipePrincipal> = p
+            .principal
+            .iter()
+            .map(|c| match c {
+                Tolerante::Conhecido(c) => c,
+                Tolerante::Desconhecido(x) => panic!("clipe desconhecido: {x}"),
+            })
+            .collect();
+        let efeitos = |c: &ClipePrincipal| -> Vec<&'static str> {
+            let base = match c {
+                ClipePrincipal::Trecho(t) => &t.base,
+                ClipePrincipal::Titulo(t) => &t.base,
+                outro => panic!("clipe inesperado: {outro:?}"),
+            };
+            let mut tipos: Vec<&'static str> = base
+                .efeitos
+                .iter()
+                .map(|e| match e {
+                    Tolerante::Conhecido(Efeito::Destaque(_)) => "destaque",
+                    Tolerante::Conhecido(Efeito::Enquadramento(_)) => "enquadramento",
+                    Tolerante::Conhecido(Efeito::Girar(g)) => {
+                        assert_eq!(g.graus, 90);
+                        "girar"
+                    }
+                    Tolerante::Conhecido(Efeito::Texto(_)) => "texto",
+                    Tolerante::Conhecido(Efeito::Ocultar(_)) => "ocultar",
+                    Tolerante::Conhecido(outro) => panic!("efeito inesperado: {outro:?}"),
+                    Tolerante::Desconhecido(x) => panic!("efeito desconhecido: {x}"),
+                })
+                .collect();
+            tipos.sort();
+            tipos
+        };
+        assert!(matches!(clipes[0], ClipePrincipal::Titulo(t) if t.titulo.blocos.len() == 2));
+        assert_eq!(efeitos(clipes[1]), ["destaque", "enquadramento", "girar"]);
+        assert_eq!(efeitos(clipes[2]), ["enquadramento", "ocultar", "texto"]);
+        let ClipePrincipal::Trecho(t2) = clipes[2] else { panic!() };
+        assert_eq!(t2.base.transicao_entrada.as_ref().map(|t| t.tipo.as_str()), Some("escurecer"));
+        let animado = t2.base.efeitos.iter().any(|e| matches!(e, Tolerante::Conhecido(Efeito::Enquadramento(q)) if matches!(&q.regiao, Animavel::Chaves(k) if k.len() == 2)));
+        assert!(animado);
+        assert_eq!(p.midias[0].ocultacoes.len(), 1);
+        assert_eq!(p.rastreios.len(), 3);
+        assert!(p.rastreios.iter().all(|r| r.ancoras.len() == 1));
+        let narracao: &ClipeAudio = &p.audios[0].clipes[0];
+        let ClipePrincipal::Trecho(t1) = clipes[1] else { panic!() };
+        assert!(matches!(&narracao.pos, Posicao::Clipe { clipe, desloc } if *clipe == t1.base.id && *desloc == 0.0));
+        assert_eq!(narracao.midia, "m3");
     }
 
     #[test]

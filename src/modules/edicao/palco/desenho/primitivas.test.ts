@@ -14,6 +14,8 @@ function quadro(A: Afim, caixa: Caixa | null, extra: Partial<QuadroPalco> = {}):
     q: 12,
     t: 3725.5,
     pts: 100,
+    indice: null,
+    programa_s: 0,
     A,
     canvas: { w: 1280, h: 720 },
     rastreio: (id) => (id === "r1" ? caixa : null),

@@ -8,7 +8,7 @@ import { commands } from "@core/commands";
 import type { Derivacao, Id, MidiaInfo, MidiaRef, ProjetoEdicao, Pts, Seg } from "@domain/edicao";
 import type { VideoMedia } from "@domain/video";
 import { comoChegou, completar, garantirMidia, novoId, novoProjeto, novoTrecho } from "../modelo/projeto";
-import { correnteDe, definirCorrente, emSerie, useEdicaoStore } from "./edicaoStore";
+import { correnteDe, definirCorrente, emSerie, separarErro, useEdicaoStore } from "./edicaoStore";
 
 export interface TrechoColetado {
   sha256: string;
@@ -168,7 +168,8 @@ async function gravar(ws: string, prontos: Preparado[], projeto?: Id): Promise<{
       const r = await commands.edicaoAbrir(ws, alvo);
       if (!r.so_leitura) doc = r.projeto;
     } catch (e) {
-      if (projeto) throw e; // projeto pedido pelo nome: não troca por outro calado
+      // projeto pedido pelo nome não troca por outro calado; o corrente só é trocado se sumiu
+      if (projeto || separarErro(e).codigo !== "projeto_nao_encontrado") throw e;
     }
     if (!doc && projeto) throw new Error("so_leitura");
   }

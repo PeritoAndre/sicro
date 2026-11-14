@@ -1513,5 +1513,9 @@ export const commands = {
   edicaoSaidaExcluir(workspacePath: string, saidaId: string): Promise<void> {
     return safeInvoke<void>("edicao_saida_excluir", { workspacePath, saidaId });
   },
+
+  edicaoRefazer(workspacePath: string, saidaId: string): Promise<string> {
+    return safeInvoke<string>("edicao_refazer", { workspacePath, saidaId });
+  },
   // ===== fim da Edição (Fase 0) =====
 } as const;

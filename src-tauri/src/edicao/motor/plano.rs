@@ -23,8 +23,9 @@ pub struct Canvas {
     pub cor_fundo: String,
 }
 
-/// Tudo que uma execução roda: slots `0..total_q` do canvas. `alvo` = o de `compilar` (só a exportação final
-/// passa por "Conferindo" e confere os pts lidos).
+/// Tudo que uma execução roda: `total_q` slots do canvas (o programa inteiro na exportação final; a janela na
+/// prévia; 1 no quadro final). `alvo` = o de `compilar` (só a exportação final passa por "Conferindo" e confere
+/// os pts lidos). Na prévia e no quadro final o canvas vem reduzido e a `proveniencia` segue a do programa inteiro.
 // CONTRATO: `alvo` não está no §5.2; o executor e o retrato precisam dele (P0.6a, P0.7 e o "refazer").
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Plano {
@@ -63,9 +64,12 @@ pub struct ArquivoTexto {
 }
 
 /// Um ffmpeg: slots [de_q, de_q + n_q). Linha (§5.8):
-/// `ffmpeg <globais> <entradas> <grafo em arquivo> -map [v] <codificador> <saida> -map [h] -f framehash -hash sha256 <framehash>`.
-/// `chave` = SHA-256 do bloco (grafo, argumentos, mídias, hash das camadas, ffmpeg); `saida` = "b003.mp4" | "b003.mkv" | "b000.bmp";
-/// `framehash` vazio = sem framehash (prévia do render e quadro final).
+/// `ffmpeg <args::globais()> <entradas> <grafo em arquivo> -map [v] <codificador> <saida> -map [h] -fps_mode passthrough -f framehash -hash sha256 <framehash>`.
+/// `grafo` = o TEXTO do grafo (quem roda grava num arquivo de nome simples e passa por `args::grafo_em_arquivo`);
+/// nele as entradas são citadas pelo índice (`[3:v]`), na ordem de `entradas`, e não há nome de arquivo.
+/// `codificador` já traz `-fps_mode passthrough`, as etiquetas de cor, os argumentos de reprodutibilidade e a escala
+/// de tempo. `chave` = SHA-256 do bloco (grafo, argumentos, mídias, hash das camadas, ffmpeg);
+/// `saida` = "b003.mp4" | "b003.mkv" | "b000.bmp"; `framehash` vazio = sem framehash (prévia do render e quadro final).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Bloco {
     pub indice: usize,
@@ -81,8 +85,9 @@ pub struct Bloco {
     pub conferir: Vec<ConferirClipe>,
 }
 
-/// O que conferir depois de rodar o bloco: `frames in` do `fps@<rotulo>` = `lidos`; na exportação final,
-/// os pts do `showinfo@<rotulo>` = `pts` (vazio fora dela).
+/// O que conferir depois de rodar o bloco: `frames in` do `fps@<rotulo>` = `lidos` + 1 (a cadeia põe sempre um
+/// clone do último quadro antes do mapa; `lidos` = quadros que saem da fonte); na exportação final, os pts do
+/// `showinfo@<rotulo>` = `pts` (vazio fora dela). Divergência = o bloco falha e é refeito com `antes_sem_busca`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConferirClipe {
     pub rotulo: String,
@@ -93,7 +98,10 @@ pub struct ConferirClipe {
 
 /// Uma entrada do ffmpeg. `antes` = argumentos antes do `-i` (`-ss -t -framerate -f concat …`).
 /// `antes_sem_busca` = os mesmos sem `-ss`, para refazer o bloco quando a leitura diverge (None = não usa busca).
-/// Em `Papel::Camada` o `caminho` fica vazio: o executor põe a lista (ou o PNG) da camada rasterizada.
+/// Em `Papel::Camada` o `caminho` fica vazio: o executor põe a lista da camada rasterizada (`antes` =
+/// `-f concat -safe 0`); se a camada saiu FIXA (um PNG só, sem lista: só se sabe depois de rasterizar), a entrada
+/// é o PNG com `-loop 1 -framerate <fps do canvas>` no lugar de `antes`. O grafo corta toda camada no tamanho
+/// dela, e serve aos dois casos.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Entrada {
     pub antes: Vec<String>,
@@ -185,7 +193,7 @@ pub const MARCA_GANHO: &str = "@GANHO_DB@";
 
 /// Áudio do programa inteiro numa passada (§5.9). Linha:
 /// `ffmpeg <globais> <entradas> <grafo em arquivo> -map [a] -c:a pcm_s16le <saida> -map [ah] -f hash -hash sha256 <hash>`.
-/// `globais` começam SEMPRE por `-cpuflags 0` (decisão O6); uma entrada por mídia (`-vn`, sem `-ss`; `Papel::Midia`
+/// `globais` começam SEMPRE por `-cpuflags 0` (decisão O6); uma entrada por mídia, repetida quando o som teria de esperar (`audio::distribuir`; `-vn`, sem `-ss`; `Papel::Midia`
 /// com `clipe` vazio);
 /// o grafo entrega `[a]` e `[ah]` (48 kHz, estéreo) com `amostras` amostras e contém `MARCA_GANHO`.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

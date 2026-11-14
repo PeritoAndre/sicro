@@ -1,0 +1,6730 @@
+[
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Fim do trecho",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-255x45.png",
+            "w": 255
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Fim do trecho",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "#101010",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "cartela da v1",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Fim do trecho",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#101010"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.1328125,
+            "x": 0.43385416666666665,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-255x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000c0",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "modelo cartela",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000c0"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000c0",
+          "tipo": "cor"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "modelo abertura",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000c0"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000c0",
+          "tipo": "cor"
+        },
+        "modelo": "evento"
+      }
+    },
+    "nome": "modelo evento",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000c0"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000c0",
+          "tipo": "cor"
+        },
+        "modelo": "terco_inferior"
+      }
+    },
+    "nome": "modelo terco_inferior",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000c0"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000c0",
+          "tipo": "cor"
+        },
+        "modelo": "encerramento"
+      }
+    },
+    "nome": "modelo encerramento",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000c0"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000c0",
+          "tipo": "cor"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "modelo livre",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000c0"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 720,
+          "w": 1280
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-463x70.png",
+            "w": 463
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 47,
+            "relativo": "sprites/falso-329x47.png",
+            "w": 329
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 30,
+            "relativo": "sprites/falso-353x30.png",
+            "w": 353
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "terco_inferior"
+      }
+    },
+    "nome": "transparente tres blocos 720p",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.36171875,
+            "x": 0.31953125,
+            "y": 0.32222222222222224
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-463x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06527777777777778,
+            "w": 0.25703125,
+            "x": 0.371875,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-329x47.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.27578125,
+            "x": 0.67421875,
+            "y": 0.8986111111111111
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-353x30.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [],
+      "titulo": {
+        "blocos": [],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "transparente sem blocos",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": []
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [],
+      "titulo": {
+        "blocos": [],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "cor sem blocos",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Antes",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-98x45.png",
+            "w": 98
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Depois",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-118x45.png",
+            "w": 118
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Antes",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#ff0000",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "v",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.6
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Depois",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "bloco vazio no meio",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Antes",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#ff0000",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "v",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.6
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Depois",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.051041666666666666,
+            "x": 0.4744791666666667,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-98x45.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.06145833333333333,
+            "x": 0.46927083333333336,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-118x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {
+        "fundo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-695x105.png",
+            "w": 695
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — saída",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.004
+                  },
+                  "contorno": null,
+                  "cor": "#e0e0e0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b2",
+                "largura_max": 0.8,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.45
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4222222222222223
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-494x70.png",
+            "w": 494
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": {
+                    "cor": "#000000",
+                    "largura": 0.002
+                  },
+                  "cor": "#c0c0c0",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "base",
+                  "x": 0.95,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "midia": "fundo",
+          "tipo": "imagem"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "imagem 4:3 em 16:9",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 1.3333333333333333,
+            "w": 1.0,
+            "x": 0.0,
+            "y": -0.16666666666666666
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "midia:fundo"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.3619791666666667,
+            "x": 0.31927083333333334,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-695x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.25729166666666664,
+            "x": 0.37135416666666665,
+            "y": 0.45
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-494x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.6744791666666666,
+            "y": 0.8981481481481481
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {
+        "fundo": {
+          "h": 1080,
+          "w": 2520
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [],
+      "titulo": {
+        "blocos": [],
+        "fundo": {
+          "midia": "fundo",
+          "tipo": "imagem"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "imagem 21:9 em 16:9",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 1.0,
+            "w": 1.3125,
+            "x": -0.15625,
+            "y": 0.0
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "midia:fundo"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {
+        "fundo": {
+          "h": 2160,
+          "w": 3840
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Fim",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-59x45.png",
+            "w": 59
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Fim",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "midia": "fundo",
+          "tipo": "imagem"
+        },
+        "modelo": "encerramento"
+      }
+    },
+    "nome": "imagem na proporcao do canvas",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Fim",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 1.0,
+            "w": 1.0,
+            "x": 0.0,
+            "y": 0.0
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "midia:fundo"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.030729166666666665,
+            "x": 0.48489583333333336,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-59x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {
+        "fundo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1920,
+          "w": 1080
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1920,
+            "blocos": [
+              {
+                "conteudo": "Evento 1",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.50625
+          },
+          "sprite": {
+            "h": 79,
+            "relativo": "sprites/falso-279x79.png",
+            "w": 279
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Evento 1",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "midia": "fundo",
+          "tipo": "imagem"
+        },
+        "modelo": "evento"
+      }
+    },
+    "nome": "imagem em canvas vertical",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1920,
+          "blocos": [
+            {
+              "conteudo": "Evento 1",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.50625
+        },
+        {
+          "altura_canvas": 1920,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 1.0,
+            "w": 2.3703703703703702,
+            "x": -0.6851851851851852,
+            "y": 0.0
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "midia:fundo"
+        },
+        {
+          "caixa": {
+            "h": 0.04114583333333333,
+            "w": 0.25833333333333336,
+            "x": 0.3712962962962963,
+            "y": 0.4796875
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-279x79.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {
+        "fundo": {
+          "h": 300,
+          "w": 400
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "midia": "outra",
+          "tipo": "imagem"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "imagem ausente",
+    "saida": {
+      "erro": "midia_ausente",
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {
+        "fundo": {
+          "h": 300,
+          "w": 0
+        }
+      },
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — saída",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.004
+              },
+              "contorno": null,
+              "cor": "#e0e0e0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b2",
+            "largura_max": 0.8,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.45
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              },
+              "cor": "#c0c0c0",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "base",
+              "x": 0.95,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "midia": "fundo",
+          "tipo": "imagem"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "imagem de tamanho zero",
+    "saida": {
+      "erro": "midia_ausente",
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — saída",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.004
+                },
+                "contorno": null,
+                "cor": "#e0e0e0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b2",
+              "largura_max": 0.8,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.45
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4222222222222223
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": {
+                  "cor": "#000000",
+                  "largura": 0.002
+                },
+                "cor": "#c0c0c0",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "base",
+                "x": 0.95,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Fora à direita",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "f1",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "meio",
+                  "x": 1.2,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 68,
+            "relativo": "sprites/falso-416x68.png",
+            "w": 416
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Meio fora no alto",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "f2",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "meio",
+                  "x": 0.1,
+                  "y": -0.02
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 68,
+            "relativo": "sprites/falso-505x68.png",
+            "w": 505
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Antes da esquerda",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "f3",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "dir",
+                  "v": "topo",
+                  "x": -0.3,
+                  "y": 0.7
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 68,
+            "relativo": "sprites/falso-505x68.png",
+            "w": 505
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Fora à direita",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "f1",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "meio",
+              "x": 1.2,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Meio fora no alto",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "f2",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "meio",
+              "x": 0.1,
+              "y": -0.02
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Antes da esquerda",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "f3",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "dir",
+              "v": "topo",
+              "x": -0.3,
+              "y": 0.7
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "bloco fora do canvas",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Fora à direita",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "f1",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "meio",
+                "x": 1.2,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Meio fora no alto",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "f2",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "meio",
+                "x": 0.1,
+                "y": -0.02
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Antes da esquerda",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "f3",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "dir",
+                "v": "topo",
+                "x": -0.3,
+                "y": 0.7
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.06296296296296296,
+            "w": 0.21666666666666667,
+            "x": 1.2,
+            "y": 0.4685185185185185
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-416x68.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06296296296296296,
+            "w": 0.2630208333333333,
+            "x": 0.1,
+            "y": -0.05185185185185185
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-505x68.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06296296296296296,
+            "w": 0.2630208333333333,
+            "x": -0.5630208333333333,
+            "y": 0.7
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-505x68.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Perícia nº 7/2026\nSão José — ação",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.06
+                },
+                "id": "q",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 162,
+            "relativo": "sprites/falso-606x162.png",
+            "w": 606
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Perícia nº 7/2026\nSão José — ação",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.06
+            },
+            "id": "q",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "#202020",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "quebra de linha e acento",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Perícia nº 7/2026\nSão José — ação",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.06
+              },
+              "id": "q",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#202020"
+        },
+        {
+          "caixa": {
+            "h": 0.15,
+            "w": 0.315625,
+            "x": 0.3421875,
+            "y": 0.425
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-606x162.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 361,
+          "w": 641
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 361,
+            "blocos": [
+              {
+                "conteudo": "abc",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.5980609418282548
+          },
+          "sprite": {
+            "h": 15,
+            "relativo": "sprites/falso-20x15.png",
+            "w": 20
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 361,
+            "blocos": [
+              {
+                "conteudo": "abcd",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.5980609418282548
+          },
+          "sprite": {
+            "h": 15,
+            "relativo": "sprites/falso-26x15.png",
+            "w": 26
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "abc",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "abcd",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "canvas impar",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 361,
+          "blocos": [
+            {
+              "conteudo": "abc",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.5980609418282548
+        },
+        {
+          "altura_canvas": 361,
+          "blocos": [
+            {
+              "conteudo": "abcd",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.5980609418282548
+        },
+        {
+          "altura_canvas": 361,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.04155124653739612,
+            "w": 0.031201248049921998,
+            "x": 0.48517940717628705,
+            "y": 0.4792243767313019
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-20x15.png"
+        },
+        {
+          "caixa": {
+            "h": 0.04155124653739612,
+            "w": 0.0405616224648986,
+            "x": 0.48049921996879874,
+            "y": 0.4792243767313019
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-26x15.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 576,
+          "w": 1024
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "r",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "meio",
+                  "x": 0.00048828124999999995,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 36,
+            "relativo": "sprites/falso-16x36.png",
+            "w": 16
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "r",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "meio",
+              "x": 0.00048828124999999995,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "arredondamento no limite do meio pixel",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "r",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "meio",
+                "x": 0.00048828124999999995,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.0625,
+            "w": 0.015625,
+            "x": 0.0009765625,
+            "y": 0.46875
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-16x36.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "#set text(size: 100pt) *x* $y$ #panic(\"z\")",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-823x45.png",
+            "w": 823
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "#set text(size: 100pt) *x* $y$ #panic(\"z\")",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "texto que parece codigo",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "#set text(size: 100pt) *x* $y$ #panic(\"z\")",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.42864583333333334,
+            "x": 0.2859375,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-823x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-20x45.png",
+            "w": 20
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "vermelho",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "cor de fundo fora do formato",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "vermelho"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.010416666666666666,
+            "x": 0.4947916666666667,
+            "y": 0.47962962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-20x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 576,
+          "w": 1024
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "g",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 1048576.0,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 36,
+            "relativo": "sprites/falso-16x36.png",
+            "w": 16
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "g",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": -1864135.0
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 36,
+            "relativo": "sprites/falso-16x36.png",
+            "w": 16
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "g",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 1048576.0,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "g",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.5,
+              "y": -1864135.0
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "lugar no limite",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "g",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 1048576.0,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "g",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.5,
+                "y": -1864135.0
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.0625,
+            "w": 0.015625,
+            "x": 1048576.0,
+            "y": 0.5
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-16x36.png"
+        },
+        {
+          "caixa": {
+            "h": 0.0625,
+            "w": 0.015625,
+            "x": 0.5,
+            "y": -1864135.0
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-16x36.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 576,
+          "w": 1024
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "antes",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#fafafa",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "c1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "meio",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 24,
+            "relativo": "sprites/falso-52x24.png",
+            "w": 52
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "g",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 1048576.0009765625,
+                  "y": 0.5
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 36,
+            "relativo": "sprites/falso-16x36.png",
+            "w": 16
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "antes",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#fafafa",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "c1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "meio",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "g",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 1048576.0009765625,
+              "y": 0.5
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "lugar 1 px alem do limite a direita",
+    "saida": {
+      "erro": "item_invalido",
+      "pedidos": [
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "antes",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#fafafa",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "c1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "g",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 1048576.0009765625,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 576,
+          "w": 1024
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "g",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": -1864136.0
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 36,
+            "relativo": "sprites/falso-16x36.png",
+            "w": 16
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "g",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.5,
+              "y": -1864136.0
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "lugar alem do limite acima",
+    "saida": {
+      "erro": "item_invalido",
+      "pedidos": [
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "g",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.5,
+                "y": -1864136.0
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 576,
+          "w": 1024
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 576,
+            "blocos": [
+              {
+                "conteudo": "x",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.05
+                },
+                "id": "g",
+                "largura_max": 0.5,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": -1e+308,
+                  "y": 1e+308
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.8888888888888888
+          },
+          "sprite": {
+            "h": 36,
+            "relativo": "sprites/falso-16x36.png",
+            "w": 16
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "x",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.05
+            },
+            "id": "g",
+            "largura_max": 0.5,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": -1e+308,
+              "y": 1e+308
+            },
+            "papel": "corpo"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "livre"
+      }
+    },
+    "nome": "lugar que estoura para infinito",
+    "saida": {
+      "erro": "item_invalido",
+      "pedidos": [
+        {
+          "altura_canvas": 576,
+          "blocos": [
+            {
+              "conteudo": "x",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.05
+              },
+              "id": "g",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": -1e+308,
+                "y": 1e+308
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.8888888888888888
+        },
+        {
+          "altura_canvas": 576,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1920,
+          "w": 1080
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1920,
+            "blocos": [
+              {
+                "conteudo": "Uma frase comprida que quebra em várias linhas",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.04
+                },
+                "id": "l",
+                "largura_max": 0.6,
+                "lugar": {
+                  "h": "esq",
+                  "v": "base",
+                  "x": 0.05,
+                  "y": 0.85
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.3375
+          },
+          "sprite": {
+            "h": 96,
+            "relativo": "sprites/falso-648x96.png",
+            "w": 648
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Uma frase comprida que quebra em várias linhas",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.04
+            },
+            "id": "l",
+            "largura_max": 0.6,
+            "lugar": {
+              "h": "esq",
+              "v": "base",
+              "x": 0.05,
+              "y": 0.85
+            },
+            "papel": "titulo"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "terco_inferior"
+      }
+    },
+    "nome": "largura do bloco em canvas vertical",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1920,
+          "blocos": [
+            {
+              "conteudo": "Uma frase comprida que quebra em várias linhas",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.04
+              },
+              "id": "l",
+              "largura_max": 0.6,
+              "lugar": {
+                "h": "esq",
+                "v": "base",
+                "x": 0.05,
+                "y": 0.85
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.3375
+        },
+        {
+          "altura_canvas": 1920,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.05,
+            "w": 0.6,
+            "x": 0.05,
+            "y": 0.8
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-648x96.png"
+        }
+      ]
+    }
+  }
+]
