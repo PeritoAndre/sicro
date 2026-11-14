@@ -1,0 +1,1800 @@
+{
+  "esquema": 2,
+  "esquema_menor": 0,
+  "id": "p1",
+  "titulo": "Contrato: todas as variantes",
+  "created_at": "2026-11-14T03:00:00Z",
+  "updated_at": "2026-11-14T03:10:00Z",
+  "gravado_por": "SICRO 7.0.0",
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": {
+      "num": 30000,
+      "den": 1001
+    },
+    "auto": false,
+    "cor_fundo": "#000000",
+    "audio": true,
+    "selos": {
+      "velocidade": true,
+      "ampliacao": false,
+      "realce": true
+    },
+    "exportacao": {
+      "predefinicao": "personalizada",
+      "codificador": "cpu",
+      "legendas": "ambos",
+      "pacote": {
+        "originais": true
+      },
+      "pdf": "a2_sem_anexos",
+      "revisado_por": "Revisor",
+      "personalizada": {
+        "codec": "hevc",
+        "conteiner": "mkv",
+        "qualidade": 20.0,
+        "altura_max": 1080,
+        "audio_kbps": 192
+      }
+    }
+  },
+  "midias": [
+    {
+      "id": "m1",
+      "tipo": "video",
+      "origem": "caso",
+      "media_id": "v1",
+      "sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "nome": "cam1.dav",
+      "relativo": "Mídias/Vídeos/cam1.dav",
+      "duracao_s": 600.5,
+      "inicio_s": 1713000000.0,
+      "largura": 1920,
+      "altura": 1080,
+      "taxa": {
+        "num": 25,
+        "den": 1
+      },
+      "vfr": true,
+      "tem_audio": true,
+      "cor": {
+        "matriz": "bt601",
+        "faixa": "pc"
+      },
+      "derivacao": {
+        "tipo": "copia_dvr",
+        "de_sha256": "3333333333333333333333333333333333333333333333333333333333333333",
+        "raiz_sha256": "4444444444444444444444444444444444444444444444444444444444444444",
+        "comando": "dvr-export",
+        "com_perdas": true
+      },
+      "recebido": {
+        "nativo": true,
+        "obs": "exportado do gravador"
+      },
+      "relogio_desvio_s": -3.5,
+      "gravador": "Dahua 1",
+      "decodificacao": {
+        "erros": 2
+      },
+      "ocultacoes": [
+        {
+          "tipo": "ocultar",
+          "id": "e01",
+          "ligado": true,
+          "nome": "ocultar 1",
+          "ativo": {
+            "de": 1713000001.0,
+            "ate": 1713000005.5
+          },
+          "modo": "solido",
+          "alvo": {
+            "rastreio": "r-manual",
+            "forma": "retangulo",
+            "vertices": null,
+            "margem": 0.1,
+            "borda_suave": 0.05,
+            "inverter": false
+          },
+          "intensidade": 1.0,
+          "cor": "#000000ff",
+          "conteudo": "placa",
+          "motivo": "placa de terceiro"
+        }
+      ]
+    },
+    {
+      "id": "m2",
+      "tipo": "video",
+      "origem": "caso",
+      "media_id": null,
+      "sha256": "5555555555555555555555555555555555555555555555555555555555555555",
+      "nome": "cel.mp4",
+      "relativo": "Mídias/Vídeos/cel.mp4",
+      "duracao_s": null,
+      "inicio_s": null,
+      "largura": null,
+      "altura": null,
+      "taxa": null,
+      "vfr": false,
+      "tem_audio": false,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    },
+    {
+      "id": "m3",
+      "tipo": "imagem",
+      "origem": "projeto",
+      "media_id": null,
+      "sha256": "6666666666666666666666666666666666666666666666666666666666666666",
+      "nome": "planta.png",
+      "relativo": "Sistema/videos/edicao/p1/midia/planta.png",
+      "duracao_s": null,
+      "inicio_s": null,
+      "largura": 800,
+      "altura": 600,
+      "taxa": null,
+      "vfr": false,
+      "tem_audio": false,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": false,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    },
+    {
+      "id": "m4",
+      "tipo": "audio",
+      "origem": "projeto",
+      "media_id": null,
+      "sha256": "7777777777777777777777777777777777777777777777777777777777777777",
+      "nome": "narracao.ogg",
+      "relativo": "Sistema/videos/edicao/p1/midia/narracao.ogg",
+      "duracao_s": 12.25,
+      "inicio_s": 0.0,
+      "largura": null,
+      "altura": null,
+      "taxa": null,
+      "vfr": false,
+      "tem_audio": true,
+      "cor": null,
+      "derivacao": null,
+      "recebido": {
+        "nativo": null,
+        "obs": ""
+      },
+      "relogio_desvio_s": null,
+      "gravador": null,
+      "decodificacao": null,
+      "ocultacoes": []
+    }
+  ],
+  "principal": [
+    {
+      "tipo": "trecho",
+      "id": "c1",
+      "rotulo": "Entrada",
+      "desligado": false,
+      "transicao_entrada": {
+        "tipo": "escurecer",
+        "duracao_s": 0.5,
+        "audio": "acompanhar"
+      },
+      "efeitos": [
+        {
+          "tipo": "estabilizar",
+          "id": "e02",
+          "ligado": true,
+          "nome": "estabilizar 2",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "suavizar": 15,
+          "borda": "ampliar",
+          "analise": {
+            "de_s": 1.0,
+            "ate_s": 9.0,
+            "de_pts": 15360,
+            "ate_pts": 138240
+          },
+          "zoom_pct": 4.5,
+          "trf_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        {
+          "tipo": "lente",
+          "id": "e03",
+          "ligado": true,
+          "nome": "lente 3",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "k1": -0.25,
+          "k2": 0.05,
+          "cx": 0.5,
+          "cy": 0.5,
+          "perfil": "GoPro"
+        },
+        {
+          "tipo": "desentrelacar",
+          "id": "e04",
+          "ligado": true,
+          "nome": "desentrelacar 4",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "modo": "campo",
+          "ordem": "tff"
+        },
+        {
+          "tipo": "media_temporal",
+          "id": "e05",
+          "ligado": true,
+          "nome": "media_temporal 5",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "quadros": 5
+        },
+        {
+          "tipo": "ajustes",
+          "id": "e06",
+          "ligado": true,
+          "nome": "ajustes 6",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "brilho": 0.125,
+          "contraste": 1.25,
+          "gama": 1.0,
+          "saturacao": 0.75
+        },
+        {
+          "tipo": "nitidez",
+          "id": "e07",
+          "ligado": true,
+          "nome": "nitidez 7",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "quantidade": 0.5
+        },
+        {
+          "tipo": "girar",
+          "id": "e08",
+          "ligado": true,
+          "nome": "girar 8",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "graus": 270,
+          "espelhar_h": false,
+          "espelhar_v": true
+        },
+        {
+          "tipo": "enquadramento",
+          "id": "e09",
+          "ligado": true,
+          "nome": "enquadramento 9",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "regiao": [
+            {
+              "t": 4.0,
+              "pts": 61440,
+              "v": {
+                "x": 0.0,
+                "y": 0.0,
+                "w": 1.0,
+                "h": 1.0
+              },
+              "interp": "linear"
+            },
+            {
+              "t": 5.0,
+              "pts": null,
+              "v": {
+                "x": 0.25,
+                "y": 0.25,
+                "w": 0.5,
+                "h": 0.5
+              },
+              "interp": "suave"
+            }
+          ],
+          "ajuste": "cobrir",
+          "interpolacao": "bicubica"
+        },
+        {
+          "tipo": "ocultar",
+          "id": "e10",
+          "ligado": true,
+          "nome": "ocultar 10",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "modo": "mosaico",
+          "alvo": {
+            "rastreio": "r-manual",
+            "forma": "poligono",
+            "vertices": [
+              {
+                "x": 0.0,
+                "y": 0.0
+              },
+              {
+                "x": 1.0,
+                "y": 0.0
+              },
+              {
+                "x": 0.5,
+                "y": 1.0
+              }
+            ],
+            "margem": 0.1,
+            "borda_suave": 0.05,
+            "inverter": false
+          },
+          "intensidade": 0.75,
+          "cor": "#000000ff",
+          "conteudo": "rosto",
+          "motivo": "só neste clipe"
+        },
+        {
+          "tipo": "holofote",
+          "id": "e11",
+          "ligado": true,
+          "nome": "holofote 11",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "alvo": {
+            "rastreio": "r-manual",
+            "forma": "silhueta",
+            "vertices": null,
+            "margem": 0.1,
+            "borda_suave": 0.05,
+            "inverter": true
+          },
+          "escurecer": 0.6,
+          "dessaturar": 0.5
+        },
+        {
+          "tipo": "destaque",
+          "id": "e12",
+          "ligado": true,
+          "nome": "destaque 12",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "forma": "colchetes",
+          "rastreio": "r-manual",
+          "traco": {
+            "cor": "#ffcc00",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "tamanho": 0.12,
+          "angulo_graus": 45.0,
+          "margem": 0.0,
+          "rotulo": {
+            "texto": "Veículo A",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": true,
+              "italico": false,
+              "tamanho": 0.052,
+              "cor": "#ffffff",
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.25
+              },
+              "contorno": {
+                "cor": "#000000",
+                "largura": 0.002
+              }
+            },
+            "lado": "cima"
+          }
+        },
+        {
+          "tipo": "destaque",
+          "id": "e13",
+          "ligado": true,
+          "nome": "destaque 13",
+          "ativo": null,
+          "forma": "seta",
+          "rastreio": "r-manual",
+          "traco": {
+            "cor": "#ffcc00",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "tamanho": 0.14,
+          "angulo_graus": 45.0,
+          "margem": 0.0,
+          "rotulo": null
+        },
+        {
+          "tipo": "lupa",
+          "id": "e14",
+          "ligado": true,
+          "nome": "lupa 14",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "rastreio": "r-manual",
+          "janela": 0.2,
+          "fator": 3.0,
+          "forma": "circulo",
+          "interpolacao": "bilinear",
+          "onde": {
+            "modo": "fixa",
+            "x": 0.8,
+            "y": 0.2
+          },
+          "moldura": {
+            "cor": "#ffcc00",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "ligacao": true
+        },
+        {
+          "tipo": "regua",
+          "id": "e15",
+          "ligado": true,
+          "nome": "regua 15",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "calibracao": {
+            "id": "k1",
+            "metodo": "cross_ratio",
+            "h": [
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0,
+              0.0,
+              0.0,
+              0.0,
+              1.0
+            ],
+            "espaco": {
+              "w": 1920,
+              "h": 1080
+            },
+            "pontos_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "residuo_m": 0.03,
+            "regiao": [
+              {
+                "x": 0.1,
+                "y": 0.1
+              },
+              {
+                "x": 0.9,
+                "y": 0.1
+              },
+              {
+                "x": 0.5,
+                "y": 0.9
+              }
+            ]
+          },
+          "ancora": {
+            "x": 0.4,
+            "y": 0.6
+          },
+          "direcao_graus": 90.0,
+          "comprimento_m": 2.0,
+          "divisoes": 4,
+          "traco": {
+            "cor": "#ffcc00",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "rotulo": true
+        },
+        {
+          "tipo": "velocidade_exibida",
+          "id": "e16",
+          "ligado": true,
+          "nome": "velocidade_exibida 16",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "calculo": {
+            "id": "v1",
+            "kmh": 42.0,
+            "faixa": [
+              39.0,
+              45.0
+            ],
+            "de_s": 3.0,
+            "ate_s": 5.0,
+            "metodo": "plane"
+          },
+          "onde": {
+            "modo": "fixa",
+            "lugar": {
+              "x": 0.5,
+              "y": 0.94,
+              "h": "dir",
+              "v": "topo"
+            }
+          },
+          "estilo": {
+            "fonte": "sans",
+            "negrito": true,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.013,
+              "raio": 0.25
+            },
+            "contorno": null
+          }
+        },
+        {
+          "tipo": "velocidade_exibida",
+          "id": "e17",
+          "ligado": true,
+          "nome": "velocidade_exibida 17",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "calculo": {
+            "id": "v2",
+            "kmh": 30.5,
+            "faixa": null,
+            "de_s": 3.0,
+            "ate_s": 5.0,
+            "metodo": "line"
+          },
+          "onde": {
+            "modo": "segue",
+            "rastreio": "r-manual",
+            "dx": 0.0,
+            "dy": -0.05
+          },
+          "estilo": {
+            "fonte": "mono",
+            "negrito": true,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": null,
+            "contorno": null
+          }
+        },
+        {
+          "tipo": "texto",
+          "id": "e18",
+          "ligado": true,
+          "nome": "texto 18",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "conteudo": "#import \"x\": { não é código }",
+          "estilo": {
+            "fonte": "serifa",
+            "negrito": true,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.013,
+              "raio": 0.25
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "esq",
+            "v": "meio"
+          },
+          "largura_max": 0.92
+        },
+        {
+          "tipo": "carimbo",
+          "id": "e19",
+          "ligado": true,
+          "nome": "carimbo 19",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "mostra": "relogio",
+          "formato": "data_hora",
+          "relogio": {
+            "media_time_s": 10.0,
+            "clock_seconds": 43200.0,
+            "clock_date": "2026-11-14"
+          },
+          "estilo": {
+            "fonte": "mono",
+            "negrito": true,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.013,
+              "raio": 0.25
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "dir",
+            "v": "topo"
+          }
+        },
+        {
+          "tipo": "carimbo",
+          "id": "e20",
+          "ligado": true,
+          "nome": "carimbo 20",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "mostra": "tempo_fonte",
+          "formato": "hms_ms",
+          "relogio": null,
+          "estilo": {
+            "fonte": "mono",
+            "negrito": true,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.013,
+              "raio": 0.25
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "dir",
+            "v": "topo"
+          }
+        },
+        {
+          "tipo": "imagem",
+          "id": "e21",
+          "ligado": true,
+          "nome": "imagem 21",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "midia": "m3",
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "dir",
+            "v": "base"
+          },
+          "largura": 0.2,
+          "opacidade": 0.5
+        },
+        {
+          "tipo": "efeito_do_futuro",
+          "id": "e99",
+          "ligado": true,
+          "campo_novo": [
+            1,
+            2.5,
+            "três"
+          ],
+          "aninhado": {
+            "x": null
+          }
+        }
+      ],
+      "midia": "m1",
+      "inicio_s": 1713000000.04,
+      "fim_s": 1713000012.0,
+      "inicio_pts": 1713000000040,
+      "fim_pts": null,
+      "velocidade": {
+        "tipo": "constante",
+        "fator": 0.5
+      },
+      "audio": {
+        "volume": [
+          {
+            "t": 0.0,
+            "pts": null,
+            "v": 1.0,
+            "interp": "suave"
+          },
+          {
+            "t": 2.5,
+            "pts": null,
+            "v": 0.5,
+            "interp": "degrau"
+          }
+        ],
+        "mudo": false,
+        "manter_tom": true,
+        "silencios": [
+          {
+            "id": "si1",
+            "de": 2.0,
+            "ate": 2.5,
+            "modo": "tom",
+            "motivo": "nome de terceiro"
+          },
+          {
+            "id": "si2",
+            "de": 3.0,
+            "ate": 3.5,
+            "modo": "mudo",
+            "motivo": "endereço"
+          }
+        ]
+      }
+    },
+    {
+      "tipo": "congelar",
+      "id": "c2",
+      "rotulo": "Quadro",
+      "desligado": false,
+      "transicao_entrada": {
+        "tipo": "fundir",
+        "duracao_s": 0.25,
+        "audio": "cortar"
+      },
+      "efeitos": [
+        {
+          "tipo": "texto",
+          "id": "e23",
+          "ligado": true,
+          "nome": "texto 23",
+          "ativo": {
+            "de": 1.5,
+            "ate": 4.25
+          },
+          "conteudo": "Congelado",
+          "estilo": {
+            "fonte": "sans",
+            "negrito": true,
+            "italico": false,
+            "tamanho": 0.052,
+            "cor": "#ffffff",
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.013,
+              "raio": 0.25
+            },
+            "contorno": null
+          },
+          "lugar": {
+            "x": 0.5,
+            "y": 0.94,
+            "h": "centro",
+            "v": "base"
+          },
+          "largura_max": 0.5
+        }
+      ],
+      "midia": "m1",
+      "instante_s": 1713000004.0,
+      "instante_pts": 1713000004000,
+      "duracao_s": 3.0
+    },
+    {
+      "tipo": "imagem",
+      "id": "c3",
+      "rotulo": "Planta",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [],
+      "midia": "m3",
+      "duracao_s": 5.0
+    },
+    {
+      "tipo": "titulo",
+      "id": "c4",
+      "rotulo": "Cartela",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [],
+      "duracao_s": 3.0,
+      "titulo": {
+        "modelo": "cartela",
+        "fundo": {
+          "tipo": "cor",
+          "cor": "#102030"
+        },
+        "blocos": [
+          {
+            "id": "b1",
+            "papel": "titulo",
+            "conteudo": "Bloco 1 — Câmera 1",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": true,
+              "italico": false,
+              "tamanho": 0.052,
+              "cor": "#ffffff",
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.25
+              },
+              "contorno": null
+            },
+            "lugar": {
+              "x": 0.5,
+              "y": 0.94,
+              "h": "centro",
+              "v": "base"
+            },
+            "largura_max": 0.9
+          },
+          {
+            "id": "b2",
+            "papel": "corpo",
+            "conteudo": "Bloco 2 — Câmera 1",
+            "estilo": {
+              "fonte": "sans",
+              "negrito": true,
+              "italico": false,
+              "tamanho": 0.052,
+              "cor": "#ffffff",
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.25
+              },
+              "contorno": null
+            },
+            "lugar": {
+              "x": 0.5,
+              "y": 0.94,
+              "h": "centro",
+              "v": "base"
+            },
+            "largura_max": 0.9
+          }
+        ]
+      }
+    },
+    {
+      "tipo": "tela",
+      "id": "c5",
+      "rotulo": "Duas câmeras",
+      "desligado": false,
+      "transicao_entrada": null,
+      "efeitos": [],
+      "arranjo": "pip",
+      "celulas": [
+        {
+          "midia": "m1",
+          "sincronia": null,
+          "rotulo": "Câmera 1",
+          "efeitos": []
+        },
+        {
+          "midia": "m2",
+          "sincronia": "s1",
+          "rotulo": "Câmera 2",
+          "efeitos": [
+            {
+              "tipo": "lupa",
+              "id": "e22",
+              "ligado": true,
+              "nome": "lupa 22",
+              "ativo": {
+                "de": null,
+                "ate": 2.0
+              },
+              "rastreio": "r-assistido",
+              "janela": 0.25,
+              "fator": 2.0,
+              "forma": "retangulo",
+              "interpolacao": "vizinho",
+              "onde": {
+                "modo": "segue",
+                "dx": 0.2,
+                "dy": -0.1
+              },
+              "moldura": {
+                "cor": "#ffcc00",
+                "espessura": 0.006,
+                "contorno": true
+              },
+              "ligacao": false
+            }
+          ]
+        }
+      ],
+      "referencia": 0,
+      "inicio_s": 1713000000.0,
+      "fim_s": 1713000002.0,
+      "inicio_pts": 1713000000000,
+      "fim_pts": 1713000002000,
+      "velocidade": {
+        "tipo": "rampa",
+        "pontos": [
+          {
+            "t": 1713000000.0,
+            "pts": null,
+            "v": 1.0,
+            "interp": "linear"
+          },
+          {
+            "t": 1713000001.0,
+            "pts": 1713000001000,
+            "v": 0.25,
+            "interp": "suave"
+          }
+        ]
+      },
+      "audio": {
+        "volume": 0.8,
+        "mudo": false,
+        "manter_tom": true,
+        "silencios": [
+          {
+            "id": "si1",
+            "de": 2.0,
+            "ate": 2.5,
+            "modo": "tom",
+            "motivo": "nome de terceiro"
+          },
+          {
+            "id": "si2",
+            "de": 3.0,
+            "ate": 3.5,
+            "modo": "mudo",
+            "motivo": "endereço"
+          }
+        ]
+      },
+      "pip": {
+        "x": 0.7,
+        "y": 0.7,
+        "w": 0.25,
+        "h": 0.25
+      }
+    },
+    {
+      "tipo": "clipe_do_futuro",
+      "id": "c9",
+      "qualquer": {
+        "coisa": true
+      }
+    }
+  ],
+  "fecho": {
+    "tipo": "fundir",
+    "duracao_s": 1.0,
+    "audio": "acompanhar"
+  },
+  "sobreposicoes": [
+    {
+      "id": "t1",
+      "nome": "S1",
+      "oculta": false,
+      "clipes": [
+        {
+          "tipo": "video",
+          "id": "l1",
+          "rotulo": "Livre l1",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "c1",
+            "desloc": 0.5
+          },
+          "duracao_s": null,
+          "transformacao": {
+            "x": [
+              {
+                "t": 0.0,
+                "pts": null,
+                "v": 0.25,
+                "interp": "linear"
+              },
+              {
+                "t": 1.0,
+                "pts": null,
+                "v": 0.75,
+                "interp": "suave"
+              }
+            ],
+            "y": 0.5,
+            "escala": 0.25,
+            "rotacao": 0.0,
+            "opacidade": [
+              {
+                "t": 0.0,
+                "pts": null,
+                "v": 0.0,
+                "interp": "linear"
+              },
+              {
+                "t": 0.5,
+                "pts": null,
+                "v": 1.0,
+                "interp": "linear"
+              }
+            ]
+          },
+          "entrada_s": 0.25,
+          "saida_s": 0.5,
+          "efeitos": [],
+          "midia": "m2",
+          "inicio_s": 2.0,
+          "inicio_pts": 30720,
+          "velocidade": {
+            "tipo": "constante",
+            "fator": 1.0
+          },
+          "audio": {
+            "volume": 0.8,
+            "mudo": false,
+            "manter_tom": true,
+            "silencios": [
+              {
+                "id": "si1",
+                "de": 2.0,
+                "ate": 2.5,
+                "modo": "tom",
+                "motivo": "nome de terceiro"
+              },
+              {
+                "id": "si2",
+                "de": 3.0,
+                "ate": 3.5,
+                "modo": "mudo",
+                "motivo": "endereço"
+              }
+            ]
+          },
+          "moldura": {
+            "cor": "#ffcc00",
+            "espessura": 0.006,
+            "contorno": true
+          },
+          "sincronia": "s1"
+        },
+        {
+          "tipo": "imagem",
+          "id": "l2",
+          "rotulo": "Livre l2",
+          "pos": {
+            "ref": "programa",
+            "t": 1.5
+          },
+          "duracao_s": 5.0,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 0.25,
+            "rotacao": 0.0,
+            "opacidade": 1.0
+          },
+          "entrada_s": 0.25,
+          "saida_s": 0.5,
+          "efeitos": [],
+          "midia": "m3"
+        },
+        {
+          "tipo": "titulo",
+          "id": "l3",
+          "rotulo": "Livre l3",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "c2",
+            "desloc": 0.0
+          },
+          "duracao_s": null,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 0.25,
+            "rotacao": 0.0,
+            "opacidade": 1.0
+          },
+          "entrada_s": 0.25,
+          "saida_s": 0.5,
+          "efeitos": [],
+          "titulo": {
+            "modelo": "terco_inferior",
+            "fundo": {
+              "tipo": "imagem",
+              "midia": "m3"
+            },
+            "blocos": [
+              {
+                "id": "b3",
+                "papel": "subtitulo",
+                "conteudo": "Bloco 3 — Câmera 1",
+                "estilo": {
+                  "fonte": "sans",
+                  "negrito": true,
+                  "italico": false,
+                  "tamanho": 0.052,
+                  "cor": "#ffffff",
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.25
+                  },
+                  "contorno": null
+                },
+                "lugar": {
+                  "x": 0.5,
+                  "y": 0.94,
+                  "h": "centro",
+                  "v": "base"
+                },
+                "largura_max": 0.9
+              }
+            ]
+          }
+        },
+        {
+          "tipo": "sobreposto_do_futuro",
+          "id": "l9",
+          "pos": {
+            "ref": "programa",
+            "t": 0.0
+          }
+        }
+      ]
+    },
+    {
+      "id": "t2",
+      "nome": "S2",
+      "oculta": true,
+      "clipes": [
+        {
+          "tipo": "titulo",
+          "id": "l4",
+          "rotulo": "Livre l4",
+          "pos": {
+            "ref": "programa",
+            "t": 0.0
+          },
+          "duracao_s": 10.0,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 0.25,
+            "rotacao": 0.0,
+            "opacidade": 1.0
+          },
+          "entrada_s": 0.25,
+          "saida_s": 0.5,
+          "efeitos": [],
+          "titulo": {
+            "modelo": "encerramento",
+            "fundo": {
+              "tipo": "transparente"
+            },
+            "blocos": [
+              {
+                "id": "b4",
+                "papel": "rodape",
+                "conteudo": "Bloco 4 — Câmera 1",
+                "estilo": {
+                  "fonte": "sans",
+                  "negrito": true,
+                  "italico": false,
+                  "tamanho": 0.052,
+                  "cor": "#ffffff",
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.25
+                  },
+                  "contorno": null
+                },
+                "lugar": {
+                  "x": 0.5,
+                  "y": 0.94,
+                  "h": "centro",
+                  "v": "base"
+                },
+                "largura_max": 0.9
+              }
+            ]
+          }
+        },
+        {
+          "tipo": "video",
+          "id": "l5",
+          "rotulo": "Livre l5",
+          "pos": {
+            "ref": "programa",
+            "t": 2.0
+          },
+          "duracao_s": 3.0,
+          "transformacao": {
+            "x": 0.5,
+            "y": 0.5,
+            "escala": 0.25,
+            "rotacao": 0.0,
+            "opacidade": 1.0
+          },
+          "entrada_s": 0.25,
+          "saida_s": 0.5,
+          "efeitos": [],
+          "midia": "m1",
+          "inicio_s": 1713000000.5,
+          "inicio_pts": null,
+          "velocidade": {
+            "tipo": "constante",
+            "fator": 2.0
+          },
+          "audio": null,
+          "moldura": null,
+          "sincronia": null
+        }
+      ]
+    }
+  ],
+  "audios": [
+    {
+      "id": "a1",
+      "nome": "Narração",
+      "papel": "narracao",
+      "volume": 1.0,
+      "mudo": false,
+      "abaixa_original": true,
+      "clipes": [
+        {
+          "id": "ca1",
+          "nome": "Áudio ca1",
+          "midia": "m4",
+          "pos": {
+            "ref": "programa",
+            "t": 0.5
+          },
+          "de_s": 0.0,
+          "ate_s": null,
+          "volume": 1.0,
+          "entrada_s": 0.0,
+          "saida_s": 0.25
+        },
+        {
+          "id": "ca2",
+          "nome": "Áudio ca2",
+          "midia": "m4",
+          "pos": {
+            "ref": "clipe",
+            "clipe": "c1",
+            "desloc": 1.0
+          },
+          "de_s": 0.0,
+          "ate_s": 3.5,
+          "volume": [
+            {
+              "t": 0.0,
+              "pts": null,
+              "v": 0.0,
+              "interp": "linear"
+            },
+            {
+              "t": 0.5,
+              "pts": null,
+              "v": 1.0,
+              "interp": "linear"
+            }
+          ],
+          "entrada_s": 0.0,
+          "saida_s": 0.25
+        }
+      ]
+    },
+    {
+      "id": "a2",
+      "nome": "Música",
+      "papel": "musica",
+      "volume": 0.5,
+      "mudo": true,
+      "abaixa_original": false,
+      "clipes": []
+    },
+    {
+      "id": "a3",
+      "nome": "Efeitos",
+      "papel": "efeitos",
+      "volume": 1.5,
+      "mudo": false,
+      "abaixa_original": false,
+      "clipes": []
+    }
+  ],
+  "legendas": {
+    "estilo": {
+      "fonte": "sans",
+      "negrito": true,
+      "italico": false,
+      "tamanho": 0.052,
+      "cor": "#ffffff",
+      "alinhamento": "centro",
+      "caixa": {
+        "cor": "#0000008c",
+        "margem": 0.013,
+        "raio": 0.25
+      },
+      "contorno": null
+    },
+    "lugar": {
+      "x": 0.5,
+      "y": 0.94,
+      "h": "centro",
+      "v": "base"
+    },
+    "linhas_max": 2,
+    "origem": {
+      "audio_sha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+      "importado_em": "2026-11-14T03:00:00Z",
+      "motor": "whisper",
+      "modelo_sha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "itens": [
+      {
+        "id": "g1",
+        "texto": "Olá",
+        "locutor": "Locutor 1",
+        "origem": "ia",
+        "conferida": false,
+        "locutor_auto": true,
+        "ref": {
+          "tipo": "fonte",
+          "midia": "m1",
+          "de": 1713000001.0,
+          "ate": 1713000002.5
+        }
+      },
+      {
+        "id": "g2",
+        "texto": "Fim",
+        "locutor": null,
+        "origem": "perito",
+        "conferida": true,
+        "locutor_auto": false,
+        "ref": {
+          "tipo": "programa",
+          "de": 10.0,
+          "ate": 11.5
+        }
+      }
+    ]
+  },
+  "rastreios": [
+    {
+      "id": "r-manual",
+      "nome": "Rastreio r-manual",
+      "cor": "#ff0000",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 1713000001.0,
+          "pts": 1713000001000,
+          "v": {
+            "x": 0.1,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "linear"
+        },
+        {
+          "t": 1713000003.0,
+          "pts": 1713000003000,
+          "v": {
+            "x": 0.2,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "degrau"
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "r-assistido",
+      "nome": "Rastreio r-assistido",
+      "cor": "#ff0000",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "origem:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "ancoras": [
+        {
+          "t": 1713000001.0,
+          "pts": 1713000001000,
+          "v": {
+            "x": 0.1,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "linear"
+        },
+        {
+          "t": 1713000003.0,
+          "pts": 1713000003000,
+          "v": {
+            "x": 0.2,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "degrau"
+        }
+      ],
+      "denso": {
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "n": 90,
+        "de_s": 1713000001.0,
+        "ate_s": 1713000004.0,
+        "ok": 80,
+        "incertos": 7,
+        "ausentes": 3
+      },
+      "silhuetas": {
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "n": 90,
+        "modelo": "edgetam"
+      },
+      "ausencias": [
+        {
+          "de_s": 1713000002.0,
+          "ate_s": 1713000002.5,
+          "motivo": "fora_de_cena",
+          "aceita_em": "2026-11-14T03:00:00Z",
+          "por": "Perito"
+        },
+        {
+          "de_s": 1713000003.0,
+          "ate_s": 1713000003.25,
+          "motivo": "oculto",
+          "aceita_em": "2026-11-14T03:00:00Z",
+          "por": "Perito"
+        },
+        {
+          "de_s": 1713000003.5,
+          "ate_s": 1713000003.75,
+          "motivo": "perdido",
+          "aceita_em": "2026-11-14T03:00:00Z",
+          "por": "Perito"
+        }
+      ],
+      "origem": {
+        "tipo": "assistido"
+      },
+      "confirmacao": null
+    },
+    {
+      "id": "r-pessoas",
+      "nome": "Rastreio r-pessoas",
+      "cor": "#ff0000",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 1713000001.0,
+          "pts": 1713000001000,
+          "v": {
+            "x": 0.1,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "linear"
+        },
+        {
+          "t": 1713000003.0,
+          "pts": 1713000003000,
+          "v": {
+            "x": 0.2,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "degrau"
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "pessoas",
+        "pessoa_id": "p3",
+        "estado": "auto",
+        "copiado_em": "2026-11-14T03:00:00Z"
+      },
+      "confirmacao": {
+        "por": "Perito",
+        "em": "2026-11-14T03:00:00Z",
+        "denso_sha256": null,
+        "de_s": 1713000001.0,
+        "ate_s": 1713000004.0
+      }
+    },
+    {
+      "id": "r-deteccao",
+      "nome": "Rastreio r-deteccao",
+      "cor": "#ff0000",
+      "midia": "m1",
+      "base": "fonte",
+      "tipo": "caixa",
+      "espaco": "origem:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "ancoras": [
+        {
+          "t": 1713000001.0,
+          "pts": 1713000001000,
+          "v": {
+            "x": 0.1,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "linear"
+        },
+        {
+          "t": 1713000003.0,
+          "pts": 1713000003000,
+          "v": {
+            "x": 0.2,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "degrau"
+        }
+      ],
+      "denso": {
+        "sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "n": 90,
+        "de_s": 1713000001.0,
+        "ate_s": 1713000004.0,
+        "ok": 80,
+        "incertos": 7,
+        "ausentes": 3
+      },
+      "silhuetas": {
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "n": 90,
+        "modelo": "edgetam"
+      },
+      "ausencias": [
+        {
+          "de_s": 1713000002.0,
+          "ate_s": 1713000002.5,
+          "motivo": "fora_de_cena",
+          "aceita_em": "2026-11-14T03:00:00Z",
+          "por": "Perito"
+        },
+        {
+          "de_s": 1713000003.0,
+          "ate_s": 1713000003.25,
+          "motivo": "oculto",
+          "aceita_em": "2026-11-14T03:00:00Z",
+          "por": "Perito"
+        },
+        {
+          "de_s": 1713000003.5,
+          "ate_s": 1713000003.75,
+          "motivo": "perdido",
+          "aceita_em": "2026-11-14T03:00:00Z",
+          "por": "Perito"
+        }
+      ],
+      "origem": {
+        "tipo": "deteccao",
+        "classe": "placa"
+      },
+      "confirmacao": {
+        "por": "Perito",
+        "em": "2026-11-14T03:00:00Z",
+        "denso_sha256": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+        "de_s": 1713000001.0,
+        "ate_s": 1713000004.0
+      }
+    },
+    {
+      "id": "r-local",
+      "nome": "Rastreio r-local",
+      "cor": "#ff0000",
+      "midia": null,
+      "base": "local",
+      "tipo": "ponto",
+      "espaco": "original",
+      "ancoras": [
+        {
+          "t": 1713000001.0,
+          "pts": 1713000001000,
+          "v": {
+            "x": 0.1,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "linear"
+        },
+        {
+          "t": 1713000003.0,
+          "pts": 1713000003000,
+          "v": {
+            "x": 0.2,
+            "y": 0.2,
+            "w": 0.3,
+            "h": 0.4
+          },
+          "interp": "degrau"
+        }
+      ],
+      "denso": null,
+      "silhuetas": null,
+      "ausencias": [],
+      "origem": {
+        "tipo": "manual"
+      },
+      "confirmacao": null
+    }
+  ],
+  "marcadores": [
+    {
+      "id": "k1",
+      "rotulo": "Impacto",
+      "cor": "#ff0000",
+      "pos": {
+        "ref": "programa",
+        "t": 12.5
+      }
+    },
+    {
+      "id": "k2",
+      "rotulo": "Entrada",
+      "cor": "#00ff00",
+      "pos": {
+        "ref": "clipe",
+        "clipe": "c1",
+        "desloc": 0.25
+      }
+    },
+    {
+      "id": "k3",
+      "rotulo": "Freada",
+      "cor": "#0000ff",
+      "pos": {
+        "ref": "fonte",
+        "midia": "m1",
+        "t": 1713000003.5
+      }
+    }
+  ],
+  "sincronias": [
+    {
+      "id": "s1",
+      "vinculo_id": "vl1",
+      "referencia": "m1",
+      "outra": "m2",
+      "desloc_s": -1.25,
+      "deriva_ppm": 20.0,
+      "deriva_incerteza_ppm": 5.0,
+      "t0_s": 1713000000.0,
+      "valido_de_s": 1713000000.0,
+      "valido_ate_s": 1713000600.0,
+      "metodo": "evento",
+      "incerteza_s": 0.04,
+      "confianca": 0.9,
+      "conferencias": [
+        {
+          "modo": "evento_visivel",
+          "t_ref_s": 1713000003.5,
+          "diferenca_quadros": -1,
+          "por": "Perito",
+          "em": "2026-11-14T03:00:00Z"
+        },
+        {
+          "modo": "sem_evento",
+          "por": "Perito",
+          "em": "2026-11-14T03:05:00Z"
+        }
+      ]
+    },
+    {
+      "id": "s2",
+      "vinculo_id": null,
+      "referencia": "m1",
+      "outra": "m4",
+      "desloc_s": 0.0,
+      "deriva_ppm": 0.0,
+      "deriva_incerteza_ppm": 0.0,
+      "t0_s": 0.0,
+      "valido_de_s": 0.0,
+      "valido_ate_s": 10.0,
+      "metodo": "audio",
+      "incerteza_s": null,
+      "confianca": null,
+      "conferencias": []
+    }
+  ],
+  "mixagem": {
+    "volume_original": 1.0,
+    "abaixar": {
+      "db": -12.0,
+      "ataque_s": 0.3,
+      "soltura_s": 0.5
+    },
+    "normalizar": {
+      "lufs": -16.0,
+      "pico_db": -1.5
+    },
+    "limitador": true
+  }
+}

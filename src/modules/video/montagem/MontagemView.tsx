@@ -86,7 +86,6 @@ function TextoEditor({ texto, onChange }: { texto: MontagemTexto | null | undefi
 /** `embutida`: como sexto modo da análise (sem "Voltar"; sair é trocar de modo). */
 export function MontagemView({ embutida = false }: { embutida?: boolean } = {}) {
   const ws = useWorkspaceStore(selectActiveWorkspacePath);
-  const fechar = useVideoStore((s) => s.fecharMontagem);
   const videos = useVideoStore((s) => s.list);
   const loadList = useVideoStore((s) => s.loadList);
   const m = useMontagemStore();
@@ -163,7 +162,6 @@ export function MontagemView({ embutida = false }: { embutida?: boolean } = {}) 
   const sair = async () => {
     if (ws && m.dirty) await m.salvar(ws);
     m.fechar();
-    fechar();
   };
   // Embutida: "Voltar" vai para a lista de edições, sem sair do modo.
   const voltarLista = async () => {

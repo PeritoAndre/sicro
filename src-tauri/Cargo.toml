@@ -4,7 +4,7 @@ version = "6.0.0"
 description = "SICRO 3.0 — Sistema Integrado de Criminalística e Operações"
 authors = ["André Ricardo Barroso"]
 edition = "2021"
-rust-version = "1.77"
+rust-version = "1.92"
 license = "Apache-2.0"
 
 # Library is what tauri-app entry points consume; main.rs only re-exports it.
@@ -30,7 +30,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-process = "2"
 
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `float_roundtrip`: número lido e regravado sai igual (projeto da Edição).
+serde_json = { version = "1", features = ["float_roundtrip"] }
 
 # SQLite — `bundled` makes deployment self-contained (no system libsqlite3 dependency).
 rusqlite = { version = "0.31", features = ["bundled"] }
@@ -118,6 +119,19 @@ nnnoiseless = { version = "0.5.2", default-features = false }
 # Gerenciador de IA baixa (sem binário embutido, sem download no build).
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "ndarray"] }
 
+# Edição profissional: camadas desenhadas no Rust (formas, máscaras, sprites de texto).
+#   `resvg` 0.47 usa o `tiny-skia` 0.12; as duas sobem juntas. Sem fontes do sistema:
+#   o texto chega do Typst já em curvas.
+tiny-skia = "0.12"
+resvg = { version = "0.47", default-features = false, features = ["raster-images"] }
+rayon = "1"
+# Texto da Edição (e PDF do relatório na Fase 1): Typst como biblioteca, versão exata
+#   (a API muda a cada 0.x). Fontes por `include_bytes!`, sem `typst-kit`. MSRV 1.92.
+typst = "=0.15.1"
+# `PagedDocument` mora aqui desde a 0.15 (o `typst` não reexporta).
+typst-layout = "=0.15.1"
+typst-svg = "=0.15.1"
+
 # Linux (WebKitGTK) — o player de mídia (GStreamer) não lê o asset protocol do
 # Tauri; <video>/<audio> vão por file:// e a página precisa ser "local" no
 # WebKit. Ver `allow_local_media` em lib.rs. Mesma versão que o `wry` usa.
@@ -126,6 +140,8 @@ webkit2gtk = "2.0"
 
 [dev-dependencies]
 tempfile = "3"
+# Mesmo casamento de padrões do escopo de arquivos do Tauri (teste do escopo do asset protocol).
+glob = "0.3"
 
 [features]
 # This feature is enabled when building for the Tauri release.

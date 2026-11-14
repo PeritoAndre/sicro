@@ -26,6 +26,9 @@ importers:
       '@tauri-apps/plugin-updater':
         specifier: ^2.14.1
         version: 2.14.1
+      immer:
+        specifier: ^11.2.10
+        version: 11.2.10
       konva:
         specifier: ^10.3.0
         version: 10.3.0
@@ -55,7 +58,7 @@ importers:
         version: 6.30.3(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       zustand:
         specifier: ^4.5.5
-        version: 4.5.7(@types/react@18.3.29)(react@18.3.1)
+        version: 4.5.7(@types/react@18.3.29)(immer@11.2.10)(react@18.3.1)
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2.1.0
@@ -716,6 +719,9 @@ packages:
   happy-dom@20.9.0:
     resolution: {integrity: sha512-GZZ9mKe8r646NUAf/zemnGbjYh4Bt8/MqASJY+pSm5ZDtc3YQox+4gsLI7yi1hba6o+eCsGxpHn5+iEVn31/FQ==}
     engines: {node: '>=20.0.0'}
+
+  immer@11.2.10:
+    resolution: {integrity: sha512-pzANBj+0A9u+prdhBJ14DVi44vCvVUQzBa8DKt6I0AMCokPHtt722BK9IX5bFC70xUSU9TnzLRIJLTGqIzjEFw==}
 
   its-fine@1.2.5:
     resolution: {integrity: sha512-fXtDA0X0t0eBYAGLVM5YsgJGsJ5jEmqZEPrGbzdf5awjv0xE7nqv3TVnvtUF060Tkes15DbDAKW/I48vsb6SyA==}
@@ -1558,6 +1564,8 @@ snapshots:
       - utf-8-validate
     optional: true
 
+  immer@11.2.10: {}
+
   its-fine@1.2.5(@types/react@18.3.29)(react@18.3.1):
     dependencies:
       '@types/react-reconciler': 0.28.9(@types/react@18.3.29)
@@ -1808,9 +1816,10 @@ snapshots:
 
   yallist@3.1.1: {}
 
-  zustand@4.5.7(@types/react@18.3.29)(react@18.3.1):
+  zustand@4.5.7(@types/react@18.3.29)(immer@11.2.10)(react@18.3.1):
     dependencies:
       use-sync-external-store: 1.6.0(react@18.3.1)
     optionalDependencies:
       '@types/react': 18.3.29
+      immer: 11.2.10
       react: 18.3.1

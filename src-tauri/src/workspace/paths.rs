@@ -40,6 +40,11 @@ pub const REL_MONTAGENS_SAIDA: &str = "Exportações/Vídeos/Montagens";
 pub const REL_PESSOAS: &str = "Sistema/videos/pessoas";
 pub const REL_REALCE: &str = "Sistema/videos/realce";
 pub const REL_ESTABILIZADOS: &str = "Sistema/videos/estabilizados";
+/// Projetos da Edição (só dado; entra no backup).
+pub const REL_EDICAO: &str = "Sistema/videos/edicao";
+pub const REL_EDICAO_SAIDA: &str = "Exportações/Vídeos/Edições";
+/// Pasta da Edição dentro de `app_cache_dir()`: fora do caso e do backup.
+pub const DIR_EDICAO_CACHE: &str = "edicao";
 
 pub const REL_IMAGENS_ORIGINAIS: &str = "Mídias/Imagens";
 pub const REL_IMAGENS_ANALISES: &str = "Sistema/imagens/analises";
@@ -260,6 +265,20 @@ pub fn dir_imagens_realce(ws: &Path) -> PathBuf {
 pub fn dir_backups(ws: &Path) -> PathBuf {
     sob(ws, REL_BACKUPS)
 }
+pub fn dir_edicao(ws: &Path) -> PathBuf {
+    sob(ws, REL_EDICAO)
+}
+pub fn dir_edicao_saida(ws: &Path) -> PathBuf {
+    sob(ws, REL_EDICAO_SAIDA)
+}
+/// `app_cache_dir()/edicao`.
+pub fn dir_edicao_cache_raiz(app_cache: &Path) -> PathBuf {
+    app_cache.join(DIR_EDICAO_CACHE)
+}
+/// `app_cache_dir()/edicao/<id do caso>`. Id tipado: nada de texto do usuário no caminho.
+pub fn dir_edicao_cache(app_cache: &Path, caso_id: &uuid::Uuid) -> PathBuf {
+    dir_edicao_cache_raiz(app_cache).join(caso_id.to_string())
+}
 
 /// Pastas efêmeras que ficam fora do backup (layout novo e antigo).
 pub const PASTAS_FORA_DO_BACKUP: &[&str] =
@@ -282,6 +301,8 @@ pub const PASTAS_DO_CASO: &[&str] = &[
     REL_VIDEOS_TRECHOS,
     REL_MONTAGENS_JSON,
     REL_MONTAGENS_SAIDA,
+    REL_EDICAO,
+    REL_EDICAO_SAIDA,
     REL_IMAGENS_ORIGINAIS,
     "Exportações/Imagens/tratadas",
     "Exportações/Imagens/anotadas",
@@ -351,6 +372,20 @@ mod tests {
         assert!(b.ends_with("Caso.2.sicro"));
         std::fs::create_dir(&b).unwrap();
         assert!(unique_workspace_path(tmp.path(), "Caso").unwrap().ends_with("Caso.3.sicro"));
+    }
+
+    #[test]
+    fn pastas_da_edicao() {
+        let ws = Path::new("/casos/A.sicro");
+        assert_eq!(dir_edicao(ws), Path::new("/casos/A.sicro/Sistema/videos/edicao"));
+        assert_eq!(dir_edicao_saida(ws), Path::new("/casos/A.sicro/Exportações/Vídeos/Edições"));
+        let id = uuid::Uuid::parse_str("6f1c2a52-0d5e-4c1b-9a43-2f7d0c1e9b10").unwrap();
+        assert_eq!(
+            dir_edicao_cache(Path::new("/c/app"), &id),
+            Path::new("/c/app/edicao/6f1c2a52-0d5e-4c1b-9a43-2f7d0c1e9b10")
+        );
+        assert!(PASTAS_DO_CASO.contains(&REL_EDICAO) && PASTAS_DO_CASO.contains(&REL_EDICAO_SAIDA));
+        assert!(!fora_do_backup(REL_EDICAO) && !fora_do_backup(REL_EDICAO_SAIDA));
     }
 
     #[test]

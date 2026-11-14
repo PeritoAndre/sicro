@@ -30,7 +30,15 @@ pub async fn register_video_media(
     workspace_path: String,
     input: RegisterVideoInput,
 ) -> Result<VideoMedia> {
-    let ws = PathBuf::from(&workspace_path);
+    registrar_video(&PathBuf::from(&workspace_path), input, &|de, para| {
+        std::fs::copy(de, para).map(|_| ())
+    })
+}
+
+type Copiar<'a> = &'a dyn Fn(&Path, &Path) -> std::io::Result<()>;
+
+fn registrar_video(ws: &Path, input: RegisterVideoInput, copiar: Copiar<'_>) -> Result<VideoMedia> {
+    let ws = ws.to_path_buf();
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
 
@@ -76,9 +84,7 @@ pub async fn register_video_media(
         None => {
             let name = pick_unique_filename(&videos_dir, &source);
             let path = videos_dir.join(&name);
-            std::fs::copy(&source, &path).map_err(|e| {
-                SicroError::Filesystem(format!("could not copy video to {}: {}", path.display(), e))
-            })?;
+            copiar_conferindo(&source, &path, &sha256, copiar)?;
             (name, path)
         }
     };
@@ -913,6 +919,26 @@ pub async fn video_thumbnail(
 // ---------------------------------------------------------------------------
 // helpers
 
+/// Copia e confere o SHA-256 da cópia com o do original; se diverge, a cópia sai.
+fn copiar_conferindo(de: &Path, para: &Path, sha_original: &str, copiar: Copiar<'_>) -> Result<()> {
+    let apagar = || {
+        let _ = std::fs::remove_file(para);
+    };
+    copiar(de, para).map_err(|e| {
+        apagar();
+        SicroError::Filesystem(format!("could not copy video to {}: {}", para.display(), e))
+    })?;
+    let sha_copia = sha256_file(para).inspect_err(|_| apagar())?;
+    if sha_copia != sha_original {
+        apagar();
+        return Err(SicroError::Filesystem(format!(
+            "a cópia de {} não confere com o original (SHA-256 {sha_copia}, esperado {sha_original})",
+            de.display()
+        )));
+    }
+    Ok(())
+}
+
 fn pick_unique_filename(dir: &Path, src: &Path) -> String {
     let raw = src
         .file_name()
@@ -1451,4 +1477,52 @@ pub async fn gravar_audio_montagem(workspace_path: String, dados: Vec<u8>, exten
         std::fs::write(dest, &dados)?;
         Ok(())
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::NewOccurrenceInput;
+
+    fn caso() -> (tempfile::TempDir, PathBuf, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let ws = crate::workspace::create::create_workspace(NewOccurrenceInput::default(), tmp.path())
+            .unwrap()
+            .path;
+        let origem = tmp.path().join("camera 1.dav");
+        std::fs::write(&origem, (0..200_000u32).map(|i| (i * 7 % 251) as u8).collect::<Vec<_>>()).unwrap();
+        (tmp, ws, origem)
+    }
+
+    fn entrada(origem: &Path) -> RegisterVideoInput {
+        serde_json::from_value(json!({ "source_path": origem.to_string_lossy() })).unwrap()
+    }
+
+    fn arquivos(dir: &Path) -> Vec<String> {
+        std::fs::read_dir(dir).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect()
+    }
+
+    #[test]
+    fn copia_que_diverge_do_original_e_recusada_e_apagada() {
+        let (_tmp, ws, origem) = caso();
+        let corromper = |de: &Path, para: &Path| -> std::io::Result<()> {
+            let mut b = std::fs::read(de)?;
+            b[1000] ^= 1;
+            std::fs::write(para, b)
+        };
+        let r = registrar_video(&ws, entrada(&origem), &corromper);
+        assert!(matches!(&r, Err(SicroError::Filesystem(m)) if m.contains("SHA-256")), "{r:?}");
+        assert!(arquivos(&dir_videos_originais(&ws)).is_empty(), "cópia ficou");
+        let conn = open_connection(&sqlite_path(&ws)).unwrap();
+        let occ = Manifest::read(&ws).unwrap().occurrence_id;
+        assert!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().is_empty());
+    }
+
+    #[test]
+    fn copia_fiel_e_registrada_com_o_hash_do_original() {
+        let (_tmp, ws, origem) = caso();
+        let m = registrar_video(&ws, entrada(&origem), &|de, para| std::fs::copy(de, para).map(|_| ())).unwrap();
+        assert_eq!(m.sha256, sha256_file(&origem).unwrap());
+        assert_eq!(sha256_file(&resolver_relativo(&ws, &m.relative_path)).unwrap(), m.sha256);
+    }
 }

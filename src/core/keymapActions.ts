@@ -7,11 +7,13 @@ import { CROQUI_ACTIONS } from "./keymap/croqui";
 import { VIDEO_ACTIONS } from "./keymap/video";
 import { AUDIO_ACTIONS } from "./keymap/audio";
 import { IMAGEM_ACTIONS } from "./keymap/imagem";
+import { EDICAO_ACTIONS, VIDEO_NA_EDICAO } from "./keymap/edicao";
 
 export type ActionScope =
   | "geral"
   | "croqui"
   | "video"
+  | "edicao"
   | "audio"
   | "imagem"
   | "integridade";
@@ -45,6 +47,7 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
   ...GERAL,
   ...CROQUI_ACTIONS,
   ...VIDEO_ACTIONS,
+  ...EDICAO_ACTIONS,
   ...AUDIO_ACTIONS,
   ...IMAGEM_ACTIONS,
   ...INTEGRIDADE,
@@ -53,3 +56,25 @@ export const SHORTCUT_ACTIONS: ShortcutAction[] = [
 export const ACTION_BY_ID: Record<string, ShortcutAction> = Object.fromEntries(
   SHORTCUT_ACTIONS.map((a) => [a.id, a]),
 );
+
+const NA_EDICAO = new Set(VIDEO_NA_EDICAO);
+
+/** Telas em que a ação vale. Uma ação "geral" vale em todas. */
+export function telasDaAcao(a: ShortcutAction): ActionScope[] {
+  return a.scope === "video" && NA_EDICAO.has(a.id) ? ["video", "edicao"] : [a.scope];
+}
+
+/** Valem juntas em alguma tela, logo não podem ter a mesma combinação. */
+export function mesmaTela(a: ShortcutAction, b: ShortcutAction): boolean {
+  if (a.scope === "geral" || b.scope === "geral") return true;
+  const tb = telasDaAcao(b);
+  return telasDaAcao(a).some((t) => tb.includes(t));
+}
+
+/** Outras ações com a mesma combinação numa tela em comum. */
+export function colisoes(a: ShortcutAction, combinacao: string, combinacaoDe: (id: string) => string): string[] {
+  if (!combinacao) return [];
+  return SHORTCUT_ACTIONS.filter(
+    (x) => x.id !== a.id && mesmaTela(a, x) && combinacaoDe(x.id) === combinacao,
+  ).map((x) => x.id);
+}

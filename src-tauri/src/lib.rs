@@ -4,6 +4,7 @@
 pub mod audio;
 pub mod commands;
 pub mod database;
+pub mod edicao;
 pub mod error;
 pub mod filesystem;
 pub mod hashing;
@@ -25,6 +26,8 @@ use tracing_subscriber::EnvFilter;
 /// Efeito colateral: página local não carrega nada de outra origem — por isso todo
 /// acesso à internet (Overpass, tiles do mapa) sai pelo Rust. Não ligar
 /// `allow_universal_access_from_file_urls`: quebra o IPC do Tauri ("missing Origin header").
+/// file:// de página local não tem escopo por pasta: vale também para o cache da Edição
+/// (`app_cache_dir()/edicao`). O asset protocol tem (ver `tauri.conf.json` e o teste abaixo).
 #[cfg(target_os = "linux")]
 fn allow_local_media(app: &tauri::App) {
     use tauri::Manager;
@@ -263,4 +266,35 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running SICRO Desktop");
+}
+
+#[cfg(test)]
+mod tests {
+    /// No Unix o `**` do escopo não entra em pasta oculta (`~/.cache`): o cache da Edição
+    /// precisa da própria entrada. Mesmas opções de `tauri::scope::fs::Scope`.
+    #[test]
+    fn asset_protocol_le_cache_da_edicao() {
+        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let cache = "/home/u/.cache/br.org.sicro.desktop";
+        let padroes: Vec<glob::Pattern> = conf["app"]["security"]["assetProtocol"]["scope"]["allow"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|p| glob::Pattern::new(&p.as_str().unwrap().replace("$APPCACHE", cache)).unwrap())
+            .collect();
+        let opcoes = glob::MatchOptions {
+            require_literal_separator: true,
+            require_literal_leading_dot: true,
+            ..Default::default()
+        };
+        let aceita = |caminho: &str| padroes.iter().any(|p| p.matches_with(caminho, opcoes));
+        let alvo = format!(
+            "{cache}/edicao/6f1c2a52-0d5e-4c1b-9a43-2f7d0c1e9b10/previa/{}.mp4",
+            "a".repeat(64)
+        );
+        assert!(aceita(&alvo));
+        assert!(aceita("/casos/A.sicro/Mídias/Vídeos/a.mp4"));
+        assert!(!glob::Pattern::new("**").unwrap().matches_with(&alvo, opcoes), "só o ** não basta");
+        assert!(!aceita(&format!("{cache}/realce/x.png")), "só a pasta da Edição");
+    }
 }

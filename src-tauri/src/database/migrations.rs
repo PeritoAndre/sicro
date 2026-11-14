@@ -117,6 +117,10 @@ const MIGRATIONS: &[Migration] = &[
         version: "026_video_media_repetido",
         sql: include_str!("../../migrations/026_video_media_repetido.sql"),
     },
+    Migration {
+        version: "027_edicao",
+        sql: include_str!("../../migrations/027_edicao.sql"),
+    },
 ];
 
 pub fn run_migrations(conn: &mut Connection) -> Result<()> {
@@ -152,4 +156,43 @@ pub fn run_migrations(conn: &mut Connection) -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn migracao_027_sobre_banco_com_video() {
+        // Banco de antes da 027 com um vídeo: a linha fica e as colunas novas vêm nulas.
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, applied_at TEXT NOT NULL);",
+        )
+        .unwrap();
+        for m in MIGRATIONS.iter().filter(|m| m.version < "027") {
+            conn.execute_batch(m.sql).unwrap();
+            conn.execute("INSERT INTO schema_migrations VALUES (?1, 'x')", [m.version]).unwrap();
+        }
+        let occ = "00000000-0000-4000-8000-000000000001";
+        conn.execute("INSERT INTO occurrences (id, created_at, updated_at) VALUES (?1, 'x', 'x')", [occ])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO video_media (id, occurrence_id, relative_path, filename, sha256, created_at, updated_at)
+             VALUES ('v1', ?1, 'a.mp4', 'a.mp4', 'h', 'x', 'x')",
+            [occ],
+        )
+        .unwrap();
+        run_migrations(&mut conn).unwrap();
+        let (sha, nativo, obs, desvio, gravador): (String, Option<i64>, Option<String>, Option<f64>, Option<String>) = conn
+            .query_row(
+                "SELECT sha256, recebido_nativo, recebido_obs, relogio_desvio_s, gravador FROM video_media WHERE id = 'v1'",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .unwrap();
+        assert_eq!((sha.as_str(), nativo, obs, desvio, gravador), ("h", None, None, None, None));
+        // Rodar de novo não reaplica nada.
+        run_migrations(&mut conn).unwrap();
+    }
 }

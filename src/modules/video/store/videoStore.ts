@@ -35,10 +35,6 @@ interface VideoState {
 
   activeMediaId: string | null;
   bundle: VideoBundle | null;
-  /** Tela da Montagem aberta no lugar da lista. */
-  montagemAberta: boolean;
-  abrirMontagem: () => void;
-  fecharMontagem: () => void;
   deleteMedia: (workspacePath: string, mediaId: string) => Promise<void>;
 
   lastError: SicroError | null;
@@ -108,9 +104,6 @@ export const useVideoStore = create<VideoState>((set) => ({
   isMutating: false,
   activeMediaId: null,
   bundle: null,
-  montagemAberta: false,
-  abrirMontagem: () => set({ montagemAberta: true }),
-  fecharMontagem: () => set({ montagemAberta: false }),
   lastError: null,
   warningsFromLastAction: [],
   speedCalibrations: [],

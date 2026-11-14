@@ -68,9 +68,7 @@ pub fn create_backup(
         ))
     })?;
     let mut zip = zip::ZipWriter::new(BufWriter::new(file));
-    let options = FileOptions::default()
-        .compression_method(CompressionMethod::Deflated)
-        .unix_permissions(0o644);
+    let options = opcoes_zip();
 
     let mut file_count: u32 = 0;
     let mut total_bytes: u64 = 0;
@@ -133,6 +131,15 @@ pub fn create_backup(
 }
 
 // ---------------------------------------------------------------------------
+
+/// ZIP64 em toda entrada: sem isso o zip recusa arquivo de mais de 4 GiB
+/// (exportação sem perda, vídeo de DVR).
+fn opcoes_zip() -> FileOptions {
+    FileOptions::default()
+        .compression_method(CompressionMethod::Deflated)
+        .unix_permissions(0o644)
+        .large_file(true)
+}
 
 fn walk_into_zip<W: Write + std::io::Seek>(
     root: &Path,
@@ -337,6 +344,39 @@ mod tests {
         fake_workspace(tmp.path(), false).unwrap();
         let a = create_backup(tmp.path(), None, None).unwrap();
         assert!(a.filename.starts_with("backup_ocorrencia_"));
+    }
+
+    #[test]
+    fn opcoes_do_zip_usam_zip64() {
+        // Cabeçalho local de entrada ZIP64: tamanhos 0xFFFFFFFF e extra de 20 bytes.
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        zip.start_file("a", opcoes_zip()).unwrap();
+        zip.write_all(b"x").unwrap();
+        let bytes = zip.finish().unwrap().into_inner();
+        assert_eq!(&bytes[0..4], b"PK\x03\x04");
+        assert_eq!(&bytes[18..26], &[0xFF; 8], "tamanhos no extra ZIP64");
+        assert_eq!(u16::from_le_bytes([bytes[28], bytes[29]]), 20);
+    }
+
+    /// Prova de verdade do ZIP64 (sem ele falha em 4 GiB). Ignorado: ~80 s em debug
+    /// (deflate de 5 GiB). `cargo test --lib backup_com_arquivo_de_5_gib -- --ignored`.
+    #[test]
+    #[ignore = "lento: ~80 s em debug"]
+    fn backup_com_arquivo_de_5_gib() {
+        // Arquivo esparso: 5 GiB lógicos, quase nada em disco; o zip de zeros fica com poucos MB.
+        const TAM: u64 = 5 << 30;
+        let tmp = TempDir::new().unwrap();
+        fake_workspace(tmp.path(), false).unwrap();
+        let grande = tmp.path().join("Mídias/Vídeos/dvr.dav");
+        fs::create_dir_all(grande.parent().unwrap()).unwrap();
+        File::create(&grande).unwrap().set_len(TAM).unwrap();
+
+        let a = create_backup(tmp.path(), Some(&tmp.path().join("Exportações/Backups")), None)
+            .expect("backup com arquivo > 4 GiB");
+        assert_eq!(a.file_count, 5);
+        let mut zip = zip::ZipArchive::new(File::open(&a.absolute_path).unwrap()).unwrap();
+        assert_eq!(zip.by_name("Mídias/Vídeos/dvr.dav").unwrap().size(), TAM);
+        assert!(zip.by_name("Sistema/laudos/laudo-1.sicrodoc").is_ok());
     }
 
     #[test]

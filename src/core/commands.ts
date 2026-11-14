@@ -134,6 +134,31 @@ import type {
   TranscriptAi,
 } from "@domain/audio";
 import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
+// --- Edição (Fase 0) ---
+import type {
+  AlvoQuadro,
+  AlvoRender,
+  Analise,
+  AtlasCarimbo,
+  EstiloTexto,
+  MidiaInfo,
+  MidiaRef,
+  PedidoSprite,
+  PreviaMidia,
+  ProjetoAberto,
+  ProjetoEdicao,
+  QuadroEm,
+  QuadroFinal,
+  ResumoCapacidades,
+  ResumoProjeto,
+  SaidaRegistrada,
+  Salvo,
+  SpriteTexto,
+  TabelaQuadros,
+  Tarefa,
+  TarefaFundo,
+  UsoMidia,
+} from "@domain/edicao";
 import { toSicroError } from "./errors";
 
 async function safeInvoke<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
@@ -1357,4 +1382,136 @@ export const commands = {
   updateWhisperEngine(): Promise<AiStatus> {
     return safeInvoke<AiStatus>("update_whisper_engine", {});
   },
+
+  // ===== Edição (Fase 0): comandos edicao_* (arquitetura §5.12). Registro no backend: P0.1, ao fechar a fase. =====
+  edicaoListar(workspacePath: string): Promise<ResumoProjeto[]> {
+    return safeInvoke<ResumoProjeto[]>("edicao_listar", { workspacePath });
+  },
+
+  edicaoAbrir(workspacePath: string, projetoId: string): Promise<ProjetoAberto> {
+    return safeInvoke<ProjetoAberto>("edicao_abrir", { workspacePath, projetoId });
+  },
+
+  /** Só o front grava o projeto.json; o backend carimba updated_at e gravado_por. */
+  edicaoSalvar(workspacePath: string, projeto: ProjetoEdicao): Promise<Salvo> {
+    return safeInvoke<Salvo>("edicao_salvar", { workspacePath, projeto });
+  },
+
+  edicaoExcluir(workspacePath: string, projetoId: string): Promise<void> {
+    return safeInvoke<void>("edicao_excluir", { workspacePath, projetoId });
+  },
+
+  edicaoDuplicar(workspacePath: string, projetoId: string): Promise<ResumoProjeto> {
+    return safeInvoke<ResumoProjeto>("edicao_duplicar", { workspacePath, projetoId });
+  },
+
+  edicaoAnalisar(workspacePath: string, projeto: ProjetoEdicao): Promise<Analise> {
+    return safeInvoke<Analise>("edicao_analisar", { workspacePath, projeto });
+  },
+
+  edicaoMidiaInfo(workspacePath: string, sha256: string): Promise<MidiaInfo> {
+    return safeInvoke<MidiaInfo>("edicao_midia_info", { workspacePath, sha256 });
+  },
+
+  edicaoMidiaPrevia(workspacePath: string, sha256: string): Promise<PreviaMidia> {
+    return safeInvoke<PreviaMidia>("edicao_midia_previa", { workspacePath, sha256 });
+  },
+
+  edicaoTabelaQuadros(workspacePath: string, sha256: string): Promise<TabelaQuadros> {
+    return safeInvoke<TabelaQuadros>("edicao_tabela_quadros", { workspacePath, sha256 });
+  },
+
+  edicaoQuadroEm(workspacePath: string, sha256: string, alvo: AlvoQuadro): Promise<QuadroEm> {
+    return safeInvoke<QuadroEm>("edicao_quadro_em", { workspacePath, sha256, alvo });
+  },
+
+  /** `origem` = caminho absoluto do arquivo escolhido. */
+  edicaoMidiaImportar(
+    workspacePath: string,
+    projetoId: string,
+    origem: string,
+    tipo: MidiaRef["tipo"],
+  ): Promise<MidiaRef> {
+    return safeInvoke<MidiaRef>("edicao_midia_importar", { workspacePath, projetoId, origem, tipo });
+  },
+
+  edicaoUsos(workspacePath: string, sha256: string): Promise<UsoMidia[]> {
+    return safeInvoke<UsoMidia[]>("edicao_usos", { workspacePath, sha256 });
+  },
+
+  /** Corpo = bytes crus da narração; o resto vai em cabeçalhos com escape de URL (cabeçalho não leva acento). */
+  async edicaoGravacaoSalvar(
+    workspacePath: string,
+    projetoId: string,
+    mime: string,
+    dados: Uint8Array,
+  ): Promise<MidiaRef> {
+    try {
+      return await invoke<MidiaRef>("edicao_gravacao_salvar", dados, {
+        headers: {
+          workspace_path: encodeURIComponent(workspacePath),
+          projeto_id: encodeURIComponent(projetoId),
+          mime: encodeURIComponent(mime),
+        },
+      });
+    } catch (err) {
+      throw toSicroError(err);
+    }
+  },
+
+  edicaoSpriteTexto(workspacePath: string, pedido: PedidoSprite): Promise<SpriteTexto> {
+    return safeInvoke<SpriteTexto>("edicao_sprite_texto", { workspacePath, pedido });
+  },
+
+  edicaoAtlasCarimbo(workspacePath: string, estilo: EstiloTexto, alturaCanvas: number): Promise<AtlasCarimbo> {
+    return safeInvoke<AtlasCarimbo>("edicao_atlas_carimbo", { workspacePath, estilo, alturaCanvas });
+  },
+
+  edicaoCapacidades(testarDeNovo: boolean): Promise<ResumoCapacidades> {
+    return safeInvoke<ResumoCapacidades>("edicao_capacidades", { testarDeNovo });
+  },
+
+  /** Devolve o id da tarefa. `ciencias` = códigos dos avisos periciais aceitos. */
+  edicaoEnfileirar(
+    workspacePath: string,
+    projeto: ProjetoEdicao,
+    alvo: AlvoRender,
+    ciencias: string[],
+  ): Promise<string> {
+    return safeInvoke<string>("edicao_enfileirar", { workspacePath, projeto, alvo, ciencias });
+  },
+
+  edicaoQuadroFinal(workspacePath: string, projeto: ProjetoEdicao, q: number, largura: number): Promise<QuadroFinal> {
+    return safeInvoke<QuadroFinal>("edicao_quadro_final", { workspacePath, projeto, q, largura });
+  },
+
+  edicaoConferir(workspacePath: string, saidaId: string, conferida: boolean): Promise<SaidaRegistrada> {
+    return safeInvoke<SaidaRegistrada>("edicao_conferir", { workspacePath, saidaId, conferida });
+  },
+
+  edicaoCancelar(tarefaId: string): Promise<void> {
+    return safeInvoke<void>("edicao_cancelar", { tarefaId });
+  },
+
+  edicaoFila(): Promise<Tarefa[]> {
+    return safeInvoke<Tarefa[]>("edicao_fila", {});
+  },
+
+  edicaoFilaLimpar(): Promise<Tarefa[]> {
+    return safeInvoke<Tarefa[]>("edicao_fila_limpar", {});
+  },
+
+  edicaoFundo(): Promise<TarefaFundo[]> {
+    return safeInvoke<TarefaFundo[]>("edicao_fundo", {});
+  },
+
+  /** Sem `projetoId`: todas as saídas do caso. */
+  edicaoSaidas(workspacePath: string, projetoId?: string): Promise<SaidaRegistrada[]> {
+    return safeInvoke<SaidaRegistrada[]>("edicao_saidas", { workspacePath, projetoId });
+  },
+
+  edicaoSaidaExcluir(workspacePath: string, saidaId: string): Promise<void> {
+    return safeInvoke<void>("edicao_saida_excluir", { workspacePath, saidaId });
+  },
+  // ===== fim da Edição (Fase 0) =====
 } as const;

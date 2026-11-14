@@ -14,6 +14,7 @@ pub mod occurrence;
 pub mod registry;
 pub mod video;
 pub mod video_distance;
+pub mod video_edit_output;
 pub mod video_speed;
 
 pub use audio::{
@@ -67,6 +68,7 @@ pub use video::{
 pub use video_distance::{
     CreateDistanceMeasurementInput, McSigmasDistance, VideoDistanceMeasurement,
 };
+pub use video_edit_output::{EstadoSaida, VideoEditOutput};
 pub use video_speed::{
     ComputeSpeedInput, ControlPoint, CreateSpeedCalibrationInput, McSigmas, TrajectoryPoint,
     VideoSpeedCalculation, VideoSpeedCalibration,

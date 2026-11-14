@@ -34,7 +34,6 @@ import { VideoEventPanel } from "./VideoEventPanel";
 import { VideoMetadataPanel } from "./VideoMetadataPanel";
 import { VideoStoryboardPanel } from "./VideoStoryboardPanel";
 import { ModeRail } from "./medir/ModeRail";
-import { MontagemView } from "../montagem/MontagemView";
 import { MedirStage } from "./medir/MedirStage";
 import { SpeedGuide, type MedirActions } from "./medir/SpeedGuide";
 import { DistanceGuide } from "./medir/DistanceGuide";
@@ -219,7 +218,6 @@ export function VideoAnalysisView() {
       "video.mode.distancia": () => setModo("distancia"),
       "video.mode.pessoas": () => setModo("pessoas"),
       "video.mode.realce": () => setModo("realce"),
-      "video.mode.edicao": () => setModo("edicao"),
     },
     { enabled: compareWith == null && galleryIndex == null && !clipOpen },
   );
@@ -1186,9 +1184,7 @@ export function VideoAnalysisView() {
           </div>
 
           {!showPlayer &&
-            (modo === "edicao" ? (
-              <MontagemView embutida />
-            ) : modo === "realce" ? (
+            (modo === "realce" ? (
               <RealceStage media={media} onVoltar={() => useRealceStore.getState().setQuadro(null)} />
             ) : (
               <MedirStage workspacePath={workspacePath} media={media} frames={storyboard} />
@@ -1204,7 +1200,7 @@ export function VideoAnalysisView() {
           aria-orientation="vertical"
         />
         <aside className={styles.side} style={{ width: sideWidth }}>
-          {modo === "edicao" ? null : modo === "velocidade" ? (
+          {modo === "velocidade" ? (
             <SpeedGuide
               workspacePath={workspacePath}
               media={media}
