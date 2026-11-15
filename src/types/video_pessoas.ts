@@ -1,5 +1,6 @@
 /** Espelho TS de `commands/pessoas_commands.rs` (rastreio no vídeo) (snake_case: o backend serializa assim). */
 
+import type { EscolhaMotor, Id, Problema } from "./edicao";
 import type { VideoStoryboardFrame } from "./video";
 
 export interface PessoaView {
@@ -70,6 +71,8 @@ export interface MarcaMancha {
   h: number;
   nome: string;
   direcao: "frente" | "tras" | "ambos";
+  /** Ausente = "auto". */
+  motor?: EscolhaMotor;
 }
 
 export interface AvisoMancha {
@@ -130,4 +133,10 @@ export interface PessoasProgresso {
   feitos: number;
   total: number;
   pessoas: number;
+}
+
+/** "Atualizar" (§6.4): a análise da Edição diz que a trilha de origem desse rastreio mudou depois da cópia
+ *  (`pessoas_commands::desatualizados`: `campo` = id do rastreio). */
+export function rastreioDesatualizado(problemas: readonly Problema[], rastreio: Id): boolean {
+  return problemas.some((p) => p.codigo === "retrato_desatualizado" && p.campo === rastreio);
 }

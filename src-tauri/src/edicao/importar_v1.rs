@@ -425,6 +425,7 @@ impl Conversao<'_> {
             ausencias: Vec::new(),
             origem: OrigemRastreio::Manual,
             confirmacao: None,
+            ancoras_do_programa: Vec::new(),
         });
     }
 

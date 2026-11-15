@@ -72,7 +72,7 @@ pub mod codigo {
     // CONTRATO: acréscimo (verificação da Fase 1): a publicação (`fila.rs`, `pacote.rs`) já devolvia estes códigos sem frase
     pub const PASTA_EXISTE: &str = "pasta_existe";
     pub const RETRATO_EXISTE: &str = "retrato_existe";
-    // Fase 2 (abertura, contratos-fase2 (b)): IA, aceleração por GPU e comandos do rastreio; ainda sem uso
+    // Fase 2 (abertura, contratos-fase2 B18): IA, aceleração por GPU e comandos do rastreio
     pub const IA_DESLIGADA: &str = "ia_desligada";
     pub const MODELO_AUSENTE: &str = "modelo_ausente";
     pub const RASTREIO_EM_CURSO: &str = "rastreio_em_curso";
@@ -209,14 +209,15 @@ const CATALOGO: &[Entrada] = &[
     e(RASTREIO_EM_CURSO, Erro, "Outro rastreio em andamento"),
     e(PESSOA_AUSENTE, Erro, "Trilha da análise não encontrada"),
     e(REABRIR, Erro, "Reabrir o SICRO"),
+    // `gpu_*`: as frases da §7.6 de `gpu-inferencia.md`, sem a instrução e sem ponto final
     e(GPU_NAO_INSTALADA, Erro, "Aceleração por GPU não instalada"),
-    e(GPU_SEM_BIBLIOTECAS, Erro, "Faltam bibliotecas da NVIDIA"),
-    e(GPU_SEM_CUDNN, Erro, "Falta o cuDNN"),
-    e(GPU_SEM_PLACA, Erro, "Nenhuma placa NVIDIA"),
+    e(GPU_SEM_BIBLIOTECAS, Erro, "Faltam bibliotecas da NVIDIA (CUDA)"),
+    e(GPU_SEM_CUDNN, Erro, "Falta o cuDNN ou ele está incompleto"),
+    e(GPU_SEM_PLACA, Erro, "Nenhuma placa NVIDIA disponível"),
     e(GPU_PLACA_ANTIGA, Erro, "Placa NVIDIA sem suporte"),
     e(GPU_DRIVER_ANTIGO, Erro, "Driver da NVIDIA antigo"),
     e(GPU_SEM_MEMORIA, Erro, "Memória de vídeo insuficiente"),
-    e(GPU_FALHOU, Erro, "GPU indisponível"),
+    e(GPU_FALHOU, Erro, "A GPU não pôde ser usada"),
     // periciais
     com_n(TAXA_VARIAVEL, Pericial, "Taxa variável", "Taxa variável: 1 intervalo irregular", "Taxa variável: {n} intervalos irregulares"),
     com_n(QUADROS_DESCARTADOS, Pericial, "Quadros descartados", "1 quadro descartado", "{n} quadros descartados"),
@@ -294,6 +295,10 @@ pub(crate) fn rotulo_nao_suportado(detalhe: &str) -> Option<&'static str> {
     NAO_SUPORTADOS.iter().find(|(k, _)| *k == detalhe).map(|(_, r)| *r)
 }
 
+/// O que falta em `modelo_ausente` (contratos-fase2 B18, B22): o nome do item no Gerenciador de IA; detalhe
+/// desconhecido = só a frase (caminho de arquivo não chega à tela).
+const MODELOS_AUSENTES: &[(&str, &str)] = &[("onnxruntime", "onnxruntime"), ("edgetam", "Rastreador"), ("vittrack", "VitTrack")];
+
 fn entrada(codigo: &str) -> Option<&'static Entrada> {
     CATALOGO.iter().find(|x| x.codigo == codigo)
 }
@@ -316,6 +321,10 @@ pub fn frase(codigo: &str, n: Option<u64>, detalhe: Option<&str>) -> String {
     match detalhe {
         Some(d) if codigo == NAO_SUPORTADO => match rotulo_nao_suportado(d) {
             Some(rotulo) => format!("{base}: {rotulo}"),
+            None => base,
+        },
+        Some(d) if codigo == MODELO_AUSENTE => match MODELOS_AUSENTES.iter().find(|(k, _)| *k == d) {
+            Some((_, rotulo)) => format!("{base}: {rotulo}"),
             None => base,
         },
         Some(d) => format!("{base}: {d}"),
@@ -434,6 +443,79 @@ mod testes {
         assert_eq!(frase(NAO_SUPORTADO, None, Some("cópia de hevc yuv420p10le")), "Ainda não suportado");
         assert_eq!(frase(FILTRO_AUSENTE, None, Some("vidstabtransform")), "Filtro ausente no ffmpeg: vidstabtransform");
         assert_eq!(frase("cancelado", None, None), "cancelado");
+    }
+
+    /// Constantes de `codigo` sob um comentário "// Fase 2", lidas do próprio arquivo.
+    fn da_fase_2() -> Vec<String> {
+        let fonte = include_str!("mensagens.rs");
+        let inicio = fonte.find("pub mod codigo {").unwrap();
+        let fim = inicio + fonte[inicio..].find("\n}\n").unwrap();
+        let mut na_fase_2 = false;
+        let mut v = Vec::new();
+        for l in fonte[inicio..fim].lines().map(str::trim) {
+            if l.starts_with("//") {
+                na_fase_2 = l.starts_with("// Fase 2");
+            } else if let (true, Some(c)) = (na_fase_2, l.strip_prefix("pub const ")) {
+                v.push(c.split('"').nth(1).unwrap().to_string());
+            }
+        }
+        v
+    }
+
+    /// Um caso por código novo da Fase 2 (contratos-fase2 B18): nível, frase exata, o que o comando devolve
+    /// (`erro_de_comando`, com e sem detalhe) e a contagem do aviso. `gpu_*` = frases da §7.6 de `gpu-inferencia.md`.
+    #[test]
+    fn codigos_da_fase_2() {
+        let msg = |e: SicroError| match e {
+            SicroError::Validation(m) => m,
+            outro => panic!("{outro:?}"),
+        };
+        let v = |s: &str| SicroError::Validation(s.into());
+        let casos = [
+            (IA_DESLIGADA, Erro, "Modelos de IA desligados"),
+            (MODELO_AUSENTE, Erro, "Modelo não instalado"),
+            (RASTREIO_EM_CURSO, Erro, "Outro rastreio em andamento"),
+            (PESSOA_AUSENTE, Erro, "Trilha da análise não encontrada"),
+            (REABRIR, Erro, "Reabrir o SICRO"),
+            (GPU_NAO_INSTALADA, Erro, "Aceleração por GPU não instalada"),
+            (GPU_SEM_BIBLIOTECAS, Erro, "Faltam bibliotecas da NVIDIA (CUDA)"),
+            (GPU_SEM_CUDNN, Erro, "Falta o cuDNN ou ele está incompleto"),
+            (GPU_SEM_PLACA, Erro, "Nenhuma placa NVIDIA disponível"),
+            (GPU_PLACA_ANTIGA, Erro, "Placa NVIDIA sem suporte"),
+            (GPU_DRIVER_ANTIGO, Erro, "Driver da NVIDIA antigo"),
+            (GPU_SEM_MEMORIA, Erro, "Memória de vídeo insuficiente"),
+            (GPU_FALHOU, Erro, "A GPU não pôde ser usada"),
+            (SILHUETA_AUSENTE, Aviso, "Quadro sem silhueta"),
+        ];
+        // todos os códigos que a abertura da Fase 2 pôs no catálogo, nenhum a mais
+        assert_eq!(casos.iter().map(|c| c.0.to_string()).collect::<BTreeSet<_>>(), da_fase_2().into_iter().collect::<BTreeSet<_>>());
+        for (c, n, f) in casos {
+            assert_eq!((nivel(c), frase(c, None, None).as_str()), (Some(n), f), "{c}");
+            assert_eq!(msg(erro_de_comando(v(c))), format!("{c}: {f}"), "{c}");
+            // texto do onnxruntime ou do CUDA atrás do código não chega à tela (vai para o log)
+            if c != MODELO_AUSENTE {
+                assert_eq!(msg(erro_de_comando(v(&format!("{c}: CUDA failure 35: cudaErrorInsufficientDriver ; GPU=0 /usr/lib/libcudnn.so.9")))), format!("{c}: {f}"), "{c}");
+            }
+        }
+        // o que falta: o nome do item no Gerenciador; detalhe desconhecido (caminho) não chega à tela
+        for (d, rotulo) in [("edgetam", "Rastreador"), ("onnxruntime", "onnxruntime"), ("vittrack", "VitTrack")] {
+            assert_eq!(msg(erro_de_comando(v(&format!("modelo_ausente: {d}")))), format!("modelo_ausente: Modelo não instalado: {rotulo}"));
+        }
+        assert_eq!(msg(erro_de_comando(v("modelo_ausente: /home/x/ai/rastreio/vision_encoder.onnx"))), "modelo_ausente: Modelo não instalado");
+        for cru in ["modelo_ausente: edgetam", "modelo_ausente: /x", "ia_desligada", "gpu_sem_cudnn: libcudnn.so.9", "reabrir"] {
+            let uma = msg(erro_de_comando(v(cru)));
+            assert_eq!(msg(erro_de_comando(v(&uma))), uma, "{cru}");
+        }
+        // o aviso com a contagem
+        assert_eq!((frase(SILHUETA_AUSENTE, Some(1), None), frase(SILHUETA_AUSENTE, Some(7), None)), ("1 quadro sem silhueta".into(), "7 quadros sem silhueta".into()));
+        let p = problema(SILHUETA_AUSENTE, Some(3), None);
+        assert_eq!((p.nivel, p.mensagem.as_str()), (Aviso, "3 quadros sem silhueta"));
+        // as peças da Fase 2 que `nao_suportado` recusa até o dono entregar
+        for (d, r) in [("ia", "modelos de IA"), ("gpu", "aceleração por GPU"), ("rastreio", "rastreio assistido"), ("vittrack", "rastreador VitTrack"),
+                       ("edgetam", "rastreador EdgeTAM"), ("mancha", "rastreador por correlação"), ("silhuetas", "silhuetas do rastreio"),
+                       ("pessoas", "trilha da análise"), ("conferencia", "conferência das ocultações")] {
+            assert_eq!(msg(erro_de_comando(v(&format!("nao_suportado: {d}")))), format!("nao_suportado: Ainda não suportado: {r}"));
+        }
     }
 
     #[test]

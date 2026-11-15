@@ -297,15 +297,14 @@ export function PessoasOverlay({ wrap, view, workspacePath, mediaHash }: Props) 
     setDraft(null);
   };
 
-  // Esc desiste da marcação
+  // Esc desiste da marcação; com a análise escondida atrás da Edição, o Esc é da Edição
   useEffect(() => {
     if (!marcando) return;
     const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        rubberOrigem.current = null;
-        setRubber(null);
-        usePessoasStore.getState().setMarcando(null);
-      }
+      if (e.key !== "Escape" || ref.current?.closest("[hidden]")) return;
+      rubberOrigem.current = null;
+      setRubber(null);
+      usePessoasStore.getState().setMarcando(null);
     };
     window.addEventListener("keydown", k);
     return () => window.removeEventListener("keydown", k);

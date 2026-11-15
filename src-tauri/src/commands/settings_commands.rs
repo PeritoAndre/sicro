@@ -91,6 +91,11 @@ pub struct PathsSettings {
     pub default_workspace_dir: String,
     #[serde(default)]
     pub default_export_dir: String,
+    // CONTRATO: acréscimo do P2.1 (§5.6, contratos-fase2 (f) "Configurações → ffmpeg").
+    /// ffmpeg escolhido nas Configurações (vazio = automático: o embutido, senão o do sistema). `SICRO_FFMPEG`
+    /// definido vence sempre.
+    #[serde(default)]
+    pub ffmpeg_path: String,
 }
 
 /// IA de transcrição (whisper.cpp + modelo) instalada pelo gerenciador; caminhos globais.
@@ -196,6 +201,21 @@ fn default_schema() -> String {
     SCHEMA_VERSION.to_string()
 }
 
+static FFMPEG: std::sync::RwLock<Option<std::path::PathBuf>> = std::sync::RwLock::new(None);
+
+/// Guarda o que vale no processo: a IA (interruptor e GPU, para a análise) e o ffmpeg escolhido.
+fn lembrar(s: &AppSettings) {
+    crate::ia::sessao::lembrar(&s.ai);
+    let f = Some(s.paths.ffmpeg_path.trim()).filter(|p| !p.is_empty()).map(std::path::PathBuf::from);
+    *FFMPEG.write().unwrap_or_else(|e| e.into_inner()) = f;
+}
+
+/// ffmpeg escolhido nas Configurações (None = automático). Quem escolhe o binário (`sonda::escolher`) põe este
+/// depois de `SICRO_FFMPEG` e antes do embutido.
+pub fn ffmpeg_configurado() -> Option<std::path::PathBuf> {
+    FFMPEG.read().unwrap_or_else(|e| e.into_inner()).clone()
+}
+
 /// Caminho absoluto do `app-settings.json`, criando o diretório se preciso.
 /// `pub(crate)` para o backup geral incluir um snapshot da config no conjunto.
 pub(crate) fn settings_path(app: &AppHandle) -> Result<std::path::PathBuf> {
@@ -214,12 +234,15 @@ pub(crate) fn settings_path(app: &AppHandle) -> Result<std::path::PathBuf> {
 #[tauri::command]
 pub async fn get_app_settings(app: AppHandle) -> Result<AppSettings> {
     let path = settings_path(&app)?;
-    if !path.is_file() {
-        return Ok(AppSettings::default());
-    }
-    let bytes = std::fs::read(&path)
-        .map_err(|e| SicroError::Filesystem(format!("read settings: {e}")))?;
-    Ok(serde_json::from_slice::<AppSettings>(&bytes).unwrap_or_default())
+    let s = if path.is_file() {
+        let bytes = std::fs::read(&path)
+            .map_err(|e| SicroError::Filesystem(format!("read settings: {e}")))?;
+        serde_json::from_slice::<AppSettings>(&bytes).unwrap_or_default()
+    } else {
+        AppSettings::default()
+    };
+    lembrar(&s);
+    Ok(s)
 }
 
 /// Grava as configurações globais (escrita atômica).
@@ -229,6 +252,7 @@ pub async fn save_app_settings(app: AppHandle, settings: AppSettings) -> Result<
     let bytes = serde_json::to_vec_pretty(&settings)
         .map_err(|e| SicroError::Workspace(format!("serialize settings: {e}")))?;
     crate::filesystem::atomic_write_bytes(&path, &bytes)?;
+    lembrar(&settings);
     Ok(())
 }
 
@@ -298,6 +322,31 @@ mod tests {
         assert_eq!(s.profile.full_name, "André");
         assert_eq!(s.appearance.theme, "dark"); // default preenchido
         assert_eq!(s.schema_version, "1");
+    }
+
+    /// Campos novos da Fase 2 com padrão (arquivo antigo abre com IA ligada, sem GPU, ffmpeg automático) e o
+    /// ffmpeg escolhido vale no processo; espaço em branco = automático.
+    #[test]
+    fn campos_da_fase_2_e_ffmpeg() {
+        let s: AppSettings = serde_json::from_str(r#"{ "ai": { "whisper_bin_path": "/w" }, "paths": { "default_workspace_dir": "/c" } }"#).unwrap();
+        assert!(!s.ai.modelos_desligados && s.ai.gpu_dir.is_empty() && s.ai.rastreio_dir.is_empty());
+        assert_eq!((s.ai.whisper_bin_path.as_str(), s.paths.ffmpeg_path.as_str()), ("/w", ""));
+        let mut c = AppSettings::default();
+        c.paths.ffmpeg_path = "/opt/ff/ffmpeg".into();
+        c.ai.modelos_desligados = true;
+        let volta: AppSettings = serde_json::from_slice(&serde_json::to_vec(&c).unwrap()).unwrap();
+        assert_eq!(volta.paths.ffmpeg_path, "/opt/ff/ffmpeg");
+        assert!(volta.ai.modelos_desligados);
+        let antes = ffmpeg_configurado();
+        // a IA em vigor é do processo inteiro: aqui só o ffmpeg muda
+        c.ai = AiSettings::default();
+        lembrar(&c);
+        assert_eq!(ffmpeg_configurado(), Some(std::path::PathBuf::from("/opt/ff/ffmpeg")));
+        c.paths.ffmpeg_path = "  ".into();
+        lembrar(&c);
+        assert_eq!(ffmpeg_configurado(), None);
+        lembrar(&AppSettings::default());
+        *FFMPEG.write().unwrap() = antes;
     }
 
     #[test]

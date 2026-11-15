@@ -1,10 +1,10 @@
-//! Avaliação de um rastreio num quadro (§6.1). Espelho no front: `modelo/rastreio.ts`. Dono: P0.3a.
-//! Ordem: âncora no quadro → amostra densa (ok ou incerta) → interpolação entre âncoras →
+//! Avaliação de um rastreio num quadro (§6.1). Espelho no front: `modelo/rastreio.ts`. Dono: P0.3a; denso: P2.2.
+//! Ordem: âncora no quadro → amostra densa (ok ou incerta; ausente = nada) → interpolação entre âncoras →
 //! depois da última âncora segura a última (só origem manual) → antes da primeira, nada.
 
 use serde::{Deserialize, Serialize};
 
-use super::ArquivoDenso;
+use super::{ArquivoDenso, ESTADO_INCERTO, ESTADO_OK, TIPO_MEDIDO};
 use crate::edicao::curva;
 use crate::edicao::modelo::{Caixa, Chave, OrigemRastreio, Rastreio};
 
@@ -49,13 +49,21 @@ fn ancora_no_quadro(ks: &[Chave<Caixa>], n: usize, em: Instante) -> Option<usize
     achada
 }
 
-/// Ponto de extensão da Fase 2 (leitor de denso): `Some(Some(_))` = amostra ok ou incerta nesse pts,
-/// `Some(None)` = estado ausente (nada), `None` = sem linha nesse quadro (segue pelas âncoras).
-/// `como` = `Denso` na linha medida e `Interpolado` na de `tipo` interpolado ou estendido (a validação conta
-/// `ocultar_interpolado` e a conferência marca o trecho fraco por isso); `incerto` = estado incerto (P2.2).
-/// Na Fase 0 não há denso: segue sempre pelas âncoras.
-fn do_denso(_d: &ArquivoDenso, _em: Instante) -> Option<Option<Avaliado>> {
-    None
+/// Linha do denso no pts do instante: `Some(Some(_))` = amostra ok ou incerta, `Some(None)` = estado ausente
+/// (nada; também estado desconhecido), `None` = sem linha nesse quadro ou instante sem pts (segue pelas âncoras).
+/// `como` = `Denso` na linha medida e `Interpolado` na de `tipo` interpolado ou estendido (B24: a validação conta
+/// `ocultar_interpolado` e a conferência marca o trecho fraco por isso); `incerto` = estado incerto. Buraco
+/// reencontrado dentro de uma corrida é gravado ausente (§6.1: sem caixa até a ausência aceita).
+fn do_denso(d: &ArquivoDenso, em: Instante) -> Option<Option<Avaliado>> {
+    let pts = em.pts?;
+    let j = d.pts.binary_search(&pts).ok()?;
+    let estado = *d.estado.get(j)?;
+    if estado != ESTADO_OK && estado != ESTADO_INCERTO {
+        return Some(None);
+    }
+    let caixa = Caixa { x: *d.x.get(j)?, y: *d.y.get(j)?, w: *d.w.get(j)?, h: *d.h.get(j)? };
+    let como = if d.tipo.get(j).copied().unwrap_or(TIPO_MEDIDO) == TIPO_MEDIDO { Como::Denso } else { Como::Interpolado };
+    Some(Some(Avaliado { caixa, como, incerto: estado == ESTADO_INCERTO }))
 }
 
 /// Caixa do rastreio no instante; None = "nada" (sem cobertura). `margem` e `forma` entram depois.
@@ -87,17 +95,17 @@ pub fn em_ausencia(r: &Rastreio, t: f64) -> bool {
 }
 
 #[cfg(test)]
-mod testes {
+pub(crate) mod testes {
     use super::*;
     use crate::edicao::curva::fixtures;
     use crate::edicao::modelo::{Ausencia, BaseRastreio, ClasseDeteccao, EstadoPessoa, Interp, MotivoAusencia, TipoRastreio};
     use serde_json::{json, Value};
 
     /// Base de tempo 1/15360 (MP4): quadro k a 30 qps tem pts 512·k e t = pts/15360.
-    fn ch(k: i64, v: Caixa, interp: Interp) -> Chave<Caixa> {
+    pub(crate) fn ch(k: i64, v: Caixa, interp: Interp) -> Chave<Caixa> {
         Chave { t: (512 * k) as f64 / 15360.0, pts: Some(512 * k), v, interp }
     }
-    fn em(k: i64) -> Instante {
+    pub(crate) fn em(k: i64) -> Instante {
         Instante { t: (512 * k) as f64 / 15360.0, pts: Some(512 * k) }
     }
     fn cx(x: f64, y: f64, w: f64, h: f64) -> Caixa {
@@ -119,7 +127,7 @@ mod testes {
             ("MKV 1/1000", 1, 1000, |k| (k * 1000 + 15) / 30),
         ]
     }
-    fn rastreio(ancoras: Vec<Chave<Caixa>>, origem: OrigemRastreio) -> Rastreio {
+    pub(crate) fn rastreio(ancoras: Vec<Chave<Caixa>>, origem: OrigemRastreio) -> Rastreio {
         Rastreio {
             id: "r1".into(),
             nome: String::new(),
@@ -134,6 +142,7 @@ mod testes {
             ausencias: vec![],
             origem,
             confirmacao: None,
+            ancoras_do_programa: Vec::new(),
         }
     }
     fn tres() -> Vec<Chave<Caixa>> {
@@ -336,6 +345,113 @@ mod testes {
             casos.push(json!({ "nome": format!("ancoras cruas: {nome}"), "entrada": { "rastreio": cru, "em": e }, "saida": avaliar(&r, None, e) }));
         }
         fixtures::conferir("rastreio-avaliar.json", Value::Array(casos));
+    }
+
+    /// Denso de `de` a `ate` (quadros k, pts 512·k) com a caixa andando; `estado`/`tipo` por quadro.
+    pub(crate) fn denso_teste(de: i64, ate: i64, estado: impl Fn(i64) -> u8, tipo: impl Fn(i64) -> u8) -> ArquivoDenso {
+        let ks: Vec<i64> = (de..=ate).collect();
+        let f = |k: i64| (k - de) as f64 / 1000.0;
+        ArquivoDenso {
+            esquema: 2,
+            rastreio: "r1".into(),
+            midia_sha256: "a".repeat(64),
+            espaco: "original".into(),
+            pixel: crate::edicao::modelo::TamanhoPx { w: 640, h: 360 },
+            pts: ks.iter().map(|k| 512 * k).collect(),
+            x: ks.iter().map(|&k| if estado(k) == super::super::ESTADO_AUSENTE { 0.0 } else { 0.2 + f(k) }).collect(),
+            y: ks.iter().map(|&k| 0.3 - f(k) / 2.0).collect(),
+            w: ks.iter().map(|_| 0.1).collect(),
+            h: ks.iter().map(|&k| 0.2 + f(k) / 4.0).collect(),
+            conf: ks.iter().map(|&k| 0.5 + (k % 7) as f64 / 20.0).collect(),
+            estado: ks.iter().map(|&k| estado(k)).collect(),
+            tipo: ks.iter().map(|&k| tipo(k)).collect(),
+            corrida: ks.iter().map(|_| 0).collect(),
+            corridas: vec![],
+        }
+    }
+
+    /// Denso de 20 a 100: incerto em 40..44, ausente em 50..55 (buraco reencontrado), interpolado em 70..72,
+    /// estendido em 95..100.
+    fn denso_padrao() -> ArquivoDenso {
+        use super::super::{ESTADO_AUSENTE, TIPO_ESTENDIDO, TIPO_INTERPOLADO};
+        denso_teste(
+            20,
+            100,
+            |k| match k {
+                40..=44 => ESTADO_INCERTO,
+                50..=55 => ESTADO_AUSENTE,
+                _ => ESTADO_OK,
+            },
+            |k| match k {
+                70..=72 => TIPO_INTERPOLADO,
+                95..=100 => TIPO_ESTENDIDO,
+                _ => TIPO_MEDIDO,
+            },
+        )
+    }
+
+    #[test]
+    fn do_denso_por_pts() {
+        let d = denso_padrao();
+        let r = rastreio(tres(), OrigemRastreio::Assistido);
+        // âncora no quadro vence o denso
+        assert_eq!(avaliar(&r, Some(&d), em(30)).unwrap().como, Como::Ancora);
+        // linha medida, incerta, ausente, interpolada, estendida
+        let a = avaliar(&r, Some(&d), em(33)).unwrap();
+        assert_eq!((a.como, a.incerto), (Como::Denso, false));
+        assert_eq!(a.caixa, Caixa { x: d.x[13], y: d.y[13], w: d.w[13], h: d.h[13] });
+        assert_eq!(avaliar(&r, Some(&d), em(42)).map(|a| (a.como, a.incerto)), Some((Como::Denso, true)));
+        for k in 50..=55 {
+            // ausente = nada, mesmo entre duas âncoras (não cai na interpolação)
+            assert!(avaliar(&r, Some(&d), em(k)).is_none(), "{k}");
+            assert!(avaliar(&rastreio(tres(), OrigemRastreio::Manual), Some(&d), em(k)).is_none(), "{k}");
+        }
+        assert_eq!(avaliar(&r, Some(&d), em(71)).map(|a| (a.como, a.incerto)), Some((Como::Interpolado, false)));
+        assert_eq!(avaliar(&r, Some(&d), em(97)).map(|a| a.como), Some(Como::Interpolado));
+        // sem linha: pelas âncoras (antes do denso nada; depois dele, só o manual segura)
+        assert!(avaliar(&r, Some(&d), em(10)).is_none());
+        assert!(avaliar(&r, Some(&d), em(101)).is_none());
+        assert_eq!(avaliar(&rastreio(tres(), OrigemRastreio::Manual), Some(&d), em(101)).map(|a| a.como), Some(Como::Segurado));
+        // pts que não é de quadro do denso (meio quadro), instante sem pts e estado desconhecido
+        assert_eq!(avaliar(&r, Some(&d), Instante { t: 0.0, pts: Some(512 * 33 + 1) }), avaliar(&r, None, Instante { t: 0.0, pts: Some(512 * 33 + 1) }));
+        assert_eq!(avaliar(&r, Some(&d), Instante { t: em(33).t, pts: None }).map(|a| a.como), Some(Como::Interpolado));
+        let mut estranho = d.clone();
+        estranho.estado[13] = 7;
+        assert!(avaliar(&r, Some(&estranho), em(33)).is_none());
+        // colunas curtas (arquivo montado à mão): sem pânico, segue pelas âncoras
+        let mut curto = d.clone();
+        curto.x.truncate(5);
+        assert_eq!(avaliar(&r, Some(&curto), em(33)).map(|a| a.como), Some(Como::Interpolado));
+        // ausência aceita sobre o buraco
+        let mut com = r.clone();
+        com.ausencias.push(Ausencia { de_s: em(50).t, ate_s: em(55).t, motivo: MotivoAusencia::Oculto, aceita_em: "2026-11-15T00:00:00Z".into(), por: "perito".into() });
+        assert!((50..=55).all(|k| em_ausencia(&com, em(k).t)) && !em_ausencia(&com, em(56).t));
+    }
+
+    /// `rastreio-denso.json` (espelho: `modelo/rastreioDenso.test.ts`).
+    #[test]
+    fn fixture_denso() {
+        let d = denso_padrao();
+        let mut casos = Vec::new();
+        for (nome, origem) in [("manual", OrigemRastreio::Manual), ("assistido", OrigemRastreio::Assistido)] {
+            let r = rastreio(tres(), origem);
+            for k in [10, 19, 20, 29, 30, 31, 33, 40, 44, 45, 49, 50, 53, 55, 56, 60, 70, 72, 73, 90, 94, 95, 100, 101, 130] {
+                let e = em(k);
+                casos.push(json!({ "nome": format!("{nome} quadro {k}"), "entrada": { "rastreio": r, "em": e, "denso": d }, "saida": avaliar(&r, Some(&d), e) }));
+            }
+            let e = Instante { t: em(33).t, pts: None };
+            casos.push(json!({ "nome": format!("{nome} sem pts"), "entrada": { "rastreio": r, "em": e, "denso": d }, "saida": avaliar(&r, Some(&d), e) }));
+        }
+        // âncora única no meio do denso; denso de uma linha
+        let r = rastreio(vec![ch(60, cx(0.4, 0.4, 0.1, 0.1), Interp::Linear)], OrigemRastreio::Manual);
+        for k in [21, 59, 60, 61, 100, 200] {
+            casos.push(json!({ "nome": format!("ancora unica quadro {k}"), "entrada": { "rastreio": r, "em": em(k), "denso": d }, "saida": avaliar(&r, Some(&d), em(k)) }));
+        }
+        let um = denso_teste(5, 5, |_| ESTADO_INCERTO, |_| super::super::TIPO_INTERPOLADO);
+        for k in [4, 5, 6] {
+            casos.push(json!({ "nome": format!("uma linha quadro {k}"), "entrada": { "rastreio": r, "em": em(k), "denso": um }, "saida": avaliar(&r, Some(&um), em(k)) }));
+        }
+        fixtures::conferir("rastreio-denso.json", Value::Array(casos));
     }
 
     /// `rastreio-ausencia.json`.

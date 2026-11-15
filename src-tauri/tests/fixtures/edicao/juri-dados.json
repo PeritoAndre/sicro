@@ -120,6 +120,7 @@
       "ia_resumo": [
         "Ocultações propostas por detecção automática e confirmadas pelo perito: 1.",
         "Marcações que acompanham alvo achado por detecção automática e confirmado pelo perito: 1.",
+        "Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1.",
         "Os programas de inteligência artificial usados estão identificados no anexo técnico, item H."
       ],
       "limitacoes": [
@@ -140,12 +141,39 @@
           "arquivos": [
             {
               "nome": "vision_encoder.onnx",
-              "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+              "sha256": "57fe1a2b3d500813fe4987c4209b856920f187ab0b7723d81586b607ea2cffc1"
+            },
+            {
+              "nome": "mask_decoder.onnx",
+              "sha256": "ee24ee1cae6ecc71889912c1893e08b09f645bb63875108ccd180f7218a3647d"
+            },
+            {
+              "nome": "memory_attention.onnx",
+              "sha256": "6477d775639905945949508c08a2c652d01e5933c0eb00a02225ae5f6aa1602c"
+            },
+            {
+              "nome": "memory_encoder.onnx",
+              "sha256": "035b30f8fb1f7c99211ada6eb9d72f0819de819ef94310b14e8147dc97f120ec"
             }
           ],
-          "modelo": "EdgeTAM",
-          "origem": "https://huggingface.co/x/y · 8ca3d3e4 · onnxruntime 1.31.1 · CPU",
-          "uso": "rastreio"
+          "desvio": "melhor de 3 máscaras no quadro marcado",
+          "execucao": "onnxruntime 1.31.1 · CUDA",
+          "modelo": "EdgeTAM vídeo",
+          "origem": "jax-image-tools/edgetam-video-onnx · 8ca3d3e4169938e65b552cdf14542fde25e8badb",
+          "uso": "acompanhamento de alvo (R1)"
+        },
+        {
+          "arquivos": [
+            {
+              "nome": "object_tracking_vittrack_2023sep.onnx",
+              "sha256": "2990f0b7cd44d92afa48cd97db6de7be113fc1d9594fddb74e2725c10478e91d"
+            }
+          ],
+          "desvio": null,
+          "execucao": "onnxruntime 1.31.1 · CPU",
+          "modelo": "VitTrack",
+          "origem": "huggingface.co/opencv/object_tracking_vittrack · 868e4c941984c6363594ec34ee1c3ba0b75378a3",
+          "uso": "acompanhamento de alvo (R2)"
         }
       ],
       "mudancas": [
@@ -170,6 +198,11 @@
           "onde": "item 2"
         },
         {
+          "explicacao": "O entorno foi escurecido para guiar o olhar até uma parte da imagem. A parte realçada não foi alterada.",
+          "o_que": "Holofote",
+          "onde": "item 3"
+        },
+        {
           "explicacao": "Uma única imagem da gravação fica na tela pelo tempo indicado.",
           "o_que": "Imagem parada",
           "onde": "item 3"
@@ -182,22 +215,30 @@
       ],
       "ocultacoes": [
         {
+          "arquivo": "cam 1.mp4",
           "conteudo": "rosto",
-          "filtro": "sólido opaco, cor #000000ff, retângulo, invertida (cobre tudo o que está fora da forma), margem 5 %",
+          "filtro": "sólido opaco, cor #000000ff",
+          "forma": "retângulo, invertida (cobre tudo o que está fora da forma), margem 5 %",
           "gravacao": "A",
           "intervalo": "0:01,000 · 0:02,000",
           "item": "2",
           "motivo": "terceiro sem relação",
-          "quadros": "quadros: 2 marcados, 0 medidos, 0 interpolados, 0 incertos; trechos sem ocultação, aceitos pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)"
+          "n": "1",
+          "quadros": "quadros: 2 pela marcação do perito, 0 medidos, 0 interpolados, 0 incertos; trechos sem ocultação, aceitos pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)",
+          "regiao": "detecção automática (rosto) · marcações do perito: 2 · confirmado por Perito Teste em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:02,000 · R1 (anexo H)"
         },
         {
+          "arquivo": "cam 1.mp4",
           "conteudo": "som",
           "filtro": "tom no lugar do som",
+          "forma": "—",
           "gravacao": "A",
           "intervalo": "0:01,500 · 0:02,000",
           "item": "2",
           "motivo": "nome",
-          "quadros": null
+          "n": "2",
+          "quadros": null,
+          "regiao": null
         }
       ],
       "originais": [
@@ -329,6 +370,36 @@
           "nome": "Régua de escala",
           "ordem": "1",
           "parametros": "calibracao: {\"residuo_m\":0.02}; comprimento_m: 2.0"
+        },
+        {
+          "item": "3",
+          "nome": "Holofote",
+          "ordem": "2",
+          "parametros": "alvo: {\"rastreio\":\"r2\"}"
+        }
+      ],
+      "rastreios": [
+        {
+          "amostras": "—",
+          "confirmacao": "confirmado por Perito Teste em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:02,000",
+          "corridas": [
+            "EdgeTAM vídeo · onnxruntime 1.31.1 · CUDA · para a frente, 0:01,000 a 0:02,000 (pts 15360 a 30720) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)",
+            "corridas sem registro legível: 1"
+          ],
+          "id": "R1",
+          "origem": "detecção automática (rosto) · marcações do perito: 2",
+          "uso": "ocultação 1; item 2"
+        },
+        {
+          "amostras": "db77fd01af957221a4989b64b3770a83a3c56068405b9f0e9408feae57fd17e4",
+          "confirmacao": "—",
+          "corridas": [
+            "VitTrack · onnxruntime 1.31.1 · CPU · para a frente, 0:03,333 a 0:03,367 (pts 51200 a 51712) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)",
+            "correlação, sem inteligência artificial · CPU · para trás, 0:03,000 a 0:03,333 (pts 46080 a 51200) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)"
+          ],
+          "id": "R2",
+          "origem": "acompanhamento por programa a partir de marcação do perito · marcações do perito: 3",
+          "uso": "item 3"
         }
       ],
       "referencias": [
@@ -384,7 +455,8 @@
         {
           "descricao": "item 3",
           "efeitos": [
-            "Régua de escala"
+            "Régua de escala",
+            "Holofote"
           ],
           "miniatura": null,
           "n": 3,
@@ -441,6 +513,11 @@
           "Typst",
           "0.15.1",
           "textos da imagem e composição deste relatório"
+        ],
+        [
+          "onnxruntime",
+          "1.31.1",
+          "execução dos modelos de inteligência artificial · CUDA, CPU"
         ],
         [
           "Sistema",
@@ -532,6 +609,7 @@
         "nome": "Perito Teste"
       },
       "processamentos": [],
+      "rastreios": [],
       "referencias": [
         "SWGDE Best Practices for Digital Forensic Video Analysis, 18-V-001, versão 2.0 (10/12/2025)",
         "SWGDE Considerations for the Use of Time-Based Analysis of Digital Video for Court, 19-V-003, versão 1.0 (17/09/2020)",

@@ -2,7 +2,21 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
-import { Bot, CheckCircle2, Download, RefreshCw, ScanSearch, Sparkles, Trash2, Users } from "lucide-react";
+import {
+  AlertTriangle,
+  Bot,
+  CheckCircle2,
+  Circle,
+  Cpu,
+  Download,
+  Loader2,
+  RefreshCw,
+  ScanSearch,
+  Sparkles,
+  Trash2,
+  Users,
+  XCircle,
+} from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
@@ -13,6 +27,7 @@ import type {
   AiStatus,
   AiUpdateInfo,
   CatalogItem,
+  EstadoIa,
 } from "@domain/ai";
 import styles from "./AiManagerCard.module.css";
 
@@ -264,6 +279,8 @@ export function AiManagerCard() {
 
       {error && <div className={styles.error}>{error}</div>}
 
+      <IaGeral progress={progress} />
+
       <h3 className={styles.group}>Motor (whisper.cpp)</h3>
       {builds.map((item) => (
         <AssetRow
@@ -390,6 +407,201 @@ export function AiManagerCard() {
         )}
       </div>
     </section>
+  );
+}
+
+/** Frases do catálogo (`edicao/mensagens.rs`) dos códigos que o Gerenciador mostra; conferidas por teste. */
+export const FRASES_IA: Readonly<Record<string, string>> = {
+  ia_desligada: "Modelos de IA desligados",
+  reabrir: "Reabrir o SICRO",
+  gpu_nao_instalada: "Aceleração por GPU não instalada",
+  gpu_sem_bibliotecas: "Faltam bibliotecas da NVIDIA (CUDA)",
+  gpu_sem_cudnn: "Falta o cuDNN ou ele está incompleto",
+  gpu_sem_placa: "Nenhuma placa NVIDIA disponível",
+  gpu_placa_antiga: "Placa NVIDIA sem suporte",
+  gpu_driver_antigo: "Driver da NVIDIA antigo",
+  gpu_sem_memoria: "Memória de vídeo insuficiente",
+  gpu_falhou: "A GPU não pôde ser usada",
+};
+
+/** Erro de comando ("validation error: <código>: <frase>") → a frase. */
+function fraseDoErro(e: unknown): string {
+  const m = toSicroError(e).message.replace(/^[a-z/]+ error: /, "");
+  const cod = /^([a-z][a-z0-9_]*)(?::|$)/.exec(m)?.[1];
+  if (cod && FRASES_IA[cod]) return FRASES_IA[cod];
+  return m.replace(/^[a-z][a-z0-9_]*: /, "");
+}
+
+const GPU_ID = "gpu";
+const RASTREADOR_ID = "rastreador";
+
+/** Interruptor "Usar modelos de IA" e os itens da Fase 2: aceleração por GPU e rastreador (§6.5, §6.6). */
+export function IaGeral({ progress }: { progress: Record<string, AiProgress> }) {
+  const settings = useSettingsStore((s) => s.settings);
+  const [estado, setEstado] = useState<EstadoIa | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const ler = useCallback(async () => {
+    try {
+      setEstado(await commands.iaEstado());
+    } catch (e) {
+      setErro(fraseDoErro(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void ler();
+  }, [ler]);
+
+  const agir = async (id: string, f: () => Promise<EstadoIa>) => {
+    setBusy(id);
+    setErro(null);
+    try {
+      setEstado(await f());
+      await useSettingsStore.getState().load();
+    } catch (e) {
+      setErro(fraseDoErro(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const ligar = async (ligada: boolean) => {
+    setErro(null);
+    try {
+      const s = useSettingsStore.getState().settings;
+      await useSettingsStore.getState().persist({ ...s, ai: { ...s.ai, modelos_desligados: !ligada } });
+      await ler();
+    } catch (e) {
+      setErro(fraseDoErro(e));
+    }
+  };
+
+  const gpu = estado?.gpu;
+  const motivoGpu = gpu ? (gpu.requisito ?? (gpu.instalada && !gpu.pronta ? gpu.motivo : null)) : null;
+
+  return (
+    <>
+      <label className={styles.interruptor}>
+        <input
+          type="checkbox"
+          checked={!settings.ai.modelos_desligados}
+          onChange={(e) => void ligar(e.target.checked)}
+        />
+        Usar modelos de IA
+      </label>
+      {erro && <div className={styles.error}>{erro}</div>}
+
+      {gpu?.disponivel && (
+        <ItemIa
+          id={GPU_ID}
+          rotulo="Aceleração por GPU (NVIDIA)"
+          estado={busy === GPU_ID ? "ocupado" : gpu.pronta ? "pronto" : gpu.instalada ? "aviso" : gpu.requisito ? "falha" : "ausente"}
+          mb={gpu.mb}
+          nota="bibliotecas da NVIDIA, sob licença própria"
+          motivo={motivoGpu ? (FRASES_IA[motivoGpu] ?? motivoGpu) : null}
+          reabrir={estado?.reabrir ?? false}
+          instalado={gpu.instalada}
+          podeBaixar={!gpu.requisito}
+          busy={busy}
+          progress={progress[GPU_ID]}
+          onBaixar={() => void agir(GPU_ID, () => commands.iaGpuInstalar())}
+          onRemover={() => void agir(GPU_ID, () => commands.iaGpuRemover())}
+          onTestar={() => void agir(GPU_ID, () => commands.iaGpuAutoteste())}
+        />
+      )}
+      {estado && (
+        <ItemIa
+          id={RASTREADOR_ID}
+          rotulo="Rastreador"
+          estado={busy === RASTREADOR_ID ? "ocupado" : estado.rastreador ? "pronto" : "ausente"}
+          mb={estado.rastreador_mb}
+          motivo={null}
+          reabrir={false}
+          instalado={estado.rastreador}
+          podeBaixar
+          busy={busy}
+          progress={progress[RASTREADOR_ID]}
+          onBaixar={() => void agir(RASTREADOR_ID, () => commands.iaRastreadorInstalar())}
+          onRemover={() => void agir(RASTREADOR_ID, () => commands.iaRastreadorRemover())}
+        />
+      )}
+    </>
+  );
+}
+
+type EstadoItem = "pronto" | "aviso" | "falha" | "ausente" | "ocupado";
+
+function IconeItem({ e }: { e: EstadoItem }) {
+  if (e === "ocupado") return <Loader2 size={14} className={styles.girando} aria-label="ocupado" />;
+  if (e === "pronto") return <CheckCircle2 size={14} className={styles.okIcone} aria-label="pronto" />;
+  if (e === "aviso") return <AlertTriangle size={14} className={styles.avisoIcone} aria-label="não pronto" />;
+  if (e === "falha") return <XCircle size={14} className={styles.falhaIcone} aria-label="sem suporte" />;
+  return <Circle size={14} className={styles.offIcone} aria-label="não instalado" />;
+}
+
+function ItemIa(p: {
+  id: string;
+  rotulo: string;
+  estado: EstadoItem;
+  mb: number;
+  nota?: string;
+  motivo: string | null;
+  reabrir: boolean;
+  instalado: boolean;
+  podeBaixar: boolean;
+  busy: string | null;
+  progress?: AiProgress;
+  onBaixar: () => void;
+  onRemover: () => void;
+  onTestar?: () => void;
+}) {
+  const ocupado = p.busy === p.id;
+  const pct = p.progress && p.progress.total > 0 ? Math.round((p.progress.received / p.progress.total) * 100) : null;
+  return (
+    <div className={styles.row} data-item={p.id}>
+      <div className={styles.rowMain}>
+        <div className={styles.rowLabel}>
+          <IconeItem e={p.estado} />
+          {p.rotulo}
+          <span className={styles.rowNote}>{p.mb} MB</span>
+        </div>
+        {p.nota && <div className={styles.rowNote}>{p.nota}</div>}
+        {p.motivo && <div className={styles.erroLinha}>{p.motivo}</div>}
+        {p.reabrir && <div className={styles.erroLinha}>{FRASES_IA.reabrir}</div>}
+        {ocupado && !p.instalado && (
+          <div className={styles.progress}>
+            <div className={styles.progressFill} style={{ width: `${pct ?? 0}%` }} />
+            <span className={styles.progressTxt}>{pct != null ? `${pct}%` : ""}</span>
+          </div>
+        )}
+      </div>
+      <div className={styles.rowActions}>
+        {p.instalado ? (
+          <>
+            {p.onTestar && (
+              <Button variant="ghost" size="sm" leftIcon={<Cpu size={13} />} onClick={p.onTestar} disabled={p.busy !== null}>
+                Testar de novo
+              </Button>
+            )}
+            <Button variant="ghost" size="sm" leftIcon={<Trash2 size={13} />} onClick={p.onRemover} disabled={p.busy !== null}>
+              Remover
+            </Button>
+          </>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            leftIcon={<Download size={13} />}
+            onClick={p.onBaixar}
+            disabled={p.busy !== null || !p.podeBaixar}
+          >
+            {ocupado ? "Baixando…" : "Baixar"}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
 

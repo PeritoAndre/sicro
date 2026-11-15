@@ -35,6 +35,9 @@ export interface AppearanceSettings {
 export interface PathsSettings {
   default_workspace_dir: string;
   default_export_dir: string;
+  // CONTRATO: acréscimo do P2.1 (§5.6, contratos-fase2 (f)).
+  /** ffmpeg escolhido nas Configurações (vazio = automático); `SICRO_FFMPEG` definido vence sempre. */
+  ffmpeg_path: string;
 }
 
 /** Caminhos da IA de transcrição instalada pelo gerenciador. */
@@ -125,7 +128,7 @@ export function defaultAppSettings(): AppSettings {
       brasao_right_path: "",
     },
     appearance: { theme: "dark", accent: "#d7a84f", ui_zoom: 1 },
-    paths: { default_workspace_dir: "", default_export_dir: "" },
+    paths: { default_workspace_dir: "", default_export_dir: "", ffmpeg_path: "" },
     ai: {
       whisper_bin_path: "",
       model_path: "",

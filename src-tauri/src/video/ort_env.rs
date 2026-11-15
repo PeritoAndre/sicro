@@ -1,21 +1,10 @@
-//! O onnxruntime só admite um ambiente por processo: Pessoas e Super-resolução dividem este.
+//! O onnxruntime só admite um ambiente por processo: ponte para `ia::sessao::ambiente` (Pessoas, super-resolução,
+//! rastreio e testes dividem o mesmo).
 
 use std::path::Path;
-use std::sync::OnceLock;
 
-use crate::error::{Result, SicroError};
-
-static ENV: OnceLock<ort::environment::Environment> = OnceLock::new();
+use crate::error::Result;
 
 pub fn entorno(lib: &Path) -> Result<&'static ort::environment::Environment> {
-    let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
-    if ENV.get().is_none() {
-        let env = ort::init_from(lib)
-            .map_err(|e| err(&e))?
-            .with_telemetry(false)
-            .build()
-            .map_err(|e| err(&e))?;
-        let _ = ENV.set(env);
-    }
-    ENV.get().ok_or_else(|| err(&"ambiente não iniciado"))
+    crate::ia::sessao::ambiente(lib)
 }

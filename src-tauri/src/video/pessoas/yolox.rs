@@ -142,24 +142,30 @@ pub struct Yolox {
     session: ort::session::Session,
     pub side: usize,
     input_name: String,
+    /// Onde a sessão rodou (vai ao registro da corrida: a saída da GPU não é bit a bit a da CPU).
+    pub provedor: crate::ia::Provedor,
+    /// Código do catálogo quando a GPU estava pronta e não serviu.
+    pub queda: Option<String>,
 }
 
+/// Forma do aquecimento na GPU (YOLOX-S, lado 640).
+const AQUECER: [usize; 4] = [1, 3, 640, 640];
+
 impl Yolox {
-    /// Carrega a libonnxruntime de `lib` e o modelo. O ambiente do `ort` é um só por processo.
+    /// Pelas Configurações em vigor (interruptor e GPU), com a lib de CPU `lib` quando a GPU não está pronta.
     pub fn load(lib: &Path, model: &Path) -> Result<Self> {
+        Self::da_ia(&crate::ia::sessao::vigentes_com_lib(lib), model)
+    }
+
+    /// Pela fábrica única (§6.5): GPU pronta com queda para CPU; interruptor desligado = `ia_desligada`.
+    pub fn da_ia(ai: &crate::commands::settings_commands::AiSettings, model: &Path) -> Result<Self> {
+        let op = crate::ia::Opcoes { aquecer: Some(AQUECER), ..Default::default() };
+        Self::de_sessao(crate::ia::criar_sessao(ai, model, &op)?)
+    }
+
+    pub(crate) fn de_sessao(s: crate::ia::SessaoIa) -> Result<Self> {
         let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
-        let env = crate::video::ort_env::entorno(lib)?;
-        let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
-        let session = ort::session::Session::builder(env)
-            .map_err(|e| err(&e))?
-            .with_intra_threads(threads)
-            .map_err(|e| err(&e))?
-            .commit_from_file(model)
-            .map_err(|e| err(&e))?;
-        let input = session
-            .inputs()
-            .first()
-            .ok_or_else(|| err(&"modelo sem entrada"))?;
+        let input = s.session.inputs().first().ok_or_else(|| err(&"modelo sem entrada"))?;
         let input_name = input.name().to_string();
         let side = match input.dtype() {
             ort::value::ValueType::Tensor { shape, .. } => {
@@ -167,7 +173,7 @@ impl Yolox {
             }
             _ => 640,
         };
-        Ok(Self { session, side, input_name })
+        Ok(Self { session: s.session, side, input_name, provedor: s.provedor, queda: s.queda })
     }
 
     /// Detecta as classes da máscara num quadro RGB reduzido `sw`×`sh`; `ratio` = reduzido / original.
@@ -183,10 +189,24 @@ impl Yolox {
         let (_, out) = outputs[0].try_extract_tensor::<f32>().map_err(|e| err(&e))?;
         Ok(postprocess(out, side, ratio, thr, 0.45, mascara))
     }
+
+    /// Só a inferência (tensor NCHW pronto → saída crua copiada), a medida do protótipo.
+    #[cfg(test)]
+    pub(crate) fn inferir(&mut self, data: Vec<f32>) -> Result<Vec<f32>> {
+        let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
+        let side = self.side;
+        let tensor = ort::value::Tensor::from_array(([1usize, 3, side, side], data)).map_err(|e| err(&e))?;
+        let outputs = self
+            .session
+            .run(ort::inputs![self.input_name.as_str() => tensor])
+            .map_err(|e| err(&e))?;
+        let (_, out) = outputs[0].try_extract_tensor::<f32>().map_err(|e| err(&e))?;
+        Ok(out.to_vec())
+    }
 }
 
 #[cfg(test)]
-mod tests {
+mod testes {
     use super::*;
     use crate::video::pessoas::classes::mascara;
 
@@ -268,6 +288,66 @@ mod tests {
         let ambos = postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[0, 2]));
         assert_eq!(ambos.len(), 2);
         assert!(postprocess(&out, side, 0.5, 0.3, 0.45, &mascara(&[])).is_empty());
+    }
+
+    /// YOLOX-S na GPU (CUDA, sem TF32) abaixo de 10 ms por quadro na inferência (tensor, execução e cópia da saída,
+    /// a medida de `gpu-inferencia.md` §4; o `detect` inteiro só vai ao registro), com as detecções da CPU (mesma
+    /// classe, caixa a até 0,5 px). Máquina dividida com outros agentes: folga de 3× (`SICRO_FOLGA=1` com a máquina
+    /// livre); o limite real fica em `LIMITE_MS`.
+    #[test]
+    fn abaixo_de_10_ms_em_gpu() {
+        use crate::ia::testes as t;
+        use crate::ia::{criar_sessao_com, Modelo, Opcoes, Provedor};
+        const LIMITE_MS: f64 = 10.0;
+        let folga: f64 = std::env::var("SICRO_FOLGA").ok().and_then(|v| v.parse().ok()).unwrap_or(3.0);
+        let _trava = t::trava_gpu();
+        let Some(p) = t::ou_dispensa(t::pacote_gpu(), "abaixo_de_10_ms_em_gpu", "a lib e as bibliotecas da NVIDIA") else { return };
+        let modelo = std::path::Path::new(t::DOSSIE).join("p2/modelos/yolox_s.onnx");
+        let quadro = std::path::Path::new(t::DOSSIE).join("p2/modelos/quadro_640x640.rgb");
+        let Some(_) = t::ou_dispensa((modelo.is_file() && quadro.is_file()).then_some(()), "abaixo_de_10_ms_em_gpu", "yolox_s.onnx e o quadro") else { return };
+        if t::ou_dispensa_gpu(crate::ia::gpu::placa(), "abaixo_de_10_ms_em_gpu", "placa NVIDIA").is_none() {
+            return;
+        }
+        let rgb = std::fs::read(&quadro).unwrap();
+        let gpu_s = criar_sessao_com(&p.lib, Some(&p), Modelo::Arquivo(&modelo), &Opcoes { aquecer: Some(AQUECER), ..Default::default() }).unwrap();
+        let mut gpu = Yolox::de_sessao(gpu_s).unwrap();
+        assert_eq!((gpu.provedor, gpu.queda.as_deref()), (Provedor::Cuda, None));
+        let mut cpu = Yolox::de_sessao(criar_sessao_com(&p.lib, None, Modelo::Arquivo(&modelo), &Opcoes::so_cpu()).unwrap()).unwrap();
+        assert_eq!(cpu.provedor, Provedor::Cpu);
+        let todas = mascara(&(0..N_CLASSES as u16).collect::<Vec<_>>());
+        // o quadro de teste é sintético: limiar baixo para haver caixas a comparar
+        let thr = [0.1f32, 0.02, 0.005].into_iter().find(|&t| !cpu.detect(&rgb, 640, 640, 1.0, t, &todas).unwrap().is_empty()).expect("nenhuma caixa na CPU");
+        let dc = cpu.detect(&rgb, 640, 640, 1.0, thr, &todas).unwrap();
+        let dg = gpu.detect(&rgb, 640, 640, 1.0, thr, &todas).unwrap();
+        assert_eq!(dg.len(), dc.len(), "GPU {dg:?}\nCPU {dc:?}");
+        for (a, b) in dg.iter().zip(&dc) {
+            assert_eq!(a.classe, b.classe);
+            for (x, y) in [(a.x, b.x), (a.y, b.y), (a.w, b.w), (a.h, b.h)] {
+                assert!((x - y).abs() <= 0.5, "caixa GPU {a:?} × CPU {b:?}");
+            }
+            assert!((a.score - b.score).abs() <= 1e-3);
+        }
+        // como no protótipo (`gpu-inferencia.md` §4): tensor + inferência + cópia da saída; o `detect` inteiro sai
+        // no registro (letterbox e pós-processamento são CPU e, no binário de teste, sem otimização)
+        let entrada = letterbox_bgr_chw(&rgb, 640, 640, 640);
+        for _ in 0..20 {
+            gpu.inferir(entrada.clone()).unwrap();
+        }
+        let medir = |f: &mut dyn FnMut()| {
+            let mut ms: Vec<f64> = (0..200)
+                .map(|_| {
+                    let t0 = std::time::Instant::now();
+                    f();
+                    t0.elapsed().as_secs_f64() * 1e3
+                })
+                .collect();
+            ms.sort_by(f64::total_cmp);
+            (ms[100], ms[190], ms[0])
+        };
+        let (mediana, p95, min) = medir(&mut || drop(gpu.inferir(entrada.clone()).unwrap()));
+        let (det, _, _) = medir(&mut || drop(gpu.detect(&rgb, 640, 640, 1.0, 0.1, &todas).unwrap()));
+        eprintln!("YOLOX-S em GPU: inferência mediana {mediana:.2} ms, p95 {p95:.2} ms, mín {min:.2} ms; detect inteiro {det:.2} ms ({} caixas a {thr} iguais à CPU)", dc.len());
+        assert!(mediana < LIMITE_MS * folga, "mediana {mediana:.2} ms ≥ {LIMITE_MS} ms × {folga}");
     }
 
     #[test]

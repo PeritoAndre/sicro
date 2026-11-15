@@ -1212,7 +1212,7 @@ fn diferentes(a: &QuadroRgb, b: &QuadroRgb, c: [f64; 4]) -> usize {
 /// Volume integrado (LUFS) de um arquivo, pela mesma medição do motor.
 fn lufs_de(cap: &Capacidades, arquivo: &Path) -> f64 {
     let out = crate::tools::command(&cap.binario)
-        .args(["-hide_banner", "-nostdin", "-cpuflags", "0", "-i"])
+        .args(["-hide_banner", "-nostdin", "-nostats", "-cpuflags", "0", "-i"])
         .arg(arquivo)
         .args(["-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=50:print_format=json", "-f", "null", "-"])
         .output()

@@ -1344,6 +1344,9 @@ pub struct Rastreio {
     pub ausencias: Vec<Ausencia>,
     pub origem: OrigemRastreio,
     pub confirmacao: Option<Confirmacao>,
+    /// `t` das âncoras escolhidas pelo "Simplificar" e não mexidas pelo perito desde então.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ancoras_do_programa: Vec<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

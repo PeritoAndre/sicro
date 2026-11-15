@@ -71,7 +71,10 @@ pub mod condicao {
 pub mod modelo {
     pub const IA_OCULTACOES: &str = "Ocultações propostas por detecção automática e confirmadas pelo perito: {n}.";
     pub const IA_MARCACOES: &str = "Marcações que acompanham alvo achado por detecção automática e confirmado pelo perito: {n}.";
-    pub const IA_ASSISTIDO: &str = "Alvos acompanhados por programa a partir de marcação do perito: {n}.";
+    /// Só rastreio com corrida de motor neural registrada (`feito.rastreios[].corridas[].motor`).
+    pub const IA_ASSISTIDO: &str = "Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: {n}.";
+    /// Rastreio assistido sem corrida legível: o `feito` não diz se o programa era de inteligência artificial.
+    pub const IA_ASSISTIDO_SEM_REGISTRO: &str = "Alvos acompanhados por programa a partir de marcação do perito, sem registro do programa usado: {n}.";
     pub const IA_IMAGENS: &str = "Imagens ampliadas por programa de inteligência artificial: {n}.";
     pub const IA_MODELOS: &str = "Os programas de inteligência artificial usados estão identificados no anexo técnico, item H.";
     pub const MEDIDA_REGUA: &str = "Régua de escala de {m} m (item {item}): erro médio da calibração de {residuo} m.";
@@ -84,6 +87,16 @@ pub mod modelo {
     pub const IA_LEGENDAS: &str = "Legendas escritas a partir de degravação automática e conferidas pelo perito.";
     /// Só quando o `feito` conta legenda automática que saiu sem a conferência registrada.
     pub const IA_LEGENDAS_SEM_CONFERENCIA: &str = "Legendas escritas a partir de degravação automática; sem conferência registrada pelo perito: {n}.";
+    // Anexos E e H (técnicos): cada pedaço sai de um campo de `feito.rastreios[]`.
+    /// Uma corrida do rastreio (`Corrida` do §6.1).
+    pub const CORRIDA: &str = "{modelo} · {execucao} · {sentido}, {faixa} · parada: {parou} · limiares {ok} e {perdido}, paciência de {paciencia} quadros · {quando}";
+    pub const CONFIRMADO: &str = "confirmado por {por} em {quando}, de {de} a {ate}";
+    pub const MARCACOES: &str = "marcações do perito: {n}";
+    /// `feito.ocultacoes[].quadros`: como cada quadro coberto obteve a região (`avaliar::Como`). `ancora` conta também o
+    /// quadro que segura a última marcação (`Como::Segurado`): "marcados" afirmaria marcação quadro a quadro.
+    pub const QUADROS_OCULTOS: &str = "quadros: {ancora} pela marcação do perito, {medido} medidos, {interpolado} interpolados, {incerto} incertos";
+    /// Rastreio com corrida que não lê como `Corrida` (gravada antes da Fase 2): o anexo só diz quantas.
+    pub const CORRIDAS_ILEGIVEIS: &str = "corridas sem registro legível: {n}";
 }
 
 /// (chave, texto): rótulos de valores do modelo (`grupo.valor`) usados nas tabelas.
@@ -171,6 +184,37 @@ const ROTULOS: &[(&str, &str)] = &[
     ("papel.typst", "textos da imagem e composição deste relatório"),
     ("corte", "Corte no tempo"),
     ("enquadramento.inteiro", "Ajuste de tamanho"),
+    // Fase 2: origem da região (anexo E) e do rastreio (anexo H); `Rastreio.nome` nunca sai
+    ("rastreio.manual", "marcação do perito"),
+    ("rastreio.assistido", "acompanhamento por programa a partir de marcação do perito"),
+    ("rastreio.deteccao", "detecção automática ({classe})"),
+    ("rastreio.pessoas.auto", "trilha automática da análise de pessoas"),
+    ("rastreio.pessoas.revisada", "trilha da análise de pessoas, revisada pelo perito na análise"),
+    ("rastreio.ref", "{r} (anexo H)"),
+    ("classe.rosto", "rosto"),
+    ("classe.placa", "placa"),
+    ("classe.cabeca", "cabeça"),
+    ("classe.pessoa", "pessoa"),
+    ("classe.veiculo", "veículo"),
+    ("motor.edgetam", "EdgeTAM"),
+    ("motor.vittrack", "VitTrack"),
+    ("motor.mancha", "correlação, sem inteligência artificial"),
+    ("sentido.frente", "para a frente"),
+    ("sentido.tras", "para trás"),
+    ("parou.fim", "fim do trecho"),
+    ("parou.perdido", "alvo perdido"),
+    ("parou.saiu_do_quadro", "alvo saiu da imagem"),
+    ("parou.limite", "limite de quadros"),
+    ("parou.ancora", "marcação do perito"),
+    ("parou.cancelado", "interrompida pelo perito"),
+    ("provedor.cpu", "CPU"),
+    ("provedor.cuda", "CUDA"),
+    ("uso.rastreio", "acompanhamento de alvo"),
+    ("uso.legendas", "degravação das legendas"),
+    ("arquivo.modelo", "arquivo do modelo"),
+    ("papel.runtime", "execução dos modelos de inteligência artificial"),
+    ("onde.ocultacao", "ocultação {n}"),
+    ("onde.ocultacoes", "ocultações {n}"),
 ];
 
 /// Rótulo de um valor do modelo (`grupo.valor`); None = fora do catálogo.
@@ -352,8 +396,10 @@ mod testes {
         }
         // toda referência com versão e data
         assert!(REFERENCIAS.iter().all(|r| r.contains("versão") && r.contains('(')));
-        let modelos = [modelo::IA_OCULTACOES, modelo::IA_MARCACOES, modelo::IA_ASSISTIDO, modelo::IA_IMAGENS, modelo::IA_MODELOS, modelo::MEDIDA_REGUA,
-                       modelo::MEDIDA_VELOCIDADE, modelo::MEDIDA_VELOCIDADE_SEM_FAIXA, modelo::DERIVADA, modelo::IA_LEGENDAS, modelo::IA_LEGENDAS_SEM_CONFERENCIA];
+        // as da parte para leigo (as do anexo técnico, `CORRIDA` e afins, levam sigla e não terminam em ponto)
+        let modelos = [modelo::IA_OCULTACOES, modelo::IA_MARCACOES, modelo::IA_ASSISTIDO, modelo::IA_ASSISTIDO_SEM_REGISTRO, modelo::IA_IMAGENS, modelo::IA_MODELOS,
+                       modelo::MEDIDA_REGUA, modelo::MEDIDA_VELOCIDADE, modelo::MEDIDA_VELOCIDADE_SEM_FAIXA, modelo::DERIVADA, modelo::IA_LEGENDAS,
+                       modelo::IA_LEGENDAS_SEM_CONFERENCIA];
         let frases = EFEITOS.iter().map(|x| x.3).chain(CONDICOES.iter().map(|x| x.1)).chain(modelos);
         for f in frases {
             let baixo = f.to_lowercase();

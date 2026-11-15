@@ -155,3 +155,38 @@
   font-size: var(--text-xs);
   color: var(--sicro-fg-dim);
 }
+
+/* Fase 2: interruptor e itens de IA (estado por ícone) */
+.interruptor {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.erroLinha {
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--sicro-danger);
+}
+.okIcone {
+  color: #35c47a;
+}
+.avisoIcone {
+  color: var(--sicro-warning, #d7a84f);
+}
+.falhaIcone {
+  color: var(--sicro-danger);
+}
+.offIcone {
+  color: var(--sicro-fg-faint);
+}
+.girando {
+  animation: girar 1s linear infinite;
+}
+@keyframes girar {
+  to {
+    transform: rotate(360deg);
+  }
+}

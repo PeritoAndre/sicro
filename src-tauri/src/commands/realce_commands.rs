@@ -1218,6 +1218,7 @@ mod testes {
 
         // super-resolução 2x sobre a média (só com o modelo à mão)
         if let (Ok(lib), Ok(modelo)) = (std::env::var("SICRO_ORT_LIB"), std::env::var("SICRO_SR_MODEL")) {
+            let _ = crate::ia::testes::ort_lib();
             let ai = crate::commands::settings_commands::AiSettings { sr_ort_lib_path: lib, sr_model_path: modelo, sr_version: "teste".into(), ..Default::default() };
             let sr = superres_nucleo(
                 &ai, &ws, &ruid.sha256,

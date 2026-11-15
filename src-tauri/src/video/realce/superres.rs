@@ -21,23 +21,33 @@ pub struct SuperRes {
     input_name: String,
     /// Lado fixo do modelo, se ele não aceita tamanho livre.
     fixo: Option<usize>,
+    /// Onde a sessão rodou (vai ao registro: a saída da GPU não é bit a bit a da CPU).
+    pub provedor: crate::ia::Provedor,
 }
 
 fn err(e: &dyn std::fmt::Display) -> SicroError {
     SicroError::Validation(format!("onnxruntime: {e}"))
 }
 
+/// Aquecimento na GPU com o ladrilho de sempre (`LADRILHO` + sobra dos dois lados).
+const AQUECER: [usize; 4] = [1, 3, LADRILHO + 2 * SOBRA, LADRILHO + 2 * SOBRA];
+
 impl SuperRes {
+    /// Pelas Configurações em vigor (interruptor e GPU), com a lib de CPU `lib` quando a GPU não está pronta.
     pub fn load(lib: &Path, model: &Path) -> Result<Self> {
-        let env = crate::video::ort_env::entorno(lib)?;
-        let threads = std::thread::available_parallelism().map_or(4, |n| n.get()).min(8);
-        let session = ort::session::Session::builder(env)
-            .map_err(|e| err(&e))?
-            .with_intra_threads(threads)
-            .map_err(|e| err(&e))?
-            .commit_from_file(model)
-            .map_err(|e| err(&e))?;
-        let input = session.inputs().first().ok_or_else(|| err(&"modelo sem entrada"))?;
+        Self::da_ia(&crate::ia::sessao::vigentes_com_lib(lib), model)
+    }
+
+    /// Pela fábrica única (§6.5): GPU pronta com queda para CPU; interruptor desligado = `ia_desligada`.
+    pub fn da_ia(ai: &crate::commands::settings_commands::AiSettings, model: &Path) -> Result<Self> {
+        let op = crate::ia::Opcoes { aquecer: Some(AQUECER), ..Default::default() };
+        let s = crate::ia::criar_sessao(ai, model, &op)?;
+        tracing::info!(target: "ia", "super-resolução: provedor {}{}", s.provedor.fio(), s.queda.as_deref().map(|q| format!(" ({q})")).unwrap_or_default());
+        Self::de_sessao(s)
+    }
+
+    pub(crate) fn de_sessao(s: crate::ia::SessaoIa) -> Result<Self> {
+        let input = s.session.inputs().first().ok_or_else(|| err(&"modelo sem entrada"))?;
         let input_name = input.name().to_string();
         let fixo = match input.dtype() {
             ort::value::ValueType::Tensor { shape, .. } => {
@@ -46,7 +56,7 @@ impl SuperRes {
             }
             _ => None,
         };
-        Ok(Self { session, input_name, fixo })
+        Ok(Self { session: s.session, input_name, fixo, provedor: s.provedor })
     }
 
     /// Um ladrilho RGB `tw`×`th` → RGB `4tw`×`4th`.
@@ -144,6 +154,7 @@ mod testes {
     #[test]
     fn ladrilhado_nao_deixa_emenda() {
         let (Ok(lib), Ok(modelo)) = (std::env::var("SICRO_ORT_LIB"), std::env::var("SICRO_SR_MODEL")) else { return };
+        let _ = crate::ia::testes::ort_lib(); // ORT_DISABLE_TELEMETRY=1 antes de a lib carregar
         // o YOLOX (Pessoas) e a super-resolução convivem no mesmo processo
         if let Ok(y) = std::env::var("SICRO_YOLOX_MODEL") {
             crate::video::pessoas::yolox::Yolox::load(Path::new(&lib), Path::new(&y)).expect("yolox");
@@ -182,6 +193,7 @@ mod testes {
             std::env::var("SICRO_ORT_LIB"), std::env::var("SICRO_SR_MODEL"), std::env::var("SICRO_SR_IMG"),
             std::env::var("SICRO_SR_ROI"), std::env::var("SICRO_REALCE_SAIDA"),
         ) else { return };
+        let _ = crate::ia::testes::ort_lib(); // ORT_DISABLE_TELEMETRY=1 antes de a lib carregar
         let r: Vec<u32> = roi.split(',').map(|v| v.trim().parse().unwrap()).collect();
         let nome = std::env::var("SICRO_SR_NOME").unwrap_or_else(|_| "sr".into());
         let full = image::open(&img).unwrap().to_rgb8();

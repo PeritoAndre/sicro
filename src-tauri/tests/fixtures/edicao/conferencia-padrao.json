@@ -1,0 +1,50 @@
+[
+  {
+    "entrada": "rosto",
+    "nome": "rosto",
+    "saida": {
+      "intensidade": 0.75,
+      "modo": "mosaico"
+    }
+  },
+  {
+    "entrada": "placa",
+    "nome": "placa",
+    "saida": {
+      "intensidade": 1.0,
+      "modo": "solido"
+    }
+  },
+  {
+    "entrada": "corpo",
+    "nome": "corpo",
+    "saida": {
+      "intensidade": 0.75,
+      "modo": "mosaico"
+    }
+  },
+  {
+    "entrada": "tela",
+    "nome": "tela",
+    "saida": {
+      "intensidade": 1.0,
+      "modo": "solido"
+    }
+  },
+  {
+    "entrada": "documento",
+    "nome": "documento",
+    "saida": {
+      "intensidade": 1.0,
+      "modo": "solido"
+    }
+  },
+  {
+    "entrada": "outro",
+    "nome": "outro",
+    "saida": {
+      "intensidade": 0.75,
+      "modo": "mosaico"
+    }
+  }
+]

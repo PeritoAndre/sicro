@@ -6,6 +6,9 @@
 //! `tecnico.{cor, observacoes}`, perde `copia_trabalho`, e `tamanho`/`imagem` passam a aceitar nulo (o `tecnico.json`
 //! não os traz); `roteiro[].selos`; `ocultacoes[].quadros`; e os campos novos `revisado_por`, `ia_resumo`, `relogios`,
 //! `medidas`, `selos_desligados`, `conferir`, `conferencia_ocultacoes`, `modelos_ia`, `pacote`, `referencias`.
+// CONTRATO: acréscimo da Fase 2 (P2.R) ao `/2`, só campos novos (dados e modelo andam juntos no binário):
+// `ocultacoes[].{n, arquivo, forma, regiao}` (planilha do 18-M §11; `filtro` sem a forma), `modelos_ia[].{execucao,
+// desvio}` (o provedor sai de `origem`) e `rastreios[]` (anexo H: cada rastreio em que um programa atuou).
 
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,6 +19,7 @@ use super::frases::{self, condicao, modelo, tipo, Classe};
 use super::tecnico;
 use crate::edicao::mensagens::codigo;
 use crate::edicao::modelo::ModoPdf;
+use crate::edicao::rastreio::{Corrida, MotorRastreio};
 use crate::error::{Result, SicroError};
 use crate::relatorio_pdf::{Entrada, Modelo};
 
@@ -324,6 +328,7 @@ struct FLegendas {
 #[serde(default)]
 struct FOrigemLegendas {
     motor: Option<String>,
+    modelo_sha256: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -339,13 +344,28 @@ struct FSincronia {
     conferencias: Vec<Value>,
 }
 
+/// `feito.rastreios[]`. `ancoras` sem o campo = não se afirma quantas; `corridas` lê como `rastreio::Corrida` (B2).
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct FRastreio {
     id: String,
     origem: Value,
-    confirmacao: Option<Value>,
+    ancoras: Option<u32>,
+    denso_sha256: Option<String>,
+    corridas: Vec<Value>,
+    confirmacao: Option<FConfirmacao>,
     ausencias: Vec<FAusencia>,
+}
+
+/// Confirmação do perito: só vira frase com todos os campos e presa às amostras do rastreio (`denso_sha256`).
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct FConfirmacao {
+    por: Option<String>,
+    em: Option<String>,
+    denso_sha256: Option<String>,
+    de_s: Option<f64>,
+    ate_s: Option<f64>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -356,19 +376,43 @@ struct FAusencia {
     motivo: String,
 }
 
-#[derive(Debug, Default, Deserialize)]
+#[derive(Debug, Default, Deserialize, Clone, PartialEq)]
 #[serde(default)]
 struct FIa {
     modelo: String,
     arquivos: Vec<FArquivo>,
     origem: String,
     commit: String,
+    desvio: String,
     runtime: String,
     provedor: String,
     uso: String,
 }
 
-#[derive(Debug, Default, Deserialize, Serialize, Clone)]
+impl FIa {
+    /// A entrada de `feito.ia` que a corrida daria (`ia::uso::da_corrida`, a regra do P2.1).
+    fn da_corrida(c: &Corrida, uso: &str) -> Self {
+        let p = crate::ia::uso::da_corrida(c, uso);
+        FIa {
+            modelo: p.modelo,
+            arquivos: p.arquivos.into_iter().map(|a| FArquivo { nome: a.nome, sha256: a.sha256 }).collect(),
+            origem: p.origem,
+            commit: p.commit,
+            desvio: p.desvio,
+            runtime: p.runtime,
+            provedor: p.provedor,
+            uso: p.uso,
+        }
+    }
+
+    /// Mesmo modelo, arquivos, execução e uso; o provedor em qualquer caixa (`cpu` no fio, "CPU" em `feito` antigo).
+    fn mesmo(&self, o: &FIa) -> bool {
+        let sem_caixa = |x: &FIa| FIa { provedor: x.provedor.trim().to_ascii_lowercase(), ..x.clone() };
+        sem_caixa(self) == sem_caixa(o)
+    }
+}
+
+#[derive(Debug, Default, Deserialize, Serialize, Clone, PartialEq)]
 #[serde(default)]
 struct FArquivo {
     nome: String,
@@ -504,6 +548,7 @@ struct RelatorioJuri {
     codificacao: Vec<[String; 2]>,
     software: Vec<[String; 3]>,
     modelos_ia: Vec<ModeloIa>,
+    rastreios: Vec<RastreioAnexo>,
     reproducao: Reproducao,
     pacote: Vec<ArquivoPacote>,
     anexos: Vec<Anexo>,
@@ -640,15 +685,21 @@ struct Diferenca {
     obs: String,
 }
 
+/// Linha da planilha de ocultações (anexo E, 18-M §11 figura 4). `n` numera imagem e som; `regiao` e `quadros`
+/// só na ocultação de imagem.
 #[derive(Debug, Serialize)]
 struct Ocultacao {
+    n: String,
     item: String,
     gravacao: String,
+    arquivo: String,
     intervalo: String,
     conteudo: String,
+    forma: String,
     filtro: String,
     motivo: String,
     quadros: Option<String>,
+    regiao: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -656,7 +707,20 @@ struct ModeloIa {
     modelo: String,
     arquivos: Vec<FArquivo>,
     origem: String,
+    execucao: String,
+    desvio: Option<String>,
     uso: String,
+}
+
+/// Rastreio em que um programa atuou (anexo H): `id` = "R1"…, nunca o nome que o perito deu.
+#[derive(Debug, Serialize)]
+struct RastreioAnexo {
+    id: String,
+    origem: String,
+    uso: String,
+    corridas: Vec<String>,
+    confirmacao: String,
+    amostras: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -764,6 +828,24 @@ fn data(rfc3339: &str) -> String {
     let (Some(d), Some(fuso)) = (instante(rfc3339), FixedOffset::west_opt(3 * 3600)) else { return rfc3339.to_string() };
     let l = d.with_timezone(&fuso);
     format!("{} de {} de {}, às {}h{:02} (horário de Brasília)", l.day(), MESES[l.month0() as usize], l.year(), l.hour(), l.minute())
+}
+
+/// "14/11/2026, 6h00 (Brasília)": datas das tabelas do anexo.
+fn data_curta(rfc3339: &str) -> String {
+    let (Some(d), Some(fuso)) = (instante(rfc3339), FixedOffset::west_opt(3 * 3600)) else { return ou_traco(rfc3339) };
+    let l = d.with_timezone(&fuso);
+    format!("{:02}/{:02}/{}, {}h{:02} (Brasília)", l.day(), l.month(), l.year(), l.hour(), l.minute())
+}
+
+/// `cpu` | `cuda` do fio (B2) como o PDF mostra; fora do catálogo, como veio.
+fn provedor(p: &str) -> String {
+    let p = p.trim();
+    frases::rotulo(&format!("provedor.{}", p.to_ascii_lowercase())).map(str::to_string).unwrap_or_else(|| p.to_string())
+}
+
+/// Texto de um enum serde (`saiu_do_quadro`).
+fn fio<T: Serialize>(x: &T) -> String {
+    serde_json::to_value(x).ok().and_then(|v| v.as_str().map(str::to_string)).unwrap_or_default()
 }
 
 /// Taxa em imagens por segundo: "30", "29,97".
@@ -1117,6 +1199,92 @@ fn automatico(r: &FRastreio) -> bool {
     matches!(r.origem["tipo"].as_str(), Some("deteccao") | Some("pessoas"))
 }
 
+/// Corridas que leem como `rastreio::Corrida` (B2) e quantas não leem (gravadas antes da Fase 2): destas nada se afirma.
+fn corridas_de(r: &FRastreio) -> (Vec<Corrida>, usize) {
+    let lidas: Vec<Corrida> = r.corridas.iter().filter_map(|v| Corrida::deserialize(v).ok()).collect();
+    let ilegiveis = r.corridas.len() - lidas.len();
+    (lidas, ilegiveis)
+}
+
+fn neural(c: &Corrida) -> bool {
+    matches!(c.motor.motor, MotorRastreio::Edgetam | MotorRastreio::Vittrack)
+}
+
+/// Como o rastreio nasceu; None = tipo que o catálogo não conhece (não se afirma).
+fn origem_do_rastreio(r: &FRastreio) -> Option<String> {
+    let rot_de = |k: &str| rot(k).to_string();
+    match r.origem["tipo"].as_str()? {
+        "manual" => Some(rot_de("rastreio.manual")),
+        "assistido" => Some(rot_de("rastreio.assistido")),
+        "deteccao" => Some(frases::preencher(rot("rastreio.deteccao"), &[("classe", &rot_ou("classe", r.origem["classe"].as_str().unwrap_or("—")))])),
+        "pessoas" => match r.origem["estado"].as_str()? {
+            "auto" => Some(rot_de("rastreio.pessoas.auto")),
+            "revisada" => Some(rot_de("rastreio.pessoas.revisada")),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+/// "confirmado por X em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:02,000"; só com todos os campos. Confirmação de
+/// outras amostras (nova corrida depois dela) não vale (§6.6, `validar::confirmacao`) e não sai.
+fn confirmacao_do_rastreio(r: &FRastreio) -> Option<String> {
+    let c = r.confirmacao.as_ref().filter(|c| c.denso_sha256 == r.denso_sha256)?;
+    let (por, em, de, ate) = (c.por.as_deref()?, c.em.as_deref()?, c.de_s?, c.ate_s?);
+    Some(frases::preencher(modelo::CONFIRMADO, &[("por", por), ("quando", &data_curta(em)), ("de", &tempo(de)), ("ate", &tempo(ate))]))
+}
+
+/// Origem e número de marcações do perito, no que o `feito` diz.
+fn origem_e_marcacoes(r: &FRastreio) -> Vec<String> {
+    let mut partes: Vec<String> = origem_do_rastreio(r).into_iter().collect();
+    if let Some(n) = r.ancoras {
+        partes.push(frases::preencher(modelo::MARCACOES, &[("n", &n.to_string())]));
+    }
+    partes
+}
+
+/// Instante (s) de um pts na base de tempo da gravação.
+fn instante_do_pts(pts: i64, tb: &R) -> Option<f64> {
+    (tb.num > 0 && tb.den > 0).then(|| pts as f64 * tb.num as f64 / tb.den as f64)
+}
+
+/// Uma corrida em uma linha (anexo H). `tb` = base de tempo da gravação do rastreio, quando se sabe qual é.
+fn corrida_txt(c: &Corrida, tb: Option<&R>) -> String {
+    let m = &c.motor;
+    let modelo_ = match m.motor {
+        MotorRastreio::Mancha => rot("motor.mancha").to_string(),
+        _ if !m.modelo.nome.trim().is_empty() => m.modelo.nome.trim().to_string(),
+        outro => rot_ou("motor", &fio(&outro)),
+    };
+    let execucao: Vec<String> = [m.runtime.trim().to_string(), provedor(&m.provedor)].into_iter().filter(|x| !x.is_empty()).collect();
+    let (a, b) = (c.de_pts.min(c.ate_pts), c.de_pts.max(c.ate_pts));
+    let faixa = match tb.and_then(|tb| Some((instante_do_pts(a, tb)?, instante_do_pts(b, tb)?))) {
+        Some((x, y)) => format!("{} a {} (pts {a} a {b})", tempo(x), tempo(y)),
+        None => format!("pts {a} a {b}"),
+    };
+    let l = &c.limiares;
+    frases::preencher(
+        modelo::CORRIDA,
+        &[
+            ("modelo", &modelo_),
+            ("execucao", &ou_traco(&execucao.join(" · "))),
+            ("sentido", &rot_ou("sentido", &fio(&c.sentido))),
+            ("faixa", &faixa),
+            ("parou", &rot_ou("parou", &fio(&c.parou))),
+            ("ok", &num(l.ok, 3)),
+            ("perdido", &num(l.perdido, 3)),
+            ("paciencia", &l.paciencia.to_string()),
+            ("quando", &data_curta(&c.feito_em)),
+        ],
+    )
+}
+
+/// "ocultação 1" · "ocultações 1, 3".
+fn onde_oc(ns: &[usize]) -> String {
+    let lista = ns.iter().map(usize::to_string).collect::<Vec<_>>().join(", ");
+    frases::preencher(rot(if ns.len() == 1 { "onde.ocultacao" } else { "onde.ocultacoes" }), &[("n", &lista)])
+}
+
 /// `dados.json` do modelo, com todos os valores já em texto pronto para imprimir.
 pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPacote]) -> Result<Value> {
     if tecnico.get("esquema").and_then(Value::as_str) != Some(tecnico::ESQUEMA_TECNICO) {
@@ -1300,8 +1468,8 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     // ---- inteligência artificial
     let rastreio = |id: &str| f.rastreios.iter().find(|r| r.id == id);
     let mut ia_resumo = Vec::new();
-    // toda ocultação de origem automática que chega à exportação passou pelo perito: confirmada (`confirmacao`) ou
-    // revisada na análise (`pessoas` em estado `revisada`, que não leva `confirmacao`)
+    // toda ocultação de origem automática que chega à exportação passou pelo perito: confirmada (`confirmacao`, que a
+    // validação exige) ou revisada na análise (`pessoas` em estado `revisada`)
     let n_oc = f.ocultacoes.iter().filter(|o| rastreio(&o.rastreio).is_some_and(automatico)).count();
     if n_oc > 0 {
         ia_resumo.push(frases::preencher(modelo::IA_OCULTACOES, &[("n", &n_oc.to_string())]));
@@ -1314,9 +1482,39 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     if !marcados.is_empty() {
         ia_resumo.push(frases::preencher(modelo::IA_MARCACOES, &[("n", &marcados.len().to_string())]));
     }
-    let assistidos = f.rastreios.iter().filter(|r| r.origem["tipo"] == "assistido").count();
-    if assistidos > 0 {
-        ia_resumo.push(frases::preencher(modelo::IA_ASSISTIDO, &[("n", &assistidos.to_string())]));
+    // rastreios em que um programa atuou (anexo H), na ordem do `feito`: "R1", "R2"…
+    struct Listado<'a> {
+        r: &'a FRastreio,
+        id: String,
+        lidas: Vec<Corrida>,
+        ilegiveis: usize,
+    }
+    let listados: Vec<Listado> = f
+        .rastreios
+        .iter()
+        .map(|r| (r, corridas_de(r)))
+        .filter(|(r, (lidas, ilegiveis))| automatico(r) || r.origem["tipo"] == "assistido" || !lidas.is_empty() || *ilegiveis > 0)
+        .enumerate()
+        .map(|(i, (r, (lidas, ilegiveis)))| Listado { r, id: format!("R{}", i + 1), lidas, ilegiveis })
+        .collect();
+    let id_listado = |id: &str| listados.iter().find(|l| l.r.id == id).map(|l| l.id.clone());
+    // rastreio assistido: IA só com corrida de motor neural registrada; sem corrida legível, não se sabe qual programa
+    // (e então "nenhuma etapa por IA" também não pode ser dito, qualquer que seja a origem); só correlação (mancha) não é IA
+    let (mut com_ia, mut sem_registro) = (0usize, 0usize);
+    for l in listados.iter().filter(|l| !automatico(l.r)) {
+        let assistido = l.r.origem["tipo"] == "assistido";
+        let com_neural = l.lidas.iter().any(neural);
+        if assistido && com_neural {
+            com_ia += 1;
+        } else if !com_neural && (l.ilegiveis > 0 || (assistido && l.lidas.is_empty())) {
+            sem_registro += 1;
+        }
+    }
+    if com_ia > 0 {
+        ia_resumo.push(frases::preencher(modelo::IA_ASSISTIDO, &[("n", &com_ia.to_string())]));
+    }
+    if sem_registro > 0 {
+        ia_resumo.push(frases::preencher(modelo::IA_ASSISTIDO_SEM_REGISTRO, &[("n", &sem_registro.to_string())]));
     }
     if let Some(a) = f.avisos.iter().find(|a| a.codigo == codigo::IMAGEM_IA) {
         ia_resumo.push(frases::preencher(modelo::IA_IMAGENS, &[("n", &a.n.max(1).to_string())]));
@@ -1326,7 +1524,16 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         let sem = f.legendas.ia.saturating_sub(f.legendas.ia_conferidas);
         ia_resumo.push(if sem == 0 { modelo::IA_LEGENDAS.to_string() } else { frases::preencher(modelo::IA_LEGENDAS_SEM_CONFERENCIA, &[("n", &sem.to_string())]) });
     }
-    if !f.ia.is_empty() {
+    // modelos por arquivo: `feito.ia` (P2.1 agrupa por modelo e provedor) e os das corridas que ele ainda não traz
+    let mut modelos: Vec<FIa> = f.ia.clone();
+    for c in listados.iter().flat_map(|l| &l.lidas).filter(|c| neural(c)) {
+        let x = FIa::da_corrida(c, "rastreio");
+        if !modelos.iter().any(|m| m.mesmo(&x)) {
+            modelos.push(x);
+        }
+    }
+    let legendas_por = f.legendas.origem.as_ref().filter(|_| com_legendas).and_then(|o| o.motor.as_deref()).map(str::trim).filter(|m| !m.is_empty());
+    if !modelos.is_empty() || legendas_por.is_some() {
         ia_resumo.push(modelo::IA_MODELOS.to_string());
     }
     if ia_resumo.is_empty() {
@@ -1495,6 +1702,9 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
             });
         }
     }
+    // planilha de ocultações (18-M §11, figura 4): gravação e arquivo original, intervalo no original, forma, filtro,
+    // o que foi protegido e por quê; imagem primeiro, som depois, numeradas em seguida
+    let nome_da_midia = |id: &str| f.midias.iter().find(|m| m.id == id).map(|m| ou_traco(&m.nome)).unwrap_or_else(|| "—".into());
     let mut ocultacoes = Vec::new();
     for o in &f.ocultacoes {
         let mut filtro = vec![rot_ou("modo", &o.modo)];
@@ -1503,19 +1713,32 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         } else if !o.cor.is_empty() {
             filtro.push(format!("cor {}", o.cor));
         }
-        filtro.push(rot_ou("forma", &o.forma));
+        let mut forma = vec![rot_ou("forma", &o.forma)];
         if o.inverter {
-            filtro.push(rot("forma.invertida").to_string());
+            forma.push(rot("forma.invertida").to_string());
         }
         if o.margem > 0.0 {
-            filtro.push(format!("margem {} %", num(o.margem * 100.0, 1)));
+            forma.push(format!("margem {} %", num(o.margem * 100.0, 1)));
         }
         if o.borda_suave > 0.0 {
-            filtro.push(format!("borda suave {} %", num(o.borda_suave * 100.0, 1)));
+            forma.push(format!("borda suave {} %", num(o.borda_suave * 100.0, 1)));
         }
+        // de onde veio a região: origem do rastreio, marcações, confirmação e a linha dele no anexo H
+        let regiao = match rastreio(&o.rastreio) {
+            Some(r) => {
+                let mut partes = origem_e_marcacoes(r);
+                partes.extend(confirmacao_do_rastreio(r));
+                partes.extend(id_listado(&r.id).map(|id| frases::preencher(rot("rastreio.ref"), &[("r", &id)])));
+                ou_traco(&partes.join(" · "))
+            }
+            None => "—".into(),
+        };
         let itens: Vec<String> = o.clipes.iter().filter_map(|c| n_do_clipe(c)).map(|n| n.to_string()).collect();
         let q = &o.quadros;
-        let mut quadros = format!("quadros: {} marcados, {} medidos, {} interpolados, {} incertos", q.ancora, q.medido, q.interpolado, q.incerto);
+        let mut quadros = frases::preencher(
+            modelo::QUADROS_OCULTOS,
+            &[("ancora", &q.ancora.to_string()), ("medido", &q.medido.to_string()), ("interpolado", &q.interpolado.to_string()), ("incerto", &q.incerto.to_string())],
+        );
         // ausências aceitas do rastreio dentro do intervalo da ocultação: ali nada foi coberto
         let ausencias: Vec<String> = rastreio(&o.rastreio)
             .into_iter()
@@ -1527,13 +1750,17 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
             quadros = format!("{quadros}; {}", frases::preencher(modelo::AUSENCIAS, &[("lista", &ausencias.join("; "))]));
         }
         ocultacoes.push(Ocultacao {
+            n: (ocultacoes.len() + 1).to_string(),
             item: if itens.is_empty() { "—".into() } else { itens.join(", ") },
             gravacao: id_da_midia(&o.midia),
+            arquivo: nome_da_midia(&o.midia),
             intervalo: format!("{} · {}", tempo(o.de_s), tempo(o.ate_s)),
             conteudo: rot_ou("conteudo", &o.conteudo),
+            forma: forma.join(", "),
             filtro: filtro.join(", "),
             motivo: ou_traco(&o.motivo),
             quadros: Some(quadros),
+            regiao: Some(regiao),
         });
     }
     if com_som {
@@ -1545,13 +1772,17 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
                 .map(|it| it.n.to_string())
                 .collect();
             ocultacoes.push(Ocultacao {
+                n: (ocultacoes.len() + 1).to_string(),
                 item: if itens.is_empty() { "—".into() } else { itens.join(", ") },
                 gravacao: id_da_midia(&s.midia),
+                arquivo: nome_da_midia(&s.midia),
                 intervalo: format!("{} · {}", tempo(s.de_s), tempo(s.ate_s)),
                 conteudo: rot("conteudo.som").to_string(),
+                forma: "—".into(),
                 filtro: rot_ou("modo", &s.modo),
                 motivo: ou_traco(&s.motivo),
                 quadros: None,
+                regiao: None,
             });
         }
     }
@@ -1592,20 +1823,77 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     let mut maquina = vec![ou_traco(&e.sistema.cpu.modelo)];
     maquina.extend(e.sistema.gpu.iter().map(|g| format!("GPU {g}")));
     maquina.extend(e.sistema.driver.iter().map(|d| format!("driver {d}")));
-    let software = vec![
+    let mut software = vec![
         ["SICRO".to_string(), format!("{} ({})", ou_traco(&e.sicro.versao), ou_traco(&e.sicro.commit)), rot("papel.sicro").to_string()],
         ["FFmpeg".to_string(), ou_traco(&e.ffmpeg.versao), format!("{} · origem: {} · SHA-256 {}", rot("papel.ffmpeg"), ou_traco(&e.ffmpeg.origem), ou_traco(&e.ffmpeg.sha256))],
         ["Typst".to_string(), ou_traco(&e.typst), rot("papel.typst").to_string()],
-        ["Sistema".to_string(), ou_traco(&e.sistema.so), maquina.join(" · ")],
     ];
-    let modelos_ia = f
-        .ia
+    // o programa que rodou os modelos ("onnxruntime 1.31.1") e onde (CPU, CUDA): a saída da GPU não é a da CPU (§6.6)
+    let mut runtimes: Vec<(&str, Vec<String>)> = Vec::new();
+    for m in modelos.iter().filter(|m| !m.runtime.trim().is_empty()) {
+        let p = provedor(&m.provedor);
+        match runtimes.iter_mut().find(|x| x.0 == m.runtime.trim()) {
+            Some(x) if p.is_empty() || x.1.contains(&p) => {}
+            Some(x) => x.1.push(p),
+            None => runtimes.push((m.runtime.trim(), if p.is_empty() { vec![] } else { vec![p] })),
+        }
+    }
+    for (rt, provedores) in runtimes {
+        let (programa, versao) = rt.split_once(' ').map(|(a, b)| (a.to_string(), b.trim().to_string())).unwrap_or((rt.to_string(), "—".into()));
+        let papel = if provedores.is_empty() { rot("papel.runtime").to_string() } else { format!("{} · {}", rot("papel.runtime"), provedores.join(", ")) };
+        software.push([programa, versao, papel]);
+    }
+    software.push(["Sistema".to_string(), ou_traco(&e.sistema.so), maquina.join(" · ")]);
+    // rastreios em que cada modelo rodou
+    let refs = |m: &FIa| -> Vec<String> {
+        listados.iter().filter(|l| l.lidas.iter().filter(|c| neural(c)).any(|c| FIa::da_corrida(c, &m.uso).mesmo(m))).map(|l| l.id.clone()).collect()
+    };
+    let mut modelos_ia: Vec<ModeloIa> = modelos
         .iter()
-        .map(|m| ModeloIa {
-            modelo: m.modelo.clone(),
-            arquivos: m.arquivos.clone(),
-            origem: [m.origem.as_str(), m.commit.as_str(), m.runtime.as_str(), m.provedor.as_str()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join(" · "),
-            uso: ou_traco(&m.uso),
+        .map(|m| {
+            let rs = refs(m);
+            let uso = rot_ou("uso", m.uso.trim());
+            ModeloIa {
+                modelo: ou_traco(&m.modelo),
+                arquivos: m.arquivos.clone(),
+                origem: ou_traco(&[m.origem.trim(), m.commit.trim()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join(" · ")),
+                execucao: ou_traco(&[m.runtime.trim().to_string(), provedor(&m.provedor)].iter().filter(|x| !x.is_empty()).cloned().collect::<Vec<_>>().join(" · ")),
+                desvio: Some(m.desvio.trim().to_string()).filter(|d| !d.is_empty()),
+                uso: if rs.is_empty() { ou_traco(&uso) } else { format!("{} ({})", ou_traco(&uso), rs.join(", ")) },
+            }
+        })
+        .collect();
+    // o motor da degravação das legendas que saíram (§6.6)
+    if let (Some(motor), Some(o)) = (legendas_por, f.legendas.origem.as_ref()) {
+        let arquivos = o.modelo_sha256.iter().filter(|s| !s.trim().is_empty()).map(|s| FArquivo { nome: rot("arquivo.modelo").to_string(), sha256: s.clone() }).collect();
+        modelos_ia.push(ModeloIa { modelo: motor.to_string(), arquivos, origem: "—".into(), execucao: "—".into(), desvio: None, uso: rot("uso.legendas").to_string() });
+    }
+    // anexo H: cada rastreio em que um programa atuou, com as corridas e o código das amostras
+    let midia_do_rastreio = |id: &str| -> Option<&FMidia> {
+        let m = f.ocultacoes.iter().find(|o| o.rastreio == id).map(|o| o.midia.as_str()).or_else(|| {
+            f.roteiro.iter().find(|it| it.processamentos.iter().any(|p| rastreio_do_proc(p) == Some(id))).and_then(|it| it.origem.as_ref()).map(|o| o.midia.as_str())
+        })?;
+        f.midias.iter().find(|x| x.id == m)
+    };
+    let rastreios_anexo = listados
+        .iter()
+        .map(|l| {
+            let tb = midia_do_rastreio(&l.r.id).map(|m| &m.medido.tb);
+            let mut corridas: Vec<String> = l.lidas.iter().map(|c| corrida_txt(c, tb)).collect();
+            if l.ilegiveis > 0 {
+                corridas.push(frases::preencher(modelo::CORRIDAS_ILEGIVEIS, &[("n", &l.ilegiveis.to_string())]));
+            }
+            let ocs: Vec<usize> = f.ocultacoes.iter().enumerate().filter(|(_, o)| o.rastreio == l.r.id).map(|(i, _)| i + 1).collect();
+            let itens: Vec<u32> = f.roteiro.iter().filter(|it| it.processamentos.iter().any(|p| rastreio_do_proc(p) == Some(l.r.id.as_str()))).map(|it| it.n).collect();
+            let uso: Vec<String> = [(!ocs.is_empty()).then(|| onde_oc(&ocs)), (!itens.is_empty()).then(|| onde(&itens))].into_iter().flatten().collect();
+            RastreioAnexo {
+                id: l.id.clone(),
+                origem: ou_traco(&origem_e_marcacoes(l.r).join(" · ")),
+                uso: ou_traco(&uso.join("; ")),
+                corridas,
+                confirmacao: confirmacao_do_rastreio(l.r).unwrap_or_else(|| "—".into()),
+                amostras: l.r.denso_sha256.clone().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "—".into()),
+            }
         })
         .collect();
 
@@ -1635,6 +1923,7 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         codificacao,
         software,
         modelos_ia,
+        rastreios: rastreios_anexo,
         reproducao: Reproducao { projeto, projeto_sha256: f.projeto.sha256.clone(), observacao: cond(if por_gpu { condicao::REFAZER_GPU } else { condicao::REFAZER_CPU }) },
         pacote: arquivos.iter().map(|a| ArquivoPacote { arquivo: a.rel.replace('\\', "/"), sha256: a.sha256.clone() }).collect(),
         // os anexos dependem do modo do PDF: `entrada` os põe
@@ -1670,7 +1959,8 @@ mod testes {
     use super::*;
     use crate::edicao::curva::fixtures;
     use crate::edicao::modelo::{AudioClipe, Ausencia, ClasseDeteccao, Mixagem, MotivoAusencia, OrigemRastreio, SincroniaRef};
-    use crate::edicao::motor::plano::{ProvProcessamento, ProvTrilha};
+    use crate::edicao::motor::plano::{ProvProcessamento, ProvRastreio, ProvTrilha};
+    use crate::edicao::rastreio::{edgetam, vittrack, ArquivoModelo, Limiares, ModeloCorrida, Motivo, MotorCorrida, Sentido};
     use crate::edicao::relatorio::apoio::{self, Cena};
     use crate::edicao::relatorio::tecnico::{completar_conferencia, montar, ConferenciaOcultacoes, Fecho};
     use crate::relatorio_pdf;
@@ -1691,12 +1981,64 @@ mod testes {
             .collect()
     }
 
-    /// O `tecnico.json` do plano de apoio, com o que as seções do `/2` pedem: detecção confirmada, ocultação invertida,
-    /// média de quadros, relógio, régua, velocidade, narração, sincronia e fecho.
+    /// Uma corrida como o laço grava (§6.1, B2), com os arquivos reais do modelo; de `de` a `ate` (quadros a 30 qps na
+    /// base 1/15360 da cena de apoio).
+    fn corrida(motor: MotorRastreio, provedor: &str, sentido: Sentido, de: i64, ate: i64) -> Corrida {
+        let (nome, arquivos, origem, commit, desvio, runtime) = match motor {
+            MotorRastreio::Edgetam => (
+                "EdgeTAM vídeo",
+                edgetam::ARQUIVOS.iter().map(|a| ArquivoModelo { nome: a.nome.into(), sha256: a.sha256.into() }).collect(),
+                edgetam::ORIGEM,
+                edgetam::COMMIT,
+                edgetam::DESVIO,
+                "onnxruntime 1.31.1",
+            ),
+            MotorRastreio::Vittrack => (
+                "VitTrack",
+                vec![ArquivoModelo { nome: vittrack::NOME_ARQUIVO.into(), sha256: vittrack::SHA256.into() }],
+                vittrack::ORIGEM,
+                vittrack::COMMIT,
+                "",
+                "onnxruntime 1.31.1",
+            ),
+            MotorRastreio::Mancha => ("", vec![], "", "", "", ""),
+        };
+        let modelo = ModeloCorrida { nome: nome.into(), origem: origem.into(), commit: commit.into(), arquivos, desvio: desvio.into() };
+        Corrida {
+            motor: MotorCorrida { motor, modelo, runtime: runtime.into(), provedor: provedor.into() },
+            sentido,
+            ancora_pts: 512 * de,
+            de_pts: 512 * de,
+            ate_pts: 512 * ate,
+            limiares: Limiares { ok: 0.95, perdido: 0.5, paciencia: 90 },
+            parou: Motivo::Fim,
+            feito_em: "2026-11-14T08:30:00Z".into(),
+        }
+    }
+
+    fn valor<T: serde::Serialize>(x: &T) -> Value {
+        serde_json::to_value(x).unwrap()
+    }
+
+    /// Rastreio usado no plano de apoio (`feito.rastreios[]`), sem nome nem confirmação.
+    fn prov_rastreio(id: &str, origem: OrigemRastreio, ancoras: u32, corridas: Vec<Value>) -> ProvRastreio {
+        ProvRastreio { id: id.into(), origem, ancoras, denso_sha256: Some(format!("{:x}", Sha256::digest(id.as_bytes()))), silhuetas_sha256: None, corridas, confirmacao: None, ausencias: vec![] }
+    }
+
+    /// O `tecnico.json` do plano de apoio, com o que as seções do `/2` pedem: detecção confirmada e seguida pelo
+    /// EdgeTAM, alvo seguido pelo VitTrack e pela correlação, ocultação invertida, média de quadros, relógio, régua,
+    /// velocidade, narração, sincronia e fecho.
     fn tecnico_completo(c: &Cena) -> Value {
         let (mut plano, res) = apoio::plano_e_resultado(c);
         let pv = &mut plano.proveniencia;
         pv.rastreios[0].origem = OrigemRastreio::Deteccao { classe: ClasseDeteccao::Rosto };
+        // a corrida antiga da cena (sem a forma da `Corrida`) fica: o anexo só diz que ela existe
+        let edgetam = corrida(MotorRastreio::Edgetam, "cuda", Sentido::Frente, 30, 60);
+        pv.rastreios[0].corridas.push(valor(&edgetam));
+        let (vit, mancha) = (corrida(MotorRastreio::Vittrack, "cpu", Sentido::Frente, 100, 101), corrida(MotorRastreio::Mancha, "cpu", Sentido::Tras, 90, 100));
+        pv.rastreios.push(prov_rastreio("r2", OrigemRastreio::Assistido, 3, vec![valor(&vit), valor(&mancha)]));
+        // `feito.ia` como o P2.1 agrupa (modelo, depois provedor)
+        pv.ia = vec![crate::ia::uso::da_corrida(&edgetam, "rastreio"), crate::ia::uso::da_corrida(&vit, "rastreio")];
         pv.ocultacoes[0].inverter = true;
         pv.ocultacoes[0].margem = 0.05;
         // uma ausência dentro do intervalo da ocultação (1 a 2 s) e outra fora dele
@@ -1710,7 +2052,10 @@ mod testes {
             proc(4, "carimbo", json!({ "tipo": "carimbo", "id": "e4", "mostra": "tempo_fonte" })),
             proc(5, "velocidade_exibida", json!({ "tipo": "velocidade_exibida", "id": "e5", "calculo": { "kmh": 42.0, "faixa": [39.0, 45.5] } })),
         ];
-        pv.roteiro[2].processamentos = vec![proc(1, "regua", json!({ "tipo": "regua", "id": "e6", "comprimento_m": 2.0, "calibracao": { "residuo_m": 0.02 } }))];
+        pv.roteiro[2].processamentos = vec![
+            proc(1, "regua", json!({ "tipo": "regua", "id": "e6", "comprimento_m": 2.0, "calibracao": { "residuo_m": 0.02 } })),
+            proc(2, "holofote", json!({ "tipo": "holofote", "id": "e7", "alvo": { "rastreio": "r2" } })),
+        ];
         pv.roteiro[1].selos = vec!["Média de 8 imagens".into()];
         pv.roteiro[1].audio = Some(serde_json::from_value::<AudioClipe>(json!({ "volume": 1.0, "mudo": true, "manter_tom": true, "silencios": [] })).unwrap());
         pv.audio.mixagem = Some(Mixagem::default());
@@ -1888,14 +2233,15 @@ mod testes {
             tem(&a.rel);
             tem(&a.sha256);
         }
-        tem("sólido opaco, cor #000000ff, retângulo, invertida (cobre tudo o que está fora da forma), margem 5 %");
+        tem("retângulo, invertida (cobre tudo o que está fora da forma), margem 5 %");
+        tem("sólido opaco, cor #000000ff");
         // a ausência aceita dentro do intervalo da ocultação sai com o motivo; a de fora dele não
-        tem("quadros: 2 marcados, 0 medidos, 0 interpolados, 0 incertos; trechos sem ocultação, aceitos pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)");
+        tem("quadros: 2 pela marcação do perito, 0 medidos, 0 interpolados, 0 incertos; trechos sem ocultação, aceitos pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)");
         nao_tem("alvo encoberto");
         tem("tom no lugar do som");
         tem("terceiro /sem relação");
         tem("vision_encoder.onnx");
-        tem(&"e".repeat(64));
+        tem(edgetam::ARQUIVOS[0].sha256);
         tem("Fecho escurecer, 0,500 s");
         tem("SWGDE Best Practices for Digital Forensic Video Analysis, 18-V-001, versão 2.0 (10/12/2025)");
         let baixo = texto.to_lowercase();
@@ -1956,6 +2302,8 @@ mod testes {
         let c = Cena::nova("juri");
         let (mut plano, res) = apoio::plano_e_resultado(&c);
         plano.proveniencia.ia.clear();
+        // a corrida da cena não se lê: com ela não se pode dizer "nenhuma etapa por IA"
+        plano.proveniencia.rastreios[0].corridas.clear();
         plano.proveniencia.selos_desligados.clear();
         plano.proveniencia.revisado_por = " Beltrana de Tal ".into();
         plano.proveniencia.avisos.clear();
@@ -1976,7 +2324,7 @@ mod testes {
         assert!(d["limitacoes"].as_array().unwrap().contains(&json!("As ocultações não foram conferidas pelo perito no arquivo final.")));
         assert_eq!(d["conferencia_ocultacoes"], json!("As ocultações não foram conferidas pelo perito no arquivo final. Perito Teste, em 14 de novembro de 2026, às 8h00 (horário de Brasília)."));
         // rastreio sem ausência aceita: só a contagem
-        assert_eq!(d["ocultacoes"][0]["quadros"], json!("quadros: 2 marcados, 0 medidos, 0 interpolados, 0 incertos"));
+        assert_eq!(d["ocultacoes"][0]["quadros"], json!("quadros: 2 pela marcação do perito, 0 medidos, 0 interpolados, 0 incertos"));
         // sem a lista de quadros no pacote, o PDF não cita o arquivo; sem projeto no pacote, o nome simples
         assert_eq!((&d["conferir"]["lista"], &d["reproducao"]["projeto"]), (&Value::Null, &json!("projeto.json")));
         // codificador de GPU: outra frase de repetição
@@ -2063,6 +2411,7 @@ mod testes {
         };
         plano.proveniencia.rastreios[0].origem = OrigemRastreio::Manual;
         plano.proveniencia.rastreios[0].confirmacao = None;
+        plano.proveniencia.rastreios[0].corridas.clear();
         assert_eq!(resumo(&plano), [nenhuma]);
         plano.proveniencia.rastreios[0].origem = serde_json::from_value(json!({ "tipo": "pessoas", "pessoa_id": "p1", "estado": "revisada", "copiado_em": "2026-11-14T09:00:00Z" })).unwrap();
         assert_eq!(resumo(&plano), ["Ocultações propostas por detecção automática e confirmadas pelo perito: 1."]);
@@ -2075,7 +2424,7 @@ mod testes {
         let c = Cena::nova("juri");
         let (mut plano, res) = apoio::plano_e_resultado(&c);
         plano.proveniencia.ia.clear();
-        plano.proveniencia.rastreios.iter_mut().for_each(|r| r.origem = OrigemRastreio::Manual);
+        plano.proveniencia.rastreios.iter_mut().for_each(|r| (r.origem, r.corridas) = (OrigemRastreio::Manual, vec![]));
         let base = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
         let legendas = |d: &Value| d["acrescimos"].as_array().unwrap().iter().filter(|l| l["o_que"].as_str().unwrap().starts_with("Legendas")).map(|l| format!("{}: {}", l["o_que"].as_str().unwrap(), l["onde"].as_str().unwrap())).collect::<Vec<_>>();
         let ia = |d: &Value| d["ia_resumo"].as_array().unwrap().iter().map(|l| l.as_str().unwrap().to_string()).collect::<Vec<_>>();
@@ -2092,7 +2441,9 @@ mod testes {
         // o modo que saiu vai escrito, com a contagem do que saiu
         for (modo, onde) in [("queimar", "na imagem, ao longo do vídeo"), ("arquivo", "em arquivo que acompanha o vídeo"), ("ambos", "na imagem e em arquivo que acompanha o vídeo")] {
             let d = com(3, json!(modo), json!("whisper"));
-            assert_eq!((legendas(&d), ia(&d)), (vec![format!("Legendas (3): {onde}")], vec![modelo::IA_LEGENDAS.to_string()]), "{modo}");
+            assert_eq!((legendas(&d), ia(&d)), (vec![format!("Legendas (3): {onde}")], vec![modelo::IA_LEGENDAS.to_string(), modelo::IA_MODELOS.to_string()]), "{modo}");
+            // o motor da degravação no anexo H (§6.6), sem arquivo quando o `feito` não traz o SHA-256 do modelo
+            assert_eq!(d["modelos_ia"], json!([{ "modelo": "whisper", "arquivos": [], "origem": "—", "execucao": "—", "desvio": null, "uso": "degravação das legendas" }]), "{modo}");
             // escritas pelo perito: acréscimo sem IA
             let d = com(3, json!(modo), Value::Null);
             assert_eq!((legendas(&d), ia(&d)), (vec![format!("Legendas (3): {onde}")], nenhuma_ia.clone()), "{modo}");
@@ -2100,10 +2451,12 @@ mod testes {
         // "conferidas pelo perito" só quando o `feito` não conta automática sem conferência
         let mut t = base.clone();
         t["feito"]["legendas"] = json!({ "origem": { "audio_sha256": "a", "importado_em": "", "motor": "whisper", "modelo_sha256": null }, "n": 5, "conferidas": 3, "modo": "queimar", "no_projeto": 7, "ia": 4, "ia_conferidas": 4 });
-        assert_eq!(ia(&dados(&t, &[], &[]).unwrap()), vec![modelo::IA_LEGENDAS.to_string()]);
+        assert_eq!(ia(&dados(&t, &[], &[]).unwrap()), vec![modelo::IA_LEGENDAS.to_string(), modelo::IA_MODELOS.to_string()]);
         t["feito"]["legendas"]["ia_conferidas"] = json!(3);
+        t["feito"]["legendas"]["origem"]["modelo_sha256"] = json!("7".repeat(64));
         let d = dados(&t, &[], &[]).unwrap();
-        assert_eq!(ia(&d), vec!["Legendas escritas a partir de degravação automática; sem conferência registrada pelo perito: 1.".to_string()]);
+        assert_eq!(ia(&d), vec!["Legendas escritas a partir de degravação automática; sem conferência registrada pelo perito: 1.".to_string(), modelo::IA_MODELOS.to_string()]);
+        assert_eq!(d["modelos_ia"][0]["arquivos"], json!([{ "nome": "arquivo do modelo", "sha256": "7".repeat(64) }]));
         assert!(!serde_json::to_string(&d).unwrap().contains("e conferidas pelo perito"), "o PDF não afirma a conferência que o feito não registra");
     }
 
@@ -2224,6 +2577,281 @@ mod testes {
         let mut ruim = t.clone();
         ruim["execucao"]["saida"]["sha256"] = json!("");
         assert!(entrada(&ruim, d, &[], b"{}", ModoPdf::A3).is_err());
+    }
+
+    /// Uma linha da planilha: (nº, item, gravação, arquivo, intervalo, conteúdo, forma, filtro, motivo, quadros, região).
+    fn linha_da_planilha(d: &Value, i: usize) -> [Value; 11] {
+        let o = &d["ocultacoes"][i];
+        ["n", "item", "gravacao", "arquivo", "intervalo", "conteudo", "forma", "filtro", "motivo", "quadros", "regiao"].map(|k| o[k].clone())
+    }
+
+    /// Planilha de ocultações do anexo E (SWGDE 18-M §11, figura 4): cada célula sai de um campo do `feito` (o campo
+    /// muda, a célula muda; sem o campo, nada se afirma), com o vídeo, a data e a conferência no arquivo final.
+    #[test]
+    fn planilha_de_ocultacoes() {
+        use crate::edicao::modelo::{ConteudoOculto, FormaRegiao, ModoOcultar};
+        use crate::edicao::motor::plano::ProvQuadrosOcultos;
+        let c = Cena::nova("juri-planilha");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let pv = &mut plano.proveniencia;
+        // r1: detecção de rosto confirmada pelo perito; r2: alvo seguido pelo VitTrack a partir de uma marcação
+        pv.rastreios[0].origem = OrigemRastreio::Deteccao { classe: ClasseDeteccao::Rosto };
+        pv.rastreios[0].corridas.clear();
+        pv.rastreios.push(prov_rastreio("r2", OrigemRastreio::Assistido, 1, vec![valor(&corrida(MotorRastreio::Vittrack, "cpu", Sentido::Frente, 30, 89))]));
+        let mut placa = pv.ocultacoes[0].clone();
+        (placa.modo, placa.intensidade, placa.conteudo, placa.forma) = (ModoOcultar::Mosaico, 0.75, ConteudoOculto::Placa, FormaRegiao::Elipse);
+        (placa.margem, placa.borda_suave, placa.motivo, placa.rastreio) = (0.1, 0.02, "placa de veículo de terceiro".into(), "r2".into());
+        (placa.clipes, placa.de_s, placa.ate_s) = (vec!["c2".into(), "c3".into()], 1.0, 3.3);
+        placa.quadros = ProvQuadrosOcultos { ancora: 1, medido: 40, interpolado: 3, incerto: 5 };
+        pv.ocultacoes.push(placa);
+        let t = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let d = dados(&t, &[], &[]).unwrap();
+        let confirmado = "confirmado por Perito Teste em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:02,000";
+        assert_eq!(linha_da_planilha(&d, 0), [
+            json!("1"), json!("2"), json!("A"), json!("cam 1.mp4"), json!("0:01,000 · 0:02,000"), json!("rosto"), json!("retângulo"),
+            json!("sólido opaco, cor #000000ff"), json!("terceiro sem relação"), json!("quadros: 2 pela marcação do perito, 0 medidos, 0 interpolados, 0 incertos"),
+            json!(format!("detecção automática (rosto) · marcações do perito: 2 · {confirmado} · R1 (anexo H)")),
+        ]);
+        assert_eq!(linha_da_planilha(&d, 1), [
+            json!("2"), json!("2, 3"), json!("A"), json!("cam 1.mp4"), json!("0:01,000 · 0:03,300"), json!("placa"), json!("elipse, margem 10 %, borda suave 2 %"),
+            json!("mosaico, intensidade 0,75"), json!("placa de veículo de terceiro"), json!("quadros: 1 pela marcação do perito, 40 medidos, 3 interpolados, 5 incertos"),
+            json!("acompanhamento por programa a partir de marcação do perito · marcações do perito: 1 · R2 (anexo H)"),
+        ]);
+        // o som: sem forma, sem região, sem quadros
+        assert_eq!(linha_da_planilha(&d, 2), [
+            json!("3"), json!("2"), json!("A"), json!("cam 1.mp4"), json!("0:01,500 · 0:02,000"), json!("som"), json!("—"), json!("tom no lugar do som"),
+            json!("nome"), Value::Null, Value::Null,
+        ]);
+        // cada célula pelo seu campo do `feito`
+        let com = |muda: &dyn Fn(&mut Value)| {
+            let mut t = t.clone();
+            muda(&mut t);
+            dados(&t, &[], &[]).unwrap()
+        };
+        let regiao = |d: &Value, i: usize| d["ocultacoes"][i]["regiao"].as_str().unwrap().to_string();
+        // detecção vira marcação (e sem corrida o r1 sai do anexo H: o r2 passa a ser R1)
+        let d2 = com(&|t| t["feito"]["rastreios"][0]["origem"] = json!({ "tipo": "manual" }));
+        assert_eq!((regiao(&d2, 0), regiao(&d2, 1)), (format!("marcação do perito · marcações do perito: 2 · {confirmado}"), "acompanhamento por programa a partir de marcação do perito · marcações do perito: 1 · R1 (anexo H)".into()));
+        let d2 = com(&|t| t["feito"]["rastreios"][0]["origem"] = json!({ "tipo": "pessoas", "pessoa_id": "p", "estado": "auto", "copiado_em": "x" }));
+        assert!(regiao(&d2, 0).starts_with("trilha automática da análise de pessoas · "), "{}", regiao(&d2, 0));
+        let d2 = com(&|t| t["feito"]["rastreios"][0]["origem"] = json!({ "tipo": "pessoas", "pessoa_id": "p", "estado": "revisada", "copiado_em": "x" }));
+        assert!(regiao(&d2, 0).starts_with("trilha da análise de pessoas, revisada pelo perito na análise · "), "{}", regiao(&d2, 0));
+        let d2 = com(&|t| t["feito"]["rastreios"][0]["origem"] = json!({ "tipo": "deteccao", "classe": "placa" }));
+        assert!(regiao(&d2, 0).starts_with("detecção automática (placa) · "));
+        // origem que o catálogo não conhece: não se diz como nasceu
+        let d2 = com(&|t| t["feito"]["rastreios"][0]["origem"] = json!({ "tipo": "futuro" }));
+        assert_eq!(regiao(&d2, 0), format!("marcações do perito: 2 · {confirmado}"));
+        // marcações: o número do `feito`; sem o campo, não se afirma
+        assert!(regiao(&com(&|t| t["feito"]["rastreios"][1]["ancoras"] = json!(7)), 1).contains("marcações do perito: 7 ·"));
+        assert_eq!(regiao(&com(&|t| drop(t["feito"]["rastreios"][1].as_object_mut().unwrap().remove("ancoras"))), 1), "acompanhamento por programa a partir de marcação do perito · R2 (anexo H)");
+        // confirmação: só inteira
+        assert!(!regiao(&com(&|t| t["feito"]["rastreios"][0]["confirmacao"] = Value::Null), 0).contains("confirmado"));
+        assert!(!regiao(&com(&|t| drop(t["feito"]["rastreios"][0]["confirmacao"].as_object_mut().unwrap().remove("em"))), 0).contains("confirmado"));
+        assert!(regiao(&com(&|t| t["feito"]["rastreios"][0]["confirmacao"]["por"] = json!("Outro Perito")), 0).contains("confirmado por Outro Perito em"));
+        // confirmação presa a outras amostras (nova corrida depois dela) não vale (§6.6): não se afirma
+        assert!(!regiao(&com(&|t| t["feito"]["rastreios"][0]["confirmacao"]["denso_sha256"] = json!("9".repeat(64))), 0).contains("confirmado"));
+        let conf = |sha: Value| json!({ "por": "Perito Teste", "em": "2026-11-14T09:00:00Z", "denso_sha256": sha, "de_s": 1.0, "ate_s": 3.3 });
+        let sha_r2 = t["feito"]["rastreios"][1]["denso_sha256"].clone();
+        assert!(sha_r2.as_str().is_some_and(|s| s.len() == 64));
+        assert!(regiao(&com(&|t| t["feito"]["rastreios"][1]["confirmacao"] = conf(sha_r2.clone())), 1).contains("confirmado por Perito Teste em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:03,300"));
+        for outra in [json!("9".repeat(64)), Value::Null] {
+            let d2 = com(&|t| t["feito"]["rastreios"][1]["confirmacao"] = conf(outra.clone()));
+            assert!(!regiao(&d2, 1).contains("confirmado"), "{outra}");
+            assert_eq!(d2["rastreios"][1]["confirmacao"], json!("—"), "{outra}");
+        }
+        // rastreio que o `feito` não traz: nada se afirma da região
+        assert_eq!(regiao(&com(&|t| t["feito"]["ocultacoes"][0]["rastreio"] = json!("rx")), 0), "—");
+        // arquivo, quadros, forma e filtro
+        assert_eq!(com(&|t| t["feito"]["midias"][0]["nome"] = json!("outra câmera.mp4"))["ocultacoes"][0]["arquivo"], json!("outra câmera.mp4"));
+        assert_eq!(com(&|t| t["feito"]["ocultacoes"][1]["quadros"]["incerto"] = json!(9))["ocultacoes"][1]["quadros"], json!("quadros: 1 pela marcação do perito, 40 medidos, 3 interpolados, 9 incertos"));
+        assert_eq!(com(&|t| t["feito"]["ocultacoes"][1]["inverter"] = json!(true))["ocultacoes"][1]["forma"], json!("elipse, invertida (cobre tudo o que está fora da forma), margem 10 %, borda suave 2 %"));
+        assert_eq!(com(&|t| t["feito"]["ocultacoes"][1]["modo"] = json!("desfoque"))["ocultacoes"][1]["filtro"], json!("desfoque, intensidade 0,75"));
+        // no PDF: a planilha com o vídeo, a data e a conferência (pendente; depois conferida, por quem e quando)
+        let (_, texto) = pdf_de(&t, ModoPdf::A3);
+        let tem = |texto: &str, s: &str| assert!(texto.contains(s), "falta no PDF: {s}\n{texto}");
+        for s in [
+            "Vídeo com as ocultações Caso.mp4",
+            "Exportado em 14 de novembro de 2026, às 7h00 (horário de Brasília)",
+            "Conferência no arquivo final A conferência das ocultações no arquivo final ainda não foi registrada.",
+            "Gravação original",
+            "A · cam 1.mp4",
+            "elipse, margem 10 %, borda suave 2 %",
+            "mosaico, intensidade 0,75",
+            "placa de veículo de terceiro",
+            "Região de cada ocultação de imagem",
+            "acompanhamento por programa a partir de marcação do perito · marcações do perito: 1 · R2 (anexo H)",
+            "quadros: 1 pela marcação do perito, 40 medidos, 3 interpolados, 5 incertos",
+            confirmado,
+        ] {
+            tem(&texto, s);
+        }
+        let mut t = t.clone();
+        completar_conferencia(&mut t, &ConferenciaOcultacoes { conferida: true, por: "Perito Teste".into(), em: "2026-11-14T11:00:00Z".into() }).unwrap();
+        let (_, texto) = pdf_de(&t, ModoPdf::A3);
+        tem(&texto, "Conferência no arquivo final As ocultações foram conferidas pelo perito no arquivo final. Perito Teste, em 14 de novembro de 2026, às 8h00 (horário de Brasília).");
+        assert!(!texto.contains(apoio::NOME_RASTREIO) && !texto.contains(&*c.caso.to_string_lossy()));
+    }
+
+    /// Anexo H, modelos por arquivo: os de `feito.ia` e os das corridas (`feito.rastreios[].corridas`) que ele não traz,
+    /// cada arquivo com o SHA-256, onde rodou ("CPU" / "CUDA") e em que rastreio; cada rastreio em que um programa
+    /// atuou, com as corridas. Correlação não é modelo de IA; marcação só do perito não entra no anexo H.
+    #[test]
+    fn anexo_h_modelos_por_arquivo() {
+        let c = Cena::nova("juri-anexo-h");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let pv = &mut plano.proveniencia;
+        pv.ia.clear();
+        // r1 (detecção) seguido duas vezes pelo EdgeTAM na GPU: um modelo só; a corrida antiga da cena fica
+        pv.rastreios[0].origem = OrigemRastreio::Deteccao { classe: ClasseDeteccao::Rosto };
+        let (frente, tras) = (corrida(MotorRastreio::Edgetam, "cuda", Sentido::Frente, 30, 60), corrida(MotorRastreio::Edgetam, "cuda", Sentido::Tras, 0, 30));
+        pv.rastreios[0].corridas.extend([valor(&frente), valor(&tras)]);
+        // r2: VitTrack em CPU e correlação; r3: só correlação; r4: só marcação
+        let vit = corrida(MotorRastreio::Vittrack, "cpu", Sentido::Frente, 100, 101);
+        pv.rastreios.push(prov_rastreio("r2", OrigemRastreio::Assistido, 3, vec![valor(&vit), valor(&corrida(MotorRastreio::Mancha, "cpu", Sentido::Tras, 90, 100))]));
+        pv.rastreios.push(prov_rastreio("r3", OrigemRastreio::Assistido, 1, vec![valor(&corrida(MotorRastreio::Mancha, "cpu", Sentido::Frente, 30, 89))]));
+        pv.rastreios.push(prov_rastreio("r4", OrigemRastreio::Manual, 2, vec![]));
+        let proc = |nome: &str, ordem: u32, alvo: Value| ProvProcessamento { ordem, nome: nome.into(), parametros: alvo };
+        pv.roteiro[1].processamentos = vec![proc("destaque", 1, json!({ "tipo": "destaque", "id": "e1", "rastreio": "r3" })), proc("destaque", 2, json!({ "tipo": "destaque", "id": "e2", "rastreio": "r4" }))];
+        pv.roteiro[2].processamentos = vec![proc("holofote", 1, json!({ "tipo": "holofote", "id": "e3", "alvo": { "rastreio": "r2" } }))];
+        let t = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let d = dados(&t, &[], &[]).unwrap();
+        let arquivos_de = |c: &Corrida| json!(c.motor.modelo.arquivos.iter().map(|a| json!({ "nome": a.nome, "sha256": a.sha256 })).collect::<Vec<_>>());
+        let esperado = json!([
+            { "modelo": "EdgeTAM vídeo", "arquivos": arquivos_de(&frente), "origem": format!("{} · {}", edgetam::ORIGEM, edgetam::COMMIT),
+              "execucao": "onnxruntime 1.31.1 · CUDA", "desvio": edgetam::DESVIO, "uso": "acompanhamento de alvo (R1)" },
+            { "modelo": "VitTrack", "arquivos": [{ "nome": vittrack::NOME_ARQUIVO, "sha256": vittrack::SHA256 }], "origem": format!("{} · {}", vittrack::ORIGEM, vittrack::COMMIT),
+              "execucao": "onnxruntime 1.31.1 · CPU", "desvio": null, "uso": "acompanhamento de alvo (R2)" },
+        ]);
+        assert_eq!(d["modelos_ia"], esperado);
+        assert_eq!(d["modelos_ia"][0]["arquivos"].as_array().unwrap().len(), 4, "os quatro grafos do EdgeTAM");
+        // `feito.ia` como o P2.1 agrupa (e o de exportação antiga, com o provedor em maiúsculas): mesma tabela, sem repetir
+        for prov in ["cuda", "CUDA"] {
+            let mut t2 = t.clone();
+            let mut ia = vec![valor(&crate::ia::uso::da_corrida(&frente, "rastreio")), valor(&crate::ia::uso::da_corrida(&vit, "rastreio"))];
+            ia[0]["provedor"] = json!(prov);
+            t2["feito"]["ia"] = json!(ia);
+            assert_eq!(dados(&t2, &[], &[]).unwrap()["modelos_ia"], esperado, "{prov}");
+        }
+        // modelo de `feito.ia` que nenhuma corrida usa: listado como o `feito` diz, sem rastreio
+        let mut t2 = t.clone();
+        t2["feito"]["ia"] = json!([{ "modelo": "YOLOX-S", "arquivos": [{ "nome": "yolox_s.onnx", "sha256": "8".repeat(64) }], "origem": "x", "commit": "", "desvio": "",
+            "runtime": "onnxruntime 1.31.1", "provedor": "cpu", "uso": "deteccao" }]);
+        let m = dados(&t2, &[], &[]).unwrap()["modelos_ia"].clone();
+        assert_eq!((m.as_array().unwrap().len(), &m[0]["modelo"], &m[0]["uso"], &m[0]["execucao"]), (3, &json!("YOLOX-S"), &json!("deteccao"), &json!("onnxruntime 1.31.1 · CPU")));
+        // onnxruntime com a versão e onde rodou, antes do sistema
+        let sw: Vec<Vec<String>> = serde_json::from_value(d["software"].clone()).unwrap();
+        assert_eq!(sw.iter().map(|l| l[0].as_str()).collect::<Vec<_>>(), ["SICRO", "FFmpeg", "Typst", "onnxruntime", "Sistema"]);
+        assert_eq!(sw[3], ["onnxruntime", "1.31.1", "execução dos modelos de inteligência artificial · CUDA, CPU"]);
+        // rastreios: r1, r2 e r3 (r4 só tem marcação); a correlação aparece como tal
+        let corrida_frente = "EdgeTAM vídeo · onnxruntime 1.31.1 · CUDA · para a frente, 0:01,000 a 0:02,000 (pts 15360 a 30720) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)";
+        assert_eq!(d["rastreios"], json!([
+            { "id": "R1", "origem": "detecção automática (rosto) · marcações do perito: 2", "uso": "ocultação 1",
+              "corridas": [corrida_frente, corrida_frente.replace("para a frente, 0:01,000 a 0:02,000 (pts 15360 a 30720)", "para trás, 0:00,000 a 0:01,000 (pts 0 a 15360)"), "corridas sem registro legível: 1"],
+              "confirmacao": "confirmado por Perito Teste em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:02,000", "amostras": "—" },
+            { "id": "R2", "origem": "acompanhamento por programa a partir de marcação do perito · marcações do perito: 3", "uso": "item 3",
+              "corridas": [
+                  "VitTrack · onnxruntime 1.31.1 · CPU · para a frente, 0:03,333 a 0:03,367 (pts 51200 a 51712) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)",
+                  "correlação, sem inteligência artificial · CPU · para trás, 0:03,000 a 0:03,333 (pts 46080 a 51200) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)",
+              ],
+              "confirmacao": "—", "amostras": format!("{:x}", Sha256::digest(b"r2")) },
+            { "id": "R3", "origem": "acompanhamento por programa a partir de marcação do perito · marcações do perito: 1", "uso": "item 2",
+              "corridas": ["correlação, sem inteligência artificial · CPU · para a frente, 0:01,000 a 0:02,967 (pts 15360 a 45568) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)"],
+              "confirmacao": "—", "amostras": format!("{:x}", Sha256::digest(b"r3")) },
+        ]));
+        // cada pedaço da corrida pelo seu campo: limiares, parada, quando, base de tempo da gravação
+        let mut t2 = t.clone();
+        let cr = &mut t2["feito"]["rastreios"][0]["corridas"][1];
+        (cr["limiares"], cr["parou"], cr["feito_em"]) = (json!({ "ok": 0.45, "perdido": 0.3, "paciencia": 60 }), json!("saiu_do_quadro"), json!("2026-11-20T14:02:11Z"));
+        t2["feito"]["midias"][0]["medido"]["tb"] = json!({ "num": 1, "den": 30720 });
+        let r1 = dados(&t2, &[], &[]).unwrap()["rastreios"][0]["corridas"][0].as_str().unwrap().to_string();
+        assert_eq!(r1, "EdgeTAM vídeo · onnxruntime 1.31.1 · CUDA · para a frente, 0:00,500 a 0:01,000 (pts 15360 a 30720) · parada: alvo saiu da imagem · limiares 0,45 e 0,3, paciência de 60 quadros · 20/11/2026, 11h02 (Brasília)");
+        // sem saber a gravação do rastreio, só os pts
+        t2["feito"]["ocultacoes"][0]["rastreio"] = json!("rx");
+        assert!(dados(&t2, &[], &[]).unwrap()["rastreios"][0]["corridas"][0].as_str().unwrap().contains("para a frente, pts 15360 a 30720 · "));
+        // resumo para leigo: detecção, alvo seguido por IA (só o r2: o r3 é correlação) e a remissão ao anexo H
+        let ia: Vec<String> = serde_json::from_value(d["ia_resumo"].clone()).unwrap();
+        assert_eq!(ia, ["Ocultações propostas por detecção automática e confirmadas pelo perito: 1.", "Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1.", modelo::IA_MODELOS]);
+        // no PDF: arquivos e SHA-256 inteiros, provedor em maiúsculas, as corridas
+        let (_, texto) = pdf_de(&t, ModoPdf::A3);
+        let tem = |s: &str| assert!(texto.contains(s), "falta no PDF: {s}\n{texto}");
+        for a in edgetam::ARQUIVOS {
+            tem(a.nome);
+            tem(a.sha256);
+        }
+        for s in [vittrack::NOME_ARQUIVO, vittrack::SHA256, "Acompanhamento de alvos", "desvio conhecido: melhor de 3 máscaras no quadro marcado", "acompanhamento de alvo (R1)",
+                  "onnxruntime 1.31.1 · CUDA", "onnxruntime 1.31.1 · CPU", corrida_frente, "correlação, sem inteligência artificial · CPU", "corridas sem registro legível: 1"] {
+            tem(s);
+        }
+        assert!(!texto.contains("cuda") && !texto.contains(" cpu "), "provedor como veio do fio");
+        assert!(!texto.contains(apoio::NOME_RASTREIO) && !texto.contains(&*c.caso.to_string_lossy()));
+    }
+
+    /// Resumo para leigo do rastreio assistido, pelas corridas: correlação não é IA ("nenhuma etapa" vale); motor
+    /// neural é; sem corrida legível não se sabe, e nem "nenhuma etapa" pode ser dito.
+    #[test]
+    fn ia_do_rastreio_assistido_pelas_corridas() {
+        let c = Cena::nova("juri-ia");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        plano.proveniencia.ia.clear();
+        (plano.proveniencia.rastreios[0].origem, plano.proveniencia.rastreios[0].confirmacao) = (OrigemRastreio::Manual, None);
+        plano.proveniencia.rastreios[0].corridas.clear();
+        let base = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let resumo = |origem: &str, corridas: Value| {
+            let mut t = base.clone();
+            (t["feito"]["rastreios"][0]["origem"], t["feito"]["rastreios"][0]["corridas"]) = (json!({ "tipo": origem }), corridas);
+            dados(&t, &[], &[]).unwrap()["ia_resumo"].as_array().unwrap().iter().map(|l| l.as_str().unwrap().to_string()).collect::<Vec<_>>()
+        };
+        let nenhuma = frases::da_condicao(condicao::IA_NENHUMA).unwrap().to_string();
+        let sem_registro = "Alvos acompanhados por programa a partir de marcação do perito, sem registro do programa usado: 1.".to_string();
+        let mancha = valor(&corrida(MotorRastreio::Mancha, "cpu", Sentido::Frente, 30, 60));
+        let vit = valor(&corrida(MotorRastreio::Vittrack, "cpu", Sentido::Frente, 30, 60));
+        let ilegivel = json!({ "motor": "edgetam" });
+        assert_eq!(resumo("manual", json!([])), [nenhuma.clone()]);
+        assert_eq!(resumo("assistido", json!([mancha])), [nenhuma.clone()]);
+        assert_eq!(resumo("assistido", json!([])), [sem_registro.clone()]);
+        assert_eq!(resumo("assistido", json!([ilegivel])), [sem_registro.clone()]);
+        assert_eq!(resumo("assistido", json!([mancha, ilegivel])), [sem_registro.clone()]);
+        let com_ia = ["Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1.".to_string(), modelo::IA_MODELOS.to_string()];
+        assert_eq!(resumo("assistido", json!([mancha, vit])), com_ia);
+        // corrida neural em rastreio manual (o perito marcou depois por cima): o modelo vai ao anexo H e ao resumo
+        assert_eq!(resumo("manual", json!([vit])), [modelo::IA_MODELOS.to_string()]);
+        // corrida ilegível também em rastreio manual: não se sabe se houve IA, "nenhuma etapa" não é dito
+        assert_eq!(resumo("manual", json!([ilegivel])), [sem_registro.clone()]);
+        assert_eq!(resumo("manual", json!([mancha, ilegivel])), [sem_registro.clone()]);
+    }
+
+    /// Fecho com o P2.1: `feito.ia` pelo `ia::uso::da_proveniencia` das mesmas corridas. O anexo H não repete modelo,
+    /// não perde nenhum das corridas, não lista correlação como modelo e sai igual em duas chamadas.
+    #[test]
+    #[ignore = "fecho da Fase 2: P2.1"]
+    fn feito_ia_das_corridas_pelo_p2_1() {
+        let c = Cena::nova("juri-fecho-ia");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let pv = &mut plano.proveniencia;
+        let (frente, tras) = (corrida(MotorRastreio::Edgetam, "cuda", Sentido::Frente, 30, 60), corrida(MotorRastreio::Edgetam, "cuda", Sentido::Tras, 0, 30));
+        pv.rastreios[0].origem = OrigemRastreio::Assistido;
+        pv.rastreios[0].corridas = vec![valor(&frente), valor(&tras), valor(&corrida(MotorRastreio::Mancha, "cpu", Sentido::Frente, 60, 89))];
+        pv.rastreios.push(prov_rastreio("r2", OrigemRastreio::Assistido, 1, vec![valor(&corrida(MotorRastreio::Vittrack, "cpu", Sentido::Frente, 30, 89))]));
+        pv.roteiro[2].processamentos = vec![ProvProcessamento { ordem: 1, nome: "holofote".into(), parametros: json!({ "tipo": "holofote", "id": "e3", "alvo": { "rastreio": "r2" } }) }];
+        pv.ia = crate::ia::uso::da_proveniencia(&pv.rastreios);
+        assert!(!pv.ia.is_empty(), "o P2.1 não preencheu `feito.ia`");
+        let t = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let d = dados(&t, &[], &[]).unwrap();
+        let mut sem = t.clone();
+        sem["feito"]["ia"] = json!([]);
+        let pelas_corridas = dados(&sem, &[], &[]).unwrap();
+        let chaves = |d: &Value| {
+            let mut v: Vec<String> = d["modelos_ia"].as_array().unwrap().iter().map(|m| format!("{} | {} | {}", m["modelo"], m["execucao"], m["arquivos"])).collect();
+            v.sort();
+            v
+        };
+        let (do_p21, das_corridas) = (chaves(&d), chaves(&pelas_corridas));
+        assert_eq!(do_p21, das_corridas, "o anexo H pelo `feito.ia` do P2.1 e pelas corridas");
+        let mut unicos = do_p21.clone();
+        unicos.dedup();
+        assert_eq!(unicos, do_p21, "modelo repetido");
+        assert!(d["modelos_ia"].as_array().unwrap().iter().all(|m| !m["arquivos"].as_array().unwrap().is_empty()), "correlação listada como modelo: {}", d["modelos_ia"]);
+        assert_eq!(serde_json::to_vec(&d).unwrap(), serde_json::to_vec(&dados(&t, &[], &[]).unwrap()).unwrap());
     }
 
     #[test]

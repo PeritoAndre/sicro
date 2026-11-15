@@ -72,6 +72,8 @@ export function DegravacaoView() {
   const navigate = useNavigate();
   // Caminhos da IA: preferir a config do gerenciador (Configurações); senão localStorage.
   const aiSettings = useSettingsStore((s) => s.settings.ai);
+  // interruptor "Usar modelos de IA" (§6.6): desligado, transcrição e locutores somem
+  const iaLigada = !aiSettings.modelos_desligados;
 
   const [media, setMedia] = useState<AudioMedia | null>(null);
   const [segments, setSegments] = useState<LocalSeg[]>([]);
@@ -386,7 +388,8 @@ export function DegravacaoView() {
   }, []);
 
   const runTranscribe = useCallback(async () => {
-    if (!ws || !media) return;
+    // o atalho também chega aqui: interruptor desligado não transcreve
+    if (!ws || !media || aiSettings.modelos_desligados) return;
     if (whisperOk === false) {
       setTranscribeErr(
         "whisper.cpp não encontrado. Instale o whisper-cli (github.com/ggml-org/whisper.cpp), " +
@@ -445,7 +448,7 @@ export function DegravacaoView() {
   }, [ws, media, whisperOk, pickModel, mutate, aiSettings, language]);
 
   const runDiarize = useCallback(async () => {
-    if (!ws || !media) return;
+    if (!ws || !media || aiSettings.modelos_desligados) return;
     if (!aiSettings.diar_bin_path) {
       setDiarErr("Separador de locutores não instalado — baixe em Configurações → IA (≈ 58 MB, uma vez; depois roda offline).");
       return;
@@ -461,7 +464,7 @@ export function DegravacaoView() {
     } finally {
       setDiarBusy(false);
     }
-  }, [ws, media, aiSettings.diar_bin_path, numSpeakers, mutate]);
+  }, [ws, media, aiSettings.diar_bin_path, aiSettings.modelos_desligados, numSpeakers, mutate]);
 
   // Nome dado na legenda vale para todos os trechos preenchidos pela separação.
   const renameSpeaker = useCallback(
@@ -566,96 +569,104 @@ export function DegravacaoView() {
               >
                 Capturar trecho
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Bot size={14} />}
-                onClick={() => void runTranscribe()}
-                disabled={transcribing}
-              >
-                {transcribing ? "Transcrevendo…" : "Rascunho IA"}
-              </Button>
-              <label className={styles.langSelect} title="Idioma do áudio para a transcrição">
-                idioma:
-                <select
-                  value={language}
-                  onChange={(e) => {
-                    setLanguage(e.target.value);
-                    localStorage.setItem("sicro.whisper.lang", e.target.value);
-                  }}
-                  disabled={transcribing}
-                >
-                  <option value="pt">Português</option>
-                  <option value="auto">Detectar automaticamente</option>
-                  <option value="es">Espanhol</option>
-                  <option value="en">Inglês</option>
-                  <option value="fr">Francês</option>
-                  <option value="it">Italiano</option>
-                  <option value="de">Alemão</option>
-                </select>
-              </label>
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={<Users size={14} />}
-                onClick={() => void runDiarize()}
-                disabled={diarBusy}
-                title="Separa as vozes: quem fala quando (local, offline)"
-              >
-                {diarBusy ? "Separando…" : "Locutores"}
-              </Button>
-              <label
-                className={styles.langSelect}
-                title="Se souber quantas pessoas falam, informe — é mais confiável que o automático"
-              >
-                pessoas:
-                <select
-                  value={numSpeakers ?? 0}
-                  onChange={(e) => {
-                    const v = Number(e.target.value);
-                    setNumSpeakers(v > 0 ? v : null);
-                    localStorage.setItem("sicro.diar.n", String(v));
-                  }}
-                  disabled={diarBusy}
-                >
-                  <option value={0}>automático (estimativa)</option>
-                  {[2, 3, 4, 5, 6, 7, 8].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              {iaLigada && (
+                <>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Bot size={14} />}
+                    onClick={() => void runTranscribe()}
+                    disabled={transcribing}
+                  >
+                    {transcribing ? "Transcrevendo…" : "Rascunho IA"}
+                  </Button>
+                  <label className={styles.langSelect} title="Idioma do áudio para a transcrição">
+                    idioma:
+                    <select
+                      value={language}
+                      onChange={(e) => {
+                        setLanguage(e.target.value);
+                        localStorage.setItem("sicro.whisper.lang", e.target.value);
+                      }}
+                      disabled={transcribing}
+                    >
+                      <option value="pt">Português</option>
+                      <option value="auto">Detectar automaticamente</option>
+                      <option value="es">Espanhol</option>
+                      <option value="en">Inglês</option>
+                      <option value="fr">Francês</option>
+                      <option value="it">Italiano</option>
+                      <option value="de">Alemão</option>
+                    </select>
+                  </label>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Users size={14} />}
+                    onClick={() => void runDiarize()}
+                    disabled={diarBusy}
+                    title="Separa as vozes: quem fala quando (local, offline)"
+                  >
+                    {diarBusy ? "Separando…" : "Locutores"}
+                  </Button>
+                  <label
+                    className={styles.langSelect}
+                    title="Se souber quantas pessoas falam, informe — é mais confiável que o automático"
+                  >
+                    pessoas:
+                    <select
+                      value={numSpeakers ?? 0}
+                      onChange={(e) => {
+                        const v = Number(e.target.value);
+                        setNumSpeakers(v > 0 ? v : null);
+                        localStorage.setItem("sicro.diar.n", String(v));
+                      }}
+                      disabled={diarBusy}
+                    >
+                      <option value={0}>automático (estimativa)</option>
+                      {[2, 3, 4, 5, 6, 7, 8].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </>
+              )}
               <span className={styles.hint}>
                 <kbd>Ctrl</kbd>+<kbd>Espaço</kbd> tocar · <kbd>Ctrl</kbd>+<kbd>←</kbd>/<kbd>→</kbd> ±3s ·{" "}
                 <kbd>Ctrl</kbd>+<kbd>Enter</kbd> capturar · <kbd>Ctrl</kbd>+<kbd>S</kbd> salvar
               </span>
-              <span className={styles.modelLine}>
-                whisper:{" "}
-                {whisperBin
-                  ? (whisperBin.split(/[\\/]/).pop() ?? whisperBin)
-                  : whisperOk
-                    ? "no PATH"
-                    : "não encontrado"}{" "}
-                <button
-                  type="button"
-                  className={styles.modelChange}
-                  onClick={() => void pickWhisperBin()}
-                >
-                  localizar
-                </button>
-              </span>
-              {modelName && (
-                <span className={styles.modelLine}>
-                  modelo IA: {modelName}{" "}
-                  <button
-                    type="button"
-                    className={styles.modelChange}
-                    onClick={() => void pickModel()}
-                  >
-                    trocar
-                  </button>
-                </span>
+              {iaLigada && (
+                <>
+                  <span className={styles.modelLine}>
+                    whisper:{" "}
+                    {whisperBin
+                      ? (whisperBin.split(/[\\/]/).pop() ?? whisperBin)
+                      : whisperOk
+                        ? "no PATH"
+                        : "não encontrado"}{" "}
+                    <button
+                      type="button"
+                      className={styles.modelChange}
+                      onClick={() => void pickWhisperBin()}
+                    >
+                      localizar
+                    </button>
+                  </span>
+                  {modelName && (
+                    <span className={styles.modelLine}>
+                      modelo IA: {modelName}{" "}
+                      <button
+                        type="button"
+                        className={styles.modelChange}
+                        onClick={() => void pickModel()}
+                      >
+                        trocar
+                      </button>
+                    </span>
+                  )}
+                </>
               )}
             </div>
           </div>

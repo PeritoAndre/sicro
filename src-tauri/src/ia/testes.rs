@@ -107,6 +107,12 @@ pub fn pacote_gpu() -> Option<PacoteGpu> {
     })
 }
 
+/// `SICRO_ORT_CPU_LIB` ou a lib de CPU 1.31.1 da venv do dossiê (nunca a do dono): só no filho do cenário
+/// "lib de CPU" (um onnxruntime por processo).
+pub fn ort_cpu_lib() -> Option<PathBuf> {
+    existe(var_ou("SICRO_ORT_CPU_LIB", "p3a/.venv-cv4/lib/python3.13/site-packages/onnxruntime/capi/libonnxruntime.so.1.31.1"))
+}
+
 /// `SICRO_SEQUENCIAS` ou `<dossiê>/p3a`: `sint/<nome>.{mp4,json}` (16) e `real/gt/<nome>.json` (22, com o vídeo
 /// em `video`), verdade por quadro em `gt[]` (`inteira`, `fracao`); referência do laço em `res_laco/`.
 pub fn sequencias() -> Option<PathBuf> {

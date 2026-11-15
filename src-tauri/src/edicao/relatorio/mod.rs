@@ -250,7 +250,8 @@ pub(crate) mod apoio {
                     commit: "8ca3d3e4".into(),
                     desvio: String::new(),
                     runtime: "onnxruntime 1.31.1".into(),
-                    provedor: "CPU".into(),
+                    // no fio, `cpu` | `cuda` (contratos-fase2 B2); o PDF mostra "CPU" / "CUDA"
+                    provedor: "cpu".into(),
                     uso: "rastreio".into(),
                 }],
                 estabilizacoes: vec![],

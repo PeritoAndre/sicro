@@ -300,6 +300,7 @@ export interface Rastreio {
         | { tipo: "pessoas"; pessoa_id: string; estado: "auto" | "revisada"; copiado_em: string }
         | { tipo: "deteccao"; classe: "rosto" | "placa" | "cabeca" | "pessoa" | "veiculo" };
   confirmacao: null | { por: string; em: string; denso_sha256: string | null; de_s: Seg; ate_s: Seg };   // vale só para esse conteúdo e intervalo
+  ancoras_do_programa?: Seg[];           // t das âncoras do "Simplificar" que o perito não mexeu
 }
 
 // ---- marcadores e sincronias ----

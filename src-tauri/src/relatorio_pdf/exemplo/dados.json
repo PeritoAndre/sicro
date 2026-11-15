@@ -355,6 +355,11 @@
       "leitura das gravações e produção do vídeo"
     ],
     [
+      "onnxruntime",
+      "1.31.1",
+      "execução dos modelos de inteligência artificial · CUDA"
+    ],
+    [
       "Sistema",
       "Linux x86_64",
       "—"
@@ -427,22 +432,30 @@
   ],
   "ocultacoes": [
     {
+      "n": "1",
       "item": "5",
       "gravacao": "B",
+      "arquivo": "cam02.mp4",
       "intervalo": "0:04,120 · 0:08,360",
-      "conteudo": "rosto de pedestre (terceiro)",
-      "filtro": "mosaico, células de 24 px, caixa rastreada com 2 correções manuais",
-      "motivo": "pessoa sem relação com o fato",
-      "quadros": "quadros: 2 marcados, 104 medidos, 0 interpolados, 0 incertos"
+      "conteudo": "rosto",
+      "forma": "elipse, margem 10 %",
+      "filtro": "mosaico, intensidade 0,75",
+      "motivo": "pessoa sem relação com o fato (exemplo)",
+      "quadros": "quadros: 2 pela marcação do perito, 104 medidos, 0 interpolados, 3 incertos",
+      "regiao": "detecção automática (rosto) · marcações do perito: 2 · confirmado por Fulano de Tal (exemplo) em 13/11/2026, 20h31 (Brasília), de 0:04,120 a 0:08,360 · R1 (anexo H)"
     },
     {
+      "n": "2",
       "item": "6",
       "gravacao": "B",
+      "arquivo": "cam02.mp4",
       "intervalo": "0:09,000 · 0:11,500",
-      "conteudo": "som: nome de testemunha",
-      "filtro": "tom de 1 kHz no lugar do som",
-      "motivo": "sigilo de testemunha",
-      "quadros": null
+      "conteudo": "som",
+      "forma": "—",
+      "filtro": "tom no lugar do som",
+      "motivo": "sigilo de testemunha (exemplo)",
+      "quadros": null,
+      "regiao": null
     }
   ],
   "revisado_por": null,
@@ -468,15 +481,33 @@
   "conferencia_ocultacoes": "As ocultações foram conferidas pelo perito no arquivo final. Fulano de Tal (exemplo), em 13 de novembro de 2026, às 20h52 (horário de Brasília).",
   "modelos_ia": [
     {
-      "modelo": "YuNet",
+      "modelo": "EdgeTAM vídeo",
       "arquivos": [
         {
-          "nome": "face_detection_yunet_2023mar.onnx",
-          "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+          "nome": "vision_encoder.onnx",
+          "sha256": "57fe1a2b000000000000000000000000000000000000000000000000ea2cffc1"
+        },
+        {
+          "nome": "mask_decoder.onnx",
+          "sha256": "ee24ee1c0000000000000000000000000000000000000000000000007218a364"
         }
       ],
-      "origem": "github.com/opencv/opencv_zoo · onnxruntime 1.31.1 · CPU",
-      "uso": "detecção de rosto (ocultação do item 5)"
+      "origem": "jax-image-tools/edgetam-video-onnx · 8ca3d3e4",
+      "execucao": "onnxruntime 1.31.1 · CUDA",
+      "desvio": "melhor de 3 máscaras no quadro marcado",
+      "uso": "acompanhamento de alvo (R1)"
+    }
+  ],
+  "rastreios": [
+    {
+      "id": "R1",
+      "origem": "detecção automática (rosto) · marcações do perito: 2",
+      "uso": "ocultação 1",
+      "corridas": [
+        "EdgeTAM vídeo · onnxruntime 1.31.1 · CUDA · para a frente, 0:04,120 a 0:08,360 (pts 63283 a 128461) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 13/11/2026, 20h28 (Brasília)"
+      ],
+      "confirmacao": "confirmado por Fulano de Tal (exemplo) em 13/11/2026, 20h31 (Brasília), de 0:04,120 a 0:08,360",
+      "amostras": "3b1f000000000000000000000000000000000000000000000000000000009e2a"
     }
   ],
   "pacote": [

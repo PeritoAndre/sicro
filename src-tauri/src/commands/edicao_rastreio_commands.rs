@@ -114,8 +114,9 @@ pub async fn edicao_rastreio_de_pessoas(
 
 /// Intervalos ocultados no arquivo exportado, para "Conferir ocultações" (P2.6).
 #[tauri::command]
-pub async fn edicao_conferencia_trechos(workspace_path: String, saida_id: String) -> Result<Vec<TrechoConferencia>> {
-    em_fundo(move || conferencia::trechos(Path::new(&workspace_path), &saida_id)).await
+pub async fn edicao_conferencia_trechos(app: AppHandle, workspace_path: String, saida_id: String) -> Result<Vec<TrechoConferencia>> {
+    let cache = cache_do_caso(&app, Path::new(&workspace_path))?;
+    em_fundo(move || conferencia::trechos_com_cache(Path::new(&workspace_path), &saida_id, Some(&cache))).await
 }
 
 #[cfg(test)]

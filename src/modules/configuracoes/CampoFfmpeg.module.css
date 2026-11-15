@@ -1,0 +1,32 @@
+/* Configurações → ffmpeg: rótulo, caminho, "Escolher…", "Automático". */
+.linha {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-lg);
+}
+.rotulo {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--sicro-fg);
+}
+.campo {
+  flex: 1;
+  min-width: 200px;
+  padding: 4px 8px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-divider);
+  border-radius: var(--radius-sm);
+}
+.erroLinha {
+  flex-basis: 100%;
+  font-size: 11px;
+  color: var(--sicro-danger);
+}

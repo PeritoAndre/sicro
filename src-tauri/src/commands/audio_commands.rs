@@ -956,6 +956,11 @@ pub async fn save_audio_transcript(
 // ---------------------------------------------------------------------------
 // Transcrição assistida por IA (whisper.cpp local) — RASCUNHO
 
+/// Interruptor "Usar modelos de IA" (§6.6): whisper e sherpa são executáveis e não passam por `criar_sessao`.
+fn exigir_ia(ai: &crate::commands::settings_commands::AiSettings) -> Result<()> {
+    crate::ia::exigir_ligada(ai).map_err(crate::edicao::mensagens::erro_de_comando)
+}
+
 #[derive(Debug, Clone, Deserialize)]
 pub struct TranscribeOptions {
     /// Caminho do modelo GGUF do whisper (obrigatório).
@@ -1009,10 +1014,23 @@ pub async fn whisper_status(whisper_bin: Option<String>) -> Result<WhisperStatus
 /// candidatos para a tela de degravação; o perito DEVE revisar.
 #[tauri::command]
 pub async fn transcribe_audio(
+    // CONTRATO: P2.1 (interruptor, §6.6): o Tauri injeta o `AppHandle`; a chamada do front não muda.
+    app: tauri::AppHandle,
     workspace_path: String,
     audio_id: String,
     options: TranscribeOptions,
 ) -> Result<Vec<TranscriptCandidate>> {
+    let ai = crate::commands::settings_commands::get_app_settings(app).await?.ai;
+    transcrever(&ai, workspace_path, audio_id, options).await
+}
+
+async fn transcrever(
+    ai: &crate::commands::settings_commands::AiSettings,
+    workspace_path: String,
+    audio_id: String,
+    options: TranscribeOptions,
+) -> Result<Vec<TranscriptCandidate>> {
+    exigir_ia(ai)?;
     let ws = PathBuf::from(&workspace_path);
     let manifest = Manifest::read(&ws)?;
     let occurrence_id = manifest.occurrence_id;
@@ -1101,6 +1119,16 @@ pub async fn diarize_audio(
     num_speakers: Option<u32>,
 ) -> Result<AudioDiarization> {
     let s = crate::commands::settings_commands::get_app_settings(app).await?;
+    separar_locutores(&s, workspace_path, audio_id, num_speakers).await
+}
+
+async fn separar_locutores(
+    s: &crate::commands::settings_commands::AppSettings,
+    workspace_path: String,
+    audio_id: String,
+    num_speakers: Option<u32>,
+) -> Result<AudioDiarization> {
+    exigir_ia(&s.ai)?;
     let (bin, seg, emb) = (
         PathBuf::from(&s.ai.diar_bin_path),
         PathBuf::from(&s.ai.diar_segmentation_path),
@@ -1284,5 +1312,33 @@ fn unique_name(dir: &Path, desired: &str) -> String {
             return candidate;
         }
         n += 1;
+    }
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+    use crate::commands::settings_commands::{AiSettings, AppSettings};
+
+    /// Interruptor desligado: transcrição e locutores recusam com `ia_desligada` (frase do catálogo) antes de abrir
+    /// caso, áudio ou executável; ligado, seguem e esbarram no caso que não existe.
+    #[test]
+    fn interruptor_desliga_transcrever_e_locutores() {
+        let caso = std::env::temp_dir().join(format!("p21-sem-caso-{}", std::process::id()));
+        let ws = caso.to_string_lossy().into_owned();
+        let op = || TranscribeOptions { model_path: "/nao/existe.bin".into(), whisper_bin: Some("/nao/existe".into()), language: None, vad_model_path: None };
+        let msg = |e: SicroError| e.to_string();
+        let desl = AiSettings { modelos_desligados: true, ..Default::default() };
+        let e = tauri::async_runtime::block_on(transcrever(&desl, ws.clone(), "a".into(), op())).unwrap_err();
+        assert_eq!(msg(e), "validation error: ia_desligada: Modelos de IA desligados");
+        let s = AppSettings { ai: desl.clone(), ..Default::default() };
+        let e = tauri::async_runtime::block_on(separar_locutores(&s, ws.clone(), "a".into(), Some(2))).unwrap_err();
+        assert_eq!(msg(e), "validation error: ia_desligada: Modelos de IA desligados");
+        let lig = AiSettings::default();
+        let e = tauri::async_runtime::block_on(transcrever(&lig, ws.clone(), "a".into(), op())).unwrap_err();
+        assert!(!msg(e).contains("ia_desligada"));
+        let e = tauri::async_runtime::block_on(separar_locutores(&AppSettings::default(), ws, "a".into(), None)).unwrap_err();
+        assert!(!msg(e).contains("ia_desligada"));
+        assert!(!caso.exists());
     }
 }

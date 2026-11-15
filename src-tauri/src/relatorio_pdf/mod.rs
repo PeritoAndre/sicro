@@ -394,7 +394,7 @@ pub(crate) mod testes {
         let mut e = entrada();
         for k in [
             "acrescimos", "mudancas", "sincronizacao", "processamentos", "diferencas", "ocultacoes", "limitacoes", "anexos", "pacote",
-            "selos_desligados", "relogios", "medidas", "modelos_ia", "ia_resumo", "referencias",
+            "selos_desligados", "relogios", "medidas", "modelos_ia", "rastreios", "ia_resumo", "referencias",
         ] {
             e.dados[k] = serde_json::json!([]);
         }

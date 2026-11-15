@@ -276,11 +276,23 @@ Trechos em câmera lenta, acelerados ou parados estão indicados no roteiro acim
 #if d.ocultacoes.len() == 0 [
   Nenhuma ocultação foi aplicada.
 ] else [
-  #tabela((auto, auto, auto, 3fr, 4fr, 4fr), ([Item], [Grav.], [De · até (original)], [Conteúdo], [Filtro], [Motivo]),
-    ..d.ocultacoes.map(x => (x.item, x.gravacao, x.intervalo, x.conteudo, [#x.filtro #if x.quadros != none [\ #text(fill: cinza, x.quadros)]], x.motivo)).flatten(),
+  // planilha de ocultações (SWGDE 18-M §11): uma linha por ocultação, tempos no arquivo original
+  #ficha((
+    ("Vídeo com as ocultações", d.saida.arquivo),
+    ("Exportado em", d.gerado_em),
+    ("Conferência no arquivo final", if d.conferencia_ocultacoes != none { d.conferencia_ocultacoes } else { [—] }),
+  ))
+  #tabela((auto, auto, 3fr, auto, 4fr, 4fr), ([Nº], [Item], [Gravação original], [De · até (original)], [Conteúdo e motivo], [Forma e filtro]),
+    ..d.ocultacoes.map(x => (x.n, x.item, [#x.gravacao · #x.arquivo], x.intervalo, [#x.conteudo \ #text(fill: cinza, x.motivo)], [#x.forma \ #x.filtro])).flatten(),
   )
+  #let regioes = d.ocultacoes.filter(x => x.regiao != none)
+  #if regioes.len() > 0 [
+    #par[*Região de cada ocultação de imagem.*]
+    #tabela((auto, 1fr), ([Nº], [De onde veio a região · como cada quadro foi coberto]),
+      ..regioes.map(x => (x.n, [#x.regiao #if x.quadros != none [\ #text(fill: cinza, x.quadros)]])).flatten(),
+    )
+  ]
   #par(text(fill: cinza)[As ocultações estão gravadas na imagem e no som do vídeo entregue. O que foi coberto por sólido opaco, ou trocado por tom ou por silêncio, não pode ser recuperado a partir dele; mosaico e desfoque dificultam o reconhecimento, sem garantia de impedi-lo. As gravações originais não têm ocultação.])
-  #if d.conferencia_ocultacoes != none [#par[*Conferência no arquivo final.* #d.conferencia_ocultacoes]]
 ]
 
 = Sincronização entre câmeras
@@ -294,10 +306,24 @@ Trechos em câmera lenta, acelerados ou parados estão indicados no roteiro acim
   ..d.software.flatten(),
 )
 #if d.modelos_ia.len() > 0 [
-  #par[*Modelos de inteligência artificial.*]
-  #tabela((auto, 1fr, auto), ([Modelo], [Arquivos e SHA-256 · origem], [Uso]),
-    ..d.modelos_ia.map(m => (m.modelo, [#for a in m.arquivos [#a.nome \ #hash(a.sha256) \ ] #m.origem], m.uso)).flatten(),
+  #par[*Modelos de inteligência artificial*, identificados pelo SHA-256 de cada arquivo.]
+  #tabela((auto, 1fr, auto), ([Modelo], [Arquivos e SHA-256 · origem · execução], [Uso]),
+    ..d.modelos_ia.map(m => (m.modelo, [#for a in m.arquivos [#a.nome \ #hash(a.sha256) \ ] #m.origem \ #m.execucao #if m.desvio != none [\ #text(fill: cinza)[desvio conhecido: #m.desvio]]], m.uso)).flatten(),
   )
+]
+#if d.rastreios.len() > 0 [
+  #par[*Acompanhamento de alvos.* Cada corrida do programa, com o modelo, onde rodou, o sentido, o trecho percorrido, por que parou e os limiares usados. As amostras são o arquivo com a posição do alvo em cada quadro, identificado pelo SHA-256.]
+  #for r in d.rastreios [
+    #block(breakable: true, width: 100%)[
+      *#r.id* #h(0.4em) #r.origem
+      #ficha((
+        ("Uso", r.uso),
+        ("Corridas", if r.corridas.len() == 0 { [—] } else { list(tight: true, ..r.corridas) }),
+        ("Confirmação", r.confirmacao),
+        ("Amostras", if r.amostras.len() == 64 { hash(r.amostras) } else { r.amostras }),
+      ))
+    ]
+  ]
 ]
 
 = Arquivos anexados a este PDF

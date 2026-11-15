@@ -1432,7 +1432,7 @@ impl<'a> Validacao<'a> {
                 return None;
             }
         }
-        self.ancoras_ok(r, &o).then_some(r)
+        self.legivel(r, &o).then_some(r)
     }
 
     /// Rastreio de uma ocultação da mídia: de fonte, da própria mídia, no espaço original.
@@ -1454,16 +1454,24 @@ impl<'a> Validacao<'a> {
             self.por(RASTREIO_ESPACO, &o);
             return None;
         }
-        self.ancoras_ok(r, &o).then_some(r)
+        self.legivel(r, &o).then_some(r)
     }
 
-    /// Âncoras em ordem de tempo e com caixa finita (antes de avaliar a curva).
-    fn ancoras_ok(&mut self, r: &Rastreio, onde: &Onde) -> bool {
+    /// Âncoras em ordem de tempo e com caixa finita (antes de avaliar a curva) e, havendo ponteiro, amostras densas que
+    /// se leem: o arquivo ausente ou alterado o motor recusa ao compilar (`rastreio_ausente`, contratos (h) 1).
+    fn legivel(&mut self, r: &Rastreio, onde: &Onde) -> bool {
         let ok = chaves_em_ordem(&r.ancoras) && r.ancoras.iter().all(|k| caixa_finita(&k.v));
         if !ok {
             self.por(REGIAO, onde);
+            return false;
         }
-        ok
+        if let Some(d) = &r.denso {
+            if self.ctx.rastreios.denso(&r.id, &d.sha256).is_err() {
+                self.por(RASTREIO_AUSENTE, onde);
+                return false;
+            }
+        }
+        true
     }
 
     /// Forma que precisa de tamanho: rastreio de caixa com lados positivos.
@@ -2112,7 +2120,9 @@ mod testes {
     use crate::edicao::importar_v1::{self, FontesV1};
     use crate::edicao::modelo::{EstadoMidia, Matriz, Faixa, OrigemMidia, Recebido};
     use crate::edicao::motor::FonteInfo;
+    use crate::edicao::motor::LeitorRastreios;
     use crate::edicao::quadros::apoio::{self, SemRastreios};
+    use crate::edicao::rastreio::{ArquivoDenso, ArquivoSilhuetas, ESTADO_AUSENTE, ESTADO_INCERTO, ESTADO_OK, TIPO_ESTENDIDO, TIPO_INTERPOLADO, TIPO_MEDIDO};
     use crate::edicao::quadros::Busca;
     use serde_json::json;
     use std::collections::BTreeSet;
@@ -2231,6 +2241,55 @@ mod testes {
         midias: Vec<EstadoMidia>,
         cap: Capacidades,
         alvo: Option<Alvo>,
+        densos: Densos,
+    }
+
+    /// Leitor de rastreios falso: densos montados à mão por (rastreio, SHA-256); guarda o que a validação pediu.
+    /// Sem o arquivo, erro (como `SemRastreios`).
+    #[derive(Default)]
+    struct Densos {
+        arquivos: HashMap<(String, String), Arc<ArquivoDenso>>,
+        pedidos: RefCell<Vec<(String, String)>>,
+    }
+
+    impl LeitorRastreios for Densos {
+        fn denso(&self, rastreio: &str, sha256: &str) -> crate::error::Result<Arc<ArquivoDenso>> {
+            self.pedidos.borrow_mut().push((rastreio.into(), sha256.into()));
+            self.arquivos.get(&(rastreio.to_string(), sha256.to_string())).cloned().ok_or_else(|| crate::error::SicroError::Validation(RASTREIO_AUSENTE.into()))
+        }
+        fn silhuetas(&self, _: &str, _: &str) -> crate::error::Result<Arc<ArquivoSilhuetas>> {
+            Err(crate::error::SicroError::Validation(RASTREIO_AUSENTE.into()))
+        }
+    }
+
+    /// Denso do r1 montado à mão, quadros `de..=ate` da m1 (pts 512·k), caixa fixa; `linha(k)` = (estado, tipo).
+    fn denso_a_mao(de: i64, ate: i64, linha: impl Fn(i64) -> (u8, u8)) -> ArquivoDenso {
+        let ks: Vec<i64> = (de..=ate).collect();
+        let (estado, tipo): (Vec<u8>, Vec<u8>) = ks.iter().map(|&k| linha(k)).unzip();
+        let caixa = |v: f64| estado.iter().map(|&e| if e == ESTADO_AUSENTE { 0.0 } else { v }).collect::<Vec<f64>>();
+        ArquivoDenso {
+            esquema: 2,
+            rastreio: "r1".into(),
+            midia_sha256: SHA.into(),
+            espaco: "original".into(),
+            pixel: TamanhoPx { w: 1280, h: 720 },
+            pts: ks.iter().map(|k| 512 * k).collect(),
+            x: caixa(0.1),
+            y: caixa(0.1),
+            w: caixa(0.2),
+            h: caixa(0.2),
+            conf: estado.iter().map(|&e| [0.9, 0.4, 0.1][e as usize]).collect(),
+            tipo,
+            corrida: vec![0; ks.len()],
+            corridas: vec![],
+            estado,
+        }
+    }
+
+    /// Ponteiro do documento para o denso (`Rastreio.denso`).
+    fn ponteiro(sha: &str, de: i64, ate: i64) -> Value {
+        let n = ate - de + 1;
+        json!({ "sha256": sha, "n": n, "de_s": t(de), "ate_s": t(ate), "ok": n, "incertos": 0, "ausentes": 0 })
     }
 
     /// Efeito do tipo, tirado da fixture com todas as variantes, ligado.
@@ -2283,6 +2342,7 @@ mod testes {
             midias: vec![estado("m1", SituacaoMidia::Ok)],
             cap: cap(),
             alvo: None,
+            densos: Densos::default(),
         }
     }
 
@@ -2292,7 +2352,7 @@ mod testes {
         }
         fn analise(&self) -> Analise {
             let p = self.projeto();
-            let ctx = Contexto { fontes: &self.fontes, cap: &self.cap, rastreios: &SemRastreios, pasta_projeto: Path::new(""), midias: &self.midias };
+            let ctx = Contexto { fontes: &self.fontes, cap: &self.cap, rastreios: &self.densos, pasta_projeto: Path::new(""), midias: &self.midias };
             let a = analisar(&p, &ctx, self.alvo.as_ref());
             // `validar` sobre a mesma linha dá o mesmo
             assert_eq!(validar(&p, &a.linha, &ctx, self.alvo.as_ref()), a.problemas);
@@ -2732,6 +2792,134 @@ mod testes {
         c.so(&[]);
         c.p["rastreios"][0]["origem"]["estado"] = json!("auto");
         c.so(&[RASTREIO_NAO_CONFIRMADO]);
+    }
+
+    /// `rastreio_nao_confirmado` pelo SHA-256 das amostras (§6.6): a confirmação vale para o conteúdo que o perito viu;
+    /// nova corrida (outro ponteiro), denso apagado ou confirmação de antes do denso a derrubam. A validação lê o denso
+    /// pelo ponteiro do documento (leitor falso com o denso montado à mão; a regra não depende do `do_denso`).
+    #[test]
+    fn rastreio_nao_confirmado_por_sha() {
+        let (a, b) = ("1".repeat(64), "2".repeat(64));
+        let confirmacao = |sha: Value| json!({ "por": "Perito", "em": "2026-11-14T00:00:00Z", "denso_sha256": sha, "de_s": 1.0, "ate_s": 3.0 });
+        // âncora em todo quadro usado: a caixa sai da âncora com ou sem o denso (nada de interpolado nem de cobertura)
+        let caso = |origem: &Value, denso: Value, conf: Value, ocultar_da_midia: bool| {
+            let mut c = cena();
+            for sha in [&a, &b] {
+                c.densos.arquivos.insert(("r1".into(), sha.clone()), Arc::new(denso_a_mao(30, 89, |_| (ESTADO_OK, TIPO_MEDIDO))));
+            }
+            let mut r = rastreio(&(30..90).collect::<Vec<_>>());
+            (r["origem"], r["denso"], r["confirmacao"]) = (origem.clone(), denso, conf);
+            c.p["rastreios"] = json!([r]);
+            if ocultar_da_midia {
+                let mut o = ocultar("r1");
+                o["ativo"] = json!({ "de": 0.0, "ate": 10.0 });
+                c.p["midias"][0]["ocultacoes"] = json!([o]);
+            } else {
+                efeito(&mut c, destaque("r1"));
+            }
+            c
+        };
+        let auto = json!({ "tipo": "pessoas", "pessoa_id": "p", "estado": "auto", "copiado_em": "2026-11-14T00:00:00Z" });
+        for origem in [&auto, &json!({ "tipo": "deteccao", "classe": "rosto" })] {
+            for da_midia in [false, true] {
+                let c = caso(origem, ponteiro(&a, 30, 89), confirmacao(json!(a)), da_midia);
+                c.so(&[]);
+                assert!(c.densos.pedidos.borrow().iter().any(|x| *x == ("r1".to_string(), a.clone())), "denso lido pelo ponteiro");
+                for (nome, denso, conf) in [
+                    ("nova corrida: outro ponteiro", ponteiro(&b, 30, 89), confirmacao(json!(a))),
+                    ("confirmada antes do denso", ponteiro(&a, 30, 89), confirmacao(Value::Null)),
+                    ("denso apagado", Value::Null, confirmacao(json!(a))),
+                    ("sem confirmação", ponteiro(&a, 30, 89), Value::Null),
+                ] {
+                    let c = caso(origem, denso, conf, da_midia);
+                    c.so(&[RASTREIO_NAO_CONFIRMADO]);
+                    let p = &c.problemas()[0];
+                    assert_eq!((p.campo.as_deref(), p.midia.as_deref(), p.efeito.as_deref()), (Some("rastreio"), da_midia.then_some("m1"), Some(if da_midia { "e1" } else { "e2" })), "{nome}");
+                }
+            }
+        }
+        // assistido e Pessoas revisada não pedem confirmação, qualquer que seja o ponteiro
+        for origem in [json!({ "tipo": "assistido" }), json!({ "tipo": "pessoas", "pessoa_id": "p", "estado": "revisada", "copiado_em": "2026-11-14T00:00:00Z" })] {
+            caso(&origem, ponteiro(&b, 30, 89), confirmacao(json!(a)), false).so(&[]);
+            caso(&origem, ponteiro(&b, 30, 89), Value::Null, true).so(&[]);
+        }
+    }
+
+    /// Amostras densas que o documento aponta e não se leem (arquivo ausente, alterado ou ilegível; Ctrl+Z para um
+    /// ponteiro já limpo, cópia sem `rastreios/`): `rastreio_ausente` no efeito, antes do motor, que recusa o mesmo
+    /// ao compilar (leitor do executor). Antes a validação seguia calada pelas âncoras.
+    #[test]
+    fn denso_ilegivel_e_rastreio_ausente() {
+        let sha = "4".repeat(64);
+        for origem in [json!({ "tipo": "manual" }), json!({ "tipo": "assistido" })] {
+            for (uso, da_midia) in [("destaque", false), ("ocultação do clipe", false), ("ocultação da mídia", true)] {
+                let caso = |com_arquivo: bool| {
+                    let mut c = cena();
+                    if com_arquivo {
+                        c.densos.arquivos.insert(("r1".into(), sha.clone()), Arc::new(denso_a_mao(30, 89, |_| (ESTADO_OK, TIPO_MEDIDO))));
+                    }
+                    let mut r = rastreio(&(30..90).collect::<Vec<_>>());
+                    (r["origem"], r["denso"]) = (origem.clone(), ponteiro(&sha, 30, 89));
+                    c.p["rastreios"] = json!([r]);
+                    match (uso, da_midia) {
+                        (_, true) => {
+                            let mut o = ocultar("r1");
+                            o["ativo"] = json!({ "de": 0.0, "ate": 10.0 });
+                            c.p["midias"][0]["ocultacoes"] = json!([o]);
+                        }
+                        ("destaque", _) => efeito(&mut c, destaque("r1")),
+                        _ => efeito(&mut c, ocultar("r1")),
+                    }
+                    c
+                };
+                caso(true).so(&[]);
+                let c = caso(false);
+                c.so(&[RASTREIO_AUSENTE]);
+                let p = &c.problemas()[0];
+                assert_eq!((p.campo.as_deref(), p.midia.as_deref()), (Some("rastreio"), da_midia.then_some("m1")), "{uso} {origem}");
+                assert!(c.densos.pedidos.borrow().contains(&("r1".to_string(), sha.clone())));
+            }
+        }
+    }
+
+    /// `ocultar_incerto` (nunca disparado antes do denso), `ocultar_interpolado` e `sem_cobertura` contados nas amostras
+    /// densas pela regra B24: linha incerta = incerto; `tipo` interpolado ou estendido = interpolado; ausente = sem
+    /// região, salvo dentro de ausência aceita. Na ocultação do clipe e na da mídia.
+    #[test]
+    #[ignore = "fecho da Fase 2: P2.2"]
+    fn ocultar_incerto_conta_incertos() {
+        let sha = "3".repeat(64);
+        // corrida a partir da âncora no quadro 0 até o 299; o trecho usa 30..89
+        let linha = |k: i64| match k {
+            30..=39 => (ESTADO_INCERTO, TIPO_MEDIDO),
+            40..=49 => (ESTADO_OK, TIPO_INTERPOLADO),
+            50..=54 => (ESTADO_AUSENTE, TIPO_MEDIDO),
+            55..=57 => (ESTADO_OK, TIPO_ESTENDIDO),
+            58 => (ESTADO_INCERTO, TIPO_INTERPOLADO),
+            _ => (ESTADO_OK, TIPO_MEDIDO),
+        };
+        for da_midia in [false, true] {
+            let mut c = cena();
+            c.densos.arquivos.insert(("r1".into(), sha.clone()), Arc::new(denso_a_mao(0, 299, linha)));
+            let mut r = rastreio(&[0]);
+            (r["origem"], r["denso"]) = (json!({ "tipo": "assistido" }), ponteiro(&sha, 0, 299));
+            // ausência aceita nos quadros 52..54: só 50 e 51 ficam sem região
+            r["ausencias"] = json!([{ "de_s": t(52), "ate_s": t(54), "motivo": "oculto", "aceita_em": "2026-11-14T00:00:00Z", "por": "Perito" }]);
+            c.p["rastreios"] = json!([r]);
+            if da_midia {
+                let mut o = ocultar("r1");
+                o["ativo"] = json!({ "de": 0.0, "ate": 10.0 });
+                c.p["midias"][0]["ocultacoes"] = json!([o]);
+            } else {
+                efeito(&mut c, ocultar("r1"));
+            }
+            c.so(&[OCULTAR_INCERTO, OCULTAR_INTERPOLADO, SEM_COBERTURA]);
+            let n = |cod: &str| c.problemas().iter().find(|p| p.codigo == cod).and_then(|p| p.n);
+            // 10 incertos + o 58; 10 interpolados + 3 estendidos + o 58; 50 e 51
+            assert_eq!((n(OCULTAR_INCERTO), n(OCULTAR_INTERPOLADO), n(SEM_COBERTURA)), (Some(11), Some(14), Some(2)), "da mídia: {da_midia}");
+            let incerto = c.problemas().into_iter().find(|p| p.codigo == OCULTAR_INCERTO).unwrap();
+            assert_eq!((incerto.nivel, incerto.mensagem.as_str()), (Nivel::Pericial, "11 quadros ocultados com rastreio incerto"));
+        }
     }
 
     #[test]
@@ -3451,8 +3639,9 @@ mod testes {
         c.so(&mais(&[ESTABILIZAR_FORA_DA_ANALISE], &[ns]));
         c.p["principal"][0]["efeitos"] = json!([estabilizar(30, 89)]);
         c.so(&mais(&[], &[ns]));
-        // confirmação presa a outro denso
+        // confirmação presa a outro denso (o do ponteiro existe e se lê)
         let mut c = cena();
+        c.densos.arquivos.insert(("r1".into(), SHA.into()), Arc::new(denso_a_mao(30, 89, |_| (ESTADO_OK, TIPO_MEDIDO))));
         let mut r = rastreio(&[30, 89]);
         r["origem"] = json!({ "tipo": "deteccao", "classe": "rosto" });
         r["denso"] = json!({ "sha256": SHA, "n": 60, "de_s": 1.0, "ate_s": 3.0, "ok": 60, "incertos": 0, "ausentes": 0 });
