@@ -33,6 +33,7 @@ import { campo, clicar, desmontarTudo, digitar, entradaDe, esperar, lerFixture a
 import { textoPermitido } from "../rotulos.teste";
 import { recursoDe, renovar, useRecursos } from "../../palco/recursos";
 import { LUPA_PRONTA } from "./LupaEditor";
+import { HOLOFOTE_PRONTO } from "./HolofoteEditor";
 
 const st = () => useEdicaoStore.getState();
 const passos = () => st().passado.length;
@@ -81,7 +82,7 @@ async function adicionar() {
 describe("Lupa", () => {
   it("ligada: editor próprio e no Adicionar, entre Ocultar e Texto (§8.6)", () => {
     expect(LUPA_PRONTA).toBe(true);
-    expect(ADICIONAR.slice(0, 3)).toEqual(["destaque", "ocultar", "lupa"]);
+    expect(ADICIONAR.slice(0, HOLOFOTE_PRONTO ? 4 : 3)).toEqual(["destaque", "ocultar", ...(HOLOFOTE_PRONTO ? ["holofote"] : []), "lupa"]);
     expect(ADICIONAR.indexOf("lupa")).toBeLessThan(ADICIONAR.indexOf("texto"));
     expect(REGISTRO.lupa.rotulo).toBe("Lupa");
   });

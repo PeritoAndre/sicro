@@ -8,6 +8,7 @@ pub mod edicao;
 pub mod error;
 pub mod filesystem;
 pub mod hashing;
+pub mod ia;
 pub mod image_editor;
 pub mod image_processing;
 pub mod importer;
@@ -179,6 +180,19 @@ pub fn run() {
             commands::edicao_commands::edicao_proxy_pedir,
             commands::video_proveniencia_commands::video_proveniencia,
             commands::video_proveniencia_commands::video_proveniencia_salvar,
+            // Fase 2 (contratos-fase2.md): rastreio, conferência das ocultações e IA
+            commands::edicao_rastreio_commands::edicao_rastreio_ler,
+            commands::edicao_rastreio_commands::edicao_rastreio_seguir,
+            commands::edicao_rastreio_commands::edicao_rastreio_cancelar,
+            commands::edicao_rastreio_commands::edicao_rastreio_editar,
+            commands::edicao_rastreio_commands::edicao_rastreio_de_pessoas,
+            commands::edicao_rastreio_commands::edicao_conferencia_trechos,
+            commands::ia_commands::ia_estado,
+            commands::ia_commands::ia_gpu_instalar,
+            commands::ia_commands::ia_gpu_remover,
+            commands::ia_commands::ia_gpu_autoteste,
+            commands::ia_commands::ia_rastreador_instalar,
+            commands::ia_commands::ia_rastreador_remover,
             // áudio
             commands::audio_commands::extract_audio_from_video,
             commands::audio_commands::import_audio_file,
@@ -330,6 +344,24 @@ mod tests {
             assert!(corpo.contains(&format!("commands::edicao_commands::{n},")), "{n} fora do invoke_handler");
         }
         assert!(corpo.contains("edicao_commands::iniciar(app.handle())") && corpo.contains("edicao_commands::encerrar()"));
+    }
+
+    /// Os comandos da Fase 2 (rastreio e IA) estão no `invoke_handler`: a mesma lista dos `comandos_registraveis`.
+    #[test]
+    fn comandos_da_fase_2_registrados() {
+        let fonte = include_str!("lib.rs");
+        let corpo = &fonte[fonte.find("pub fn run()").unwrap()..fonte.find("#[cfg(test)]").unwrap()];
+        for (modulo, texto, n) in [
+            ("edicao_rastreio_commands", include_str!("commands/edicao_rastreio_commands.rs"), 6),
+            ("ia_commands", include_str!("commands/ia_commands.rs"), 6),
+        ] {
+            let ini = texto.find("fn comandos_registraveis").unwrap();
+            let lista: Vec<&str> = texto[ini..].lines().map(str::trim).filter_map(|l| l.strip_suffix(',')).filter(|n| n.starts_with("edicao_") || n.starts_with("ia_")).collect();
+            assert_eq!(lista.len(), n, "{modulo}: {lista:?}");
+            for c in &lista {
+                assert!(corpo.contains(&format!("commands::{modulo}::{c},")), "{c} fora do invoke_handler");
+            }
+        }
     }
 
     /// No Unix o `**` do escopo não entra em pasta oculta (`~/.cache`): o cache da Edição

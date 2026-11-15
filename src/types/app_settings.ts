@@ -56,6 +56,14 @@ export interface AiSettings {
   sr_model_path: string;
   sr_ort_lib_path: string;
   sr_version: string;
+  // CONTRATO: abertura da Fase 2 (contratos-fase2.md (b)); dono P2.1.
+  /** Interruptor "Usar modelos de IA" desligado (padrão: ligado). */
+  modelos_desligados: boolean;
+  /** Aceleração por GPU: pasta `ai/gpu` (vazio = não instalada). */
+  gpu_dir: string;
+  /** Rastreador EdgeTAM: pasta `ai/rastreio` (vazio = não instalado) e versão. */
+  rastreio_dir: string;
+  rastreio_version: string;
 }
 
 /** Motor de OCR (Tesseract) + idiomas instalados. */
@@ -133,6 +141,10 @@ export function defaultAppSettings(): AppSettings {
       sr_model_path: "",
       sr_ort_lib_path: "",
       sr_version: "",
+      modelos_desligados: false,
+      gpu_dir: "",
+      rastreio_dir: "",
+      rastreio_version: "",
     },
     ocr: {
       engine_bin_path: "",

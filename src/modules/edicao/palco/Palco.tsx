@@ -40,6 +40,9 @@ import { useOrigem } from "../inspetor/origemDoClipe";
 import { useOrigemStore } from "../store/origemStore";
 import { PASSO_ZOOM, VISTA_INICIAL, caixaMedida, contido, deslocar, limitar, mostrado, zoomEm, zoomMaximo, type Tamanho, type Vista } from "./vista";
 import styles from "./Palco.module.css";
+// Fase 2 (contratos-fase2.md (c)): corrida do rastreio no palco (P2.4), só com a bandeira dele
+import { FerramentaSeguir } from "../rastreio/FerramentaSeguir";
+import { RASTREIO_PRONTO } from "../store/rastreioStore";
 
 /** Tempo parado (ms) depois do último quadro pintado até o palco medir a busca da mídia (§7.6). */
 export const MEDIR_APOS_MS = 800;
@@ -1089,6 +1092,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
             onFundo={(dx, dy) => onFundo(dx, dy)}
           />
         )}
+        {RASTREIO_PRONTO && !render && <FerramentaSeguir area={{ x: m.x, y: m.y, w: m.w, h: m.h }} />}
         {(preparando || render?.tarefa === null || (render && !render.src)) && (
           <span className={styles.estado} data-estado="preparando">
             <Loader2 size={22} className={styles.gira} aria-hidden />

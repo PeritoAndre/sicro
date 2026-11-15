@@ -64,3 +64,28 @@ export interface AiProgress {
   received: number;
   total: number;
 }
+
+// ---- Fase 2 (contratos-fase2.md; `ia/gpu.rs` e `commands/ia_commands.rs`, P2.1) ----
+/** Onde a sessão rodou. */
+export type Provedor = "cpu" | "cuda";
+/** `nvidia-smi --query-gpu=name,driver_version,compute_cap,memory.total`. */
+export interface Placa { nome: string; driver: string; compute_cap: string; memoria_mb: number }
+/** Aceleração por GPU na tela; `requisito` e `motivo` = códigos do catálogo (`gpu_*`). */
+export interface EstadoGpuIa {
+  disponivel: boolean;
+  placa: Placa | null;
+  requisito: string | null;
+  instalada: boolean;
+  pronta: boolean;
+  motivo: string | null;
+  mb: number;
+}
+/** Estado da IA para o Gerenciador (`ia_estado`). `reabrir`: vale depois de reabrir o SICRO. */
+export interface EstadoIa {
+  ligada: boolean;
+  gpu: EstadoGpuIa;
+  rastreador: boolean;
+  rastreador_mb: number;
+  carregada: Provedor | null;
+  reabrir: boolean;
+}

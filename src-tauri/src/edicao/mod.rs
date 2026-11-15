@@ -5,6 +5,7 @@
 
 pub mod armazem;
 pub mod camada;
+pub mod conferencia;
 pub mod conferir;
 pub mod cor;
 pub mod curva;

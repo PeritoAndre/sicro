@@ -127,6 +127,18 @@ pub struct AiSettings {
     pub sr_ort_lib_path: String,
     #[serde(default)]
     pub sr_version: String,
+    // CONTRATO: abertura da Fase 2 (§6.5, §6.6; contratos-fase2.md (b)). Dono: P2.1.
+    /// Interruptor "Usar modelos de IA" desligado (padrão: ligado).
+    #[serde(default)]
+    pub modelos_desligados: bool,
+    /// Aceleração por GPU: pasta `ai/gpu` instalada (vazio = não instalada); "pronta" só pelo `estado.json`.
+    #[serde(default)]
+    pub gpu_dir: String,
+    /// Rastreador EdgeTAM: pasta `ai/rastreio` com os 4 grafos (vazio = não instalado); versão instalada.
+    #[serde(default)]
+    pub rastreio_dir: String,
+    #[serde(default)]
+    pub rastreio_version: String,
 }
 
 /// OCR (Tesseract) instalado pelo gerenciador: `engine_bin_path` é o executável;

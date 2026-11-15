@@ -132,19 +132,25 @@ import type {
   SpectroImage,
   TranscriptAi,
 } from "@domain/audio";
-import type { AiCatalog, AiStatus, AiUpdateInfo } from "@domain/ai";
+import type { AiCatalog, AiStatus, AiUpdateInfo, EstadoIa } from "@domain/ai";
 // --- Edição ---
 import type {
   AlvoQuadro,
   AlvoRender,
   Analise,
+  ArquivoDenso,
   AtlasCarimbo,
+  Caixa,
+  Chave,
   Degravacao,
+  Editado,
+  EscolhaMotor,
   EstadoOrigem,
   EstiloTexto,
   MidiaInfo,
   MidiaRef,
   Onda,
+  OpRastreio,
   PedidoSprite,
   PreviaMidia,
   ProjetoAberto,
@@ -152,16 +158,19 @@ import type {
   ProvenienciaMidia,
   QuadroEm,
   QuadroFinal,
+  Rastreio,
   ResumoCapacidades,
   ResumoProjeto,
   RetratoCalculo,
   RetratoCalibracao,
   SaidaRegistrada,
   Salvo,
+  SentidoPedido,
   SpriteTexto,
   TabelaQuadros,
   Tarefa,
   TarefaFundo,
+  TrechoConferencia,
   UsoMidia,
 } from "@domain/edicao";
 import { toSicroError } from "./errors";
@@ -1194,6 +1203,33 @@ export const commands = {
     return safeInvoke<AiStatus>("remove_pessoas", {});
   },
 
+  // --- IA da Fase 2 (contratos-fase2.md; `ia_commands.rs`, P2.1). Progresso: "ai-download-progress", id "gpu" | "rastreador" ---
+  iaEstado(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_estado", {});
+  },
+
+  /** Baixa a aceleração por GPU e roda o autoteste em processo filho. */
+  iaGpuInstalar(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_gpu_instalar", {});
+  },
+
+  iaGpuRemover(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_gpu_remover", {});
+  },
+
+  /** "Testar de novo". */
+  iaGpuAutoteste(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_gpu_autoteste", {});
+  },
+
+  iaRastreadorInstalar(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_rastreador_instalar", {});
+  },
+
+  iaRastreadorRemover(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_rastreador_remover", {});
+  },
+
   // --- Rastreio no vídeo ---
   pessoasClasses(): Promise<ClasseInfo[]> {
     return safeInvoke<ClasseInfo[]>("pessoas_classes", {});
@@ -1541,6 +1577,45 @@ export const commands = {
 
   videoProvenienciaSalvar(workspacePath: string, mediaId: string, proveniencia: ProvenienciaMidia): Promise<ProvenienciaMidia> {
     return safeInvoke<ProvenienciaMidia>("video_proveniencia_salvar", { workspacePath, mediaId, proveniencia });
+  },
+
+  // --- Fase 2 (contratos-fase2.md): rastreio e conferência das ocultações (`edicao_rastreio_commands.rs`) ---
+  /** Arquivo denso do rastreio (§6.1), SHA-256 conferido. */
+  edicaoRastreioLer(workspacePath: string, projetoId: string, rastreioId: string, sha256: string): Promise<ArquivoDenso> {
+    return safeInvoke<ArquivoDenso>("edicao_rastreio_ler", { workspacePath, projetoId, rastreioId, sha256 });
+  },
+
+  /** "Seguir" (§6.3): devolve o `tarefa_id`; andamento e fim pelo evento `edicao:rastreio`. Não grava no projeto. */
+  edicaoRastreioSeguir(
+    workspacePath: string,
+    projeto: ProjetoEdicao,
+    rastreioId: string,
+    clipeId: string,
+    ancora: Chave<Caixa>,
+    sentido: SentidoPedido,
+    ateS: number | null,
+    motor: EscolhaMotor,
+  ): Promise<string> {
+    return safeInvoke<string>("edicao_rastreio_seguir", { workspacePath, projeto, rastreioId, clipeId, ancora, sentido, ateS, motor });
+  },
+
+  edicaoRastreioCancelar(tarefaId: string): Promise<void> {
+    return safeInvoke<void>("edicao_rastreio_cancelar", { tarefaId });
+  },
+
+  /** "Apagar daqui em diante" e "Simplificar": o front aplica `Editado` por alterar(). */
+  edicaoRastreioEditar(workspacePath: string, projeto: ProjetoEdicao, rastreioId: string, op: OpRastreio): Promise<Editado> {
+    return safeInvoke<Editado>("edicao_rastreio_editar", { workspacePath, projeto, rastreioId, op });
+  },
+
+  /** "Da análise" (§6.4): a trilha da pessoa vira rastreio com denso copiado para o projeto. */
+  edicaoRastreioDePessoas(workspacePath: string, projetoId: string, midiaId: string, mediaSha256: string, pessoaId: string): Promise<Rastreio> {
+    return safeInvoke<Rastreio>("edicao_rastreio_de_pessoas", { workspacePath, projetoId, midiaId, mediaSha256, pessoaId });
+  },
+
+  /** "Conferir ocultações": intervalos ocultados no arquivo exportado, fracos primeiro. */
+  edicaoConferenciaTrechos(workspacePath: string, saidaId: string): Promise<TrechoConferencia[]> {
+    return safeInvoke<TrechoConferencia[]>("edicao_conferencia_trechos", { workspacePath, saidaId });
   },
   // ===== fim da Edição (Fase 0) =====
 } as const;

@@ -804,3 +804,31 @@ pub async fn pessoas_seguir_mancha(
     )?;
     Ok(ResultadoMancha { estado: estado(&c.conn, &c.occ, &media_hash)?, id, avisos })
 }
+
+// ---------------------------------------------------------------------------
+// CONTRATO: abertura da Fase 2 (contratos-fase2.md (c), P2.5). Pontos de ligação da Edição com as trilhas da análise.
+
+/// "Da análise" (§6.4): a trilha `pessoa_id` da mídia, com as correções do perito, vira `Rastreio { origem: pessoas }`
+/// (divide por `run.width/height`), com o denso gravado em `rastreios/<rid>/` do projeto e `midia = midia_id`.
+/// Trilha `auto` entra sem confirmação; a revisada, confirmada. Trilha inexistente: `pessoa_ausente`.
+/// `cache` = `app_cache_dir()/edicao/<caso>`: a tabela do decodificador (`TabelaQuadros::obter`) dá o pts de cada
+/// quadro do denso e a base de tempo de `arquivo::gravar` (as trilhas guardam só `t`).
+/// Abertura: recusa `nao_suportado: pessoas` até o P2.5 entregar.
+pub(crate) fn rastreio_da_pessoa(
+    ws: &std::path::Path,
+    cache: &std::path::Path,
+    projeto_id: &str,
+    midia_id: &str,
+    media_sha256: &str,
+    pessoa_id: &str,
+) -> Result<crate::edicao::modelo::Rastreio> {
+    let _ = (ws, cache, projeto_id, midia_id, media_sha256, pessoa_id);
+    Err(SicroError::Validation(format!("{}: pessoas", crate::edicao::mensagens::codigo::NAO_SUPORTADO)))
+}
+
+/// `retrato_desatualizado` dos rastreios vindos de Pessoas cuja trilha mudou depois de `copiado_em` (§6.4,
+/// "Atualizar"); `edicao_analisar` acrescenta à `Analise`. Abertura: nenhum.
+pub(crate) fn desatualizados(ws: &std::path::Path, p: &crate::edicao::modelo::ProjetoEdicao) -> Vec<crate::edicao::modelo::Problema> {
+    let _ = (ws, p);
+    Vec::new()
+}

@@ -61,6 +61,9 @@ import { adicionarRegua, novaRegua, REGUA_PRONTA, ReguaEditor } from "./secoes/R
 import { adicionarVelocidade, novaVelocidade, VELOCIDADE_PRONTA, VelocidadeEditor } from "./secoes/VelocidadeEditor";
 import { REALCE_PRONTO, RealceSecao } from "./secoes/RealceSecao";
 import { AUDIO_CLIPE_PRONTO, AudioClipeSecao } from "./secoes/AudioClipeSecao";
+// Fase 2 (contratos-fase2.md (c)): o P2.6 liga o holofote em `HolofoteEditor.tsx`, sem tocar aqui
+import { adicionarHolofote, HOLOFOTE_PRONTO, HolofoteEditor, novoHolofote } from "./secoes/HolofoteEditor";
+import { alcasDoAlvo } from "./secoes/alvoRegiao";
 
 // ---- efeitos ----
 
@@ -189,7 +192,8 @@ export const REGISTRO: Registro = {
     novo: () => novoOcultar(novoId()),
     Editor: OcultarEditor,
     primitivas: prim,
-    alcas: (e, q) => alcasRastreio(e.alvo.rastreio, q),
+    // vértices do "Polígono": P2.6 (`secoes/alvoRegiao.ts`)
+    alcas: (e, q) => alcasDoAlvo(e, q, alcasRastreio(e.alvo.rastreio, q)),
   },
   texto: { tipo: "texto", rotulo: "Texto", icone: Type, familia: "anotacao", novo: novoTexto, Editor: TextoEditor, primitivas: prim, alcas: alcaLugar },
   carimbo: { tipo: "carimbo", rotulo: "Tempo", icone: Clock, familia: "anotacao", novo: novoCarimbo, Editor: CarimboEditor, primitivas: prim, alcas: alcaLugar },
@@ -205,8 +209,10 @@ export const REGISTRO: Registro = {
   velocidade_exibida: VELOCIDADE_PRONTA
     ? { tipo: "velocidade_exibida", rotulo: "Velocidade", icone: Gauge, familia: "anotacao", novo: novaVelocidade, Editor: VelocidadeEditor, primitivas: prim }
     : soLeitura("velocidade_exibida", "Velocidade", Gauge, "anotacao"),
+  holofote: HOLOFOTE_PRONTO
+    ? { tipo: "holofote", rotulo: "Holofote", icone: Lightbulb, familia: "regiao", novo: novoHolofote, Editor: HolofoteEditor, primitivas: prim, alcas: (e, q) => alcasDoAlvo(e, q, alcasRastreio(e.alvo.rastreio, q)) }
+    : soLeitura("holofote", "Holofote", Lightbulb, "regiao"),
   // fases seguintes
-  holofote: soLeitura("holofote", "Holofote", Lightbulb, "regiao"),
   estabilizar: soLeitura("estabilizar", "Estabilizar", Sparkles, "origem"),
   lente: soLeitura("lente", "Lente", Sparkles, "origem"),
   desentrelacar: soLeitura("desentrelacar", "Desentrelaçar", Sparkles, "origem"),
@@ -219,6 +225,7 @@ export const REGISTRO: Registro = {
 export const ADICIONAR: readonly TipoAdicionavel[] = [
   "destaque",
   "ocultar",
+  ...(HOLOFOTE_PRONTO ? (["holofote"] as const) : []),
   ...(LUPA_PRONTA ? (["lupa"] as const) : []),
   ...(REGUA_PRONTA ? (["regua"] as const) : []),
   ...(VELOCIDADE_PRONTA ? (["velocidade_exibida"] as const) : []),
@@ -226,9 +233,10 @@ export const ADICIONAR: readonly TipoAdicionavel[] = [
   "carimbo",
   "imagem",
 ];
-export type TipoAdicionavel = "destaque" | "ocultar" | "lupa" | "regua" | "velocidade_exibida" | "texto" | "carimbo" | "imagem";
+export type TipoAdicionavel = "destaque" | "ocultar" | "holofote" | "lupa" | "regua" | "velocidade_exibida" | "texto" | "carimbo" | "imagem";
 /** "Adicionar" dos tipos que criam o efeito por conta própria (rastreio, retrato da análise): a função do pacote. */
 export const ADICIONAR_PROPRIO: Partial<Record<TipoAdicionavel, (clipeId: Id, rotulo: string) => Promise<Id | null>>> = {
+  holofote: adicionarHolofote,
   lupa: adicionarLupa,
   regua: adicionarRegua,
   velocidade_exibida: adicionarVelocidade,

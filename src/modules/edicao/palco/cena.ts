@@ -25,6 +25,7 @@ import type {
 import { acharMidia, acharRastreio, efeitoConhecido } from "../modelo/projeto";
 import { aDe, type Afim, type Tamanho } from "../modelo/geometria";
 import { avaliar, emAusencia } from "../modelo/rastreio";
+import { densoEmCache } from "../store/rastreioStore";
 import { primitivas } from "./desenho/primitivas";
 
 /** O que vem do backend ou do disco; null = ainda não chegou. */
@@ -119,7 +120,7 @@ export function quadroDaCena(
       if (!r) return null;
       const em = r.base === "fonte" && fonte ? fonte : { t: inst.t, pts: inst.pts };
       if (emAusencia(r, em.t)) return null;
-      return avaliar(r, em)?.caixa ?? null;
+      return avaliar(r, em, densoEmCache(r))?.caixa ?? null;
     },
     sprite: (p) => fontes.sprite(p),
     atlas: (e, h) => fontes.atlas(e, h),

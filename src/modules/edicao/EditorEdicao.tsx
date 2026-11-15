@@ -31,6 +31,8 @@ import { receberMarca, useInspetorUi } from "./inspetor/ui";
 import { efetivas, gradeDasColunas, LIMITES, useColunas } from "./colunas";
 import styles from "./EditorEdicao.module.css";
 import { capturar } from "./palco/capturar";
+// Fase 2 (contratos-fase2.md (c)): rastreio assistido do P2.4 (sem efeito enquanto RASTREIO_PRONTO = false)
+import { atalhosDoRastreio, pararCorrida, useOuvirRastreio } from "./store/rastreioStore";
 
 /** Atalhos da tela: só na frente, sem diálogo e sem menu aberto (Fila, menu do cartão, menu de contexto). */
 export function atalhosLigados(x: { ativo: boolean; exportando: boolean; modal: boolean; semDialogo: boolean; semMenu: boolean }): boolean {
@@ -68,6 +70,7 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
   const semDialogo = useDialogosAbertos((s) => s.pilha.length === 0);
   const semMenu = useMenusAbertos((s) => s.n === 0);
   const atalhos = atalhosLigados({ ativo, exportando, modal, semDialogo, semMenu });
+  useOuvirRastreio();
   const palco = useRef<PalcoApi | null>(null);
   // largura do corpo: as laterais cedem quando o palco ficaria estreito
   const corpoRef = useRef<HTMLDivElement | null>(null);
@@ -141,7 +144,9 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
       "edicao.quadroFinal": () => palco.current?.quadroFinal(),
       // Enter só é da marcação com a ferramenta de rastreio ligada; fora disso segue para o botão em foco
       ...(ferramenta?.rastreio ? { "edicao.marcar": marcarNesteQuadro } : {}),
+      ...atalhosDoRastreio(),
       "edicao.cancelar": () => {
+        if (pararCorrida()) return;
         if (palco.current?.cancelar()) return;
         if (ferramenta) useInspetorUi.getState().cancelarMarcacao();
         else if (expandido) setExpandido(false);

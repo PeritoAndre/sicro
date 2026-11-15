@@ -37,6 +37,7 @@ import { ROTULOS, textoPermitido } from "./rotulos.teste";
 import { ADICIONAR, ADICIONAR_PROPRIO, EDITAVEIS, REGISTRO, secoesDe } from "./registro";
 import { FECHO_PRONTO, EntradaSecao } from "./secoes/EntradaSecao";
 import { LUPA_PRONTA, LupaEditor } from "./secoes/LupaEditor";
+import { HOLOFOTE_PRONTO } from "./secoes/HolofoteEditor";
 import { REGUA_PRONTA, ReguaEditor } from "./secoes/ReguaEditor";
 import { VELOCIDADE_PRONTA, VelocidadeEditor } from "./secoes/VelocidadeEditor";
 import { REALCE_PRONTO, RealceSecao } from "./secoes/RealceSecao";
@@ -1037,8 +1038,8 @@ describe("rótulos", () => {
     expect({ FECHO_PRONTO, LUPA_PRONTA, REGUA_PRONTA, VELOCIDADE_PRONTA, REALCE_PRONTO, AUDIO_CLIPE_PRONTO, PAINEL_AUDIO_PRONTO, LEGENDAS_PRONTAS, EDITOR_TITULO_PRONTO, PRESOS_PRONTOS, SELOS_PRONTOS }).toEqual({
       FECHO_PRONTO: true, LUPA_PRONTA: true, REGUA_PRONTA: true, VELOCIDADE_PRONTA: true, REALCE_PRONTO: true, AUDIO_CLIPE_PRONTO: true, PAINEL_AUDIO_PRONTO: true, LEGENDAS_PRONTAS: true, EDITOR_TITULO_PRONTO: true, PRESOS_PRONTOS: true, SELOS_PRONTOS: true,
     });
-    // "Adicionar" na ordem do §8.6 (Holofote é de fase seguinte), com o editor do pacote
-    expect(ADICIONAR.map((t) => REGISTRO[t].rotulo)).toEqual(["Destaque", "Ocultar", "Lupa", "Régua", "Velocidade", "Texto", "Tempo", "Imagem"]);
+    // "Adicionar" na ordem do §8.6 (Holofote: P2.6 liga), com o editor do pacote
+    expect(ADICIONAR.map((t) => REGISTRO[t].rotulo)).toEqual(["Destaque", "Ocultar", ...(HOLOFOTE_PRONTO ? ["Holofote"] : []), "Lupa", "Régua", "Velocidade", "Texto", "Tempo", "Imagem"]);
     expect([REGISTRO.lupa.Editor, REGISTRO.regua.Editor, REGISTRO.velocidade_exibida.Editor]).toEqual([LupaEditor, ReguaEditor, VelocidadeEditor]);
     for (const t of ["lupa", "regua", "velocidade_exibida"] as const) expect(EDITAVEIS.has(t), t).toBe(true);
     // seções por tipo de item: som do trecho depois do Trecho; Realce (P1.4) antes das Marcações

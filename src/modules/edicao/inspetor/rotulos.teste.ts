@@ -37,6 +37,9 @@ export const ROTULOS = new Set<string>([
   "Selo de velocidade", "Selo de ampliação", "Selo de realce",
   "Não", "Na imagem", "Arquivo", "As duas", "Incluir originais", "PDF sem anexos", "Revisado por", "Testar de novo",
   "Conferir ocultações", "Refazer e comparar", "Igual", "Conteúdo igual, arquivo diferente", "Não comparável",
+  // Fase 2 (§8.6 "Rastreio" e contratos-fase2 (f)), já aqui: o pacote que liga a casca não edita este arquivo
+  "Seguir para trás", "Incerto", "Fora de cena", "Oculto", "Perdido", "Retomar", "Aceitar ausência", "Próximo trecho fraco",
+  "Apagar daqui em diante", "Simplificar", "Atualizar", "Dessaturar", "Quadro anterior", "Próximo quadro",
   // amostras e unidades
   "Aa", "×", "%", "°", "#",
 ]);
@@ -47,6 +50,7 @@ export function textoPermitido(t: string): boolean {
   if (/^Exportar com \d+ avisos?$/.test(t)) return true;
   if (/^Vídeo \d+\/\d+$/.test(t)) return true;
   if (/^Diferente a partir de \d{2}:\d{2}:\d{2},\d{3}$/.test(t)) return true;
+  if (/^Perdido em (\d{2}:)?\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^\d+ marcaç(ão|ões)$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;
   if (/^-?\d+(,\d+)?\s?(%|°|×)?$/.test(t)) return true;

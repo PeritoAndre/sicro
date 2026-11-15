@@ -72,6 +72,20 @@ pub mod codigo {
     // CONTRATO: acréscimo (verificação da Fase 1): a publicação (`fila.rs`, `pacote.rs`) já devolvia estes códigos sem frase
     pub const PASTA_EXISTE: &str = "pasta_existe";
     pub const RETRATO_EXISTE: &str = "retrato_existe";
+    // Fase 2 (abertura, contratos-fase2 (b)): IA, aceleração por GPU e comandos do rastreio; ainda sem uso
+    pub const IA_DESLIGADA: &str = "ia_desligada";
+    pub const MODELO_AUSENTE: &str = "modelo_ausente";
+    pub const RASTREIO_EM_CURSO: &str = "rastreio_em_curso";
+    pub const PESSOA_AUSENTE: &str = "pessoa_ausente";
+    pub const REABRIR: &str = "reabrir";
+    pub const GPU_NAO_INSTALADA: &str = "gpu_nao_instalada";
+    pub const GPU_SEM_BIBLIOTECAS: &str = "gpu_sem_bibliotecas";
+    pub const GPU_SEM_CUDNN: &str = "gpu_sem_cudnn";
+    pub const GPU_SEM_PLACA: &str = "gpu_sem_placa";
+    pub const GPU_PLACA_ANTIGA: &str = "gpu_placa_antiga";
+    pub const GPU_DRIVER_ANTIGO: &str = "gpu_driver_antigo";
+    pub const GPU_SEM_MEMORIA: &str = "gpu_sem_memoria";
+    pub const GPU_FALHOU: &str = "gpu_falhou";
     // periciais
     pub const TAXA_VARIAVEL: &str = "taxa_variavel";
     pub const QUADROS_DESCARTADOS: &str = "quadros_descartados";
@@ -96,6 +110,8 @@ pub mod codigo {
     pub const QUADRO_AJUSTADO: &str = "quadro_ajustado";
     pub const RETRATO_DESATUALIZADO: &str = "retrato_desatualizado";
     pub const SELO_DESLIGADO: &str = "selo_desligado";
+    // Fase 2 (abertura): quadro sem máscara na forma silhueta (cai na elipse da caixa; uso na Fase 5)
+    pub const SILHUETA_AUSENTE: &str = "silhueta_ausente";
 }
 
 use codigo::*;
@@ -188,6 +204,19 @@ const CATALOGO: &[Entrada] = &[
     e(RETRATO_DIVERGENTE, Erro, "Retrato da exportação alterado"),
     e(PASTA_EXISTE, Erro, "Pasta da exportação já existe"),
     e(RETRATO_EXISTE, Erro, "Retrato da exportação já existe"),
+    e(IA_DESLIGADA, Erro, "Modelos de IA desligados"),
+    com_detalhe(MODELO_AUSENTE, Erro, "Modelo não instalado"),
+    e(RASTREIO_EM_CURSO, Erro, "Outro rastreio em andamento"),
+    e(PESSOA_AUSENTE, Erro, "Trilha da análise não encontrada"),
+    e(REABRIR, Erro, "Reabrir o SICRO"),
+    e(GPU_NAO_INSTALADA, Erro, "Aceleração por GPU não instalada"),
+    e(GPU_SEM_BIBLIOTECAS, Erro, "Faltam bibliotecas da NVIDIA"),
+    e(GPU_SEM_CUDNN, Erro, "Falta o cuDNN"),
+    e(GPU_SEM_PLACA, Erro, "Nenhuma placa NVIDIA"),
+    e(GPU_PLACA_ANTIGA, Erro, "Placa NVIDIA sem suporte"),
+    e(GPU_DRIVER_ANTIGO, Erro, "Driver da NVIDIA antigo"),
+    e(GPU_SEM_MEMORIA, Erro, "Memória de vídeo insuficiente"),
+    e(GPU_FALHOU, Erro, "GPU indisponível"),
     // periciais
     com_n(TAXA_VARIAVEL, Pericial, "Taxa variável", "Taxa variável: 1 intervalo irregular", "Taxa variável: {n} intervalos irregulares"),
     com_n(QUADROS_DESCARTADOS, Pericial, "Quadros descartados", "1 quadro descartado", "{n} quadros descartados"),
@@ -212,6 +241,7 @@ const CATALOGO: &[Entrada] = &[
     com_n(QUADRO_AJUSTADO, Aviso, "Quadro ajustado", "1 quadro ajustado", "{n} quadros ajustados"),
     e(RETRATO_DESATUALIZADO, Aviso, "Retrato desatualizado"),
     com_n(SELO_DESLIGADO, Aviso, "Selo desligado", "1 selo desligado", "{n} selos desligados"),
+    com_n(SILHUETA_AUSENTE, Aviso, "Quadro sem silhueta", "1 quadro sem silhueta", "{n} quadros sem silhueta"),
 ];
 
 /// Rótulo do que `nao_suportado` recusa (o detalhe dos erros); palavra desconhecida = só a frase.
@@ -247,6 +277,16 @@ const NAO_SUPORTADOS: &[(&str, &str)] = &[
     ("volume_animado", "volume animado"),
     ("silenciar", "silenciar trecho"),
     ("legendas", "legendas"),
+    // Fase 2 (abertura): peças ainda não entregues (contratos-fase2 (c)); cada uma sai quando o dono entrega
+    ("ia", "modelos de IA"),
+    ("gpu", "aceleração por GPU"),
+    ("rastreio", "rastreio assistido"),
+    ("vittrack", "rastreador VitTrack"),
+    ("edgetam", "rastreador EdgeTAM"),
+    ("mancha", "rastreador por correlação"),
+    ("silhuetas", "silhuetas do rastreio"),
+    ("pessoas", "trilha da análise"),
+    ("conferencia", "conferência das ocultações"),
 ];
 
 /// Detalhes de `nao_suportado` que têm rótulo (a validação só usa estes).
@@ -339,7 +379,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 82, "constantes de `codigo`");
+        assert_eq!(cods.len(), 96, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {

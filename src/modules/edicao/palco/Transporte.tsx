@@ -18,6 +18,9 @@ import { tempoDoX, xDoTempo, type Escala } from "./faixa";
 import type { Fiel } from "./quadroFiel";
 import styles from "./Palco.module.css";
 import { capturar } from "./capturar";
+// Fase 2 (contratos-fase2.md (c)): faixa do rastreio do P2.4, só com a bandeira dele
+import { FaixaRastreio } from "./FaixaRastreio";
+import { RASTREIO_PRONTO } from "../store/rastreioStore";
 
 export type Fase = "inicio" | "move" | "fim";
 /** "falhou": a última prévia do render não saiu (ícone até pedir de novo ou trocar de clipe). */
@@ -231,6 +234,7 @@ export function Transporte(p: TransporteProps) {
     <div className={styles.transporte}>
       <div ref={pista} className={styles.pista} onPointerDown={arrastar(p.onBuscar)} data-pista="">
         {onda && p.base === "fonte" && <OndaDaPista onda={onda} de={p.de} ate={p.ate} largura={largura} />}
+        {RASTREIO_PRONTO && p.base === "fonte" && <FaixaRastreio de={p.de} ate={p.ate} largura={largura} />}
         {p.faixa && (
           <div className={styles.faixa} style={{ left: pct(p.faixa[0]), width: `calc(${pct(p.faixa[1])} - ${pct(p.faixa[0])})` }} data-faixa="">
             {p.bordas && (

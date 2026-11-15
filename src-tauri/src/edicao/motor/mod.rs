@@ -720,8 +720,9 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         audio: ProvAudio { silencios, tolerancia_atempo_ms, mixagem: p.saida.audio.then(|| p.mixagem.clone()), trilhas },
         legendas: legendas_prov,
         sincronias: Vec::new(),
+        // modelos de IA das corridas dos rastreios usados (P2.1, contratos-fase2 (c)); vazio até ele entregar
+        ia: crate::ia::uso::da_proveniencia(&rastreios),
         rastreios,
-        ia: Vec::new(),
         estabilizacoes: efeitos::realce::estabilizacoes(p),
         avisos: Vec::new(),
         selos_desligados,

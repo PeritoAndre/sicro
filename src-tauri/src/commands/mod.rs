@@ -9,6 +9,8 @@ pub mod case_index_commands;
 pub mod croqui_commands;
 pub mod edicao_commands;
 pub mod edicao_diagnostico_commands;
+pub mod edicao_rastreio_commands;
+pub mod ia_commands;
 pub mod image_commands;
 pub mod import_commands;
 pub mod os_open;

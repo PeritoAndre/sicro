@@ -16,6 +16,8 @@ import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
 import { useExportarUi } from "./avisos";
 import styles from "./Exportar.module.css";
+// Fase 2 (contratos-fase2.md (c)): "Conferir ocultações" do P2.6, só com a bandeira dele
+import { CONFERIR_PRONTO, ConferirSaida } from "./ConferirSaida";
 
 /** Estado mostrado: a conferir; concluída e conferida; concluída sem a conferência exigida; concluída. */
 export type EstadoMostrado = "a_conferir" | "conferida" | "nao_conferida" | "pronta";
@@ -134,6 +136,7 @@ export function Saidas() {
             </div>
             {est === "a_conferir" && (
               <div className={styles.tarefaLinha} data-conferindo={conferindo.has(s.id) || undefined}>
+                {CONFERIR_PRONTO && <ConferirSaida ws={ws} saidaId={s.id} />}
                 <button type="button" className={styles.mini} disabled={conferindo.has(s.id)} onClick={() => void conferirSaida(ws, s.id, true)}>
                   {conferindo.has(s.id) ? <Loader2 size={12} className={styles.gira} /> : <CheckCircle2 size={12} />} Conferido
                 </button>

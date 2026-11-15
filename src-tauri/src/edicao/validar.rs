@@ -14,7 +14,7 @@ use super::cor;
 use super::geometria;
 use super::mensagens::{self, codigo::*};
 use super::modelo::{
-    Analise, Animavel, BaseRastreio, Caixa, Chave, ClipePrincipal, ClipeSobreposto, Codec, ConteudoOculto, Efeito, EfOcultar, EstiloTexto,
+    Analise, Animavel, BaseRastreio, Caixa, Chave, ClipePrincipal, ClipeSobreposto, Codec, Efeito, EfOcultar, EstiloTexto,
     Exportacao, FormaDestaque, FormaRegiao, Interpolacao, Lugar, AlinhamentoV, LinhaResolvida, MetodoSincronia, MidiaRef, ModoLegendas,
     ModoOcultar, MostraCarimbo, Nivel, OndePrender, OndeVelocidade, OrigemLegenda, OrigemRastreio, EstadoPessoa, Posicao, Predefinicao,
     Prender, Problema, ProjetoEdicao, Racional, Rastreio, RefLegenda, SituacaoMidia, TamanhoPx, TipoDerivacao, TipoMidia, TipoRastreio,
@@ -47,10 +47,6 @@ const REGIAO_MIN_W: f64 = 0.02;
 const AREA_SEGURA: f64 = camada::titulo::AREA_SEGURA;
 /// Ampliação acima disso é aviso.
 const AMPLIACAO_MAX: f64 = 4.0;
-/// Desfoque abaixo disso é fraco (medido em texto, §2.3).
-const DESFOQUE_MIN: f64 = 0.6;
-/// Mosaico com mais células que isso no lado menor é fraco.
-const MOSAICO_MAX_CELULAS: f64 = 6.0;
 /// Carimbo de relógio a mais disso do ponto de vínculo (s).
 const RELOGIO_MAX_S: f64 = 600.0;
 /// Taxa variável (`receitas-audio-saida.md` §8): tolerância mínima do passo (s), parte dos passos fora de ±25 % e lacuna.
@@ -1320,21 +1316,15 @@ impl<'a> Validacao<'a> {
             Ok(c) if oc.modo == ModoOcultar::Solido && c.a != 255 => self.por(OCULTAR_COR_OPACA, &onde.campo("cor")),
             Ok(_) => {}
         }
-        let texto = matches!(oc.conteudo, ConteudoOculto::Placa | ConteudoOculto::Documento | ConteudoOculto::Tela);
-        if oc.modo != ModoOcultar::Solido && texto {
+        // força da ocultação: regra do P2.6 (`regiao::reversivel`, `regiao::fraca`; contratos-fase2 (c))
+        if efeitos::regiao::reversivel(oc) {
             self.por(OCULTACAO_REVERSIVEL, onde);
         }
         // o motor prende a intensidade em 0..1: valor fora disso não sai como foi gravado
         if !(0.0..=1.0).contains(&oc.intensidade) {
             self.por(ITEM_INVALIDO, &onde.campo("intensidade"));
         }
-        let i = oc.intensidade.clamp(0.0, 1.0);
-        let fraca = match oc.modo {
-            ModoOcultar::Desfoque => oc.intensidade < DESFOQUE_MIN,
-            ModoOcultar::Mosaico => (12.0 - 11.0 * i).round() > MOSAICO_MAX_CELULAS,
-            ModoOcultar::Solido => false,
-        };
-        if fraca {
+        if efeitos::regiao::fraca(oc) {
             self.por(OCULTACAO_FRACA, onde);
         }
         if oc.alvo.forma == FormaRegiao::Silhueta {
@@ -3029,11 +3019,24 @@ mod testes {
         caso("mosaico", 1.0, "placa").so(&[OCULTACAO_REVERSIVEL]);
         caso("desfoque", 1.0, "documento").so(&[OCULTACAO_REVERSIVEL]);
         caso("solido", 1.0, "tela").so(&[]);
-        caso("desfoque", 0.5, "rosto").so(&[OCULTACAO_FRACA]);
-        caso("desfoque", 0.6, "rosto").so(&[]);
-        // mosaico: round(12 − 11·i) células; 0,5 → 7 (fraca), 0,55 → 6
-        caso("mosaico", 0.5, "rosto").so(&[OCULTACAO_FRACA]);
-        caso("mosaico", 0.55, "rosto").so(&[]);
+        // a força é regra de `regiao::{reversivel, fraca}` (P2.6 fixa os limiares; os casos de limiar estão lá):
+        // aqui, que a validação pergunta a ela em toda combinação
+        for modo in ["solido", "mosaico", "desfoque"] {
+            for conteudo in ["rosto", "placa", "documento", "tela", "corpo", "outro"] {
+                for i in [0.0, 0.25, 0.5, 0.55, 0.6, 0.75, 0.9, 1.0] {
+                    let c = caso(modo, i, conteudo);
+                    let o: EfOcultar = serde_json::from_value(c.p["principal"][0]["efeitos"].as_array().unwrap().last().unwrap().clone()).unwrap();
+                    let mut esperado = Vec::new();
+                    if efeitos::regiao::reversivel(&o) {
+                        esperado.push(OCULTACAO_REVERSIVEL);
+                    }
+                    if efeitos::regiao::fraca(&o) {
+                        esperado.push(OCULTACAO_FRACA);
+                    }
+                    c.so(&esperado);
+                }
+            }
+        }
     }
 
     #[test]

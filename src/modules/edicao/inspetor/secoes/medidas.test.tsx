@@ -31,6 +31,7 @@ import { Inspetor } from "../Inspetor";
 import { esquecerLeituras } from "../contexto";
 import { ADICIONAR, descritor } from "../registro";
 import { LUPA_PRONTA } from "./LupaEditor";
+import { HOLOFOTE_PRONTO } from "./HolofoteEditor";
 import { useInspetorUi } from "../ui";
 import { botao, campo, clicar, desmontarTudo, digitar, entradaDe, escolher, esperar, lerFixture as ler, montar, textosVisiveis, type Tela } from "../testeTela";
 import { textoPermitido } from "../rotulos.teste";
@@ -114,7 +115,7 @@ function conferirTextos() {
 
 describe("registro (P1.3)", () => {
   it("Adicionar oferece Régua e Velocidade na ordem do §8.6, com editor", () => {
-    expect(ADICIONAR).toEqual(["destaque", "ocultar", ...(LUPA_PRONTA ? ["lupa"] : []), "regua", "velocidade_exibida", "texto", "carimbo", "imagem"]);
+    expect(ADICIONAR).toEqual(["destaque", "ocultar", ...(HOLOFOTE_PRONTO ? ["holofote"] : []), ...(LUPA_PRONTA ? ["lupa"] : []), "regua", "velocidade_exibida", "texto", "carimbo", "imagem"]);
     for (const tipo of ["regua", "velocidade_exibida"] as const) {
       const { d, editavel } = descritor({ tipo, id: "x" } as unknown as EfRegua);
       expect([d.tipo, editavel]).toEqual([tipo, true]);

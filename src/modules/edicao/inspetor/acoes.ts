@@ -95,7 +95,7 @@ export const midiaDoClipe = (c: ClipeQualquer): Id | null => (c.tipo === "trecho
 export type TipoAdicionar = "destaque" | "ocultar" | "texto" | "carimbo" | "imagem";
 
 /** Quadro mostrado no congelado: tempo e pts dele pela tabela da mídia (a do palco); sem tabela, o do clipe. */
-function quadroDoCongelado(c: ClipeCongelar): { t: Seg; pts: Pts | null } {
+export function quadroDoCongelado(c: ClipeCongelar): { t: Seg; pts: Pts | null } {
   const doc = st().doc;
   const tab = doc ? recursoDe(doc.midias.find((m) => m.id === c.midia)?.sha256).tabela : null;
   if (!tab) return { t: c.instante_s, pts: c.instante_pts };
@@ -104,7 +104,7 @@ function quadroDoCongelado(c: ClipeCongelar): { t: Seg; pts: Pts | null } {
 }
 
 /** Quadro mostrado no tempo `t` do trecho, com o pts: a âncora nasce igual à que o palco marca nesse quadro. */
-function quadroDoTrecho(c: ClipeTrecho, t: Seg): { t: Seg; pts: Pts | null } | null {
+export function quadroDoTrecho(c: ClipeTrecho, t: Seg): { t: Seg; pts: Pts | null } | null {
   const doc = st().doc;
   const tab = doc ? recursoDe(doc.midias.find((m) => m.id === c.midia)?.sha256).tabela : null;
   if (!tab) return null;

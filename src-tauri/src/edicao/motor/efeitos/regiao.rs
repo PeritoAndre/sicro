@@ -3,7 +3,7 @@
 //! Dono: P0.6a.
 
 use crate::edicao::cor;
-use crate::edicao::modelo::{EfHolofote, EfOcultar, ModoOcultar};
+use crate::edicao::modelo::{ConteudoOculto, EfHolofote, EfOcultar, ModoOcultar};
 use crate::edicao::motor::grafo::{filtro, scale, Grafo};
 use crate::error::Result;
 
@@ -68,6 +68,29 @@ pub fn ocultar(
         atual = trocar(g, &atual, uniao_px[i], v, &mascaras[i]);
     }
     Ok(atual)
+}
+
+// CONTRATO: abertura da Fase 2 (contratos-fase2 (c)): a força da ocultação é regra do P2.6 (mede o ataque e fixa os
+// limiares, §12 item 4); a validação pergunta aqui.
+/// Desfoque abaixo disso é fraco (limiar provisório, medido em texto, §2.3).
+pub(crate) const DESFOQUE_MIN: f64 = 0.6;
+/// Mosaico com mais células que isso no lado menor é fraco.
+pub(crate) const MOSAICO_MAX_CELULAS: f64 = 6.0;
+
+/// `ocultacao_reversivel`: mosaico ou desfoque em placa, documento ou tela, em qualquer intensidade (§6.6 (2)).
+pub(crate) fn reversivel(o: &EfOcultar) -> bool {
+    let texto = matches!(o.conteudo, ConteudoOculto::Placa | ConteudoOculto::Documento | ConteudoOculto::Tela);
+    o.modo != ModoOcultar::Solido && texto
+}
+
+/// `ocultacao_fraca`: desfoque abaixo de `DESFOQUE_MIN` ou mosaico com mais de `MOSAICO_MAX_CELULAS` células.
+pub(crate) fn fraca(o: &EfOcultar) -> bool {
+    let i = o.intensidade.clamp(0.0, 1.0);
+    match o.modo {
+        ModoOcultar::Desfoque => o.intensidade < DESFOQUE_MIN,
+        ModoOcultar::Mosaico => (CELULAS_MAX - (CELULAS_MAX - 1.0) * i).round() > MOSAICO_MAX_CELULAS,
+        ModoOcultar::Solido => false,
+    }
 }
 
 /// Holofote: a variante escurecida e dessaturada entra onde a máscara (por slot, px do canvas) manda.
@@ -144,6 +167,28 @@ mod testes {
             let fora_do_preto = (20..60).flat_map(|y| (20..60).map(move |x| (y * 160 + x) * 3)).filter(|&k| q[k..k + 3].iter().any(|&v| v > 2)).count();
             assert_eq!(fora_do_preto, 0, "quadro {i} descoberto ({})", cap.versao);
         }
+    }
+
+    /// Força da ocultação com os limiares de hoje (provisórios, §12 item 4: o P2.6 troca pelos medidos no ataque e
+    /// atualiza estes casos); até a abertura da Fase 2 eram de `validar.rs`, que agora só pergunta aqui.
+    #[test]
+    fn reversivel_e_fraca_nos_limiares_de_hoje() {
+        let com = |modo: &str, i: f64, conteudo: &str| {
+            let mut o = ocultacao(modo, i);
+            o.conteudo = serde_json::from_value(json!(conteudo)).unwrap();
+            o
+        };
+        assert!(reversivel(&com("mosaico", 1.0, "placa")));
+        assert!(reversivel(&com("desfoque", 1.0, "documento")));
+        assert!(reversivel(&com("desfoque", 0.1, "tela")));
+        assert!(!reversivel(&com("solido", 1.0, "tela")));
+        assert!(!reversivel(&com("mosaico", 1.0, "rosto")));
+        assert!(fraca(&com("desfoque", 0.5, "rosto")));
+        assert!(!fraca(&com("desfoque", 0.6, "rosto")));
+        // mosaico: round(12 − 11·i) células; 0,5 → 7 (fraca), 0,55 → 6
+        assert!(fraca(&com("mosaico", 0.5, "rosto")));
+        assert!(!fraca(&com("mosaico", 0.55, "rosto")));
+        assert!(!fraca(&com("solido", 0.0, "placa")));
     }
 
     #[test]

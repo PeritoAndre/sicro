@@ -15,6 +15,8 @@ import { useRenderStore } from "../store/renderStore";
 import { useExportarUi } from "./avisos";
 import { useMenuAberto } from "../menus";
 import { Saidas, conferirSaida } from "./Saidas";
+// Fase 2 (contratos-fase2.md (c)): "Conferir ocultações" do P2.6, só com a bandeira dele
+import { CONFERIR_PRONTO, ConferirSaida } from "./ConferirSaida";
 import styles from "./Exportar.module.css";
 
 const EM_CURSO = new Set<EstadoTarefa["tipo"]>(["na_fila", "preparando", "rodando"]);
@@ -183,6 +185,7 @@ function LinhaTarefa({ t }: { t: Tarefa }) {
       )}
       {e.tipo === "a_conferir" && ws && (
         <div className={styles.tarefaLinha}>
+          {CONFERIR_PRONTO && <ConferirSaida ws={ws} saidaId={e.saida_id} />}
           <button type="button" className={styles.mini} onClick={() => void conferirSaida(ws, e.saida_id, true)}>
             <CheckCircle2 size={12} /> Conferido
           </button>

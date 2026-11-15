@@ -481,6 +481,62 @@ export interface RetratoCalculo { id: string; kmh: number; faixa: [number, numbe
 /** Proveniência da mídia na análise (video_proveniencia_commands.rs, P1.10); null = não informado. */
 export interface ProvenienciaMidia { recebido_nativo: boolean | null; recebido_obs: string; relogio_desvio_s: number | null; gravador: string | null }
 
+// ---- Fase 2 (contratos-fase2.md): rastreio assistido, conferência das ocultações ----
+/** Ponteiro do denso gravado no projeto (`Rastreio.denso`; modelo.rs `Denso`). */
+export interface Denso { sha256: string; n: number; de_s: Seg; ate_s: Seg; ok: number; incertos: number; ausentes: number }
+/** Ponteiro das silhuetas (`Rastreio.silhuetas`; modelo.rs `Silhuetas`). */
+export interface Silhuetas { sha256: string; n: number; modelo: string }
+/** Colunas `estado` e `tipo` do denso (rastreio/mod.rs). */
+export const ESTADO_OK = 0;
+export const ESTADO_INCERTO = 1;
+export const ESTADO_AUSENTE = 2;
+export const TIPO_MEDIDO = 0;
+export const TIPO_INTERPOLADO = 1;
+export const TIPO_ESTENDIDO = 2;
+export type MotorRastreio = "edgetam" | "vittrack" | "mancha";
+/** `auto` = edgetam com GPU pronta e item instalado, senão vittrack, senão mancha. */
+export type EscolhaMotor = "auto" | "edgetam" | "vittrack" | "mancha";
+export type Sentido = "frente" | "tras";
+export type SentidoPedido = "frente" | "tras" | "ambos";
+/** Por que a corrida parou (rastreio/mod.rs `Motivo`). */
+export type MotivoParada = "fim" | "perdido" | "saiu_do_quadro" | "limite" | "ancora" | "cancelado";
+/** Limiares gravados na corrida; `paciencia` em quadros. */
+export interface Limiares { ok: number; perdido: number; paciencia: number }
+export interface ArquivoModelo { nome: string; sha256: string }
+export interface ModeloCorrida { nome: string; origem: string; commit: string; arquivos: ArquivoModelo[]; desvio: string }
+/** `provedor` = "cpu" | "cuda"; `runtime` = "onnxruntime 1.31.1" (vazio na mancha). */
+export interface MotorCorrida { motor: MotorRastreio; modelo: ModeloCorrida; runtime: string; provedor: string }
+/** Uma corrida, como em `ArquivoDenso.corridas[]` (§6.1). */
+export interface Corrida extends MotorCorrida { sentido: Sentido; ancora_pts: Pts; de_pts: Pts; ate_pts: Pts; limiares: Limiares;
+                                                parou: MotivoParada; feito_em: string }
+/** `rastreios/<rid>/<sha256>.json` (§6.1): uma linha por quadro da fonte, em colunas. */
+export interface ArquivoDenso {
+  esquema: number; rastreio: Id; midia_sha256: string; espaco: string; pixel: { w: number; h: number };
+  pts: Pts[]; x: number[]; y: number[]; w: number[]; h: number[]; conf: number[]; estado: number[]; tipo: number[]; corrida: number[];
+  corridas: Corrida[];
+}
+/** O que "Seguir" pede (`edicao_rastreio_seguir`); `ate_s` em tempo de fonte (null = até a borda da mídia). */
+export interface PedidoSeguir { rastreio_id: Id; clipe_id: Id; ancora: Chave<Caixa>; sentido: SentidoPedido; ate_s: Seg | null; motor: EscolhaMotor }
+export interface Parou { motivo: MotivoParada; pts: Pts | null }
+export interface ParouSentido { sentido: Sentido; motivo: MotivoParada; pts: Pts | null }
+/** Evento `edicao:rastreio` (até 5 por segundo; `miniatura` = data URL JPEG de até 320 px com a caixa). */
+export interface AvancoRastreio { tipo: "avanco"; tarefa_id: string; rastreio_id: Id; sentido: Sentido; pts: Pts; caixa: Caixa | null;
+                                  conf: number; estado: number; feitos: number; miniatura: string | null }
+/** Fim: o front aplica `denso` e `silhuetas` por alterar(); `denso` null = nada novo. */
+export interface FimRastreio { tipo: "fim"; tarefa_id: string; rastreio_id: Id; parou: ParouSentido[]; denso: Denso | null; silhuetas: Silhuetas | null }
+/** `mensagem` = "<código>: <frase>" do catálogo. */
+export interface FalhaRastreio { tipo: "falhou"; tarefa_id: string; rastreio_id: Id; mensagem: string }
+export type EventoRastreio = AvancoRastreio | FimRastreio | FalhaRastreio;
+export const EVENTO_RASTREIO = "edicao:rastreio";
+/** `edicao_rastreio_editar`: faixas por pts do quadro (`ate_pts` null = até o fim). */
+export type OpRastreio = { tipo: "apagar_faixa"; de_pts: Pts; ate_pts: Pts | null } | { tipo: "simplificar"; tolerancia: number };
+/** O front grava `ancoras` quando vem e `denso` sempre (null = rastreio sem denso). */
+export interface Editado { ancoras: Chave<Caixa>[] | null; denso: Denso | null }
+/** "Conferir ocultações" (conferencia.rs, P2.6): segundos do arquivo exportado, `[de_s, ate_s)`. */
+export type ComoFraco = "incerto" | "interpolado";
+export interface FaixaFraca { de_s: Seg; ate_s: Seg; como: ComoFraco }
+export interface TrechoConferencia { efeito: Id; conteudo: EfOcultar["conteudo"]; de_s: Seg; ate_s: Seg; fracos: FaixaFraca[] }
+
 // ---- palco e desenho (§8.3) ----
 // Unidades: 0..1 do canvas. O pintor (front) e camada::formas (Rust) implementam TODOS os `k` uma vez; efeito novo só devolve primitivas.
 type Traco2 = { cor: Cor; largura: number; contorno?: Cor };

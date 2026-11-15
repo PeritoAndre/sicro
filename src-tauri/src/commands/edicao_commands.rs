@@ -175,6 +175,8 @@ pub(crate) fn analisar(ws: &Path, projeto: &Value, app_cache: &Path) -> Result<A
     let mut a = validar::analisar(&p, &prep.contexto(), None);
     // retratos de análise que mudaram depois de gravados no projeto (P1.3)
     a.problemas.extend(medidas::desatualizados(ws, &p));
+    // rastreios "Da análise" cuja trilha mudou depois da cópia (P2.5, contratos-fase2 (c))
+    a.problemas.extend(crate::commands::pessoas_commands::desatualizados(ws, &p));
     Ok(a)
 }
 

@@ -34,6 +34,9 @@ import { useInspetorUi } from "../ui";
 import { escolherMidia } from "./importar";
 import { useMenuAberto } from "../../menus";
 import { useOrigemPendente } from "../../palco/origem";
+// Fase 2 (contratos-fase2.md (c)): rastreio assistido do P2.4, montado só com a bandeira dele
+import { PainelRastreio } from "../../rastreio/PainelRastreio";
+import { RASTREIO_PRONTO } from "../../store/rastreioStore";
 import styles from "../Inspetor.module.css";
 
 interface Item {
@@ -81,7 +84,7 @@ export function MarcacoesSecao({ clipe: c, ctx, info, tabela: lida }: SecaoProps
             // falha de "Adicionar": a frase do catálogo no aviso do app, nunca calada
             if (proprio) void proprio(c.id, d.rotulo).catch(falhou);
             else if (tipo === "imagem") void escolherMidia("imagem").then((m) => m && adicionarImagem(c.id, m, d.rotulo), falhou);
-            else adicionarEfeito(c.id, tipo as Exclude<typeof tipo, "imagem" | "lupa" | "regua" | "velocidade_exibida">, d.rotulo);
+            else adicionarEfeito(c.id, tipo as Exclude<typeof tipo, "imagem" | "holofote" | "lupa" | "regua" | "velocidade_exibida">, d.rotulo);
           },
         };
       }),
@@ -204,6 +207,11 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
                 >
                   <Crosshair size={12} /> Marcar
                 </Mini>
+              </div>
+            )}
+            {RASTREIO_PRONTO && rastreio && (
+              <div className={styles.larga}>
+                <PainelRastreio efeito={ef} rastreio={rastreio} clipe={clipe} ctx={ctx} parada={parada} tabela={fonte ? tabela : null} />
               </div>
             )}
           </div>

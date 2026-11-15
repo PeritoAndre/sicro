@@ -51,6 +51,8 @@ fn ancora_no_quadro(ks: &[Chave<Caixa>], n: usize, em: Instante) -> Option<usize
 
 /// Ponto de extensão da Fase 2 (leitor de denso): `Some(Some(_))` = amostra ok ou incerta nesse pts,
 /// `Some(None)` = estado ausente (nada), `None` = sem linha nesse quadro (segue pelas âncoras).
+/// `como` = `Denso` na linha medida e `Interpolado` na de `tipo` interpolado ou estendido (a validação conta
+/// `ocultar_interpolado` e a conferência marca o trecho fraco por isso); `incerto` = estado incerto (P2.2).
 /// Na Fase 0 não há denso: segue sempre pelas âncoras.
 fn do_denso(_d: &ArquivoDenso, _em: Instante) -> Option<Option<Avaliado>> {
     None

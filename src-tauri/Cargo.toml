@@ -117,7 +117,8 @@ nnnoiseless = { version = "0.5.2", default-features = false }
 
 # Pessoas no vídeo (5.2): YOLOX em ONNX. `load-dynamic` carrega a libonnxruntime que o
 # Gerenciador de IA baixa (sem binário embutido, sem download no build).
-ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "ndarray"] }
+# `cuda` (Fase 2, `ia::sessao`): só compila `ep::cuda`; com `load-dynamic` não liga nem baixa nada.
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "ndarray", "cuda"] }
 
 # Edição profissional: camadas desenhadas no Rust (formas, máscaras, sprites de texto).
 #   `resvg` 0.47 usa o `tiny-skia` 0.12; as duas sobem juntas. Sem fontes do sistema:
