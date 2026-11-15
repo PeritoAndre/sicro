@@ -5,6 +5,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::fs::{self, File};
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 
 use chrono::{DateTime, SecondsFormat, Utc};
@@ -81,7 +82,7 @@ const VIDSTAB: &str = "vidstab";
 
 /// Extensões aceitas na mídia própria do projeto (as do áudio são as da v1).
 const EXT_AUDIO: &[&str] = &["mp3", "wav", "m4a", "ogg", "webm", "aac", "flac", "opus", "mp4"];
-const EXT_IMAGEM: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"];
+pub(crate) const EXT_IMAGEM: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"];
 
 const TIPOS_CLIPE: &[&str] = &["trecho", "congelar", "imagem", "titulo", "tela"];
 const TIPOS_SOBREPOSTO: &[&str] = &["video", "imagem", "titulo"];
@@ -549,11 +550,15 @@ pub(super) fn gravar_atomico(destino: &Path, bytes: &[u8]) -> Result<()> {
 }
 
 fn gravar_atomico_com(destino: &Path, escrever: impl FnOnce(&mut File) -> io::Result<()>) -> Result<()> {
+    static N: AtomicU64 = AtomicU64::new(0);
     let _vez = GRAVACAO.lock().unwrap_or_else(|e| e.into_inner());
     let pasta = destino.parent().ok_or_else(|| SicroError::Filesystem(format!("sem pasta: {}", destino.display())))?;
     fs::create_dir_all(pasta)?;
     let nome = destino.file_name().map(|n| n.to_string_lossy().to_string()).unwrap_or_default();
-    let tmp = pasta.join(format!("{nome}.tmp"));
+    // temporário do processo: outra instância (ou outra máquina, com o caso na rede) gravando o mesmo arquivo
+    // escreveria no mesmo `.tmp` e trocaria pelo destino um documento pela metade
+    let tmp = pasta.join(format!("{nome}.{}-{}.tmp", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+    apagar_tmp_velhos(pasta, &nome);
     let escrito = (|| -> io::Result<()> {
         let mut f = File::create(&tmp)?;
         escrever(&mut f)?;
@@ -568,6 +573,20 @@ fn gravar_atomico_com(destino: &Path, escrever: impl FnOnce(&mut File) -> io::Re
         let _ = d.sync_all();
     }
     Ok(())
+}
+
+/// Temporário de `nome` de uma queda (processo morto entre criar e trocar): sai depois de uma hora, quando nenhuma
+/// gravação viva o usa.
+fn apagar_tmp_velhos(pasta: &Path, nome: &str) {
+    const IDADE: std::time::Duration = std::time::Duration::from_secs(3600);
+    for e in fs::read_dir(pasta).into_iter().flatten().flatten() {
+        let n = e.file_name().to_string_lossy().into_owned();
+        let deste = n.strip_prefix(nome).is_some_and(|r| r.starts_with('.') && r.ends_with(".tmp"));
+        let velho = e.metadata().and_then(|m| m.modified()).ok().and_then(|d| d.elapsed().ok()).is_some_and(|i| i > IDADE);
+        if deste && velho {
+            let _ = fs::remove_file(e.path());
+        }
+    }
 }
 
 /// `projeto.anterior.json` = o `projeto.json` como estava ao abrir (`lido`) ou, sem abertura, como está no disco.
@@ -1553,13 +1572,22 @@ mod testes {
         assert!(r.is_err());
         assert_eq!(fs::read(&arq).unwrap(), antes);
         assert!(sem_tmp(&pasta));
-        // `.tmp` velho de uma queda anterior não atrapalha
-        fs::write(pasta.join("projeto.json.tmp"), b"lixo de uma queda").unwrap();
+        // `.tmp` de uma queda anterior não atrapalha; o de mais de uma hora sai (o recente pode ser de outra instância)
+        let velho = |n: &str| {
+            let f = File::create(pasta.join(n)).unwrap();
+            f.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(7200)).unwrap();
+        };
+        velho("projeto.json.tmp");
+        velho("projeto.json.4242-7.tmp");
+        velho("outro.json.4242-7.tmp");
+        fs::write(pasta.join("projeto.json.4243-0.tmp"), b"outra instancia escrevendo").unwrap();
         let mut v: Value = serde_json::from_slice(&antes).unwrap();
         v["titulo"] = json!("Depois da queda");
         salvar(&ws, &v).unwrap();
         assert_eq!(ler(&arq)["titulo"], "Depois da queda");
-        assert!(sem_tmp(&pasta));
+        let sobra: BTreeSet<String> = fs::read_dir(&pasta).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).filter(|n| n.ends_with(".tmp")).collect();
+        assert_eq!(sobra, BTreeSet::from(["outro.json.4242-7.tmp".to_string(), "projeto.json.4243-0.tmp".to_string()]));
+        sobra.iter().for_each(|n| fs::remove_file(pasta.join(n)).unwrap());
         // destino que não dá para renomear (é uma pasta): o arquivo de antes fica
         let bloqueado = pasta.join("bloqueado.json");
         fs::create_dir_all(bloqueado.join("dentro")).unwrap();
@@ -2159,6 +2187,61 @@ mod testes {
         let midia = pasta_projeto(&ws, MINIMO).join(MIDIA);
         assert!(!midia.exists() || fs::read_dir(&midia).unwrap().count() == 0, "sobrou arquivo");
         assert!(importar_midia(&ws, MINIMO, &t.path().join("não existe.wav"), TipoMidia::Audio).is_err());
+    }
+
+    /// Processo auxiliar: grava o projeto mínimo do caso `SICRO_ARMAZEM_WS` em laço. Só age chamado por
+    /// `duas_instancias_gravando_o_mesmo_projeto`.
+    #[test]
+    #[ignore]
+    fn auxiliar_grava_em_laco() {
+        let Some(ws) = std::env::var_os("SICRO_ARMAZEM_WS") else { return };
+        let base: Value = serde_json::from_str(&fixture("projeto-minimo.json")).unwrap();
+        let recheio: Vec<f64> = (0..20_000).map(|i| i as f64 / 7.0).collect();
+        for i in 0..VOLTAS_DE_CADA {
+            let mut d = base.clone();
+            d["titulo"] = json!(format!("outra {i}"));
+            d["recheio"] = json!(recheio);
+            salvar(Path::new(&ws), &d).unwrap_or_else(|e| panic!("outra instância, volta {i}: {e}"));
+        }
+    }
+
+    const VOLTAS_DE_CADA: usize = 150;
+
+    /// Duas instâncias do app (ou duas máquinas com o caso na rede) gravando o mesmo projeto: cada gravação sai
+    /// inteira e nenhuma falha; o `projeto.json` é sempre um documento inteiro de uma das duas.
+    #[test]
+    fn duas_instancias_gravando_o_mesmo_projeto() {
+        let (_t, ws) = caso();
+        let pasta = por(&ws, MINIMO, &fixture("projeto-minimo.json"));
+        let mut aux = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--ignored", "--exact", "edicao::armazem::testes::auxiliar_grava_em_laco", "--nocapture", "--test-threads", "1"])
+            .env("SICRO_ARMAZEM_WS", &ws)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .unwrap();
+        let base: Value = serde_json::from_str(&fixture("projeto-minimo.json")).unwrap();
+        let recheio: Vec<f64> = (0..20_000).map(|i| i as f64 / 3.0).collect();
+        let mut erros = Vec::new();
+        let mut i = 0;
+        // grava enquanto a outra grava (com teto: a outra pode demorar a nascer)
+        while i < VOLTAS_DE_CADA || (i < 4 * VOLTAS_DE_CADA && aux.try_wait().unwrap().is_none()) {
+            let mut d = base.clone();
+            d["titulo"] = json!(format!("esta {i}"));
+            d["recheio"] = json!(recheio);
+            if let Err(e) = salvar(&ws, &d) {
+                erros.push(format!("esta instância, volta {i}: {e}"));
+            }
+            match serde_json::from_slice::<Value>(&fs::read(pasta.join(PROJETO)).unwrap()) {
+                Ok(v) => assert_eq!(v["id"], json!(MINIMO)),
+                Err(e) => erros.push(format!("projeto.json estragado depois da volta {i}: {e}")),
+            }
+            i += 1;
+        }
+        let fim = aux.wait_with_output().unwrap();
+        assert!(fim.status.success(), "{}", String::from_utf8_lossy(&fim.stderr));
+        assert!(erros.is_empty(), "{erros:#?}");
+        assert!(ler(&pasta.join(PROJETO))["titulo"].as_str().is_some_and(|t| t.starts_with("esta ") || t.starts_with("outra ")));
     }
 
     /// Gravações e aberturas ao mesmo tempo: quem lê vê sempre um documento inteiro; não sobra `.tmp`.

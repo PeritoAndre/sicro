@@ -458,7 +458,14 @@ pub async fn edicao_fundo() -> Result<Vec<TarefaFundo>> {
 /// Saídas registradas do caso, ou só as de um projeto.
 #[tauri::command]
 pub async fn edicao_saidas(workspace_path: String, projeto_id: Option<String>) -> Result<Vec<SaidaRegistrada>> {
-    em_fundo(move || fila::saidas(Path::new(&workspace_path), projeto_id.as_deref())).await
+    em_fundo(move || saidas(Path::new(&workspace_path), projeto_id.as_deref())).await
+}
+
+/// A lista das saídas abre o caso para a Edição: a sobra de uma publicação interrompida (processo morto no meio da
+/// cópia) sai aqui, e não só na próxima exportação.
+pub(crate) fn saidas(ws: &Path, projeto_id: Option<&str>) -> Result<Vec<SaidaRegistrada>> {
+    fila::limpar_sobras_de_publicar(ws);
+    fila::saidas(ws, projeto_id)
 }
 
 /// Exclui uma exportação: linha do banco, retrato e a pasta da saída (somente leitura incluída); audita. Erro se estiver na fila.
@@ -960,6 +967,28 @@ mod testes {
         assert!(quadro_final_de(Estado::Cancelada, 7).unwrap_err().to_string().contains("cancelado"));
         let e = quadro_final_de(Estado::Falhou { mensagem: "filtro_ausente: b000".into(), log_rel: String::new() }, 7).unwrap_err();
         assert!(e.to_string().contains("filtro_ausente: b000"));
+    }
+
+    /// Processo morto no meio da publicação: a pasta pela metade (vídeo somente leitura, marca solta) e o retrato
+    /// saem quando a lista das saídas é pedida; a saída registrada fica.
+    #[test]
+    fn lista_das_saidas_tira_a_sobra_de_publicacao_interrompida() {
+        let (_d, ws, _app) = caso();
+        let raiz = paths::dir_edicao_saida(&ws);
+        let morta = raiz.join("Sobra 2026-11-15 10h00m00");
+        std::fs::create_dir_all(&morta).unwrap();
+        std::fs::write(morta.join("Sobra.mp4"), b"pela metade").unwrap();
+        fila::somente_leitura(&morta.join("Sobra.mp4")).unwrap();
+        let (pid, sid) = (uuid::Uuid::new_v4().to_string(), uuid::Uuid::new_v4().to_string());
+        std::fs::write(morta.join(fila::PUBLICANDO), serde_json::json!({ "saida_id": sid, "projeto_id": pid }).to_string()).unwrap();
+        let retrato = fila::pasta_retrato(&ws, &pid, &sid).unwrap();
+        std::fs::create_dir_all(retrato.join("dados")).unwrap();
+        std::fs::write(retrato.join("projeto.json"), b"{}").unwrap();
+        let alheia = raiz.join("Recortes");
+        std::fs::create_dir_all(&alheia).unwrap();
+        assert!(saidas(&ws, None).unwrap().is_empty());
+        assert!(!morta.exists() && !retrato.exists(), "a sobra ficou");
+        assert!(alheia.is_dir());
     }
 
     /// Só compila se todo argumento desserializa e toda resposta serializa: é o que o `invoke_handler` vai exigir.

@@ -833,6 +833,13 @@ fn proveniencia_lista_sobrepostos_e_legendas_que_saem() {
     assert_eq!((s[0].preso_a.as_deref(), s[0].modelo, s[0].midia.as_deref(), s[0].nome.as_str()), (Some("c2"), Some(ModeloTitulo::TercoInferior), None, "rótulo t1"));
     assert_eq!(s[0].textos, vec!["Rua das Flores".to_string(), "Portão 2".to_string()], "os blocos com texto, na ordem");
     assert_eq!((s[1].na_saida.de_q, s[1].na_saida.n_q, s[1].preso_a.as_deref(), s[1].midia.as_deref(), s[1].modelo), (0, 90, None, Some("foto"), None), "marca no programa inteiro");
+    assert!(s.iter().all(|x| x.selos.is_empty()));
+    // a mesma imagem tratada por IA leva o selo fixo no `feito` (o que a camada global escreve nos slots dela)
+    let mut p_ia = p.clone();
+    p_ia.midias.iter_mut().find(|m| m.id == "foto").unwrap().derivacao =
+        Some(serde_json::from_value(json!({ "tipo": "superres", "de_sha256": "a", "raiz_sha256": "a", "comando": "", "com_perdas": true })).unwrap());
+    let ia = mundo.compilar(&p_ia, &alvo_final("cpu")).unwrap().proveniencia.sobrepostos;
+    assert_eq!(ia.iter().map(|x| (x.clipe.as_str(), x.selos.clone())).collect::<Vec<_>>(), vec![("t1", vec![]), ("i1", vec!["Imagem ampliada por IA".to_string()])]);
     // a mídia do sobreposto segue citada, com a resolução; a do trecho leva o tamanho do arquivo
     let m = |id: &str| pv.midias.iter().find(|m| m.id == id).unwrap_or_else(|| panic!("mídia {id} fora do feito"));
     assert_eq!((m("foto").largura, m("foto").altura), (400, 300));

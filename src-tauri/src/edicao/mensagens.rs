@@ -69,6 +69,9 @@ pub mod codigo {
     pub const CALCULO_AUSENTE: &str = "calculo_ausente";
     pub const DEGRAVACAO_AUSENTE: &str = "degravacao_ausente";
     pub const RETRATO_DIVERGENTE: &str = "retrato_divergente";
+    // CONTRATO: acréscimo (verificação da Fase 1): a publicação (`fila.rs`, `pacote.rs`) já devolvia estes códigos sem frase
+    pub const PASTA_EXISTE: &str = "pasta_existe";
+    pub const RETRATO_EXISTE: &str = "retrato_existe";
     // periciais
     pub const TAXA_VARIAVEL: &str = "taxa_variavel";
     pub const QUADROS_DESCARTADOS: &str = "quadros_descartados";
@@ -183,6 +186,8 @@ const CATALOGO: &[Entrada] = &[
     e(CALCULO_AUSENTE, Erro, "Cálculo de velocidade não encontrado"),
     e(DEGRAVACAO_AUSENTE, Erro, "Degravação não encontrada"),
     e(RETRATO_DIVERGENTE, Erro, "Retrato da exportação alterado"),
+    e(PASTA_EXISTE, Erro, "Pasta da exportação já existe"),
+    e(RETRATO_EXISTE, Erro, "Retrato da exportação já existe"),
     // periciais
     com_n(TAXA_VARIAVEL, Pericial, "Taxa variável", "Taxa variável: 1 intervalo irregular", "Taxa variável: {n} intervalos irregulares"),
     com_n(QUADROS_DESCARTADOS, Pericial, "Quadros descartados", "1 quadro descartado", "{n} quadros descartados"),
@@ -334,7 +339,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 80, "constantes de `codigo`");
+        assert_eq!(cods.len(), 82, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {

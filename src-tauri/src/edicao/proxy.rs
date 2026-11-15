@@ -93,7 +93,12 @@ fn queda(
     if !gpu {
         return na_cpu(motivo, progresso);
     }
-    match na_gpu(motivo.clone(), progresso) {
+    let mut ate = 0.0f32;
+    let r = na_gpu(motivo.clone(), &mut |p| {
+        ate = ate.max(p);
+        progresso(p)
+    });
+    match r {
         Ok(p) => Ok(p),
         Err(e) if previa::cancelado(&e) || cancelar.load(Ordering::SeqCst) => Err(e),
         Err(e) => {
@@ -104,7 +109,9 @@ fn queda(
                 Some(m) => format!("{m}; gpu: {e}"),
                 None => format!("gpu: {e}"),
             };
-            na_cpu(Some(m), progresso)
+            // a barra da fila de fundo segue de onde a GPU parou, sem voltar a zero
+            let ate = ate.clamp(0.0, 1.0);
+            na_cpu(Some(m), &mut |p| progresso(ate + (1.0 - ate) * p.clamp(0.0, 1.0)))
         }
     }
 }
@@ -297,6 +304,25 @@ mod testes {
         assert!(e.to_string().contains("cancelado"));
         let sim = AtomicBool::new(true);
         assert!(queda(true, &sim, None, |_, _| Err(SicroError::Validation("outra: x".into())), |_, _| panic!("cpu"), &mut prog).is_err());
+        // na queda o progresso não recua: a CPU segue de onde a GPU parou até 1
+        let mut visto = Vec::new();
+        queda(
+            true,
+            &nao,
+            None,
+            |_, pr| {
+                pr(0.2);
+                pr(0.6);
+                Err(SicroError::Validation("outra: x".into()))
+            },
+            |_, pr| {
+                [0.0, 0.5, 1.0].into_iter().for_each(|x| pr(x));
+                Ok(p(TipoPrevia::Proxy))
+            },
+            &mut |x| visto.push(x),
+        )
+        .unwrap();
+        assert!(visto.windows(2).all(|w| w[1] >= w[0]) && visto.last() == Some(&1.0), "{visto:?}");
     }
 
     #[test]
@@ -560,10 +586,10 @@ mod testes {
         }
     }
 
-    /// O render lê só o original (§7.6): com cópia, proxy e um intermediário de origem prontos no cache da Edição, o
-    /// plano da exportação final (`preparar` + `compilar`, como a fila) não cita nenhum deles e os quadros compostos
-    /// são os do original, iguais aos de um cache vazio. O mesmo plano apontado para o proxy daria outros quadros: o
-    /// teste enxerga a troca.
+    /// O render lê só o original (§7.6): com cópia, proxy e o intermediário de origem DO CLIPE (nitidez, feito pela
+    /// fila de fundo) prontos no cache da Edição, o plano da exportação final (`preparar` + `compilar`, como a fila)
+    /// não cita nenhum deles e os quadros compostos são os do original, iguais aos de um cache vazio. O mesmo plano
+    /// apontado para o proxy daria outros quadros: o teste enxerga a troca.
     #[test]
     fn render_nunca_le_proxy_nem_origem() {
         use crate::edicao::executar::{self, apoio};
@@ -586,9 +612,6 @@ mod testes {
         let copia = previa::copiar(&cap, &cache, &f, &nao, &mut sem_progresso()).unwrap();
         let px = produzir(&cap, &cache, &f, &nao, &mut sem_progresso()).unwrap();
         let px_arquivo = cache.join(&px.relativo);
-        let origem = cache.join("origem").join(format!("{}.mp4", "e".repeat(64)));
-        std::fs::create_dir_all(origem.parent().unwrap()).unwrap();
-        std::fs::copy(&px_arquivo, &origem).unwrap();
         // crf 23 sobre a fonte sem perda: quadros diferentes (ler do proxy apareceria nos compostos)
         assert_ne!(hashes_por_quadro(&cap, &original), hashes_por_quadro(&cap, &px_arquivo), "{}", cap.versao);
         let mut m = aceite::midia("m1", "video", json!([]));
@@ -596,7 +619,22 @@ mod testes {
         m["relativo"] = json!(vm.relative_path);
         m["media_id"] = json!(vm.id.to_string());
         m["nome"] = json!(vm.filename);
-        let p = aceite::projeto(320, 180, (30, 1), vec![m], vec![aceite::trecho("c1", "m1", &f.quadros, 30, 90, 1.0, json!([]))], json!({}));
+        let nitidez = json!([{ "tipo": "nitidez", "id": "n1", "ligado": true, "nome": "", "ativo": null, "quantidade": 0.8 }]);
+        let p = aceite::projeto(320, 180, (30, 1), vec![m], vec![aceite::trecho("c1", "m1", &f.quadros, 30, 90, 1.0, nitidez)], json!({}));
+        // o intermediário de verdade do clipe, pela fila de fundo
+        let doc = serde_json::to_value(&p).unwrap();
+        let t0 = std::time::Instant::now();
+        let intermediario = loop {
+            match crate::edicao::origem::pedir_do_projeto(&ws, &cache, &doc, "c1") {
+                Ok(crate::edicao::origem::EstadoOrigem::Pronto { previa, .. }) => break cache.join(previa.relativo),
+                Ok(_) => {}
+                Err(e) if e.to_string().contains("tabela_pendente") => {}
+                Err(e) => panic!("intermediário: {e} ({})", cap.versao),
+            }
+            assert!(t0.elapsed().as_secs() < 240, "intermediário preso ({})", cap.versao);
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        };
+        assert!(intermediario.starts_with(cache.join("origem")) && intermediario.is_file(), "{}", intermediario.display());
         let plano_com = |cache: &Path| {
             let prep = executar::preparar_com(&ws, &p, cache, true, Some(&nao)).unwrap();
             assert_eq!(prep.contexto().fontes["m1"].caminho, original, "{}", cap.versao);
@@ -607,6 +645,8 @@ mod testes {
         for proibido in ["cache da edição", "proxies/", "origem/", copia.relativo.as_str(), px.relativo.as_str()] {
             assert!(!texto.contains(proibido), "o plano cita {proibido}");
         }
+        // a nitidez sai do original, no grafo do bloco
+        assert!(texto.contains("unsharp"), "{}", cap.versao);
         let midias: Vec<&PathBuf> = plano.blocos.iter().flat_map(|b| &b.entradas).filter(|e| matches!(e.papel, Papel::Midia { .. })).map(|e| &e.caminho).collect();
         assert!(!midias.is_empty() && midias.iter().all(|c| **c == original), "{midias:?}");
         let rodar = |pl: &crate::edicao::motor::plano::Plano, nome: &str| {

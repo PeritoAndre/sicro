@@ -215,13 +215,27 @@ fn numero(v: &Value) -> Option<f64> {
     v.as_f64().or_else(|| v.as_str().and_then(|s| s.trim().parse().ok())).filter(|x: &f64| x.is_finite())
 }
 
+/// Contêiner de imagem parada como o ffprobe o nomeia (`image2`, `image2pipe`, `png_pipe`…).
+pub(crate) fn conteiner_de_imagem(c: &str) -> bool {
+    c == "image2" || c == "image2pipe" || c.ends_with("_pipe")
+}
+
+/// Foto da mídia própria (extensão do armazém): vai como `image2pipe` (tipo pelo conteúdo). Pelo `image2` o 7.0.2
+/// lê o caminho como padrão de sequência e não acha a foto em pasta com `%` ("100% {c}", "x%5d").
+fn como_imagem(video: &Path) -> bool {
+    let ext = video.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    super::armazem::EXT_IMAGEM.contains(&ext.as_str())
+}
+
 fn sondar(cap: &Capacidades, video: &Path) -> Result<Info> {
     let t = Trabalho::nova()?;
-    let cmd = t.comando(
-        "ffprobe-info",
-        &cap.ffprobe,
-        textos(&["-v", "error", "-show_format", "-show_streams", "-of", "json", &video.to_string_lossy()]),
-    );
+    let caminho = video.to_string_lossy();
+    let mut a = vec!["-v", "error", "-show_format", "-show_streams", "-of", "json"];
+    if como_imagem(video) {
+        a.extend(["-f", "image2pipe"]);
+    }
+    a.push(caminho.as_ref());
+    let cmd = t.comando("ffprobe-info", &cap.ffprobe, textos(&a));
     let (fim, out) = exec::rodar_com_saida(&cmd, &AtomicBool::new(false))?;
     exec::exigir_sucesso(&cmd, &fim)?;
     let j: Value = serde_json::from_slice(&out)?;
@@ -261,7 +275,7 @@ fn sondar(cap: &Capacidades, video: &Path) -> Result<Info> {
         taxa: numero(&s["sample_rate"]).unwrap_or(0.0) as u32,
         canais: numero(&s["channels"]).unwrap_or(0.0) as u32,
     });
-    let imagem = video.is_some() && (conteiner == "image2" || conteiner.ends_with("_pipe"));
+    let imagem = video.is_some() && conteiner_de_imagem(&conteiner);
     let tamanho = numero(&j["format"]["size"]).filter(|t| *t >= 0.0).map_or(0, |t| t as u64);
     Ok(Info { conteiner, inicio, duracao: numero(&j["format"]["duration"]), tamanho, video, audio, imagem })
 }
@@ -1745,5 +1759,32 @@ mod testes {
         rodar_ffmpeg(&cap, &pasta, "capa", &["-i", "som.wav", "-i", "foto.png", "-map", "0:a", "-map", "1:v", "-c:a", "aac", "-c:v", "png", "-disposition:v", "attached_pic", "capa.m4a"]);
         let i = info_de(&cap, &pasta.join("capa.m4a"), None);
         assert_eq!((i.quadros.pts.len(), i.exibido, i.audio.map(|a| (a.taxa, a.canais))), (0, (0, 0), Some((44100, 1))));
+    }
+
+    /// Foto em pasta (ou com nome) que o `image2` do 7.0.2 lê como padrão de sequência: a mesma leitura da pasta
+    /// comum, nas extensões da mídia própria; e a prévia segue recusando imagem.
+    #[test]
+    fn foto_com_porcento_no_caminho() {
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = fontes::pasta_temporaria("quadros-porcento");
+        for ext in crate::edicao::armazem::EXT_IMAGEM {
+            let nome = format!("foto.{ext}");
+            rodar_ffmpeg(&cap, &pasta, ext, &["-f", "lavfi", "-i", "testsrc2=s=322x242:d=1", "-frames:v", "1", "-update", "1", &nome]);
+            let comum = pasta.join(&nome);
+            let base = fonte_info(&cap, &comum, "00", Arc::new(TabelaQuadros::de_pacotes(&cap, &comum).unwrap()), None).unwrap();
+            assert_eq!((base.exibido, &base.quadros.pts, base.quadros.tb), ((322, 242), &vec![0], r(1, 1)), "{} {ext}", cap.versao);
+            for (dir, arq) in [("100% {c}", "foto"), ("x%5d", "foto"), ("comum", "foto %d"), ("d'água 50% [a:b]", "100%03d")] {
+                let d = pasta.join(dir);
+                std::fs::create_dir_all(&d).unwrap();
+                let arq = d.join(format!("{arq}.{ext}"));
+                std::fs::copy(&comum, &arq).unwrap();
+                let tab = TabelaQuadros::de_pacotes(&cap, &arq).unwrap_or_else(|e| panic!("{} {}: {e}", cap.versao, arq.display()));
+                let i = fonte_info(&cap, &arq, "00", Arc::new(tab), None).unwrap_or_else(|e| panic!("{} {}: {e}", cap.versao, arq.display()));
+                let t = &i.quadros;
+                assert_eq!((&t.pts, t.tb, t.origem, i.exibido, &i.codec, &i.pix_fmt, &i.conteiner), (&base.quadros.pts, base.quadros.tb, OrigemTabela::Decodificador, base.exibido, &base.codec, &base.pix_fmt, &base.conteiner), "{} {}", cap.versao, arq.display());
+                let e = crate::edicao::previa::consultar(&pasta, &pasta, &i).unwrap_err().to_string();
+                assert!(e.contains("nao_suportado: imagem"), "{} {}: {e}", cap.versao, arq.display());
+            }
+        }
     }
 }

@@ -385,6 +385,16 @@ mod testes {
         (Mundo::novo(&Arc::new(apoio::cap_falsa())).com("m1", &info), info)
     }
 
+    /// O rastreio que a lupa segue é usado no vídeo: sai em `feito.rastreios` (o resumo de IA do relatório o procura lá).
+    #[test]
+    fn rastreio_da_lupa_sai_no_feito() {
+        let (mundo, info) = mundo_falso(30, (1280, 720));
+        let p = projeto_com(&info.quadros, (1280, 720), 30, &|_| [0.4, 0.4, 0.02, 0.02], json!([lupa("L1", json!({}))]));
+        let plano = mundo.compilar(&p, &alvo_final("cpu")).expect("compila");
+        let ids: Vec<&str> = plano.proveniencia.rastreios.iter().map(|r| r.id.as_str()).collect();
+        assert_eq!(ids, ["r1"]);
+    }
+
     #[test]
     fn grafo_da_lupa_e_mascara_unica_na_fixa() {
         let (mundo, info) = mundo_falso(30, (1280, 720));

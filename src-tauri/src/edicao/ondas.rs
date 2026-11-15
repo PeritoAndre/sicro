@@ -1,13 +1,8 @@
 //! Forma de onda (`receitas-audio-saida.md` §10): `-ac 1 -ar 8000 -f s16le` por pipe, mínimo e máximo por balde de
 //! 10 ms, em cache por mídia (`ondas/<sha256>.pk`), feita na fila de fundo (`TipoFundo::Onda`). Dono: P1.9.
 
-use std::fs::File;
-use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::{Child, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::Mutex;
-use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
@@ -44,8 +39,6 @@ const PASTA: &str = "ondas";
 /// depois `min[n]` e `max[n]` em i16.
 const MARCA: &[u8; 8] = b"SICROPK\x01";
 const CABECALHO: usize = 8 + 64 + 8 + 4 + 4;
-/// Intervalo da vigia do cancelamento.
-const VIGIA: Duration = Duration::from_millis(10);
 
 fn sha_valido(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
@@ -229,7 +222,7 @@ impl Picos {
 
 /// `ffmpeg … -map 0:a:0 -af aresample=8000:async=1 -ac 1 -f s16le -` lido em fluxo (sem guardar o PCM). O
 /// `async=1` preenche buraco de som com silêncio: a onda não escorrega depois de uma falha do gravador.
-/// O filho escreve no pipe: se o SICRO morre, a escrita seguinte o derruba.
+/// Pelo `exec`: o filho fica preso ao SICRO (morre com ele e no `matar_todos` da saída).
 fn picos_por_pipe(
     cap: &Capacidades,
     arquivo: &Path,
@@ -239,71 +232,23 @@ fn picos_por_pipe(
     corte: Option<usize>,
     progresso: &mut dyn FnMut(f32),
 ) -> Result<(Vec<i16>, Vec<i16>)> {
-    let stderr = pasta.join("onda.stderr");
-    let mut c = crate::tools::command(&cap.binario);
-    c.args(["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-vn", "-sn", "-dn", "-i"])
-        .arg(arquivo)
-        .args(["-map", "0:a:0", "-af", "aresample=8000:async=1", "-ac", "1", "-f", "s16le", "-"])
-        .current_dir(pasta)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(File::create(&stderr)?);
-    let mut filho = c
-        .spawn()
-        .map_err(|e| SicroError::Filesystem(format!("não foi possível rodar {} (onda): {e}", cap.binario.display())))?;
-    let mut saida = filho.stdout.take().expect("stdout");
-    let filho: Mutex<Child> = Mutex::new(filho);
-    let morto = AtomicBool::new(false);
-    let matar = || {
-        if !morto.swap(true, Ordering::SeqCst) {
-            let _ = filho.lock().unwrap_or_else(|e| e.into_inner()).kill();
-        }
+    let mut args: Vec<String> = ["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-vn", "-sn", "-dn", "-i"].iter().map(|s| s.to_string()).collect();
+    args.push(arquivo.to_string_lossy().into_owned());
+    args.extend(["-map", "0:a:0", "-af", "aresample=8000:async=1", "-ac", "1", "-f", "s16le", "-"].iter().map(|s| s.to_string()));
+    let cmd = exec::Comando {
+        nome: "onda".into(),
+        programa: cap.binario.clone(),
+        args,
+        pasta: pasta.to_path_buf(),
+        ambiente: Vec::new(),
+        sem_ambiente: Vec::new(),
+        stderr: pasta.join("onda.stderr"),
     };
-    // a vigia mata no cancelamento e espera o fim do processo (sem depender do pipe)
-    let (leitura, fim) = std::thread::scope(|s| {
-        let vigia = s.spawn(|| -> std::io::Result<ExitStatus> {
-            loop {
-                if cancelar.load(Ordering::SeqCst) {
-                    matar();
-                }
-                if let Some(st) = filho.lock().unwrap_or_else(|e| e.into_inner()).try_wait()? {
-                    return Ok(st);
-                }
-                std::thread::sleep(VIGIA);
-            }
-        });
-        let r = ler_pipe(&mut saida, esperadas, corte, progresso);
-        // erro de leitura, ou onda já inteira (fim do vídeo): o resto do som não interessa
-        if r.as_ref().map_or(true, |p| p.cheio) {
-            matar();
-        }
-        drop(saida);
-        (r, vigia.join())
-    });
-    let st = fim.map_err(|_| SicroError::Validation("vigia_falhou: onda".into()))??;
-    if cancelar.load(Ordering::SeqCst) {
-        return Err(SicroError::Validation(format!("{ERRO_CANCELADO}: onda")));
-    }
-    let picos = leitura?;
-    // cortada: o processo foi morto aqui, o código dele não diz nada
-    if !st.success() && !picos.cheio {
-        return Err(SicroError::Validation(format!("outra: onda (código {:?}): {}", st.code(), exec::ultimas_linhas(&stderr, 3).join(" | "))));
-    }
-    picos.fim()
-}
-
-fn ler_pipe(saida: &mut impl Read, esperadas: Option<u64>, corte: Option<usize>, progresso: &mut dyn FnMut(f32)) -> Result<Picos> {
     let mut picos = Picos::novo(MAX_BALDES, corte);
-    let mut buf = vec![0u8; 1 << 16];
     let mut ultimo = 0.0f32;
-    while !picos.cheio {
-        let n = match saida.read(&mut buf) {
-            Ok(0) => break,
-            Ok(n) => n,
-            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
-            Err(e) => return Err(e.into()),
-        };
-        picos.somar(&buf[..n])?;
+    // onda já inteira (fim do vídeo): o resto do som não interessa
+    let t = exec::rodar_com_fluxo(&cmd, cancelar, &mut |b| {
+        picos.somar(b)?;
         if let Some(t) = esperadas {
             let f = (picos.amostras as f64 / t as f64).min(0.99) as f32;
             if f - ultimo >= 0.01 {
@@ -311,8 +256,16 @@ fn ler_pipe(saida: &mut impl Read, esperadas: Option<u64>, corte: Option<usize>,
                 progresso(f);
             }
         }
+        Ok(!picos.cheio)
+    })?;
+    if t.cancelado || cancelar.load(Ordering::SeqCst) {
+        return Err(SicroError::Validation(format!("{ERRO_CANCELADO}: onda")));
     }
-    Ok(picos)
+    // cortada: o processo foi morto aqui, o código dele não diz nada
+    if t.codigo != Some(0) && !picos.cheio {
+        return Err(SicroError::Validation(format!("outra: onda (código {:?}): {}", t.codigo, exec::ultimas_linhas(&cmd.stderr, 3).join(" | "))));
+    }
+    picos.fim()
 }
 
 /// `edicao_onda`: a onda do cache, ou None depois de pedir à fila de fundo (chave `onda:<sha256>`; o fim chega pelo
@@ -334,6 +287,8 @@ pub fn pedir(ws: &Path, cache: &Path, sha256: &str) -> Result<Option<Onda>> {
 #[cfg(test)]
 mod testes {
     use super::*;
+    use std::fs::File;
+    use std::time::Duration;
     use std::time::Instant;
 
     use crate::edicao::previa::testes::{extra, fonte_de_teste, fonte_falsa, sem_progresso, MP4};

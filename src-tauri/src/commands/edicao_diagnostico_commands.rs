@@ -297,21 +297,23 @@ fn receitas(p: &Path, dur: u32) -> Vec<Receita> {
     v
 }
 
+/// Pelo `exec` da Edição: o ffmpeg fica preso ao SICRO (morre com ele e no `matar_todos` da saída do app); solto, um
+/// fechamento no meio do preparo deixava o ffmpeg gravando no cache.
 fn rodar(ffmpeg: &Path, args: &[String], saida: &Path) -> Result<()> {
-    let out = crate::tools::command(ffmpeg)
-        .args(["-hide_banner", "-nostdin", "-loglevel", "error", "-y"])
-        .args(args)
-        .arg(saida)
-        .output()
-        .map_err(|e| SicroError::Filesystem(format!("{}: {e}", ffmpeg.display())))?;
-    if !out.status.success() || !saida.is_file() {
-        let err = String::from_utf8_lossy(&out.stderr);
-        let fim: Vec<&str> = err.lines().rev().take(4).collect();
-        return Err(SicroError::Filesystem(format!(
-            "ffmpeg {}: {}",
-            saida.file_name().unwrap_or_default().to_string_lossy(),
-            fim.into_iter().rev().collect::<Vec<_>>().join(" | ")
-        )));
+    use crate::edicao::ffmpeg::exec;
+    let mut a: Vec<String> = ["-hide_banner", "-nostdin", "-loglevel", "error", "-y"].iter().map(|s| s.to_string()).collect();
+    a.extend(args.iter().cloned());
+    a.push(saida.to_string_lossy().into_owned());
+    let pasta = saida.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let mut log = saida.file_name().unwrap_or_default().to_os_string();
+    log.push(".stderr");
+    let cmd = exec::Comando { nome: "diagnostico".into(), programa: ffmpeg.to_path_buf(), args: a, pasta: pasta.clone(), ambiente: Vec::new(), sem_ambiente: Vec::new(), stderr: pasta.join(log) };
+    let t = exec::rodar(&cmd, &std::sync::atomic::AtomicBool::new(false));
+    let fim = exec::ultimas_linhas(&cmd.stderr, 4).join(" | ");
+    let _ = std::fs::remove_file(&cmd.stderr);
+    let t = t.map_err(|e| SicroError::Filesystem(format!("{}: {e}", ffmpeg.display())))?;
+    if t.codigo != Some(0) || !saida.is_file() {
+        return Err(SicroError::Filesystem(format!("ffmpeg {}: {fim}", saida.file_name().unwrap_or_default().to_string_lossy())));
     }
     Ok(())
 }
@@ -619,5 +621,66 @@ mod testes {
         assert!(manifesto_valido(&pasta, dur).is_none());
         std::fs::remove_file(pasta.join("cam4.mp4")).unwrap();
         assert!(manifesto_valido(&pasta, dur).is_none());
+    }
+
+    /// Processo auxiliar: `rodar` com um ffmpeg longo (10 min em tempo real). Só age chamado por
+    /// `ffmpeg_do_preparo_morre_com_o_app`.
+    #[test]
+    #[ignore]
+    fn auxiliar_preparo_longo() {
+        let Some(pasta) = std::env::var_os("SICRO_TESTE_DIAG") else { return };
+        let Some(ff) = ffmpeg_do_teste() else { return };
+        let a: Vec<String> = ["-re", "-f", "lavfi", "-i", "testsrc2=s=64x48:r=30:d=603", "-f", "null"].iter().map(|s| s.to_string()).collect();
+        let _ = rodar(&ff, &a, &PathBuf::from(pasta).join("longo.nut"));
+    }
+
+    /// O SICRO morre com o preparo das mídias do diagnóstico no meio: o ffmpeg morre junto (não fica órfão).
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ffmpeg_do_preparo_morre_com_o_app() {
+        /// Limite real (s) entre a morte do pai e a do filho; folga de 3× com a máquina dividida.
+        const MORTE_S: f64 = 1.0;
+        let Some(_ff) = ffmpeg_do_teste() else { return };
+        let d = tempfile::tempdir().unwrap();
+        let mut aux = Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "commands::edicao_diagnostico_commands::testes::auxiliar_preparo_longo", "--ignored", "--nocapture"])
+            .env("SICRO_TESTE_DIAG", d.path())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .spawn()
+            .unwrap();
+        // o ffmpeg é neto do teste: filho do auxiliar (pelo pai em /proc/<pid>/stat)
+        let netos = |pai: u32| -> Vec<u32> {
+            std::fs::read_dir("/proc")
+                .unwrap()
+                .flatten()
+                .filter_map(|e| e.file_name().to_string_lossy().parse::<u32>().ok())
+                .filter(|p| {
+                    let stat = std::fs::read_to_string(format!("/proc/{p}/stat")).unwrap_or_default();
+                    let ppid = stat.rsplit_once(')').and_then(|(_, r)| r.split_whitespace().nth(1)).and_then(|x| x.parse::<u32>().ok());
+                    ppid == Some(pai) && std::fs::read(format!("/proc/{p}/cmdline")).is_ok_and(|c| String::from_utf8_lossy(&c).contains("d=603"))
+                })
+                .collect()
+        };
+        let t0 = std::time::Instant::now();
+        let ffmpeg = loop {
+            if let Some(p) = netos(aux.id()).first() {
+                break *p;
+            }
+            assert!(t0.elapsed().as_secs() < 60, "o auxiliar não abriu o ffmpeg");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        };
+        aux.kill().unwrap();
+        let _ = aux.wait();
+        let morto = std::time::Instant::now();
+        let vivo = |p: u32| std::fs::read_to_string(format!("/proc/{p}/stat")).is_ok_and(|s| s.rsplit_once(')').is_some_and(|(_, r)| !r.trim_start().starts_with('Z')));
+        while vivo(ffmpeg) {
+            if morto.elapsed().as_secs_f64() > MORTE_S * 3.0 {
+                // o órfão não fica rodando 10 min depois do teste
+                let _ = Command::new("kill").args(["-9", &ffmpeg.to_string()]).status();
+                panic!("ffmpeg {ffmpeg} vivo depois da morte do SICRO");
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
     }
 }

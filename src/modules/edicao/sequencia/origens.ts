@@ -20,15 +20,16 @@ export const ESPERA_DA_CONSULTA = 600;
 export function useOrigensDosClipes(): void {
   const ws = useEdicaoStore((s) => s.ws);
   const principal = useEdicaoStore((s) => s.doc?.principal);
+  const midias = useEdicaoStore((s) => s.doc?.midias);
   // [clipe, o que muda o intermediário dele]: só os trechos com efeito de origem ligado
   const clipes = useMemo(() => {
     const r: [Id, string][] = [];
     for (const c of principal ?? []) {
-      const a = clipeConhecido(c) ? assinaturaDaOrigem(c) : null;
+      const a = clipeConhecido(c) ? assinaturaDaOrigem(c, c.tipo === "trecho" ? (midias?.find((m) => m.id === c.midia)?.cor ?? null) : null) : null;
       if (a && clipeConhecido(c)) r.push([c.id, a]);
     }
     return r;
-  }, [principal]);
+  }, [principal, midias]);
   const assinatura = JSON.stringify(clipes);
   // a fila de fundo começou ou terminou um intermediário: a situação pode ter mudado
   const naFila = useFundoStore((s) => s.tarefas.filter((t) => t.tipo === "origem").map((t) => `${t.id}:${t.estado.tipo}`).join("|"));

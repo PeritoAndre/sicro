@@ -512,7 +512,8 @@ impl<'a> Validacao<'a> {
             self.por(SAIDA, &Onde::default().campo("altura"));
         }
         let (num, den) = (s.fps.num as i128, s.fps.den as i128);
-        if !(num > 0 && den > 0 && num >= den && num <= 120 * den) {
+        let fps_valido = num > 0 && den > 0 && num >= den && num <= 120 * den;
+        if !fps_valido {
             self.por(SAIDA, &Onde::default().campo("fps"));
         }
         // H.264: lado maior até 4096 (o NVENC recusa acima; §5.6)
@@ -535,6 +536,29 @@ impl<'a> Validacao<'a> {
             }
             if w.max(h) > 4096.0 {
                 self.por(SAIDA, &Onde::default().campo("largura"));
+            }
+        }
+        // o que a predefinição recusa ao codificar, pela regra dela (`saida::codificacao`): campo da personalizada fora
+        // do que o codificador aceita e codificador que este ffmpeg não tem (com saída torta, só o `saida` acima)
+        if self.exporta && fps_valido && lado(s.largura, 7680) && lado(s.altura, 4320) {
+            let alvo = Alvo::Final { exportacao: e.clone() };
+            let canvas = super::motor::canvas_do_alvo(p, &alvo);
+            if let Err(crate::error::SicroError::Validation(m)) = motor_saida::codificacao(&alvo, &canvas, self.ctx.cap) {
+                let (cod, det) = m.split_once(':').map_or((m.as_str(), ""), |(c, d)| (c.trim(), d.trim()));
+                let onde = Onde::default().campo("exportacao");
+                match cod {
+                    FILTRO_AUSENTE => self.add(FILTRO_AUSENTE, &onde, None, Some(det), None),
+                    ITEM_INVALIDO => {
+                        let campo = match det.strip_prefix("personalizada.") {
+                            Some("qualidade") => "qualidade",
+                            Some("audio_kbps") => "audio_kbps",
+                            Some("conteiner") => "conteiner",
+                            _ => "exportacao",
+                        };
+                        self.por(ITEM_INVALIDO, &Onde::default().campo(campo));
+                    }
+                    _ => self.por(SAIDA, &onde),
+                }
             }
         }
         self.cor(&s.cor_fundo, &Onde::default().campo("cor_fundo"));
@@ -2384,6 +2408,45 @@ mod testes {
         c.alvo = Some(Alvo::Final { exportacao: e });
         // a altura máxima traz o lado para baixo de 4096; a predefinição é do P1.8
         c.so(&mais(&[], &[ns_se(recusa)]));
+    }
+
+    /// O que `saida::codificacao` recusa na predefinição a validação acusa antes, pela mesma regra (contratos (h) 1):
+    /// campo da personalizada fora do que o codificador aceita e codificador que o ffmpeg não tem.
+    #[test]
+    fn predefinicao_que_o_codificador_recusa() {
+        use super::super::modelo::{Conteiner, Personalizada};
+        let com = |codec, conteiner, qualidade, audio_kbps| {
+            let mut c = cena();
+            let mut e = c.projeto().saida.exportacao;
+            e.predefinicao = Predefinicao::Personalizada;
+            e.personalizada = Some(Personalizada { codec, conteiner, qualidade, altura_max: None, audio_kbps });
+            c.alvo = Some(Alvo::Final { exportacao: e });
+            c
+        };
+        let mut cap = cap();
+        cap.codificadores.insert("ffv1".into());
+        for (c, campo) in [
+            (com(Codec::H264, Conteiner::Mp4, 52.0, 192), "qualidade"),
+            (com(Codec::H264, Conteiner::Mp4, 20.0, 16), "audio_kbps"),
+            (com(Codec::Ffv1, Conteiner::Mp4, 0.0, 192), "conteiner"),
+        ] {
+            let c = Cena { cap: cap.clone(), ..c };
+            c.so(&[ITEM_INVALIDO]);
+            assert_eq!(c.problemas()[0].campo.as_deref(), Some(campo));
+            // o motor recusa o mesmo
+            let alvo = c.alvo.clone().unwrap();
+            let e = motor_saida::codificacao(&alvo, &crate::edicao::motor::canvas_do_alvo(&c.projeto(), &alvo), &c.cap).unwrap_err().to_string();
+            assert!(e.contains(&format!("personalizada.{campo}")), "{e}");
+        }
+        let c = Cena { cap: cap.clone(), ..com(Codec::Ffv1, Conteiner::Mkv, 0.0, 192) };
+        c.so(&[]);
+        // codificador fora do ffmpeg (AV1 sem libaom, e a preservação sem FLAC), também na análise sem alvo
+        com(Codec::Av1, Conteiner::Mkv, 30.0, 192).so(&[FILTRO_AUSENTE]);
+        let mut c = cena();
+        c.p["saida"]["exportacao"]["predefinicao"] = json!("preservacao");
+        c.cap = cap;
+        c.so(&[FILTRO_AUSENTE]);
+        assert!(c.problemas()[0].mensagem.contains("flac"), "{:?}", c.problemas());
     }
 
     #[test]

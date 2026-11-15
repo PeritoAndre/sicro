@@ -1,0 +1,182 @@
+{
+  "id": "361ddd9a-fffb-4720-9d22-93de2c2d967e",
+  "titulo": "Furto na farmácia",
+  "created_at": "2026-11-15T07:46:46.390Z",
+  "updated_at": "2026-11-15T07:47:51.124745224+00:00",
+  "itens": [
+    {
+      "tipo": "trecho",
+      "id": "e06b1931-ee90-4107-831b-bf510f232cb7",
+      "media_id": "11111111-2222-4333-8444-555555555551",
+      "inicio_s": 12.4,
+      "fim_s": 18.9,
+      "velocidade": 0.5,
+      "texto": {
+        "conteudo": "Entrada do suspeito",
+        "posicao": "topo",
+        "tamanho": "g",
+        "carimbo_tempo": true
+      },
+      "transicao_entrada": "fade",
+      "zoom": {
+        "inicio": {
+          "x": 0.0,
+          "y": 0.0,
+          "w": 1.0,
+          "h": 1.0
+        },
+        "fim": {
+          "x": 0.3,
+          "y": 0.2,
+          "w": 0.4,
+          "h": 0.4
+        }
+      },
+      "destaques": [
+        {
+          "id": "ae01d5ac-9c44-414f-8b4e-a1263df026a4",
+          "forma": "circulo",
+          "cor": "#ff2d2d",
+          "quadros": [
+            {
+              "t": 0.5,
+              "x": 0.42,
+              "y": 0.55,
+              "w": null,
+              "h": null
+            },
+            {
+              "t": 2.0,
+              "x": 0.47,
+              "y": 0.5,
+              "w": null,
+              "h": null
+            }
+          ]
+        },
+        {
+          "id": "c1bf02eb-de1c-42ca-adb6-379397ffdc96",
+          "forma": "retangulo",
+          "cor": "#ffd400",
+          "quadros": [
+            {
+              "t": 1.0,
+              "x": 0.6,
+              "y": 0.3,
+              "w": 0.1,
+              "h": 0.2
+            }
+          ]
+        }
+      ],
+      "desfoques": [
+        {
+          "id": "be9476e7-6f24-4060-b64e-f64ba7d202e0",
+          "quadros": [
+            {
+              "t": 0.0,
+              "x": 0.1,
+              "y": 0.7,
+              "w": 0.15,
+              "h": 0.1
+            },
+            {
+              "t": 3.0,
+              "x": 0.2,
+              "y": 0.7,
+              "w": 0.15,
+              "h": 0.1
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "tipo": "cartela",
+      "id": "9285a726-11f8-49fd-b3c6-1817ceca39ed",
+      "duracao_s": 3.0,
+      "texto": "Câmera 2 — corredor",
+      "cor_fundo": "#101820",
+      "cor_texto": "#ffffff",
+      "tamanho": "p",
+      "transicao_entrada": "fade"
+    },
+    {
+      "tipo": "congelar",
+      "id": "d11b8794-cc50-4a20-8529-ac1f7ffc5401",
+      "media_id": "11111111-2222-4333-8444-555555555552",
+      "instante_s": 7.25,
+      "duracao_s": 2.0,
+      "texto": {
+        "conteudo": "Momento do contato",
+        "posicao": "centro",
+        "tamanho": "m",
+        "carimbo_tempo": false
+      }
+    },
+    {
+      "tipo": "trecho",
+      "id": "157db123-1f1c-4bc9-99ea-3e47b66cf9fa",
+      "media_id": "11111111-2222-4333-8444-555555555553",
+      "inicio_s": 0.0,
+      "fim_s": 4.0,
+      "velocidade": 2.0,
+      "texto": null,
+      "transicao_entrada": "corte",
+      "zoom": null,
+      "destaques": [],
+      "desfoques": []
+    },
+    {
+      "tipo": "trecho",
+      "id": "3947b750-2e30-43d2-8a2a-2cff0005c4e5",
+      "media_id": "11111111-2222-4333-8444-555555555552",
+      "inicio_s": 5.0,
+      "fim_s": 9.0,
+      "velocidade": 1.0,
+      "texto": null,
+      "transicao_entrada": "corte",
+      "zoom": null,
+      "destaques": [
+        {
+          "id": "055c6386-3681-4249-9741-d855a267059e",
+          "forma": "seta",
+          "cor": "#ff2d2d",
+          "quadros": [
+            {
+              "t": 0.4,
+              "x": 0.5,
+              "y": 0.45,
+              "w": null,
+              "h": null
+            }
+          ]
+        }
+      ],
+      "desfoques": []
+    }
+  ],
+  "saida": {
+    "largura": 1920,
+    "altura": 1080,
+    "fps": 25,
+    "incluir_audio": true
+  },
+  "narracoes": [
+    {
+      "id": "eed7ee58-c644-491f-9c92-cc8327232f92",
+      "arquivo_relativo": "Sistema/videos/montagens/audios/d98986a5-ed7f-47d9-bc0c-5e6ff7c8393a.webm",
+      "inicio_s": 1.5,
+      "volume": 0.8,
+      "nome": "Narração 1"
+    },
+    {
+      "id": "7d9ff0a1-12d5-43c0-bd1d-8c732820d9fb",
+      "arquivo_relativo": "Sistema/videos/montagens/audios/2ec742a7-0858-4e4e-b14a-4cb4d022ee35.wav",
+      "inicio_s": 20.0,
+      "volume": 1.0,
+      "nome": "Narração 2"
+    }
+  ],
+  "volume_original": 0.6
+}

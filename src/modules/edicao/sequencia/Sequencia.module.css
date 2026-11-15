@@ -232,6 +232,11 @@
   padding: 2px;
   min-width: 140px;
 }
+/* sem espaço à direita no cartão (1100 px): abre para a esquerda, a partir da borda direita do "Adicionar" */
+.menuEsq {
+  left: auto;
+  right: 0;
+}
 .menu button {
   text-align: left;
   background: transparent;

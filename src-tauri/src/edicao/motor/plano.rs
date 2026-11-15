@@ -276,6 +276,10 @@ pub struct ProvSobreposto {
     pub preso_a: Option<String>,
     pub modelo: Option<ModeloTitulo>,
     pub textos: Vec<String>,
+    // CONTRATO: acréscimo (verificação da Fase 1): o selo fixo da imagem por IA também no sobreposto.
+    /// Selos escritos na imagem nos slots dele (`camada::selos::do_sobreposto`); vazio sai do JSON.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub selos: Vec<String>,
 }
 
 /// O SHA-256 do `projeto.json` não está aqui (o compilador não vê o arquivo): vem do retrato.

@@ -22,6 +22,8 @@ export const PRESOS_PRONTOS = true;
 
 export type TipoPreso = "Título" | "Terço inferior" | "Imagem" | "Narração";
 const TIPOS: readonly TipoPreso[] = ["Título", "Terço inferior", "Imagem", "Narração"];
+/** `min-width` do `.menu` (Sequencia.module.css) mais a margem. */
+const MENU_LARGURA = 146;
 
 const ICONE = { titulo: Type, imagem: IconeImagem, video: Video, narracao: Mic, musica: Music, efeitos: Volume2 } as const;
 /** Nome do item preso sem rótulo próprio (só o ícone aparece): o do tipo. */
@@ -102,6 +104,8 @@ export function Presos({ clipe }: { clipe: Id }) {
   // o cartão em foco (o mesmo da Sequência): seleção do clipe, senão o clipe do cursor
   const emFoco = useEdicaoStore((s) => (s.selecao.foco?.k === "clipe" ? s.selecao.foco.id : s.cursor.modo === "clipe" ? s.cursor.clipe : null) === clipe);
   const [menu, setMenu] = useState(false);
+  /** Sem espaço à direita no cartão: o menu abre para a esquerda. */
+  const [paraEsquerda, setParaEsquerda] = useState(false);
   const menuRef = useRef<HTMLSpanElement | null>(null);
   useMenuAberto(menu);
   // menu aberto: clique fora ou Esc fecha
@@ -137,12 +141,23 @@ export function Presos({ clipe }: { clipe: Id }) {
       })}
       {!soLeitura && (
         <span className={styles.adicionar} ref={menuRef}>
-          <button type="button" className={styles.mini} onClick={() => setMenu((m) => !m)} aria-expanded={menu}>
+          <button
+            type="button"
+            className={styles.mini}
+            onClick={(e) => {
+              const r = e.currentTarget.getBoundingClientRect();
+              // o cartão (dentro dele o menu não faz a lista rolar de lado); fora de um, a coluna
+              const col = e.currentTarget.closest("[data-cartao], [data-coluna]")?.getBoundingClientRect();
+              setParaEsquerda(!!col && r.left + MENU_LARGURA > col.right);
+              setMenu((m) => !m);
+            }}
+            aria-expanded={menu}
+          >
             <Plus size={12} aria-hidden />
             Adicionar
           </button>
           {menu && (
-            <span className={styles.menu} role="menu">
+            <span className={`${styles.menu} ${paraEsquerda ? styles.menuEsq : ""}`} role="menu">
               {TIPOS.map((t) => (
                 <button
                   type="button"

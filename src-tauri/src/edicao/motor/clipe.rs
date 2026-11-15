@@ -189,6 +189,28 @@ pub(crate) fn caixa_da_ocultacao(rs: &mut Rastreios, o: &EfOcultar, tab: &Tabela
     }
 }
 
+/// Caixa da ocultação num quadro LIDO. `mostrados` = [a, b): os quadros da fonte que o clipe mostra. Fora deles o
+/// quadro só alimenta média, desentrelace ou estabilização e nunca aparece sozinho: vale o `ativo` do quadro
+/// mostrado mais próximo (a ocultação criada pela tela nasce com `ativo` = faixa do clipe; lido pelo instante do
+/// vizinho, ele entrava descoberto na média). Sem caixa no vizinho, a do quadro mostrado mais próximo.
+pub(crate) fn caixa_no_lido(rs: &mut Rastreios, o: &EfOcultar, tab: &TabelaQuadros, j: usize, mostrados: (usize, usize)) -> Result<Option<Avaliado>> {
+    let (a, b) = mostrados;
+    if b <= a || (a..b).contains(&j) {
+        return caixa_da_ocultacao(rs, o, tab, j);
+    }
+    let perto = j.clamp(a, b - 1);
+    if !efeitos::base_ativa(&o.base, tab.tempo(perto)) {
+        return Ok(None);
+    }
+    let r = rs.achar(&o.alvo.rastreio)?;
+    let t = tab.tempo(j);
+    match rs.em(r, Instante { t, pts: Some(tab.pts[j]) })? {
+        Some(x) => Ok(Some(x)),
+        None if avaliar::em_ausencia(r, t) => Ok(None),
+        None => caixa_da_ocultacao(rs, o, tab, perto),
+    }
+}
+
 /// Detalhe do `nao_suportado` de um efeito que o motor ainda não renderiza; None = renderiza. A regra é do pacote
 /// dono do efeito (realce: P1.4; lupa: P1.2; régua e velocidade: P1.3); a validação pergunta o mesmo.
 pub(crate) fn recusa_do_efeito(e: &Efeito, com_fonte: bool) -> Option<&'static str> {
@@ -314,7 +336,8 @@ impl Montagem<'_, '_> {
     /// `ocultar` sobre `base` (fonte já na cor interna), para os quadros `[ja, jb)` lidos da tabela.
     /// O recorte e o raio saem dos quadros `[ca, cb)` do clipe INTEIRO: desfoque e mosaico dependem do recorte, e
     /// a janela (quadro final, prévia, bloco) tem de dar os mesmos pixels da exportação.
-    fn ocultar(&mut self, base: String, midia: &str, efeitos_do_clipe: &[Tolerante<Efeito>], fonte: &FonteInfo, (ja, jb): (usize, usize), (ca, cb): (usize, usize)) -> Result<String> {
+    /// `mostrados` = quadros da fonte que o clipe mostra (os demais lidos são vizinhos: `caixa_no_lido`).
+    fn ocultar(&mut self, base: String, midia: &str, efeitos_do_clipe: &[Tolerante<Efeito>], fonte: &FonteInfo, (ja, jb): (usize, usize), (ca, cb): (usize, usize), mostrados: (usize, usize)) -> Result<String> {
         let tab = &fonte.quadros;
         let espaco = TamanhoPx { w: fonte.exibido.0, h: fonte.exibido.1 };
         let midia_ref = self.p.midias.iter().find(|m| m.id == midia);
@@ -324,7 +347,7 @@ impl Montagem<'_, '_> {
             let (mut quadros, mut prims, mut lado, mut algum) = (Vec::with_capacity(jb - ja), Vec::with_capacity(cb - ca), 0u32, false);
             for j in ca..cb {
                 let mut rastreios = BTreeMap::new();
-                if let Some(a) = caixa_da_ocultacao(&mut self.rastreios, o, tab, j)? {
+                if let Some(a) = caixa_no_lido(&mut self.rastreios, o, tab, j, mostrados)? {
                     rastreios.insert(o.alvo.rastreio.clone(), a.caixa);
                     lado = lado.max((a.caixa.w * espaco.w as f64).min(a.caixa.h * espaco.h as f64).round().max(0.0) as u32);
                     algum |= (ja..jb).contains(&j);
@@ -588,7 +611,9 @@ fn trecho(mut m: Montagem, t: &ClipeTrecho, res: &ClipeResolvido, janela: Janela
     f.push(cor);
     let na_cor = m.g.rotulo("f");
     m.g.cadeia(&[&ent], &f, &[&na_cor]);
-    let oculto = m.ocultar(na_cor, &t.midia, &t.base.efeitos, fonte, (ja, jb), leitura.clipe)?;
+    // quadros da fonte que o clipe mostra (por campo, o mapa conta campos: dois por quadro)
+    let mostrados = if leitura.campos { (mapa.j_in / 2, mapa.j_out.div_ceil(2)) } else { (mapa.j_in, mapa.j_out) };
+    let oculto = m.ocultar(na_cor, &t.midia, &t.base.efeitos, fonte, (ja, jb), leitura.clipe, mostrados)?;
     let oculto = if realce::ativos(&t.base.efeitos, true) { realce::aplicar(&mut m, &oculto, &t.base.efeitos, fonte, &leitura)? } else { oculto };
     // o clone do último quadro vai sempre: sem ele o 7.0.2 perde o último no `fps` (faixa cheia, fim da mídia,
     // filtro de duas entradas); o `fps@` conta lidos + 1
@@ -649,7 +674,7 @@ fn congelar(mut m: Montagem, c: &ClipeCongelar, res: &ClipeResolvido, janela: Ja
     let na_cor = m.g.rotulo("f");
     m.g.cadeia(&[&ent], &f, &[&na_cor]);
     let efeitos_oc = efeitos_do_congelado(&c.base.efeitos, res.n_q, m.canvas.fps)?;
-    let oculto = m.ocultar(na_cor, &c.midia, &efeitos_oc, fonte, (ja, jb), leitura.clipe)?;
+    let oculto = m.ocultar(na_cor, &c.midia, &efeitos_oc, fonte, (ja, jb), leitura.clipe, (j, j + 1))?;
     // média de quadros e desentrelace no congelado (P1.4): de `leitura.ler` para o quadro j (`leitura.lidos`)
     let oculto = if realce::ativos(&c.base.efeitos, true) { realce::aplicar(&mut m, &oculto, &c.base.efeitos, fonte, &leitura)? } else { oculto };
     let n = janela.ate - janela.de;

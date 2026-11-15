@@ -81,6 +81,7 @@ enum Saida<'a> {
     Nada,
     Captura,
     Progresso(&'a mut dyn FnMut(&ProgressoFfmpeg)),
+    Fluxo(&'a mut dyn FnMut(&[u8]) -> Result<bool>),
 }
 
 /// Roda até o fim ou até `cancelar` virar true (a vigia mata sem depender da saída do processo).
@@ -99,6 +100,31 @@ pub fn rodar_com_saida(cmd: &Comando, cancelar: &AtomicBool) -> Result<(Termino,
 /// O cancelamento não depende de chegar progresso.
 pub fn rodar_com_progresso(cmd: &Comando, cancelar: &AtomicBool, progresso: &mut dyn FnMut(&ProgressoFfmpeg)) -> Result<Termino> {
     rodar_interno(cmd, cancelar, Saida::Progresso(progresso)).map(|(t, _)| t)
+}
+
+// CONTRATO: acréscimo (verificação adversa da Fase 1). A onda lia o stdout de um ffmpeg lançado por fora daqui, sem
+// `PR_SET_PDEATHSIG`, sem Job do Windows e fora de `matar_todos`.
+/// Como `rodar`, entregando o stdout em pedaços a `fluxo` (PCM por pipe, sem guardar). `Ok(false)` = basta: o filho é
+/// morto e o `Termino` volta sem `cancelado` (o código dele não diz nada). `Err` de `fluxo` mata o filho e volta.
+pub fn rodar_com_fluxo(cmd: &Comando, cancelar: &AtomicBool, fluxo: &mut dyn FnMut(&[u8]) -> Result<bool>) -> Result<Termino> {
+    rodar_interno(cmd, cancelar, Saida::Fluxo(fluxo)).map(|(t, _)| t)
+}
+
+/// Lê o stdout em pedaços até o fim, até `f` dizer que basta (`Ok(true)` = parou antes) ou até um erro.
+fn ler_fluxo(mut out: impl Read, f: &mut dyn FnMut(&[u8]) -> Result<bool>) -> Result<bool> {
+    let mut buf = vec![0u8; 1 << 16];
+    loop {
+        match out.read(&mut buf) {
+            Ok(0) => return Ok(false),
+            Ok(n) => {
+                if !f(&buf[..n])? {
+                    return Ok(true);
+                }
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
 }
 
 fn rodar_interno(cmd: &Comando, cancelar: &AtomicBool, mut saida: Saida<'_>) -> Result<(Termino, Vec<u8>)> {
@@ -140,6 +166,7 @@ fn rodar_interno(cmd: &Comando, cancelar: &AtomicBool, mut saida: Saida<'_>) -> 
     vivos().lock().unwrap_or_else(|e| e.into_inner()).insert(id, vivo.clone());
 
     let mut capturado = Vec::new();
+    let mut erro_do_fluxo = None;
     let (estado, leitura) = std::thread::scope(|s| {
         let vigia = s.spawn(|| vigiar(&vivo, cancelar));
         let leitura = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -150,6 +177,14 @@ fn rodar_interno(cmd: &Comando, cancelar: &AtomicBool, mut saida: Saida<'_>) -> 
                         let _ = out.read_to_end(&mut capturado);
                     }
                     Saida::Progresso(f) => ler_progresso(out, &mut **f),
+                    Saida::Fluxo(f) => {
+                        let r = ler_fluxo(&mut out, &mut **f);
+                        // parou antes do fim (basta, ou erro): o filho não segue escrevendo num pipe que ninguém lê
+                        if !matches!(r, Ok(false)) {
+                            let _ = vivo.filho.lock().unwrap_or_else(|e| e.into_inner()).kill();
+                        }
+                        erro_do_fluxo = r.err();
+                    }
                 }
             }
         }));
@@ -165,6 +200,9 @@ fn rodar_interno(cmd: &Comando, cancelar: &AtomicBool, mut saida: Saida<'_>) -> 
         std::panic::resume_unwind(p);
     }
     let estado = estado.map_err(|_| SicroError::Validation(format!("vigia_falhou: {}", cmd.nome)))??;
+    if let Some(e) = erro_do_fluxo {
+        return Err(e);
+    }
 
     Ok((
         Termino {
@@ -413,7 +451,7 @@ pub fn ultimas_linhas(stderr: &Path, n: usize) -> Vec<String> {
 pub fn classificar(linhas: &[String]) -> ClasseFalha {
     let t = linhas.join("\n").to_lowercase();
     let tem = |ps: &[&str]| ps.iter().any(|p| t.contains(p));
-    if tem(&["no space left on device", "not enough space on the disk", "disk full"]) {
+    if tem(&["no space left on device", "not enough space on the disk", "disk full", "disk quota exceeded"]) {
         ClasseFalha::DiscoCheio
     } else if tem(&["no such filter", "filter not found", "unknown filter", "unknown encoder", "encoder not found"]) {
         ClasseFalha::FiltroAusente
@@ -649,6 +687,60 @@ mod testes {
         assert!(meus().is_empty(), "ffmpeg vivo depois do pânico ({})", cap.versao);
         let preso = vivos().lock().unwrap().values().any(|v| v.filho.lock().unwrap().id() == pid);
         assert!(!preso, "o filho ficou na lista de vivos");
+    }
+
+    /// Stdout em pedaços: o filho está na lista de vivos enquanto escreve (é por ela que `matar_todos` o acha); "basta"
+    /// o mata sem marcar cancelamento; erro de quem lê e cancelamento também o matam; nada fica vivo nem na lista.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn fluxo_entrega_o_stdout_e_mata_o_filho_quando_basta() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("exec-fluxo");
+        // -re e d=602: sem a morte rodaria 10 min; a duração distingue este ffmpeg dos vizinhos
+        let longo = ["-hide_banner", "-nostdin", "-loglevel", "error", "-re", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=602", "-f", "s16le", "-"];
+        let meus = || -> Vec<u32> {
+            filhos_de(std::process::id())
+                .into_iter()
+                .filter(|p| vivo(*p) && std::fs::read(format!("/proc/{p}/cmdline")).is_ok_and(|c| String::from_utf8_lossy(&c).contains("duration=602")))
+                .collect()
+        };
+        let na_lista = |pid: u32| vivos().lock().unwrap().values().any(|v| v.filho.lock().unwrap().id() == pid);
+        // basta
+        let (mut bytes, mut pid, mut estava) = (0usize, 0u32, false);
+        let t0 = Instant::now();
+        let t = rodar_com_fluxo(&cmd(&d, &cap.binario, &longo), &AtomicBool::new(false), &mut |b| {
+            bytes += b.len();
+            pid = meus()[0];
+            estava = na_lista(pid);
+            Ok(bytes < 4000)
+        })
+        .unwrap();
+        assert!(bytes >= 4000 && estava && pid != 0, "{bytes} bytes, na lista: {estava} ({})", cap.versao);
+        assert!(!t.cancelado && t.codigo != Some(0), "{t:?}");
+        assert!(t0.elapsed().as_secs_f64() < CANCELAR_S * FOLGA + 2.0, "{:?}", t0.elapsed());
+        assert!(meus().is_empty() && !na_lista(pid), "ffmpeg vivo depois de bastar ({})", cap.versao);
+        // erro de quem lê
+        let e = rodar_com_fluxo(&cmd(&d, &cap.binario, &longo), &AtomicBool::new(false), &mut |_| Err(SicroError::Validation("nao_suportado: teste".into()))).unwrap_err();
+        assert!(e.to_string().contains("nao_suportado: teste"), "{e}");
+        assert!(meus().is_empty(), "ffmpeg vivo depois do erro ({})", cap.versao);
+        // cancelamento no meio
+        let cancelar = AtomicBool::new(false);
+        let t = rodar_com_fluxo(&cmd(&d, &cap.binario, &longo), &cancelar, &mut |_| {
+            cancelar.store(true, Ordering::SeqCst);
+            Ok(true)
+        })
+        .unwrap();
+        assert!(t.cancelado, "{t:?}");
+        assert!(meus().is_empty(), "ffmpeg vivo depois do cancelamento ({})", cap.versao);
+        // até o fim: todos os bytes, código 0
+        let curto = ["-hide_banner", "-nostdin", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=2", "-f", "s16le", "-"];
+        let mut total = 0usize;
+        let t = rodar_com_fluxo(&cmd(&d, &cap.binario, &curto), &AtomicBool::new(false), &mut |b| {
+            total += b.len();
+            Ok(true)
+        })
+        .unwrap();
+        assert_eq!((total, t.codigo, t.cancelado), (2 * 8000 * 2, Some(0), false), "{}", cap.versao);
     }
 
     /// Processo auxiliar: roda um ffmpeg longo por `rodar` e espera. Só age quando chamado por `matar_o_pai_mata_os_filhos`.

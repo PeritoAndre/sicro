@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use super::formas::QuadroCamada;
 use crate::edicao::geometria::Afim;
 use crate::edicao::modelo::{
-    Alinhamento, AlinhamentoV, Animavel, CaixaTexto, ClipePrincipal, EfBase, EfTexto, Efeito, EstiloTexto, Fonte, Fundo, LinhaResolvida, Lugar,
+    Alinhamento, AlinhamentoV, Animavel, CaixaTexto, ClipePrincipal, ClipeSobreposto, EfBase, EfTexto, Efeito, EstiloTexto, Fonte, Fundo, LinhaResolvida, Lugar,
     ProjetoEdicao, TamanhoPx, TipoDerivacao, Tolerante, Velocidade,
 };
 use crate::edicao::motor::plano::{Desenho, ItemCamada, QuadroItem};
@@ -196,12 +196,86 @@ pub fn do_clipe(p: &ProjetoEdicao, linha: &LinhaResolvida, id: &str) -> Vec<Stri
     }) {
         v.push(texto_da_media(n));
     }
-    let por_ia = |midia: &str| p.midias.iter().any(|m| m.id == midia && m.derivacao.as_ref().is_some_and(|d| d.tipo == TipoDerivacao::Superres));
-    let sobreposta = ligados(efeitos).any(|e| matches!(e, Efeito::Imagem(i) if por_ia(&i.midia)));
-    if sobreposta || midias_do_clipe(c).into_iter().any(por_ia) {
+    let sobreposta = ligados(efeitos).any(|e| matches!(e, Efeito::Imagem(i) if por_ia(p, &i.midia)));
+    if sobreposta || midias_do_clipe(c).into_iter().any(|m| por_ia(p, m)) {
         v.push(IMAGEM_IA.to_string());
     }
     v
+}
+
+/// Mídia tratada por IA (`derivacao.tipo = superres`).
+fn por_ia(p: &ProjetoEdicao, midia: &str) -> bool {
+    p.midias.iter().any(|m| m.id == midia && m.derivacao.as_ref().is_some_and(|d| d.tipo == TipoDerivacao::Superres))
+}
+
+// CONTRATO: acréscimo (verificação da Fase 1): a imagem por IA posta numa trilha de sobreposição também leva o selo
+// fixo (§6.6); antes só a da principal.
+/// Textos dos selos de um clipe sobreposto (os de `feito.sobrepostos[].selos`): só o fixo da imagem por IA (a figura,
+/// ou o fundo de imagem do título), que não desliga.
+pub fn do_sobreposto(p: &ProjetoEdicao, c: &ClipeSobreposto) -> Vec<String> {
+    if !na_imagem() {
+        return Vec::new();
+    }
+    let midia = match c {
+        ClipeSobreposto::Imagem(x) => Some(x.midia.as_str()),
+        ClipeSobreposto::Video(x) => Some(x.midia.as_str()),
+        ClipeSobreposto::Titulo(x) => match &x.titulo.fundo {
+            Fundo::Imagem { midia } => Some(midia.as_str()),
+            _ => None,
+        },
+    };
+    if midia.is_some_and(|m| por_ia(p, m)) {
+        vec![IMAGEM_IA.to_string()]
+    } else {
+        Vec::new()
+    }
+}
+
+/// Slots [de, ate) e selos de cada sobreposto que entra no vídeo e leva selo (trilha visível, com slots na linha).
+fn sobrepostos_com_selo(p: &ProjetoEdicao, linha: &LinhaResolvida) -> Vec<(u64, u64, Vec<String>)> {
+    let mut v = Vec::new();
+    for t in p.sobreposicoes.iter().filter(|t| !t.oculta) {
+        for c in &t.clipes {
+            let Tolerante::Conhecido(c) = c else { continue };
+            let textos = do_sobreposto(p, c);
+            let id = match c {
+                ClipeSobreposto::Imagem(x) => &x.base.id,
+                ClipeSobreposto::Video(x) => &x.base.id,
+                ClipeSobreposto::Titulo(x) => &x.base.id,
+            };
+            let Some(l) = linha.livres.iter().find(|l| l.id == *id && l.trilha == t.id) else { continue };
+            if !textos.is_empty() && l.n_q > 0 {
+                v.push((l.inicio_q, l.inicio_q + l.n_q as u64, textos));
+            }
+        }
+    }
+    v
+}
+
+/// Soma, slot a slot, os selos dos sobrepostos aos dos trechos da principal (de, ate, início do clipe, textos): o
+/// selo é um só no canto, com os textos dos dois.
+fn somar(trechos: &[(u64, u64, u64, Vec<String>)], extras: &[(u64, u64, Vec<String>)], de_q: u64, ate_q: u64) -> Vec<(u64, u64, u64, Vec<String>)> {
+    // (de, ate, início, textos, trecho de baixo)
+    let mut v: Vec<(u64, u64, u64, Vec<String>, Option<usize>)> = Vec::new();
+    for q in de_q..ate_q {
+        let base = trechos.iter().position(|t| t.0 <= q && q < t.1);
+        let mut textos = base.map(|i| trechos[i].3.clone()).unwrap_or_default();
+        for (_, _, s) in extras.iter().filter(|(a, z, _)| *a <= q && q < *z) {
+            for x in s {
+                if !textos.contains(x) {
+                    textos.push(x.clone());
+                }
+            }
+        }
+        if textos.is_empty() {
+            continue;
+        }
+        match v.last_mut() {
+            Some(u) if u.1 == q && u.3 == textos && u.4 == base => u.1 = q + 1,
+            _ => v.push((q, q + 1, base.map_or(q, |i| trechos[i].2), textos, base)),
+        }
+    }
+    v.into_iter().map(|(a, z, inicio, textos, _)| (a, z, inicio, textos)).collect()
 }
 
 fn da_velocidade(v: &Velocidade) -> Option<String> {
@@ -232,26 +306,50 @@ fn efeito(conteudo: String) -> Efeito {
     })
 }
 
-/// Itens dos selos nos slots [de_q, de_q + n_q) do bloco, um por clipe que pede selo, em px do canvas `canvas`
-/// (`ItemCamada.de` relativo a `de_q`). Na sobreposição de uma transição vale o selo do clipe que entra.
+/// Itens dos selos nos slots [de_q, de_q + n_q) do bloco, em px do canvas `canvas` (`ItemCamada.de` relativo a
+/// `de_q`). Na sobreposição de uma transição os dois clipes estão na imagem: valem os selos dos dois (o trecho em
+/// câmera lenta que sai ainda aparece ali; só com o selo de quem entra ele ficava sem aviso). Imagem por IA numa
+/// trilha de sobreposição soma o selo dela ao do clipe por baixo, nos slots em que aparece.
 pub fn itens(p: &ProjetoEdicao, linha: &LinhaResolvida, de_q: u64, n_q: u32, canvas: TamanhoPx) -> Result<Vec<ItemCamada>> {
     let ate_q = de_q + n_q as u64;
-    let mut v = Vec::new();
+    let textos: Vec<Vec<String>> = linha.clipes.iter().map(|c| do_clipe(p, linha, &c.id)).collect();
+    let fim = |i: usize| linha.clipes[i].inicio_q + linha.clipes[i].n_q as u64;
+    // (de, ate, início do clipe, textos), já cortados ao bloco
+    let mut trechos: Vec<(u64, u64, u64, Vec<String>)> = Vec::new();
+    let mut por = |de: u64, ate: u64, inicio: u64, textos: &[String]| {
+        let (a, z) = (de.max(de_q), ate.min(ate_q));
+        if a < z && !textos.is_empty() {
+            trechos.push((a, z, inicio, textos.to_vec()));
+        }
+    };
     for (i, c) in linha.clipes.iter().enumerate() {
-        let textos = do_clipe(p, linha, &c.id);
-        if textos.is_empty() {
-            continue;
+        // cabeça: slots que o clipe divide com o anterior (transição que sobrepõe)
+        let cabeca = if i > 0 { fim(i - 1).min(fim(i)).max(c.inicio_q) } else { c.inicio_q };
+        let mut juntos = if i > 0 { textos[i - 1].clone() } else { Vec::new() };
+        for t in &textos[i] {
+            if !juntos.contains(t) {
+                juntos.push(t.clone());
+            }
         }
-        let fim = linha.clipes.get(i + 1).map_or(c.inicio_q + c.n_q as u64, |prox| prox.inicio_q.min(c.inicio_q + c.n_q as u64));
-        let (a, z) = (c.inicio_q.max(de_q), fim.min(ate_q));
-        if a >= z {
-            continue;
+        // até o começo da sobreposição com o seguinte (a cabeça dele)
+        let ate = linha.clipes.get(i + 1).map_or(fim(i), |prox| prox.inicio_q.min(fim(i)));
+        if cabeca == c.inicio_q || juntos == textos[i] {
+            por(c.inicio_q, ate, c.inicio_q, &textos[i]);
+        } else {
+            por(c.inicio_q, cabeca.min(ate), c.inicio_q, &juntos);
+            por(cabeca, ate, c.inicio_q, &textos[i]);
         }
+    }
+    let extras: Vec<_> = sobrepostos_com_selo(p, linha).into_iter().filter(|(a, z, _)| *a < ate_q && de_q < *z).collect();
+    if !extras.is_empty() {
+        trechos = somar(&trechos, &extras, de_q, ate_q);
+    }
+    let item = |(a, z, inicio, textos): (u64, u64, u64, Vec<String>)| {
         let quadros = (a..z)
             .map(|q| QuadroItem {
                 quadro: QuadroCamada {
                     q,
-                    t: tempo::instante_do_slot(q - c.inicio_q, linha.fps),
+                    t: tempo::instante_do_slot(q - inicio, linha.fps),
                     pts: None,
                     a: Afim::IDENTIDADE,
                     canvas,
@@ -262,9 +360,9 @@ pub fn itens(p: &ProjetoEdicao, linha: &LinhaResolvida, de_q: u64, n_q: u32, can
                 transformacao: None,
             })
             .collect();
-        v.push(ItemCamada { desenho: Desenho::Efeito { efeito: efeito(textos.join(SEPARADOR)) }, de: (a - de_q) as u32, quadros });
-    }
-    Ok(v)
+        ItemCamada { desenho: Desenho::Efeito { efeito: efeito(textos.join(SEPARADOR)) }, de: (a - de_q) as u32, quadros }
+    };
+    Ok(trechos.into_iter().map(item).collect())
 }
 
 #[cfg(test)]
@@ -500,6 +598,52 @@ mod testes {
         assert_eq!(do_clipe(&p, &l, "c2"), ["Velocidade 0,25×", "Imagem tratada", "Média de 15 imagens"]);
     }
 
+    /// Imagem por IA numa trilha de sobreposição (presa ou "Imagem…") leva o selo fixo nos slots em que aparece, somado
+    /// ao do clipe por baixo; a mesma imagem sem IA, a trilha oculta e os selos fora da imagem não levam.
+    #[test]
+    fn imagem_por_ia_sobreposta_leva_o_selo_fixo() {
+        let _selos = ligar_no_teste();
+        let mut ia = midia("m2", "imagem", json!([]));
+        ia["derivacao"] = json!({ "tipo": "superres", "de_sha256": "a", "raiz_sha256": "a", "comando": "", "com_perdas": true });
+        let fixo = |v: f64| json!(v);
+        let sob = json!({ "tipo": "imagem", "id": "s1", "rotulo": "", "pos": { "ref": "programa", "t": 0.5 }, "duracao_s": 1.5, "entrada_s": 0.0, "saida_s": 0.0,
+            "transformacao": { "x": fixo(0.5), "y": fixo(0.5), "escala": fixo(0.5), "rotacao": fixo(0.0), "opacidade": fixo(1.0) }, "efeitos": [], "midia": "m2" });
+        let montar = |oculta: bool, midias: Vec<Value>| {
+            let mut p = com(vec![trecho_json("c1", 1.0, json!([])), trecho_json("c2", 0.5, json!([]))], (true, true, true), midias);
+            p.sobreposicoes = serde_json::from_value(json!([{ "id": "t1", "nome": "", "oculta": oculta, "clipes": [sob.clone()] }])).unwrap();
+            let mut l = linha(&p);
+            l.livres = vec![crate::edicao::modelo::LivreResolvido { id: "s1".into(), trilha: "t1".into(), inicio_q: 15, n_q: 45 }];
+            (p, l)
+        };
+        let faixas = |p: &ProjetoEdicao, l: &LinhaResolvida, de: u64, n: u32| -> Vec<(String, u32, usize)> {
+            itens(p, l, de, n, CANVAS).unwrap().iter().map(|it| (texto_do_item(it).to_string(), it.de, it.quadros.len())).collect()
+        };
+        let (p, l) = montar(false, vec![midia("m1", "video", json!([])), ia.clone()]);
+        assert_eq!(faixas(&p, &l, 0, 60), [
+            (IMAGEM_IA.to_string(), 15, 15),
+            (format!("Velocidade 0,5× · {IMAGEM_IA}"), 30, 30),
+        ]);
+        // bloco que pega o meio: cortado a ele; o tempo do selo segue o do clipe por baixo
+        let v = itens(&p, &l, 20, 20, CANVAS).unwrap();
+        assert_eq!(v.iter().map(|it| (it.de, it.quadros.len())).collect::<Vec<_>>(), [(0, 10), (10, 10)]);
+        assert_eq!(v[1].quadros[0].quadro.t, tempo::instante_do_slot(0, linha(&p).fps));
+        let s = match &p.sobreposicoes[0].clipes[0] {
+            Tolerante::Conhecido(c) => c.clone(),
+            _ => panic!(),
+        };
+        assert_eq!(do_sobreposto(&p, &s), [IMAGEM_IA]);
+        // sem IA, ou com a trilha oculta: como antes, só o selo da principal
+        let (p, l) = montar(false, vec![midia("m1", "video", json!([])), midia("m2", "imagem", json!([]))]);
+        assert_eq!(faixas(&p, &l, 0, 60), [("Velocidade 0,5×".to_string(), 30, 30)]);
+        assert!(do_sobreposto(&p, &s).is_empty());
+        let (p, l) = montar(true, vec![midia("m1", "video", json!([])), ia.clone()]);
+        assert_eq!(faixas(&p, &l, 0, 60), [("Velocidade 0,5×".to_string(), 30, 30)]);
+        // selos fora da imagem (chave do integrador): nada, também do sobreposto
+        let _fora = desligar_no_teste();
+        let (p, l) = montar(false, vec![midia("m1", "video", json!([])), ia]);
+        assert!(itens(&p, &l, 0, 60, CANVAS).unwrap().is_empty() && do_sobreposto(&p, &s).is_empty());
+    }
+
     /// O selo não cai sobre o carimbo de tempo no lugar em que ele nasce (`novoCarimbo`: 0,02 × 0,03, à esquerda, no
     /// formato mais largo). Com o selo mais longo (todos os textos de um clipe), as caixas pintadas não se tocam.
     #[test]
@@ -534,17 +678,31 @@ mod testes {
         assert!(selo[2] - selo[0] <= larga && selo[3] - selo[1] > (0.075 * CANVAS.h as f64) as u32 && selo[0] > carimbo[2], "{selo:?}");
     }
 
-    /// Na sobreposição de uma transição os dois clipes dividem slots: vale um selo só, o do clipe que entra.
+
+    /// Transição que sobrepõe: nos slots em que os dois clipes estão na imagem valem os selos dos dois.
     #[test]
-    fn na_transicao_vale_o_selo_de_quem_entra() {
+    fn sobreposicao_leva_o_selo_de_quem_sai() {
         let _selos = ligar_no_teste();
-        let p = com(vec![trecho_json("c1", 0.5, json!([])), congelar_json("c2")], (true, true, true), vec![midia("m1", "video", json!([]))]);
+        let faixas = |p: &ProjetoEdicao, l: &LinhaResolvida| -> Vec<(u32, usize, String)> {
+            itens(p, l, 0, l.total_q as u32, CANVAS).unwrap().iter().map(|it| (it.de, it.quadros.len(), texto_do_item(it).to_string())).collect()
+        };
+        // c1 em câmera lenta sai por cima de c2 (normal) em 6 slots: [0, 30) e [24, 54)
+        let p = com(vec![trecho_json("c1", 0.5, json!([])), trecho_json("c2", 1.0, json!([]))], (true, true, true), vec![midia("m1", "video", json!([]))]);
         let mut l = linha(&p);
-        // c2 entra 10 slots antes do fim do c1
-        l.clipes[1].inicio_q = 20;
-        l.clipes[1].sobrepoe_q = 10;
-        let its = itens(&p, &l, 0, 50, CANVAS).unwrap();
-        assert_eq!(its.iter().map(|i| (texto_do_item(i), i.de, i.quadros.len())).collect::<Vec<_>>(), [("Velocidade 0,5×", 0, 20), ("Imagem parada", 20, 30)]);
+        (l.clipes[1].inicio_q, l.clipes[1].sobrepoe_q, l.total_q) = (24, 6, 54);
+        assert_eq!(faixas(&p, &l), [(0, 24, "Velocidade 0,5×".to_string()), (24, 6, "Velocidade 0,5×".to_string())]);
+        // os dois com selo diferente: na sobreposição, os dois textos; iguais, um item só por clipe (como antes)
+        let p = com(vec![trecho_json("c1", 0.5, json!([])), congelar_json("c2")], (true, true, true), vec![midia("m1", "video", json!([]))]);
+        assert_eq!(faixas(&p, &l), [(0, 24, "Velocidade 0,5×".to_string()), (24, 6, "Velocidade 0,5× · Imagem parada".to_string()), (30, 24, "Imagem parada".to_string())]);
+        let p = com(vec![trecho_json("c1", 0.5, json!([])), trecho_json("c2", 0.5, json!([]))], (true, true, true), vec![midia("m1", "video", json!([]))]);
+        assert_eq!(faixas(&p, &l), [(0, 24, "Velocidade 0,5×".to_string()), (24, 30, "Velocidade 0,5×".to_string())]);
+        // só quem entra tem selo: desde o primeiro slot dele (como antes)
+        let p = com(vec![trecho_json("c1", 1.0, json!([])), trecho_json("c2", 0.5, json!([]))], (true, true, true), vec![midia("m1", "video", json!([]))]);
+        assert_eq!(faixas(&p, &l), [(24, 30, "Velocidade 0,5×".to_string())]);
+        // janela do bloco no meio da sobreposição
+        let p = com(vec![trecho_json("c1", 0.5, json!([])), trecho_json("c2", 1.0, json!([]))], (true, true, true), vec![midia("m1", "video", json!([]))]);
+        let v = itens(&p, &l, 26, 10, CANVAS).unwrap();
+        assert_eq!(v.iter().map(|it| (it.de, it.quadros.len())).collect::<Vec<_>>(), [(0, 4)]);
     }
 
     /// A chave do integrador: com `NA_IMAGEM` desligado nada é desenhado nem listado no `feito` (os dois juntos: o

@@ -90,6 +90,7 @@ struct FSobreposto {
     nome: String,
     na_saida: FNaSaida,
     textos: Vec<String>,
+    selos: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -1058,7 +1059,7 @@ fn rotulo_do_proc(p: &FProc, tipo: &str) -> String {
             Some(n) => format!("{base} ({n})"),
             None => base,
         },
-        "ocultar" => match p.parametros["conteudo"].as_str() {
+        "ocultar" | tipo::OCULTAR_PARCIAL => match p.parametros["conteudo"].as_str() {
             Some(c) => format!("{base} ({})", rot_ou("conteudo", c)),
             None => base,
         },
@@ -1082,12 +1083,22 @@ fn regiao_parcial(regiao: &Value) -> bool {
 /// Tipo do catálogo de frases para o processamento. O enquadramento só é "ampliação" quando mostra parte da imagem;
 /// com a imagem inteira, "Preencher" corta as bordas e "Inteiro" não muda o que se vê (None: fica só no anexo C).
 fn tipo_do_proc(p: &FProc) -> Option<&str> {
-    if p.nome != "enquadramento" || regiao_parcial(&p.parametros["regiao"]) {
+    if p.nome == "ocultar" {
+        Some(tipo_da_ocultacao(p.parametros["modo"].as_str().unwrap_or("")))
+    } else if p.nome != "enquadramento" || regiao_parcial(&p.parametros["regiao"]) {
         Some(&p.nome)
     } else if p.parametros["ajuste"] == "cobrir" {
         Some(tipo::PREENCHER)
     } else {
         None
+    }
+}
+
+/// Tipo do catálogo de frases para a ocultação: só o sólido opaco é dado como irreversível (D17).
+fn tipo_da_ocultacao(modo: &str) -> &'static str {
+    match modo {
+        "mosaico" | "desfoque" => tipo::OCULTAR_PARCIAL,
+        _ => "ocultar",
     }
 }
 
@@ -1159,6 +1170,16 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         for p in &it.processamentos {
             let Some(t) = tipo_do_proc(p) else { continue };
             let r = rotulo_do_proc(p, t);
+            usar(t, r.clone(), it.n);
+            if !efeitos.contains(&r) {
+                efeitos.push(r);
+            }
+        }
+        // ocultação da MÍDIA (D17, o padrão da tela) não está nos processamentos do clipe: muda a imagem do item do
+        // mesmo jeito (sem isto o relatório dizia "mostradas como foram registradas" com um rosto coberto)
+        for o in f.ocultacoes.iter().filter(|o| o.clipes.iter().any(|c| *c == it.clipe)) {
+            let t = tipo_da_ocultacao(&o.modo);
+            let r = format!("{} ({})", frases::rotulo_do_efeito(t).unwrap_or(""), rot_ou("conteudo", &o.conteudo));
             usar(t, r.clone(), it.n);
             if !efeitos.contains(&r) {
                 efeitos.push(r);
@@ -1242,6 +1263,25 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
                 Some(a) => a.1.push(it.n),
                 None => avisos.push((s.as_str(), vec![it.n])),
             }
+        }
+    }
+    // o selo do sobreposto (imagem por IA) vale nos itens em que ele aparece
+    for s in &f.sobrepostos {
+        let itens = itens_nos_slots(&f.roteiro, s.na_saida.de_q, s.na_saida.n_q);
+        for x in s.selos.iter().filter(|x| !x.trim().is_empty() && !itens.is_empty()) {
+            let i = match avisos.iter().position(|a| a.0 == x.as_str()) {
+                Some(i) => i,
+                None => {
+                    avisos.push((x.as_str(), Vec::new()));
+                    avisos.len() - 1
+                }
+            };
+            for n in &itens {
+                if !avisos[i].1.contains(n) {
+                    avisos[i].1.push(*n);
+                }
+            }
+            avisos[i].1.sort_unstable();
         }
     }
     for (texto, itens) in &avisos {
@@ -1368,6 +1408,9 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     let mut limitacoes = Vec::new();
     if f.saida.com_perdas {
         limitacoes.push(cond(condicao::COM_PERDAS));
+    }
+    if f.saida.predefinicao.as_deref() == Some("whatsapp") {
+        limitacoes.push(cond(condicao::SO_COMO_DOCUMENTO));
     }
     for a in &f.avisos {
         // aviso de código que o catálogo não conhece (versão mais nova) sai pelo código, nunca calado
@@ -1874,6 +1917,39 @@ mod testes {
         tem("Emitido em 14 de novembro de 2026, às 7h00 (horário de Brasília)");
     }
 
+    /// A ocultação da MÍDIA (o padrão da tela, D17) não está nos processamentos do clipe: entra nas mudanças e no
+    /// item do roteiro. Mosaico e desfoque não levam a frase do sólido ("não é possível desfazer").
+    #[test]
+    fn ocultacao_da_midia_entra_nas_mudancas_e_whatsapp_nos_limites() {
+        let c = Cena::nova("juri-oc");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        for it in &mut plano.proveniencia.roteiro {
+            it.processamentos.clear();
+        }
+        let linhas = |plano: &crate::edicao::motor::plano::Plano| {
+            let t = montar(plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+            let d = dados(&t, &[], &[]).unwrap();
+            let m: Vec<(String, String, String)> = d["mudancas"].as_array().unwrap().iter().map(|l| (l["o_que"].as_str().unwrap().into(), l["onde"].as_str().unwrap().into(), l["explicacao"].as_str().unwrap().into())).collect();
+            (m, d)
+        };
+        let (m, d) = linhas(&plano);
+        let oc: Vec<_> = m.iter().filter(|l| l.0 == "Ocultação (rosto)").collect();
+        assert_eq!(oc.len(), 1, "{m:?}");
+        assert_eq!(oc[0].1, "item 2");
+        assert!(oc[0].2.contains("não é possível desfazer"));
+        let item = d["roteiro"].as_array().unwrap().iter().find(|it| it["n"] == 2).unwrap();
+        assert!(item["efeitos"].as_array().unwrap().contains(&json!("Ocultação (rosto)")), "{item}");
+        assert!(!d["limitacoes"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().contains("como documento")));
+        // mosaico: outra frase; WhatsApp: o código só confere no envio como documento
+        plano.proveniencia.ocultacoes[0].modo = crate::edicao::modelo::ModoOcultar::Mosaico;
+        plano.proveniencia.saida.predefinicao = Some(crate::edicao::modelo::Predefinicao::Whatsapp);
+        let (m, d) = linhas(&plano);
+        let oc: Vec<_> = m.iter().filter(|l| l.0 == "Ocultação (rosto)").collect();
+        assert_eq!(oc.len(), 1, "{m:?}");
+        assert!(oc[0].2.contains("não garante") && !oc[0].2.contains("não é possível desfazer"), "{}", oc[0].2);
+        assert!(d["limitacoes"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().contains("só confere se ele for enviado como documento")), "{}", d["limitacoes"]);
+    }
+
     /// O outro lado de cada condição: sem IA, selos ligados, conferência feita ou não feita, revisão preenchida.
     #[test]
     fn sem_ia_selos_ligados_conferida_e_revisado() {
@@ -1945,6 +2021,8 @@ mod testes {
     fn enquadramento_so_e_ampliacao_quando_mostra_parte() {
         let c = Cena::nova("juri");
         let (mut plano, res) = apoio::plano_e_resultado(&c);
+        // só o enquadramento no item 2 (a ocultação da mídia da cena também entra na lista do item)
+        plano.proveniencia.ocultacoes.clear();
         let q = |regiao: Value, ajuste: &str| vec![ProvProcessamento { ordem: 1, nome: "enquadramento".into(), parametros: json!({ "tipo": "enquadramento", "id": "q", "regiao": regiao, "ajuste": ajuste, "interpolacao": "bilinear" }) }];
         let inteira = json!({ "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 });
         let parte = json!({ "x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5 });
@@ -2092,6 +2170,16 @@ mod testes {
         ]);
         assert_eq!(dados(&com, &[], &[]).unwrap()["acrescimos"].as_array().unwrap().len(), antes + 2);
         assert_eq!(frases::classe_do_efeito(tipo::AVISO_NA_IMAGEM), Some(Classe::Acrescimo));
+        // o selo de um sobreposto (imagem por IA) entra pelos itens em que ele aparece; texto igual ao de um clipe
+        // junta numa linha só
+        com["feito"]["sobrepostos"] = json!([{ "trilha": "s1", "clipe": "i1", "tipo": "imagem", "nome": "", "na_saida": { "de_q": 40, "n_q": 5, "de_s": 40.0 / 30.0, "ate_s": 1.5 },
+            "midia": "m9", "preso_a": null, "modelo": null, "textos": [], "selos": ["Imagem ampliada por IA", "Imagem ampliada"] }]);
+        let frase = frases::do_efeito(tipo::AVISO_NA_IMAGEM).unwrap().to_string();
+        assert_eq!(avisos(&com), vec![
+            ("Aviso escrito na imagem: Velocidade 0,5×".to_string(), "item 1".to_string(), frase.clone()),
+            ("Aviso escrito na imagem: Imagem ampliada".to_string(), "itens 1, 2".to_string(), frase.clone()),
+            ("Aviso escrito na imagem: Imagem ampliada por IA".to_string(), "item 2".to_string(), frase),
+        ]);
     }
 
     /// Resolução e tamanho de cada gravação (18-V §4.3.1) saem do `feito`; sem eles, vazio, nunca inventado.

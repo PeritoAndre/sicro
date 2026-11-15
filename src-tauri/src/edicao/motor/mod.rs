@@ -334,17 +334,23 @@ fn limitar_decodificadores(entradas: &mut [Entrada]) {
     }
 }
 
-/// Posição do efeito na cadeia do clipe (§5.3, `clipe.rs`): `ocultar` (domínio da fonte) → origem → giro →
-/// enquadramento → holofote → lupa → anotação (desenhada na ordem da lista).
+/// Posição do efeito na cadeia do clipe (§5.3, `clipe.rs`): `ocultar` (domínio da fonte) → origem na ordem de
+/// `realce::aplicar` (desentrelace, estabilização, lente, ajustes, nitidez, média) → giro → enquadramento → holofote
+/// → lupa → anotação (desenhada na ordem da lista).
 fn lugar_na_cadeia(e: &Efeito) -> u8 {
     match e {
         Efeito::Ocultar(_) => 0,
-        e if efeitos::familia(e) == efeitos::Familia::Origem => 1,
-        Efeito::Girar(_) => 2,
-        Efeito::Enquadramento(_) => 3,
-        Efeito::Holofote(_) => 4,
-        Efeito::Lupa(_) => 5,
-        _ => 6,
+        Efeito::Desentrelacar(_) => 1,
+        Efeito::Estabilizar(_) => 2,
+        Efeito::Lente(_) => 3,
+        Efeito::Ajustes(_) => 4,
+        Efeito::Nitidez(_) => 5,
+        Efeito::MediaTemporal(_) => 6,
+        Efeito::Girar(_) => 7,
+        Efeito::Enquadramento(_) => 8,
+        Efeito::Holofote(_) => 9,
+        Efeito::Lupa(_) => 10,
+        _ => 11,
     }
 }
 
@@ -440,15 +446,19 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             for o in clipe::ocultacoes_de(midia_ref, &efeitos_oc) {
                 rastreios_usados.insert(o.alvo.rastreio.clone());
                 let (mut n, mut de, mut ate) = (ProvQuadrosOcultos { ancora: 0, medido: 0, interpolado: 0, incerto: 0 }, f64::INFINITY, f64::NEG_INFINITY);
-                for j in j_in..j_out {
-                    let Some(a) = clipe::caixa_da_ocultacao(&mut rs, o, tab, j)? else { continue };
+                // a máscara entra por quadro LIDO da fonte (`clipe::ocultar`): por campo o mapa conta campos, dois
+                // por quadro, e contados na tabela de campos os segundos saíam como "interpolados" que não houve
+                let da_fonte: &TabelaQuadros = &fonte.quadros;
+                let (fa, fb) = if tab.pts.len() != da_fonte.pts.len() { (j_in / 2, j_out.div_ceil(2).min(da_fonte.pts.len())) } else { (j_in, j_out) };
+                for j in fa..fb {
+                    let Some(a) = clipe::caixa_da_ocultacao(&mut rs, o, da_fonte, j)? else { continue };
                     match a.como {
                         Como::Ancora | Como::Segurado => n.ancora += 1,
                         Como::Denso => n.medido += 1,
                         Como::Interpolado => n.interpolado += 1,
                     }
                     n.incerto += u32::from(a.incerto);
-                    (de, ate) = (de.min(tab.tempo(j)), ate.max(tab.tempo(j)));
+                    (de, ate) = (de.min(da_fonte.tempo(j)), ate.max(da_fonte.tempo(j)));
                 }
                 if de > ate {
                     continue;
@@ -526,9 +536,13 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             match e {
                 Efeito::Ocultar(o) => drop(rastreios_usados.insert(o.alvo.rastreio.clone())),
                 Efeito::Holofote(h) => drop(rastreios_usados.insert(h.alvo.rastreio.clone())),
-                Efeito::Destaque(d) => drop(rastreios_usados.insert(d.rastreio.clone())),
                 Efeito::Imagem(im) => drop(citadas.insert(im.midia.clone())),
                 _ => {}
+            }
+            // destaque, lupa e velocidade que acompanha: o rastreio seguido também é usado (o resumo de IA do
+            // relatório procura por ele em `feito.rastreios`)
+            if let Some(id) = efeitos::rastreio_seguido(e) {
+                rastreios_usados.insert(id.to_string());
             }
             processamentos.push(ProvProcessamento { ordem: processamentos.len() as u32 + 1, nome: efeitos::tipo(e).to_string(), parametros: serde_json::to_value(e)? });
         }
@@ -553,9 +567,10 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
     let mut sobrepostos = Vec::new();
     for trilha in p.sobreposicoes.iter().filter(|t| !t.oculta) {
         for c in &trilha.clipes {
+            let Tolerante::Conhecido(c) = c else { continue };
             let (b, tipo, midia, modelo, textos) = match c {
-                Tolerante::Conhecido(ClipeSobreposto::Imagem(x)) => (&x.base, "imagem", Some(x.midia.clone()), None, Vec::new()),
-                Tolerante::Conhecido(ClipeSobreposto::Titulo(x)) => {
+                ClipeSobreposto::Imagem(x) => (&x.base, "imagem", Some(x.midia.clone()), None, Vec::new()),
+                ClipeSobreposto::Titulo(x) => {
                     let fundo = match &x.titulo.fundo {
                         Fundo::Imagem { midia } => Some(midia.clone()),
                         _ => None,
@@ -587,6 +602,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
                 },
                 modelo,
                 textos,
+                selos: crate::edicao::camada::selos::do_sobreposto(p, c),
             });
         }
     }
@@ -720,6 +736,35 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
 mod testes {
     use super::*;
     use serde_json::json;
+
+    /// `feito.roteiro[].processamentos` na ordem da cadeia (contratos (i) 8): os de origem na ordem dos filtros do grafo,
+    /// qualquer que seja a da lista do clipe (antes saíam na da lista: média antes do desentrelace, que o grafo faz depois).
+    #[test]
+    fn processamentos_de_origem_na_ordem_do_grafo() {
+        use crate::edicao::quadros::apoio;
+        use crate::edicao::testes::aceite::{alvo_final, efeito, midia, projeto, trecho, Mundo};
+        let info = apoio::fonte(apoio::tabela((1, 30), (0..30).collect()), (640, 360));
+        let mundo = Mundo::novo(&Arc::new(apoio::cap_falsa())).com("m1", &info);
+        let efs = json!([
+            efeito("media_temporal", "m", json!({ "quadros": 3 })),
+            efeito("nitidez", "n", json!({ "quantidade": 1.0 })),
+            efeito("ajustes", "a", json!({ "brilho": 0.1, "contraste": 1.0, "gama": 1.0, "saturacao": 1.0 })),
+            efeito("girar", "g", json!({ "graus": 90, "espelhar_h": false, "espelhar_v": false })),
+            efeito("lente", "l", json!({ "k1": -0.1, "k2": 0.0, "cx": 0.5, "cy": 0.5, "perfil": "" })),
+            efeito("desentrelacar", "d", json!({ "modo": "quadro", "ordem": "auto" })),
+        ]);
+        let p = projeto(640, 360, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", &info.quadros, 0, 30, 1.0, efs)], json!({}));
+        let plano = mundo.compilar(&p, &alvo_final("cpu")).expect("compila");
+        let nomes: Vec<&str> = plano.proveniencia.roteiro[0].processamentos.iter().map(|x| x.nome.as_str()).collect();
+        assert_eq!(nomes, ["desentrelacar", "lente", "ajustes", "nitidez", "media_temporal", "girar"]);
+        let ordem: Vec<u32> = plano.proveniencia.roteiro[0].processamentos.iter().map(|x| x.ordem).collect();
+        assert_eq!(ordem, [1, 2, 3, 4, 5, 6]);
+        // é a ordem dos filtros no grafo do bloco
+        let g = &plano.blocos[0].grafo;
+        let pos = |f: &str| g.find(f).unwrap_or_else(|| panic!("{f} fora do grafo"));
+        let filtros = ["bwdif", "lenscorrection", "eq=brightness", "unsharp", "tmix", "transpose"];
+        assert!(filtros.windows(2).all(|w| pos(w[0]) < pos(w[1])), "{g}");
+    }
 
     #[test]
     fn alvo_tag_tipo() {

@@ -1,0 +1,109 @@
+{
+  "calibracao": {
+    "id": "a0000000-0000-4000-8000-000000000001",
+    "occurrence_id": "c-verif1",
+    "media_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "method": "plane",
+    "reference_source": "campo",
+    "residuals_px": 0.01,
+    "distortion_model": null,
+    "author": "",
+    "created_at": "2026-11-14T10:00:00Z",
+    "control_points": [
+      {
+        "px": 32,
+        "py": 36,
+        "world_x_m": 0.32,
+        "world_y_m": 0.36
+      },
+      {
+        "px": 288,
+        "py": 36,
+        "world_x_m": 2.88,
+        "world_y_m": 0.36
+      },
+      {
+        "px": 288,
+        "py": 162,
+        "world_x_m": 2.88,
+        "world_y_m": 1.62
+      },
+      {
+        "px": 32,
+        "py": 162,
+        "world_x_m": 0.32,
+        "world_y_m": 1.62
+      }
+    ],
+    "homography": [
+      0.01,
+      0,
+      0,
+      0,
+      0.01,
+      0,
+      0,
+      0,
+      1
+    ]
+  },
+  "calculo": {
+    "id": "a0000000-0000-4000-8000-000000000002",
+    "occurrence_id": "c-verif1",
+    "media_hash": "1111111111111111111111111111111111111111111111111111111111111111",
+    "calibration_id": "a0000000-0000-4000-8000-000000000001",
+    "velocity_kmh": 41.6,
+    "vx_m_per_s": 11,
+    "vy_m_per_s": 3,
+    "se_m_per_s": 0.5,
+    "ci_low": 39,
+    "ci_high": 44,
+    "confidence": 0.95,
+    "r_squared": 0.99,
+    "residuals": [],
+    "mc_seed": 7,
+    "mc_sigmas": null,
+    "mc_n": 10000,
+    "mc_failed": 0,
+    "mc_mean_kmh": 41.7,
+    "mc_median_kmh": 41.6,
+    "mc_p2_5_kmh": 38.7,
+    "mc_p97_5_kmh": 45.2,
+    "limitations": [],
+    "audit": null,
+    "author": "",
+    "created_at": "2026-11-14T11:00:00Z",
+    "points": [
+      {
+        "storyboard_frame_id": null,
+        "export_id": null,
+        "px": 1,
+        "py": 2,
+        "u_px": 1,
+        "actual_timestamp_s": 2.5,
+        "delta_s": null,
+        "manual": true
+      },
+      {
+        "storyboard_frame_id": null,
+        "export_id": null,
+        "px": 1,
+        "py": 2,
+        "u_px": 1,
+        "actual_timestamp_s": 3,
+        "delta_s": null,
+        "manual": true
+      },
+      {
+        "storyboard_frame_id": null,
+        "export_id": null,
+        "px": 1,
+        "py": 2,
+        "u_px": 1,
+        "actual_timestamp_s": 3.5,
+        "delta_s": null,
+        "manual": true
+      }
+    ]
+  }
+}

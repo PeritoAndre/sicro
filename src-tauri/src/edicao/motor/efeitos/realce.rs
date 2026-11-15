@@ -1331,6 +1331,102 @@ pub(crate) mod testes {
         }
     }
 
+    /// `ocultar` sólido da mídia com `ativo` = [de, ate] (tempo de fonte), como a tela grava.
+    fn oculta_em(de: f64, ate: f64) -> Value {
+        json!([ocultar("o1", "r1", "solido", json!({ "ativo": { "de": de, "ate": ate } }))])
+    }
+
+    /// Projeto 320×180 da fonte MP4 com o rastreio da marca em volta de [j_in, j_out), compilado para a exportação.
+    fn plano_da_marca(cap: &Arc<Capacidades>, m: &Medida, ocultacoes: Value, clipe: Value, (j_in, j_out): (usize, usize)) -> Plano {
+        let rastreios = json!({ "rastreios": [rastreio("r1", Some("m1"), "fonte", ancoras_da_marca(Fonte::Mp4, m, j_in - 8, j_out + 8))] });
+        let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", ocultacoes)], vec![clipe], rastreios);
+        Mundo::novo(cap).com("m1", &m.info).compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    /// A ocultação criada pela tela vale só na faixa do clipe (`ativo` em tempo de fonte). A média lê vizinhos de
+    /// antes dela, que nunca aparecem sozinhos: saem cobertos (lidos pelo próprio instante, entravam descobertos e
+    /// o alvo vazava diluído nos primeiros quadros do clipe).
+    #[test]
+    fn media_com_ocultar_so_na_faixa_do_clipe_sem_sobra() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::Mp4);
+        let tab = &m.info.quadros;
+        let (j_in, j_out) = (40usize, 64usize);
+        let montar = |ocultacoes: Value| plano_da_marca(&cap, &m, ocultacoes, trecho("c1", "m1", tab, j_in, j_out, 1.0, json!([media(4)])), (j_in, j_out));
+        let (_, quadros) = renderizar(&cap, &montar(oculta_em(tab.tempo(j_in), tab.tempo(j_out))), "viz-trecho", &[]);
+        assert_eq!(quadros.len(), j_out - j_in);
+        for (q, quadro) in quadros.iter().enumerate() {
+            assert_eq!(sobra(quadro), 0, "trecho com média ({}): slot {q} com pixel do alvo de sobra", cap.versao);
+        }
+        let (_, sem) = renderizar(&cap, &montar(json!([])), "viz-trecho-sem", &[]);
+        assert!(sobra(&sem[0]) > 200, "o medidor não vê o alvo diluído");
+        // a ocultação que não vale na ponta do clipe não passa a cobrir o vizinho: o que o perito deixou à mostra fica
+        let (_, quadros) = renderizar(&cap, &montar(oculta_em(tab.tempo(j_in + 6), tab.tempo(j_out))), "viz-meio", &[]);
+        assert!(sobra(&quadros[0]) > 200, "ocultação inativa no começo do clipe cobriu o vizinho");
+        assert_eq!(sobra(&quadros[quadros.len() - 1]), 0);
+    }
+
+    /// Quadro congelado com média centrada e a ocultação da mídia no instante do quadro (contratos (h) 23): os
+    /// vizinhos lidos saem cobertos (antes, 4 dos 5 quadros da média entravam com o alvo à mostra).
+    #[test]
+    fn congelado_com_media_e_ocultar_no_instante_sem_sobra() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::Mp4);
+        let tab = &m.info.quadros;
+        let j = 52;
+        let montar = |ocultacoes: Value| plano_da_marca(&cap, &m, ocultacoes, congelado(&m, j, json!([media(5)])), (j, j + 1));
+        let (_, quadros) = renderizar(&cap, &montar(oculta_em(tab.tempo(j), tab.tempo(j))), "viz-congelado", &[]);
+        assert!(!quadros.is_empty());
+        for quadro in &quadros {
+            assert_eq!(sobra(quadro), 0, "congelado com média ({}): pixel do alvo de sobra", cap.versao);
+        }
+        let (_, sem) = renderizar(&cap, &montar(json!([])), "viz-congelado-sem", &[]);
+        assert!(sobra(&sem[0]) > 200, "o medidor não vê o alvo no congelado");
+    }
+
+    fn plano_entrelacado_na_faixa(cap: &Arc<Capacidades>, m: &Medida, modo: &str, fps: (i64, i64)) -> Plano {
+        let tab = &m.info.quadros;
+        let (j_in, j_out) = FAIXA_ENTRELACADA;
+        let p = projeto(
+            720,
+            480,
+            fps,
+            vec![midia("m1", "video", oculta_em(tab.tempo(j_in), tab.tempo(j_out)))],
+            vec![trecho("c1", "m1", tab, j_in, j_out, 1.0, json!([desentrelacar(modo)]))],
+            json!({ "rastreios": [rastreio("r1", Some("m1"), "fonte", ancoras_da_marca(Fonte::Entrelacado, m, j_in - 4, j_out + 4))] }),
+        );
+        Mundo::novo(cap).com("m1", &m.info).compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{modo}: {e}"))
+    }
+
+    /// Desentrelace (lê 2 quadros antes e 1 depois) com a ocultação só na faixa do clipe: 0 pixel de sobra.
+    #[test]
+    fn desentrelace_com_ocultar_so_na_faixa_do_clipe_sem_sobra() {
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::Entrelacado);
+        for (modo, fps) in [("quadro", NTSC), ("campo", NTSC_CAMPOS)] {
+            let (_, quadros) = renderizar(&cap, &plano_entrelacado_na_faixa(&cap, &m, modo, fps), "viz-des", &[]);
+            for (q, quadro) in quadros.iter().enumerate() {
+                assert_eq!(sobra(quadro), 0, "desentrelace por {modo} ({}): slot {q} com pixel do alvo de sobra", cap.versao);
+            }
+        }
+    }
+
+    /// O `feito` conta os quadros da FONTE cobertos. Por campo o mapa conta campos (dois por quadro): contados na
+    /// tabela de campos, metade saía como "interpolada" sem que nenhuma posição tivesse sido interpolada.
+    #[test]
+    fn feito_conta_os_quadros_ocultados_da_fonte_tambem_por_campo() {
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::Entrelacado);
+        let (j_in, j_out) = FAIXA_ENTRELACADA;
+        for (modo, fps) in [("quadro", NTSC), ("campo", NTSC_CAMPOS)] {
+            let plano = plano_entrelacado_na_faixa(&cap, &m, modo, fps);
+            let n = &plano.proveniencia.ocultacoes[0].quadros;
+            assert_eq!((n.ancora, n.interpolado, n.medido), ((j_out - j_in) as u32, 0, 0), "por {modo}: quadros ocultados no feito");
+        }
+    }
+
     fn congelado(m: &Medida, j: usize, efeitos: Value) -> Value {
         let t = &m.info.quadros;
         json!({ "tipo": "congelar", "id": "g1", "rotulo": "", "midia": "m1", "instante_s": t.tempo(j), "instante_pts": t.pts[j], "duracao_s": 0.2, "efeitos": efeitos })

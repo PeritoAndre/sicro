@@ -2922,7 +2922,9 @@ mod testes {
         let raiz = u16(&paths::dir_edicao_saida(&ws).to_string_lossy());
         let pior = |b: &str| raiz + 1 + u16(b) + SUFIXO_PASTA + 1 + (u16(b) + SUFIXO_ARQUIVO).max(MAIOR_FIXO);
         assert!(pior(&inteiro) > CAMINHO_MAX, "o teste precisa de um título que passe: {}", pior(&inteiro));
-        assert!(pior(&base) <= CAMINHO_MAX, "{} com {base:?}", pior(&base));
+        // raiz funda (TMPDIR longo, %TEMP% do Windows): o título para no mínimo e o caminho pode passar
+        let cabe = pior(&base) <= CAMINHO_MAX;
+        assert!(cabe || u16(&base) == TITULO_MIN, "{} com {base:?}", pior(&base));
         assert!(u16(&base) >= TITULO_MIN && inteiro.starts_with(&base) && !base.ends_with(' '), "{base:?}");
         assert_eq!(nome_base_em(&ws, "Placa: a/b"), "Placa_ a_b", "título curto não muda");
         // o maior caminho fixo do pacote é o do denso (`projeto/<de>`); o do vídeo conta o `.parcial` da cópia
@@ -2934,11 +2936,11 @@ mod testes {
         let s = publicar(&Publicar { ws: &ws, projeto: &projeto, plano: &plano, res: &res, amb: &amb, quando: quando(), tecnico: &TecFalso }).unwrap();
         assert_eq!(s.arquivo, format!("{}/{base} (ocultado).mp4", s.pasta));
         let video = paths::resolver_relativo(&ws, &s.arquivo);
-        assert!(video.is_file() && u16(&video.to_string_lossy()) <= CAMINHO_MAX, "{}", u16(&video.to_string_lossy()));
+        assert!(video.is_file() && (!cabe || u16(&video.to_string_lossy()) <= CAMINHO_MAX), "{}", u16(&video.to_string_lossy()));
         let a = concluir_conferencia(&ws, &s.id, true, "Perito Teste", &TecFalso).unwrap();
         assert_eq!(a.tecnico_rel.as_deref(), Some(format!("{}/{base}.tecnico.json", s.pasta).as_str()));
         let tecnico = paths::resolver_relativo(&ws, a.tecnico_rel.as_deref().unwrap());
-        assert!(tecnico.is_file() && u16(&tecnico.to_string_lossy()) <= CAMINHO_MAX);
+        assert!(tecnico.is_file() && (!cabe || u16(&tecnico.to_string_lossy()) <= CAMINHO_MAX));
         // caso em pasta funda: o título para de encolher no mínimo
         let fundo = d.path().join("a".repeat(120)).join("b".repeat(120));
         assert_eq!(u16(&nome_base_em(&fundo, &titulo)), TITULO_MIN);

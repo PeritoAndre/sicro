@@ -16,7 +16,7 @@ interface TocItem {
 }
 
 /** Slug no padrão do GitHub (mantém acentos) para os links do Sumário do manual baterem. */
-function slugify(text: string, used: Set<string>): string {
+export function slugify(text: string, used: Set<string>): string {
   const base =
     text
       .trim()

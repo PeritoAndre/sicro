@@ -45,7 +45,6 @@ import type {
   VideoOperationLog,
   VideoStoryboardFrame,
 } from "@domain/video";
-import type { AudioMontagem, Montagem, RenderMontagemResult } from "@domain/montagem";
 import type {
   ComputeSpeedInput,
   CreateSpeedCalibrationInput,
@@ -396,31 +395,6 @@ export const commands = {
   /** Remove o vídeo e o que foi marcado nele (o log de operações fica). */
   deleteVideoMedia(workspacePath: string, mediaId: string): Promise<void> {
     return safeInvoke<void>("delete_video_media", { workspacePath, mediaId });
-  },
-
-  listMontagens(workspacePath: string): Promise<Montagem[]> {
-    return safeInvoke<Montagem[]>("list_montagens", { workspacePath });
-  },
-
-  saveMontagem(workspacePath: string, montagem: Montagem): Promise<Montagem> {
-    return safeInvoke<Montagem>("save_montagem", { workspacePath, montagem });
-  },
-
-  deleteMontagem(workspacePath: string, montagemId: string): Promise<void> {
-    return safeInvoke<void>("delete_montagem", { workspacePath, montagemId });
-  },
-
-  /** Progresso no evento `montagem:progresso` ({ montagem_id, pct }). */
-  renderMontagem(workspacePath: string, montagemId: string, previa = false): Promise<RenderMontagemResult> {
-    return safeInvoke<RenderMontagemResult>("render_montagem", { workspacePath, montagemId, previa });
-  },
-
-  importarAudioMontagem(workspacePath: string, origem: string): Promise<AudioMontagem> {
-    return safeInvoke<AudioMontagem>("importar_audio_montagem", { workspacePath, origem });
-  },
-
-  gravarAudioMontagem(workspacePath: string, dados: number[], extensao: string, nome: string): Promise<AudioMontagem> {
-    return safeInvoke<AudioMontagem>("gravar_audio_montagem", { workspacePath, dados, extensao, nome });
   },
 
   /** Copia para videos/originais/, calcula SHA-256 e roda ffprobe. */

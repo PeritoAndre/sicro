@@ -84,6 +84,64 @@ contrato honesto com quem usa.
   silêncio. Cada linha precisa ser revisada antes de ir ao laudo.
 - **ENF e realces de áudio** são apoio à escuta e indícios, não conclusão.
 
+## Edição de vídeo
+
+- **Prévia viva mostra só o clipe.** Transições, itens presos (títulos e imagens),
+  legendas e selos não aparecem no palco; volume e silêncios do clipe, abaixar,
+  normalizar e limitador não tocam nele (ícone de ouvido cortado). Tudo isso sai no
+  **Quadro final** e na **Prévia do render**. Lupa em clipe de imagem ou de título
+  aparece sem ampliação na prévia viva.
+- **Realce no palco:** ao mudar estabilizar, lente, desentrelaçar ou os ajustes, o
+  palco mostra o original até o vídeo intermediário novo ficar pronto; trocar a
+  **Cor** da mídia não refaz o intermediário. Com lente ou estabilizar, o palco
+  desenha as ocultações (marcadas no original) fora do lugar sobre a imagem
+  corrigida, e as anotações fora do lugar quando uma ocultação está selecionada: a
+  referência é o **Quadro final**. Tocando de antes do clipe para dentro dele, o
+  palco para na borda.
+- **Quadro congelado com Lente** não deixa marcar anotação (**Marcar** desligado).
+- **Marcação só à mão**, quadro a quadro: **Seguir** ainda não existe. Os atalhos
+  **Seguir** (Ctrl+→ / Ctrl+←), **Próximo trecho fraco** (N) e **Marcador** (M)
+  aparecem em Configurações → Atalhos, mas não fazem nada; na Edição também não
+  valem J / L e Ctrl+G. Lupa e velocidade que **acompanham** só ficam nos lados
+  fixos de **Posição** em relação ao alvo: o afastamento não se ajusta nem se marca
+  no palco.
+- **Ainda não há:** holofote, polígono e silhueta na ocultação, tela dividida,
+  vídeo sobreposto, rampa de velocidade, sincronização entre câmeras, linha do
+  tempo com trilhas e o relógio da câmera no **Tempo**.
+- **Proveniência:** mudar **Formato do gravador**, **Desvio do relógio** ou
+  **Gravador** na análise só chega a uma edição que já usa o vídeo na próxima
+  coleta dele (Ctrl+3 ou **Trecho…**).
+- **Legendas:** usar **Da degravação…** de novo traz de volta a fala de uma
+  legenda editada (fica duplicada) ou removida.
+- **Títulos:** título preso em modelo de cartão cobre o vídeo com o fundo preto;
+  **Fundo** não volta a transparente; o arranjo do modelo não se refaz quando a
+  saída muda de tamanho; subtítulo longo do terço inferior encosta no texto de
+  cima. O selo (canto de cima, à direita) cai onde nasce a imagem sobreposta.
+- **Exportar:**
+  - **Conferir ocultações** (percorrer no arquivo exportado só os trechos
+    ocultados) não existe: assista ao arquivo e use **Conferido** ou **Concluir sem
+    conferir**.
+  - **Personalizada** não aparece no diálogo (só em projeto que já a traz).
+  - **WhatsApp:** acima de 30 quadros/s sai na taxa do projeto; vídeo longo pode
+    sair com taxa muito baixa sem aviso; o relatório ainda não diz que o SHA-256
+    só confere se o vídeo for enviado como documento.
+  - Na exportação, a placa de vídeo só é usada se for NVIDIA (NVENC); com as
+    outras, codifica no processador.
+  - Avisos do PDF (caractere trocado por □, PDF/A que não saiu) e pico de som
+    acima de −1 dBTP não aparecem na tela.
+  - **Quadro final** dentro de uma transição longa pode levar alguns segundos.
+  - Fechar o SICRO no meio da cópia de uma exportação para pasta de rede deixa uma
+    pasta parcial em Exportações, sem registro; em pasta de rede sem trava de
+    arquivo ela não é apagada sozinha.
+  - Nome de original muito longo em `originais/` pode passar do limite de caminho
+    do Windows com o caso em pasta funda.
+- **Refazer e comparar** grava a refeita como saída nova (ocupa o espaço de uma
+  exportação) e, com ocultação, para de novo em **A conferir**. Clipe estabilizado
+  exportado antes de a análise do movimento chegar ao projeto é analisado de novo
+  no refazer: em outro computador ou versão pode sair **Diferente**. Som diferente
+  com imagens iguais aparece como diferente a partir do início.
+- O Windows não foi testado nesta versão.
+
 ## Imagens
 
 - Filtros forenses (ELA, realces) são **indícios** que exigem exame humano;

@@ -126,6 +126,10 @@
 .campoNum > div > span:last-child {
   border-radius: var(--radius-sm);
 }
+/* meia coluna a 1100 px: com os botões de 34 px "15,0" saía "15," */
+.campoNum > div > span:last-child > button {
+  width: 26px;
+}
 .ruim > div > span:last-child {
   border-color: var(--sicro-danger);
 }

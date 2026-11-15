@@ -54,8 +54,13 @@ struct Caso {
 
 impl Caso {
     fn novo(nome: &str) -> Self {
+        Self::novo_em(nome, "Casos ç", "cache do app")
+    }
+
+    /// Caso dentro da pasta `pai` e cache do app em `cache` (nomes que o perito e o sistema podem ter).
+    fn novo_em(nome: &str, pai: &str, cache: &str) -> Self {
         let d = tempfile::Builder::new().prefix(&format!("p0f-{nome}-")).tempdir().expect("pasta temporária");
-        let pai = d.path().join("Casos ç");
+        let pai = d.path().join(pai);
         std::fs::create_dir_all(&pai).unwrap();
         let criado = crate::workspace::create::create_workspace(
             crate::models::NewOccurrenceInput {
@@ -71,7 +76,7 @@ impl Caso {
             &pai,
         )
         .unwrap();
-        let app = d.path().join("cache do app");
+        let app = d.path().join(cache);
         Caso { _d: d, ws: criado.path, app }
     }
 
@@ -1540,4 +1545,119 @@ fn comandos_do_palco_proxy_por_busca_e_estado_do_intermediario() {
         Some(EstadoOrigem::Pronto { previa, trf }) => assert_eq!((previa, trf), (pronto, None), "{v}"),
         outro => panic!("{v}: estado depois de pronto: {outro:?}"),
     }
+}
+
+// ------------------------------------------------------------------ verificação adversa da Fase 1 (robustez do app)
+
+/// O texto cru de `falha.log` da tarefa que falhou (a mensagem da fila é só a frase do catálogo).
+fn falha_de(c: &Caso, fim: &Estado) -> String {
+    match fim {
+        Estado::Falhou { log_rel, .. } => std::fs::read_to_string(c.cache().join(log_rel)).unwrap_or_default(),
+        _ => String::new(),
+    }
+}
+
+/// Pastas do caso e do cache com apóstrofo, `%`, `:`, colchetes, chaves, `;`, `,`, `=`, `#`, `&` e `$` (o ffmpeg
+/// trata vários deles em lista de concat, filtro e padrão de imagem): o projeto da Fase 1 exporta com pacote e
+/// originais, confere, e os quadros compostos e o som são os MESMOS do caso em pasta comum. Proxy, onda e
+/// intermediário também saem nessas pastas.
+#[test]
+fn caso_e_cache_em_pastas_com_caracteres_especiais() {
+    use crate::edicao::fundo::{self, EstadoFundo, TipoFundo};
+    use crate::edicao::origem::{self, EstadoOrigem};
+    use crate::edicao::previa::TipoPrevia;
+    let Some(cap) = fontes::cap() else { return };
+    let _ = sonda_do_app();
+    let v = cap.versao.clone();
+    let fonte = fontes::gerar(Fonte::Mp4).unwrap();
+    let exportar_em = |c: &Caso, titulo: &str| {
+        let m1 = registrar(&cap, &c.ws, &fonte);
+        let mut projeto = projeto_da_fase_1(c, &cap, &m1, None);
+        projeto["titulo"] = json!(titulo);
+        projeto["saida"]["exportacao"]["pacote"] = json!({ "originais": true });
+        let (_, analise, fim) = exportar(c, &projeto, "cpu");
+        let erros: Vec<_> = analise.problemas.iter().filter(|p| p.nivel == Nivel::Erro && p.codigo != mensagens::codigo::TABELA_PENDENTE).collect();
+        assert!(erros.is_empty(), "{v}: {erros:#?}");
+        let Estado::AConferir { saida_id } = fim else { panic!("{v}: {titulo}: esperava a conferir, veio {fim:?}\n{}", falha_de(c, &fim)) };
+        (m1, cmd::conferir(&c.ws, &saida_id, true).unwrap_or_else(|e| panic!("{v}: {titulo}: edicao_conferir: {e}")))
+    };
+    let comum = Caso::novo("nomes-comum");
+    let (_, s0) = exportar_em(&comum, "Fase 1");
+    let c = Caso::novo_em("nomes", "Casos d'água 100% de [a:b] {c};x=y, #1 & $z", "cache d'app 50% [k:v];,=#");
+    let (m1, s) = exportar_em(&c, "Laudo: d'água 100% [a]; x=y, #2");
+    assert_eq!(s.estado, EstadoSaida::Concluida, "{v}");
+    assert_eq!(s.n_quadros, 225, "{v}");
+    assert_eq!((&s.composto_sha256, &s.audio_sha256), (&s0.composto_sha256, &s0.audio_sha256), "{v}: o nome da pasta mudou a imagem ou o som");
+    assert!(!s.composto_sha256.is_empty() && s.audio_sha256.is_some(), "{v}");
+    // o arquivo entregue decodifica nos quadros conferidos
+    let mp4 = c.ws.join(&s.arquivo);
+    assert_eq!(s.decodificado_sha256, Some(conferir::hash_de_conteudo(&medir::framehash(&cap, &mp4).unwrap())), "{v}");
+    // pacote: as somas conferem com o que está na pasta (PDF fora das somas) e os originais vieram
+    let pasta = mp4.parent().unwrap();
+    let somas = std::fs::read_to_string(pasta.join("SHA256SUMS.txt")).unwrap_or_else(|e| panic!("{v}: SHA256SUMS.txt: {e}"));
+    let mut n = 0;
+    for l in somas.lines().filter(|l| !l.trim().is_empty()) {
+        let (sha, rel) = l.split_once("  ").unwrap_or_else(|| panic!("{v}: linha das somas: {l:?}"));
+        let rel = rel.trim_start_matches('*');
+        assert_eq!(crate::hashing::sha256::sha256_file(&pasta.join(rel)).unwrap(), sha, "{v}: {rel}");
+        n += 1;
+    }
+    assert!(n >= 4, "{v}: {somas}");
+    assert!(somas.contains(&m1.vm.sha256), "{v}: original fora do pacote: {somas}");
+    assert!(pasta.join("Relatório.pdf").is_file() && !somas.contains("Relatório.pdf"), "{v}");
+
+    // ---- mídia de prévia nas mesmas pastas: proxy (busca lenta), onda e intermediário de origem
+    let cache = c.cache();
+    let trecho = json!({ "tipo": "trecho", "id": "nitido", "rotulo": "", "desligado": false, "transicao_entrada": null, "midia": "m1",
+        "efeitos": [{ "tipo": "nitidez", "id": "e1", "ligado": true, "nome": "", "ativo": null, "quantidade": 1.0 }],
+        "inicio_s": m1.tab.tempo(10), "fim_s": m1.tab.tempo(40), "inicio_pts": m1.tab.pts[10], "fim_pts": m1.tab.pts[40],
+        "velocidade": { "tipo": "constante", "fator": 1.0 }, "audio": { "volume": 1.0, "mudo": true, "manter_tom": true, "silencios": [] } });
+    let doc = json!({
+        "esquema": 2, "esquema_menor": 0, "id": uuid::Uuid::new_v4().to_string(), "titulo": "Palco", "created_at": "2026-11-15T00:00:00Z", "updated_at": "2026-11-15T00:00:00Z",
+        "saida": { "largura": 640, "altura": 360, "fps": { "num": 30, "den": 1 }, "auto": false, "cor_fundo": "#000000", "audio": false,
+                   "selos": { "velocidade": true, "ampliacao": true, "realce": true },
+                   "exportacao": { "predefinicao": "juri", "codificador": "cpu", "legendas": "nenhuma", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } },
+        "midias": [midia_ref("m1", &m1, json!([]))], "principal": [trecho],
+    });
+    let t0 = Instant::now();
+    let espera = |o_que: &str| assert!(t0.elapsed() < Duration::from_secs(240), "{v}: {o_que} preso");
+    // proxy pedido pela busca lenta: pronto, com os pts da fonte
+    let chave = fundo::chave(TipoFundo::Proxy, &m1.vm.sha256);
+    let proxy = loop {
+        let p = crate::edicao::proxy::pedir_do_projeto(&c.ws, &cache, &doc, "nitido", Some(500.0)).unwrap_or_else(|e| panic!("{v}: proxy: {e}"));
+        if p.tipo == TipoPrevia::Proxy && p.pronta {
+            break p;
+        }
+        if let Some(EstadoFundo::Falhou { mensagem }) = fundo::estado(&chave).map(|t| t.estado) {
+            panic!("{v}: proxy falhou: {mensagem}");
+        }
+        espera("proxy");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    let pts = |arq: &Path| TabelaQuadros::do_decodificador(&cap, arq, &AtomicBool::new(false), &mut |_| {}).unwrap().pts;
+    assert_eq!(pts(&cache.join(&proxy.relativo)).len(), m1.tab.pts.len(), "{v}: quadros do proxy");
+    // onda: None enquanto a fila de fundo faz; depois os picos
+    let onda = loop {
+        match crate::edicao::ondas::pedir(&c.ws, &cache, &m1.vm.sha256) {
+            Ok(Some(o)) => break o,
+            Ok(None) => {}
+            Err(e) => panic!("{v}: onda: {e}"),
+        }
+        espera("onda");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert!(!onda.max.is_empty() && onda.max.iter().any(|x| *x != 0), "{v}: onda vazia");
+    // intermediário de origem
+    let pronto = loop {
+        match origem::pedir_do_projeto(&c.ws, &cache, &doc, "nitido") {
+            Ok(EstadoOrigem::Pronto { previa, .. }) => break previa,
+            Ok(EstadoOrigem::Fazendo { .. }) => {}
+            Err(e) if e.to_string().contains("tabela_pendente") => {}
+            Err(e) => panic!("{v}: intermediário: {e}"),
+        }
+        espera("intermediário");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!((pronto.tipo, pronto.pronta), (TipoPrevia::Origem, true), "{v}");
+    assert_eq!(pts(&cache.join(&pronto.relativo)).len(), 30, "{v}: quadros do intermediário");
 }

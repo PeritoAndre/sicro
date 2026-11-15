@@ -230,6 +230,25 @@ pub(crate) fn sha256_bytes(b: &[u8]) -> String {
     format!("{:x}", Sha256::digest(b))
 }
 
+/// Guarda a análise da estabilização em `vidstab/<sha256>.trf` do projeto (se ainda não está) e devolve o SHA-256.
+/// Temporário próprio de cada gravação: a exportação e o intermediário (ou dois intermediários do mesmo trecho)
+/// gravam o mesmo `.trf` ao mesmo tempo, e com um nome só um trocava o arquivo do outro e o outro falhava.
+pub(crate) fn guardar_trf(pasta_projeto: &Path, bytes: &[u8]) -> Result<String> {
+    static N: AtomicU64 = AtomicU64::new(0);
+    let sha256 = sha256_bytes(bytes);
+    let destino = pasta_projeto.join("vidstab").join(format!("{sha256}.trf"));
+    if !destino.is_file() {
+        fs::create_dir_all(pasta_projeto.join("vidstab"))?;
+        let tmp = destino.with_extension(format!("trf.{}-{}.tmp", std::process::id(), N.fetch_add(1, Ordering::Relaxed)));
+        let r = fs::write(&tmp, bytes).and_then(|_| fs::rename(&tmp, &destino));
+        if r.is_err() {
+            let _ = fs::remove_file(&tmp);
+        }
+        r?;
+    }
+    Ok(sha256)
+}
+
 // ---------------------------------------------------------------------------------------------- preparar
 
 /// Lê banco, tabelas de quadros, sonda e rastreios do projeto. `ws` = raiz do caso; `cache` = pasta da Edição do caso.
@@ -901,15 +920,7 @@ impl Execucao<'_> {
                     // sem isso 3 execuções dão 3 `.trf` (§5.3)
                     cmd.ambiente.push(("OMP_NUM_THREADS".into(), "1".into()));
                     self.passo(&cmd)?;
-                    let bytes = fs::read(self.trabalho().join(nome))?;
-                    let sha256 = sha256_bytes(&bytes);
-                    let destino = self.amb.pasta_projeto.join("vidstab").join(format!("{sha256}.trf"));
-                    if !destino.is_file() {
-                        fs::create_dir_all(destino.parent().unwrap_or(Path::new(".")))?;
-                        let tmp = destino.with_extension(format!("trf.{}.tmp", std::process::id()));
-                        fs::write(&tmp, &bytes)?;
-                        fs::rename(&tmp, &destino)?;
-                    }
+                    let sha256 = guardar_trf(&self.amb.pasta_projeto, &fs::read(self.trabalho().join(nome))?)?;
                     let log = String::from_utf8_lossy(&fs::read(&cmd.stderr)?).into_owned();
                     trf.push(TrfNovo { efeito: efeito.clone(), sha256, zoom_pct: zoom_final(&log) });
                 }
@@ -1163,13 +1174,23 @@ impl Execucao<'_> {
         })
     }
 
+    /// Arquivo do cache pelo caminho relativo à pasta de trabalho (a do processo). O concat resolve as entradas da lista
+    /// contra o caminho dela como URL: `#` ou `?` numa pasta acima (nome de usuário) cortava o caminho ali.
+    fn relativo_ao_trabalho(&self, alvo: &Path) -> PathBuf {
+        let (Ok(t), Ok(a)) = (self.trabalho().strip_prefix(&self.amb.cache), alvo.strip_prefix(&self.amb.cache)) else { return alvo.to_path_buf() };
+        if !t.components().chain(a.components()).all(|c| matches!(c, std::path::Component::Normal(_))) {
+            return alvo.to_path_buf();
+        }
+        t.components().map(|_| std::path::Component::ParentDir).collect::<PathBuf>().join(a)
+    }
+
     /// Caminho de cada `-i`. Camada: a lista rasterizada; camada fixa (um PNG só) lida por `-f concat` ganha uma
     /// lista própria com uma entrada por quadro; com `-loop` vai o PNG.
     fn caminho_da_entrada(&self, e: &Entrada, k: usize, b: &Bloco, prontas: &HashMap<String, CamadaPronta>) -> Result<PathBuf> {
         let Papel::Camada { id } = &e.papel else { return Ok(e.caminho.clone()) };
         let c = prontas.get(id).ok_or_else(|| erro(format!("{}: camada {id} não rasterizada", codigo::ITEM_INVALIDO)))?;
         if let Some(l) = &c.lista {
-            return Ok(c.pasta.join(l));
+            return Ok(self.relativo_ao_trabalho(&c.pasta.join(l)));
         }
         let png = c.pasta.join(&c.arquivos.first().ok_or_else(|| erro(format!("{}: camada {id} vazia", codigo::ITEM_INVALIDO)))?.arquivo);
         if !e.antes.iter().any(|a| a == "concat") {
@@ -1921,6 +1942,24 @@ mod testes {
         v
     }
 
+    /// O mesmo `.trf` gravado ao mesmo tempo por várias tarefas (exportação e intermediários): toda gravação dá certo,
+    /// o arquivo fica inteiro e não sobra temporário.
+    #[test]
+    fn mesmo_trf_gravado_ao_mesmo_tempo() {
+        let pasta = fontes::pasta_temporaria("executar-trf");
+        let bytes: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+        for volta in 0..20 {
+            let _ = fs::remove_dir_all(pasta.join("vidstab"));
+            let erros: Vec<String> = std::thread::scope(|s| {
+                let hs: Vec<_> = (0..8).map(|_| s.spawn(|| guardar_trf(&pasta, &bytes))).collect();
+                hs.into_iter().filter_map(|h| h.join().unwrap().err().map(|e| format!("volta {volta}: {e}"))).collect()
+            });
+            assert!(erros.is_empty(), "{erros:?}");
+            assert_eq!(arquivos(&pasta.join("vidstab")), vec![format!("{}.trf", sha256_bytes(&bytes))]);
+            assert_eq!(fs::read(pasta.join("vidstab").join(format!("{}.trf", sha256_bytes(&bytes)))).unwrap(), bytes);
+        }
+    }
+
     /// Exportação de 3 blocos: contagem, quadro de origem em todos os slots, pixel e cor, composto = quadros da fonte,
     /// conferência do arquivo; repetir com outro cache dá o mesmo SHA-256; com o mesmo cache não roda bloco nenhum.
     #[test]
@@ -2215,9 +2254,19 @@ mod testes {
         assert!(texto.contains(&args::escapar_concat(&png.to_string_lossy())));
         let laco = Entrada { antes: vec!["-loop".into(), "1".into()], ..concat.clone() };
         assert_eq!(ex.caminho_da_entrada(&laco, 1, &plano.blocos[0], &prontas).unwrap(), png);
-        let com_lista = CamadaPronta { lista: Some(camada::LISTA.into()), fixa: false, ..pronta };
+        let com_lista = CamadaPronta { lista: Some(camada::LISTA.into()), fixa: false, ..pronta.clone() };
         let prontas: HashMap<String, CamadaPronta> = [("k001".to_string(), com_lista)].into();
         assert_eq!(ex.caminho_da_entrada(&concat, 1, &plano.blocos[0], &prontas).unwrap(), png.parent().unwrap().join(camada::LISTA));
+        // camada no cache: a lista vai relativa à pasta de trabalho (nenhuma pasta de cima entra no caminho)
+        let no_cache = CamadaPronta { pasta: amb.cache.join("camadas").join("abc"), lista: Some(camada::LISTA.into()), fixa: false, ..pronta.clone() };
+        let prontas: HashMap<String, CamadaPronta> = [("k001".to_string(), no_cache)].into();
+        let rel = ex.caminho_da_entrada(&concat, 1, &plano.blocos[0], &prontas).unwrap();
+        assert!(rel.is_relative() && rel.ends_with(Path::new("camadas/abc").join(camada::LISTA)), "{}", rel.display());
+        assert_eq!(fs::canonicalize(&amb.cache).unwrap().join("camadas/abc").join(camada::LISTA), {
+            fs::create_dir_all(amb.cache.join("camadas/abc")).unwrap();
+            fs::write(amb.cache.join("camadas/abc").join(camada::LISTA), "x").unwrap();
+            fs::canonicalize(amb.trabalho.join(&rel)).unwrap()
+        });
     }
 
     #[test]

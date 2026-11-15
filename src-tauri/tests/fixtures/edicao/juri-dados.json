@@ -25,7 +25,7 @@
           "onde": "item 2"
         },
         {
-          "explicacao": "Resultado de cálculo da perícia, mostrado com a faixa de erro. Não é leitura de aparelho.",
+          "explicacao": "Resultado de cálculo da perícia, mostrado com a faixa de erro ou, quando o cálculo não tem faixa, como valor aproximado. Não é leitura de aparelho.",
           "o_que": "Velocidade calculada",
           "onde": "item 2"
         },

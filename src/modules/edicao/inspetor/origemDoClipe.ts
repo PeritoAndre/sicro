@@ -8,12 +8,12 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { Desconhecido, EfEstabilizar, Efeito, Id, TrfNovo } from "@domain/edicao";
+import type { Desconhecido, EfEstabilizar, Efeito, Id, MidiaRef, ProjetoEdicao, TrfNovo } from "@domain/edicao";
 import { commands } from "@core/commands";
 import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { useOrigemStore, type OrigemDoClipe } from "../store/origemStore";
 import { useFundoStore } from "../store/fundoStore";
-import { acharClipe, efeitoConhecido } from "../modelo/projeto";
+import { acharClipe, acharMidia, efeitoConhecido } from "../modelo/projeto";
 import { noEfeito, type ClipeQualquer } from "./acoes";
 
 /** Os efeitos de origem (os da seção Realce): entram no intermediário. */
@@ -37,16 +37,24 @@ useEdicaoStore.subscribe((s, antes) => {
 /** Só para testes: esquece o que foi gravado e o estado dos intermediários. */
 export function esquecerOrigens(): void {
   gravados.clear();
+  adiados.clear();
   donos.clear();
   validoPara.clear();
   useOrigemStore.setState({ porClipe: {} });
 }
 
-/** Grava no efeito o `.trf` e o zoom que o intermediário devolveu (um passo, um escritor só: D2). */
-function gravarTrf(t: TrfNovo): void {
+/** Grava no efeito o `.trf` e o zoom que o intermediário devolveu (um passo, um escritor só: D2). Com o perito no
+ *  meio de um Desfazer (o passo apagaria o Refazer) ou de um arrasto (cortaria o gesto), fica para depois, e só
+ *  entra se o clipe ainda é o que foi pedido (`assinatura`). */
+function gravarTrf(t: TrfNovo, clipe: Id, assinatura: string): void {
   const st = useEdicaoStore.getState();
   const k = chaveDoTrf(t);
   if (!st.doc || st.soLeitura || gravados.has(k)) return;
+  if (st.futuro.length > 0 || apertado) {
+    adiados.set(t.efeito, { t, clipe, assinatura, aberta: st.aberta });
+    return;
+  }
+  adiados.delete(t.efeito);
   gravados.add(k);
   st.alterar(
     "Estabilizar",
@@ -56,7 +64,28 @@ function gravarTrf(t: TrfNovo): void {
       e.zoom_pct = t.zoom_pct;
     }),
   );
+  // gravar o `.trf` muda a assinatura do clipe sem mudar o arquivo: o pronto vale também para ela
+  const d = useEdicaoStore.getState().doc;
+  const c = d ? acharClipe(d, clipe)?.clipe : null;
+  const nova = c ? assinaturaDaOrigem(c, corDoClipe(d, c)) : null;
+  if (nova && useOrigemStore.getState().porClipe[clipe]?.tipo === "pronto" && validoPara.get(clipe) === assinatura) validoPara.set(clipe, nova);
 }
+
+/** `.trf` que esperam o histórico voltar à ponta e o ponteiro soltar. */
+const adiados = new Map<Id, { t: TrfNovo; clipe: Id; assinatura: string; aberta: unknown }>();
+function gravarAdiados(): void {
+  if (adiados.size === 0 || apertado) return;
+  const st = useEdicaoStore.getState();
+  if (st.futuro.length > 0) return;
+  for (const [efeito, a] of [...adiados]) {
+    adiados.delete(efeito);
+    const c = st.doc && st.aberta === a.aberta ? acharClipe(st.doc, a.clipe)?.clipe : null;
+    if (c && assinaturaDaOrigem(c, corDoClipe(st.doc, c)) === a.assinatura) gravarTrf(a.t, a.clipe, a.assinatura);
+  }
+}
+useEdicaoStore.subscribe((s, antes) => {
+  if (s.futuro !== antes.futuro || s.aberta !== antes.aberta) queueMicrotask(gravarAdiados);
+});
 
 /** Esperas (ms): depois da última mudança; consulta de reserva enquanto faz (quem avisa é a fila de fundo);
  *  enquanto a tabela do decodificador não chega. */
@@ -67,7 +96,15 @@ let apertado = false;
 if (typeof window !== "undefined") {
   window.addEventListener("pointerdown", () => void (apertado = true), true);
   // `blur`: soltou fora da janela
-  for (const fim of ["pointerup", "pointercancel", "blur"]) window.addEventListener(fim, () => void (apertado = false), true);
+  for (const fim of ["pointerup", "pointercancel", "blur"])
+    window.addEventListener(
+      fim,
+      () => {
+        apertado = false;
+        queueMicrotask(gravarAdiados);
+      },
+      true,
+    );
 }
 
 /** Assinatura (`assinaturaDaOrigem`) para a qual a situação guardada de cada clipe vale. */
@@ -109,18 +146,26 @@ function useDono(clipe: Id): boolean {
   return donos.get(clipe)?.[0] === eu.current;
 }
 
-/** Assinatura do que muda o intermediário do clipe (mídia, faixa e efeitos de origem ligados); null = clipe sem
- *  intermediário (não é trecho, ou sem efeito de origem ligado). */
-export function assinaturaDaOrigem(c: ClipeQualquer): string | null {
+/** Assinatura do que muda o intermediário do clipe (mídia, "Cor" dela, faixa e efeitos de origem ligados); null =
+ *  clipe sem intermediário (não é trecho, ou sem efeito de origem ligado).
+ *  CONTRATO: `cor` (acréscimo da verificação da Fase 1): a chave do Rust (`origem::chave`) leva a cor decidida, que
+ *  segue `MidiaRef.cor`; sem ela, trocar a "Cor" não pedia o intermediário de novo. */
+export function assinaturaDaOrigem(c: ClipeQualquer, cor: MidiaRef["cor"] = null): string | null {
   const ligados = c.efeitos.filter((e) => ehDeOrigem(e) && e.ligado);
-  return c.tipo === "trecho" && ligados.length > 0 ? JSON.stringify([c.midia, c.inicio_s, c.inicio_pts, c.fim_s, c.fim_pts, ligados]) : null;
+  return c.tipo === "trecho" && ligados.length > 0 ? JSON.stringify([c.midia, cor, c.inicio_s, c.inicio_pts, c.fim_s, c.fim_pts, ligados]) : null;
+}
+
+/** `MidiaRef.cor` da mídia do trecho (a escolha do perito; null = a da fonte). */
+export function corDoClipe(doc: ProjetoEdicao | null, c: ClipeQualquer): MidiaRef["cor"] {
+  return doc && c.tipo === "trecho" ? (acharMidia(doc, c.midia)?.cor ?? null) : null;
 }
 
 /** Pede o intermediário do trecho sempre que o que muda a imagem dele muda, e acompanha até ficar pronto.
  *  O estado fica em `useOrigemStore` (o palco lê de lá). Montado mais de uma vez para o mesmo clipe, só um pede. */
 export function useOrigem(c: ClipeQualquer): OrigemDoClipe | undefined {
   const ws = useEdicaoStore((s) => s.ws);
-  const assinatura = assinaturaDaOrigem(c);
+  const cor = useEdicaoStore((s) => corDoClipe(s.doc, c));
+  const assinatura = assinaturaDaOrigem(c, cor);
   const id = c.id;
   const dono = useDono(id);
   useEffect(() => {
@@ -152,12 +197,7 @@ export function useOrigem(c: ClipeQualquer): OrigemDoClipe | undefined {
           tarefa = e.tarefa;
           relogio = setTimeout(() => void pedir(), ESPERA.fazendo);
         } else if (e.trf) {
-          gravarTrf(e.trf);
-          // gravar o `.trf` muda a assinatura do clipe sem mudar o arquivo: o pronto vale também para ela
-          const d = useEdicaoStore.getState().doc;
-          const c = d ? acharClipe(d, id)?.clipe : null;
-          const nova = c ? assinaturaDaOrigem(c) : null;
-          if (nova) validoPara.set(id, nova);
+          gravarTrf(e.trf, id, assinatura);
         }
       } catch (x) {
         if (!vivo) return;

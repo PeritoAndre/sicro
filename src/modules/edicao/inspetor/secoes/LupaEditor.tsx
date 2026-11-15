@@ -132,21 +132,19 @@ export function LupaEditor({ valor: e }: EditorEfeitoProps<EfLupa>) {
         larga
         valor={lugarDaGrade(e.onde)}
         aplicar={(l) => em((x) => void (x.onde = ondeDaGrade(x.onde.modo, l)))}
-        extra={
-          <>
-            <Escolha
-              rotulo="Posição"
-              semRotulo
-              valor={modo}
-              opcoes={[
-                { v: "fixa" as const, r: "Fixa" },
-                { v: "segue" as const, r: "Acompanha" },
-              ]}
-              aplicar={(v) => em((x) => void (x.onde = ondeDaGrade(v, lugarDaGrade(x.onde))))}
-            />
-            {modo === "fixa" && <MarcarCentro id={id} />}
-          </>
-        }
+        extra={modo === "fixa" ? <MarcarCentro id={id} /> : undefined}
+      />
+      {/* linha própria: ao lado da grade "Acompanha" saía cortado (340 px de Inspetor) */}
+      <Escolha
+        rotulo="Posição"
+        semRotulo
+        larga
+        valor={modo}
+        opcoes={[
+          { v: "fixa" as const, r: "Fixa" },
+          { v: "segue" as const, r: "Acompanha" },
+        ]}
+        aplicar={(v) => em((x) => void (x.onde = ondeDaGrade(v, lugarDaGrade(x.onde))))}
       />
       <Escolha
         rotulo="Interpolação"

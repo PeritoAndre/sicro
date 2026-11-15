@@ -2,7 +2,7 @@
 
 use std::cell::RefCell;
 use std::collections::HashMap;
-use std::path::{Component, Path};
+use std::path::Path;
 
 use chrono::{SecondsFormat, Utc};
 use rusqlite::Connection;
@@ -52,7 +52,8 @@ pub fn converter(v1: &Value, fontes: &dyn FontesV1, agora: &str, versao: &str) -
     Conversao { m: &m, fontes, midias: Vec::new(), por_chave: HashMap::new(), rastreios: Vec::new() }.projeto(agora, versao)
 }
 
-/// Lê o v1, converte, grava o v2 e renomeia o v1 para `<id>.json.v1`. Devolve o documento gravado.
+/// Lê o v1, converte, grava o v2 e renomeia o v1 para `<id>.json.v1` (os bytes não mudam). Devolve o documento gravado.
+/// Leitura que falha (banco, narração) não grava nada e deixa o v1 como está: a próxima abertura tenta de novo.
 pub fn importar(ws: &Path, conn: &Connection, projeto_id: &str) -> Result<Value> {
     if !armazem::id_valido(projeto_id) {
         return Err(SicroError::Validation(codigo::ESQUEMA.into()));
@@ -64,9 +65,12 @@ pub fn importar(ws: &Path, conn: &Connection, projeto_id: &str) -> Result<Value>
     }
     let v1: Value = serde_json::from_slice(&std::fs::read(&v1_arq)?)
         .map_err(|e| SicroError::Validation(format!("{}: {e}", codigo::ESQUEMA)))?;
-    let fontes = FontesBanco { ws, conn, tamanhos: RefCell::new(HashMap::new()) };
+    let fontes = FontesBanco { ws, conn, tamanhos: RefCell::new(HashMap::new()), erro: RefCell::new(None) };
     let agora = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let mut p = converter(&v1, &fontes, &agora, APP_VERSION)?;
+    if let Some(e) = fontes.erro.into_inner() {
+        return Err(e);
+    }
     // a pasta é pelo nome do arquivo
     p.id = projeto_id.to_string();
     let doc = serde_json::to_value(&p)?;
@@ -79,7 +83,8 @@ pub fn importar(ws: &Path, conn: &Connection, projeto_id: &str) -> Result<Value>
 }
 
 // ---------------------------------------------------------------------------
-// v1 como estava em `src-tauri/src/models/video.rs` (cópia própria: a v1 sai no fim da Fase 1)
+// Formato do arquivo v1, lido aqui sem o código da v1 (que saiu na Fase 1). Conferido contra uma montagem gravada
+// pela própria v1 (`tests/fixtures/edicao/v1-salvo-pela-v1.json`).
 
 fn um() -> f64 {
     1.0
@@ -667,18 +672,31 @@ struct FontesBanco<'a> {
     ws: &'a Path,
     conn: &'a Connection,
     tamanhos: RefCell<HashMap<String, (u32, u32)>>,
+    /// Primeiro erro de leitura (o trait só devolve Option): `importar` falha com ele.
+    erro: RefCell<Option<SicroError>>,
+}
+
+impl FontesBanco<'_> {
+    fn ou_guarda<T>(&self, r: Result<T>) -> Option<T> {
+        r.map_err(|e| {
+            self.erro.borrow_mut().get_or_insert(e);
+        })
+        .ok()
+    }
 }
 
 impl FontesV1 for FontesBanco<'_> {
     fn video(&self, media_id: &str) -> Option<MidiaRef> {
+        // id fora do formato: a v1 também não achava a mídia
         let uuid = Uuid::parse_str(media_id).ok()?;
-        let m = video_repo::find_media_by_id(self.conn, &uuid).ok()??;
+        let m = self.ou_guarda(video_repo::find_media_by_id(self.conn, &uuid))??;
         let bruto: Value = serde_json::from_str(&m.raw_probe_json).unwrap_or(Value::Null);
         let (largura, altura) = tamanho_exibido(&bruto).map(|(w, h)| (Some(w), Some(h))).unwrap_or((m.width, m.height));
         if let (Some(w), Some(h)) = (largura, altura) {
             self.tamanhos.borrow_mut().insert(m.sha256.clone(), (w, h));
         }
-        let (nativo, obs, relogio_desvio_s, gravador) = recebimento(self.conn, &m.id);
+        let (nativo, obs, relogio_desvio_s, gravador) = self.ou_guarda(recebimento(self.conn, &m.id))?;
+        let derivacao = self.ou_guarda(derivacao(self.conn, &m))?;
         Some(MidiaRef {
             id: String::new(),
             tipo: TipoMidia::Video,
@@ -696,7 +714,7 @@ impl FontesV1 for FontesBanco<'_> {
             vfr: false,
             tem_audio: tem_audio(&bruto),
             cor: None,
-            derivacao: derivacao(self.conn, &m),
+            derivacao,
             recebido: Recebido { nativo, obs },
             relogio_desvio_s,
             gravador,
@@ -706,15 +724,15 @@ impl FontesV1 for FontesBanco<'_> {
     }
 
     fn narracao(&self, relativo: &str) -> Option<MidiaRef> {
-        let rel = Path::new(relativo);
-        if rel.is_absolute() || rel.components().any(|c| matches!(c, Component::ParentDir)) {
+        // a regra do executor: no Windows `C:x` e `\x` não são absolutos e o `join` sairia do caso
+        if !super::executar::relativo_seguro(relativo) {
             return None;
         }
         let abs = paths::resolver_relativo(self.ws, relativo);
         if !abs.is_file() {
             return None;
         }
-        let sha256 = crate::hashing::sha256::sha256_file(&abs).ok()?;
+        let sha256 = self.ou_guarda(crate::hashing::sha256::sha256_file(&abs))?;
         let mut r = sumida(TipoMidia::Audio, OrigemMidia::Projeto, relativo);
         r.sha256 = sha256;
         if let Ok(p) = crate::video::probe_media(&abs) {
@@ -765,27 +783,41 @@ fn tem_audio(bruto: &Value) -> bool {
     bruto["streams"].as_array().is_some_and(|s| s.iter().any(|s| s["codec_type"].as_str() == Some("audio")))
 }
 
-/// Colunas da migração 027 (`recebido_*`, desvio do relógio, gravador); banco sem elas = não informado.
-fn recebimento(conn: &Connection, id: &Uuid) -> (Option<bool>, String, Option<f64>, Option<String>) {
-    conn.query_row(
+/// Colunas da migração 027 (`recebido_*`, desvio do relógio, gravador), pelas regras de `video_proveniencia`:
+/// erro de leitura e valor que a tela não grava sobem, nunca viram "não informado".
+fn recebimento(conn: &Connection, id: &Uuid) -> Result<(Option<bool>, String, Option<f64>, Option<String>)> {
+    let (nativo, obs, desvio, gravador) = conn.query_row(
         "SELECT recebido_nativo, recebido_obs, relogio_desvio_s, gravador FROM video_media WHERE id = ?1",
         [id.to_string()],
         |r| {
             Ok((
-                r.get::<_, Option<i64>>(0)?.map(|n| n != 0),
-                r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                r.get::<_, Option<i64>>(0)?,
+                r.get::<_, Option<String>>(1)?,
                 r.get::<_, Option<f64>>(2)?,
                 r.get::<_, Option<String>>(3)?,
             ))
         },
-    )
-    .unwrap_or((None, String::new(), None, None))
+    )?;
+    let nativo = match nativo {
+        None => None,
+        Some(0) => Some(false),
+        Some(1) => Some(true),
+        Some(_) => return Err(SicroError::Database(format!("video_media.recebido_nativo fora de 0/1 ({id})"))),
+    };
+    if desvio.is_some_and(|d| !d.is_finite()) {
+        return Err(SicroError::Database(format!("video_media.relogio_desvio_s não finito ({id})")));
+    }
+    Ok((nativo, obs.unwrap_or_default(), desvio, gravador.filter(|g| !g.is_empty())))
 }
 
-/// Retrato de `derived_from_hash` + `derivation_json`, seguindo a cadeia até a raiz.
-fn derivacao(conn: &Connection, m: &VideoMedia) -> Option<Derivacao> {
-    let de = m.derived_from_hash.clone()?;
-    let j: Value = m.derivation_json.as_deref().and_then(|s| serde_json::from_str(s).ok()).unwrap_or(Value::Null);
+/// Retrato de `derived_from_hash` + `derivation_json`, seguindo a cadeia até a raiz. JSON ilegível e erro do banco sobem.
+fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Derivacao>> {
+    let Some(de) = m.derived_from_hash.clone() else { return Ok(None) };
+    let j: Value = match m.derivation_json.as_deref() {
+        None => Value::Null,
+        Some(s) => serde_json::from_str(s)
+            .map_err(|e| SicroError::Database(format!("video_media.derivation_json ilegível ({}): {e}", m.id)))?,
+    };
     let tipo = match j["kind"].as_str() {
         Some("clip") => TipoDerivacao::Trecho,
         Some("estabilizado") => TipoDerivacao::Estabilizado,
@@ -808,15 +840,16 @@ fn derivacao(conn: &Connection, m: &VideoMedia) -> Option<Derivacao> {
         .unwrap_or_default();
     let mut raiz = de.clone();
     for _ in 0..64 {
-        match video_repo::find_media_by_sha256(conn, &m.occurrence_id, &raiz) {
-            Ok(Some(x)) => match x.derived_from_hash {
+        match video_repo::find_media_by_sha256(conn, &m.occurrence_id, &raiz)? {
+            Some(x) => match x.derived_from_hash {
                 Some(h) if h != raiz => raiz = h,
                 _ => break,
             },
-            _ => break,
+            // a origem saiu do caso: a raiz é a última conhecida
+            None => break,
         }
     }
-    Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas })
+    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas }))
 }
 
 #[cfg(test)]
@@ -1119,6 +1152,190 @@ mod testes {
         assert_eq!(converte("v1-completo.json"), p);
     }
 
+    /// Montagem gravada pela própria v1 antes de ela sair (modelo do front da v1 e o `save_montagem` de então):
+    /// `null` nos opcionais, `"corte"`, `updated_at` do Rust, narrações em `montagens/audios`.
+    #[test]
+    fn montagem_gravada_pela_v1() {
+        let p = converte("v1-salvo-pela-v1.json");
+        assert_eq!(
+            (p.id.as_str(), p.titulo.as_str(), p.created_at.as_str(), p.updated_at.as_str()),
+            ("361ddd9a-fffb-4720-9d22-93de2c2d967e", "Furto na farmácia", "2026-11-15T07:46:46.390Z", "2026-11-15T07:47:51.124745224+00:00")
+        );
+        assert_eq!((p.saida.largura, p.saida.altura, p.saida.fps, p.saida.audio, p.saida.auto), (1920, 1080, Racional { num: 25, den: 1 }, true, false));
+        assert_eq!(p.mixagem.volume_original, 0.6);
+        let c = clipes(&p);
+        let id_de = |c: &ClipePrincipal| match c {
+            ClipePrincipal::Trecho(x) => x.base.id.clone(),
+            ClipePrincipal::Titulo(x) => x.base.id.clone(),
+            ClipePrincipal::Congelar(x) => x.base.id.clone(),
+            _ => unreachable!(),
+        };
+        assert_eq!(
+            c.iter().map(|c| id_de(c)).collect::<Vec<_>>(),
+            ["e06b1931-ee90-4107-831b-bf510f232cb7", "9285a726-11f8-49fd-b3c6-1817ceca39ed", "d11b8794-cc50-4a20-8529-ac1f7ffc5401",
+             "157db123-1f1c-4bc9-99ea-3e47b66cf9fa", "3947b750-2e30-43d2-8a2a-2cff0005c4e5"]
+        );
+        let (m1, m2, m3) = (&p.midias[0], &p.midias[1], &p.midias[2]);
+        assert_eq!((m1.media_id.as_deref(), m2.media_id.as_deref(), m3.media_id.as_deref()), (Some(M1), Some(M2), Some(M3)));
+        assert_eq!((m3.sha256.as_str(), m3.relativo.as_str()), ("", ""), "M3 não está no caso");
+        let esc = |d: f64| Some(Transicao { tipo: "escurecer".into(), duracao_s: d, audio: AudioTransicao::Acompanhar });
+
+        // 1: 0,5×, "fade" no primeiro (13 s na saída) = 0,5; zoom, círculo, retângulo, desfoque, carimbo e texto no topo
+        let ClipePrincipal::Trecho(t1) = c[0] else { panic!() };
+        assert_eq!((t1.midia.as_str(), t1.inicio_s, t1.fim_s, t1.inicio_pts, t1.fim_pts), (m1.id.as_str(), 12.4, 18.9, Some(12400), Some(18900)));
+        assert_eq!((t1.velocidade.clone(), t1.base.transicao_entrada.clone()), (Velocidade::Constante { fator: 0.5 }, esc(0.5)));
+        let e = efeitos(c[0]);
+        let tipos: Vec<String> = e.iter().map(|e| serde_json::to_value(e).unwrap()["tipo"].as_str().unwrap().to_string()).collect();
+        assert_eq!(tipos, ["enquadramento", "destaque", "destaque", "carimbo", "texto"]);
+        let Efeito::Enquadramento(z) = e[0] else { panic!() };
+        let Animavel::Chaves(k) = &z.regiao else { panic!() };
+        // fonte 4:3 numa saída 16:9: h = 0,75 w
+        assert_eq!((k.len(), k[0].t, k[0].v, k[1].t), (2, 12.4, Caixa { x: 0.0, y: 0.0, w: 1.0, h: 0.75 }, 18.9));
+        assert!((k[1].v.x, k[1].v.y, k[1].v.w) == (0.3, 0.2, 0.4) && (k[1].v.h - 0.3).abs() < 1e-12);
+        let Efeito::Destaque(d1) = e[1] else { panic!() };
+        assert_eq!((d1.base.id.as_str(), d1.forma, d1.traco.cor.as_str(), d1.traco.contorno), ("ae01d5ac-9c44-414f-8b4e-a1263df026a4", FormaDestaque::Circulo, "#ff2d2d", true));
+        assert_eq!(d1.base.ativo, Some(Intervalo { de: Some(12.4 + 0.5), ate: None }));
+        let r1 = rastreio(&p, &d1.rastreio);
+        assert_eq!(r1.ancoras.iter().map(|a| (a.t, a.v)).collect::<Vec<_>>(),
+                   [(12.4 + 0.5, Caixa { x: 0.42, y: 0.55, w: 0.0, h: 0.0 }), (12.4 + 2.0, Caixa { x: 0.47, y: 0.5, w: 0.0, h: 0.0 })]);
+        let Efeito::Destaque(d2) = e[2] else { panic!() };
+        assert_eq!((d2.forma, d2.traco.cor.as_str(), d2.traco.contorno, d2.tamanho), (FormaDestaque::Retangulo, "#ffd400", false, 0.12));
+        assert_eq!(rastreio(&p, &d2.rastreio).ancoras[0].v, Caixa { x: 0.6, y: 0.3, w: 0.1, h: 0.2 });
+        let Efeito::Carimbo(cb) = e[3] else { panic!() };
+        assert_eq!((cb.mostra, cb.formato), (MostraCarimbo::TempoFonte, FormatoCarimbo::HmsMs));
+        let Efeito::Texto(tx) = e[4] else { panic!() };
+        assert_eq!((tx.conteudo.as_str(), tx.estilo.tamanho, tx.lugar), ("Entrada do suspeito", 0.078, Lugar { x: 0.5, y: 0.06, h: Alinhamento::Centro, v: AlinhamentoV::Topo }));
+        let oc = &m1.ocultacoes;
+        assert_eq!((oc.len(), oc[0].base.id.as_str(), oc[0].base.ativo), (1, "be9476e7-6f24-4060-b64e-f64ba7d202e0", Some(Intervalo { de: Some(12.4), ate: Some(18.9) })));
+        assert_eq!((oc[0].modo, oc[0].alvo.forma), (ModoOcultar::Desfoque, FormaRegiao::Retangulo));
+        assert_eq!(rastreio(&p, &oc[0].alvo.rastreio).ancoras.iter().map(|a| a.t).collect::<Vec<_>>(), [12.4, 12.4 + 3.0]);
+
+        // 2: cartela de 3 s em "p", fade = min(0,5; 13 ÷ 2; 3 ÷ 2)
+        let ClipePrincipal::Titulo(k2) = c[1] else { panic!() };
+        assert_eq!((k2.duracao_s, k2.base.transicao_entrada.clone(), k2.titulo.fundo.clone()), (3.0, esc(0.5), Fundo::Cor { cor: "#101820".into() }));
+        let b = &k2.titulo.blocos[0];
+        assert_eq!((k2.titulo.blocos.len(), b.conteudo.as_str(), b.estilo.tamanho, b.estilo.cor.as_str()), (1, "Câmera 2 — corredor", 0.033, "#ffffff"));
+        // 3: quadro congelado de M2 com texto no centro, sem carimbo
+        let ClipePrincipal::Congelar(g3) = c[2] else { panic!() };
+        assert_eq!((g3.midia.as_str(), g3.instante_s, g3.instante_pts, g3.duracao_s, g3.base.transicao_entrada.clone()), (m2.id.as_str(), 7.25, Some(7250), 2.0, None));
+        let eg = efeitos(c[2]);
+        let Efeito::Texto(tg) = eg[0] else { panic!() };
+        assert_eq!((eg.len(), tg.conteudo.as_str(), tg.lugar.v), (1, "Momento do contato", AlinhamentoV::Meio));
+        // 4: M3 a 2×, sem pts; "corte" = sem transição
+        let ClipePrincipal::Trecho(t4) = c[3] else { panic!() };
+        assert_eq!((t4.midia.as_str(), t4.inicio_pts, t4.velocidade.clone(), t4.base.transicao_entrada.clone()), (m3.id.as_str(), None, Velocidade::Constante { fator: 2.0 }, None));
+        // 5: seta em M2
+        let ClipePrincipal::Trecho(t5) = c[4] else { panic!() };
+        let Efeito::Destaque(s5) = efeitos(c[4])[0] else { panic!() };
+        assert_eq!((t5.midia.as_str(), s5.forma, s5.tamanho, s5.base.ativo), (m2.id.as_str(), FormaDestaque::Seta, 0.14, Some(Intervalo { de: Some(5.0 + 0.4), ate: None })));
+
+        // narrações gravadas pela v1: mídia do projeto, uma trilha "Narração"
+        let narr: Vec<&str> = p.midias[3..].iter().map(|m| m.relativo.as_str()).collect();
+        assert_eq!(narr, ["Sistema/videos/montagens/audios/d98986a5-ed7f-47d9-bc0c-5e6ff7c8393a.webm",
+                          "Sistema/videos/montagens/audios/2ec742a7-0858-4e4e-b14a-4cb4d022ee35.wav"]);
+        assert!(p.midias[3..].iter().all(|m| m.origem == OrigemMidia::Projeto && m.tipo == TipoMidia::Audio && m.sha256.len() == 64));
+        let t = &p.audios[0];
+        let cl: Vec<(&str, &str, f64, f64)> = t.clipes.iter().map(|c| (c.id.as_str(), c.nome.as_str(), match c.pos { Posicao::Programa { t } => t, _ => panic!() }, match c.volume { Animavel::Fixo(v) => v, _ => panic!() })).collect();
+        assert_eq!((p.audios.len(), t.papel), (1, PapelAudio::Narracao));
+        assert_eq!(cl, [("eed7ee58-c644-491f-9c92-cc8327232f92", "Narração 1", 1.5, 0.8), ("7d9ff0a1-12d5-43c0-bd1d-8c732820d9fb", "Narração 2", 20.0, 1.0)]);
+        assert_eq!(p.rastreios.len(), 4);
+        assert_eq!(converte("v1-salvo-pela-v1.json"), p, "duas importações, o mesmo documento");
+    }
+
+    fn caso_temporario(nome: &str) -> (tempfile::TempDir, std::path::PathBuf, Connection) {
+        let tmp = tempfile::Builder::new().prefix("sicro-p111-").tempdir().unwrap();
+        let entrada = crate::models::NewOccurrenceInput { titulo: Some(nome.into()), ..Default::default() };
+        let ws = crate::workspace::create::create_workspace(entrada, tmp.path()).unwrap().path;
+        let conn = crate::database::connection::open_connection(&paths::sqlite_path(&ws)).unwrap();
+        (tmp, ws, conn)
+    }
+
+    /// Importação que não consegue ler (proveniência estragada, derivação ilegível, narração sem leitura, v1 que a
+    /// v1 não abriria) não grava nada e deixa o v1 com o mesmo nome e os mesmos bytes; corrigido, importa.
+    #[test]
+    fn importacao_que_falha_deixa_o_v1_como_esta() {
+        let (_tmp, ws, conn) = caso_temporario("Roubo Jardim Felicidade");
+        let occ = crate::workspace::manifest::Manifest::read(&ws).unwrap().occurrence_id;
+        let agora = Utc::now();
+        let (raiz, uso) = ("d".repeat(64), "e".repeat(64));
+        let id_uso = Uuid::new_v4();
+        let midia = |id: Uuid, sha: &str, derivado: Option<&str>| VideoMedia {
+            id, occurrence_id: occ, original_path: None, relative_path: format!("Mídias/Vídeos/{sha}.mp4"), filename: "cam.mp4".into(),
+            sha256: sha.into(), size_bytes: 10, duration_s: Some(30.0), codec: Some("h264".into()), width: Some(1440), height: Some(1080),
+            pixel_format: Some("yuv420p".into()), fps_declared: Some(30.0), avg_frame_rate: Some("30/1".into()), r_frame_rate: Some("30/1".into()),
+            time_base: Some("1/15360".into()), frame_count: Some(900), bitrate: None, raw_probe_json: "{}".into(),
+            warnings_json: "[]".into(), created_at: agora, updated_at: agora,
+            derived_from_hash: derivado.map(str::to_string), derivation_json: derivado.map(|_| r#"{"kind":"clip","mode":"copy"}"#.to_string()),
+        };
+        video_repo::insert_media(&conn, &midia(Uuid::new_v4(), &raiz, None)).unwrap();
+        video_repo::insert_media(&conn, &midia(id_uso, &uso, Some(&raiz))).unwrap();
+        // a montagem gravada pela v1, com o primeiro vídeo trocado pelo do caso
+        let texto = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/edicao/v1-salvo-pela-v1.json")).unwrap();
+        let bytes = texto.replace(M1, &id_uso.to_string()).into_bytes();
+        let id = "361ddd9a-fffb-4720-9d22-93de2c2d967e";
+        let montagens = paths::dir_montagens_json(&ws);
+        std::fs::create_dir_all(montagens.join("audios")).unwrap();
+        let v1_arq = montagens.join(format!("{id}.json"));
+        std::fs::write(&v1_arq, &bytes).unwrap();
+        let narracao = montagens.join("audios/d98986a5-ed7f-47d9-bc0c-5e6ff7c8393a.webm");
+        std::fs::write(&narracao, b"narracao").unwrap();
+        let projeto = armazem::pasta_projeto(&ws, id).join("projeto.json");
+        let intacto = |caso: &str| {
+            assert_eq!(std::fs::read(&v1_arq).unwrap(), bytes, "{caso}: v1 alterado");
+            assert!(!v1_arq.with_extension("json.v1").exists(), "{caso}: v1 renomeado");
+            assert!(!projeto.exists(), "{caso}: v2 gravado");
+            let l = armazem::listar(&ws).unwrap();
+            assert_eq!((l.len(), l[0].esquema), (1, 1), "{caso}");
+        };
+        let sql = |q: &str| conn.execute(q, [id_uso.to_string()]).unwrap();
+
+        sql("UPDATE video_media SET recebido_nativo = 2 WHERE id = ?1");
+        assert!(matches!(armazem::abrir(&ws, id), Err(SicroError::Database(m)) if m.contains("recebido_nativo")));
+        intacto("recebido_nativo = 2");
+        sql("UPDATE video_media SET recebido_nativo = 1, relogio_desvio_s = 'dois' WHERE id = ?1");
+        assert!(matches!(armazem::abrir(&ws, id), Err(SicroError::Sqlite(_))));
+        intacto("relogio_desvio_s em texto");
+        // 9e999 vira infinito no SQLite: a tela não grava, a importação não aceita
+        sql("UPDATE video_media SET relogio_desvio_s = 9e999 WHERE id = ?1");
+        assert!(matches!(armazem::abrir(&ws, id), Err(SicroError::Database(m)) if m.contains("relogio_desvio_s")));
+        intacto("relogio_desvio_s infinito");
+        sql("UPDATE video_media SET relogio_desvio_s = -1.5, derivation_json = '{' WHERE id = ?1");
+        assert!(matches!(armazem::abrir(&ws, id), Err(SicroError::Database(m)) if m.contains("derivation_json")));
+        intacto("derivation_json ilegível");
+        // gravador em branco = não informado, como na análise
+        sql("UPDATE video_media SET derivation_json = '{\"kind\":\"clip\",\"mode\":\"copy\"}', gravador = '' WHERE id = ?1");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(&narracao, std::fs::Permissions::from_mode(0o000)).unwrap();
+            // como root a leitura passa: o caso só vale para usuário comum
+            if std::fs::File::open(&narracao).is_err() {
+                assert!(matches!(armazem::abrir(&ws, id), Err(SicroError::Filesystem(m)) if m.contains("d98986a5")));
+                intacto("narração sem leitura");
+            }
+            std::fs::set_permissions(&narracao, std::fs::Permissions::from_mode(0o644)).unwrap();
+        }
+        // item que a v1 também não abria: recusado, nada gravado
+        let mut ruim: Value = serde_json::from_slice(&bytes).unwrap();
+        ruim["itens"][0]["tipo"] = json!("outro");
+        let bytes_ruim = serde_json::to_vec(&ruim).unwrap();
+        std::fs::write(&v1_arq, &bytes_ruim).unwrap();
+        assert!(matches!(armazem::abrir(&ws, id), Err(SicroError::Validation(c)) if c.starts_with("esquema")));
+        assert_eq!(std::fs::read(&v1_arq).unwrap(), bytes_ruim);
+        assert!(!projeto.exists() && !v1_arq.with_extension("json.v1").exists());
+
+        // com o banco certo, importa; o v1 só muda de nome
+        std::fs::write(&v1_arq, &bytes).unwrap();
+        let a = armazem::abrir(&ws, id).unwrap();
+        assert_eq!(a.importado_de, Some(1));
+        assert_eq!(std::fs::read(v1_arq.with_extension("json.v1")).unwrap(), bytes);
+        let p = armazem::tipado(&a.projeto).unwrap();
+        let m = &p.midias[0];
+        assert_eq!((m.media_id.clone(), m.recebido.nativo, m.relogio_desvio_s, m.gravador.clone()), (Some(id_uso.to_string()), Some(true), Some(-1.5), None));
+        assert_eq!(m.derivacao.as_ref().map(|d| (d.tipo, d.raiz_sha256.as_str(), d.com_perdas)), Some((TipoDerivacao::Trecho, raiz.as_str(), false)));
+        assert_eq!(p.midias[3].sha256, crate::hashing::sha256::sha256_bytes(b"narracao"));
+    }
+
     /// Ponta a ponta pelo `abrir`: caso de verdade (banco e pastas), vídeo derivado, narração no disco.
     #[test]
     fn importar_pelo_abrir() {
@@ -1159,7 +1376,8 @@ mod testes {
             "saida": { "largura": 1920, "altura": 1080, "fps": 25, "incluir_audio": false },
             "narracoes": [{ "id": "n1", "arquivo_relativo": "Sistema/videos/montagens/audios/n1.webm", "inicio_s": 0.5, "volume": 1.2, "nome": "N" },
                           { "id": "n2", "arquivo_relativo": "../../fora.wav", "inicio_s": 1.0, "volume": 1.0, "nome": "Fora" }] });
-        std::fs::write(montagens.join(format!("{id}.json")), serde_json::to_vec_pretty(&v1).unwrap()).unwrap();
+        let bytes_v1 = serde_json::to_vec_pretty(&v1).unwrap();
+        std::fs::write(montagens.join(format!("{id}.json")), &bytes_v1).unwrap();
         assert!(existe(&ws, id));
         let lista = armazem::listar(&ws).unwrap();
         assert_eq!((lista.len(), lista[0].esquema), (1, 1));
@@ -1167,7 +1385,7 @@ mod testes {
         let a = armazem::abrir(&ws, id).unwrap();
         assert_eq!((a.importado_de, a.so_leitura), (Some(1), false));
         assert!(!existe(&ws, id));
-        assert!(montagens.join(format!("{id}.json.v1")).is_file());
+        assert_eq!(std::fs::read(montagens.join(format!("{id}.json.v1"))).unwrap(), bytes_v1, "o v1 só muda de nome");
         assert!(!montagens.join(format!("{id}.json")).exists());
         let gravado: Value = serde_json::from_slice(&std::fs::read(armazem::pasta_projeto(&ws, id).join("projeto.json")).unwrap()).unwrap();
         assert_eq!(gravado, a.projeto);

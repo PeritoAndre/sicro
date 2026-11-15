@@ -147,7 +147,7 @@ fn sem_video(f: &FonteInfo) -> Result<()> {
         return Err(SicroError::Validation("nao_suportado: fonte sem vídeo".into()));
     }
     // imagem parada (E2; mesma regra de `quadros`): o palco a desenha pelo sprite, nunca por `<video>`
-    if f.conteiner == "image2" || f.conteiner.ends_with("_pipe") {
+    if super::quadros::conteiner_de_imagem(&f.conteiner) {
         return Err(SicroError::Validation("nao_suportado: imagem".into()));
     }
     // a tabela (de pacotes ou do decodificador) vazia não enche depois

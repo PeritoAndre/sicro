@@ -21,7 +21,7 @@
 #let comando(c) = block(above: 0.4em, below: 0.6em, inset: (left: 6pt), mono(c))
 
 #set document(
-  title: "Relatório da edição demonstrativa de vídeo — " + d.caso.numero,
+  title: "Relatório da edição demonstrativa de vídeo" + if d.caso.numero != "" { " — " + d.caso.numero } else { "" },
   author: d.perito.nome,
   keywords: ("SICRO", "vídeo", "edição demonstrativa"),
 )
@@ -34,7 +34,7 @@
     set text(size: 8.5pt, fill: cinza)
     grid(
       columns: (1fr, auto),
-      [Relatório da edição demonstrativa de vídeo · #d.caso.numero], [SICRO],
+      [Relatório da edição demonstrativa de vídeo#if d.caso.numero != "" [ · #d.caso.numero]], [SICRO],
     )
     v(-0.5em)
     line(length: 100%, stroke: 0.4pt + linha)
@@ -279,7 +279,7 @@ Trechos em câmera lenta, acelerados ou parados estão indicados no roteiro acim
   #tabela((auto, auto, auto, 3fr, 4fr, 4fr), ([Item], [Grav.], [De · até (original)], [Conteúdo], [Filtro], [Motivo]),
     ..d.ocultacoes.map(x => (x.item, x.gravacao, x.intervalo, x.conteudo, [#x.filtro #if x.quadros != none [\ #text(fill: cinza, x.quadros)]], x.motivo)).flatten(),
   )
-  #par(text(fill: cinza)[As ocultações estão gravadas na imagem e no som do vídeo entregue e não podem ser desfeitas a partir dele. As gravações originais não têm ocultação.])
+  #par(text(fill: cinza)[As ocultações estão gravadas na imagem e no som do vídeo entregue. O que foi coberto por sólido opaco, ou trocado por tom ou por silêncio, não pode ser recuperado a partir dele; mosaico e desfoque dificultam o reconhecimento, sem garantia de impedi-lo. As gravações originais não têm ocultação.])
   #if d.conferencia_ocultacoes != none [#par[*Conferência no arquivo final.* #d.conferencia_ocultacoes]]
 ]
 

@@ -45,7 +45,7 @@ fn allow_local_media(app: &tauri::App) {
         // console.* da página no stdout: é como se depura o release (sem devtools).
         if let Some(settings) = WebViewExt::settings(&inner) {
             settings.set_enable_write_console_messages_to_stdout(true);
-            // Narração da Montagem: libera só o microfone (nunca câmera nem tela).
+            // Narração da Edição: libera só o microfone (nunca câmera nem tela).
             settings.set_enable_media_stream(true);
         }
         inner.connect_permission_request(|_, req| {
@@ -140,12 +140,6 @@ pub fn run() {
             commands::video_commands::video_thumbnail,
             commands::video_commands::export_video_clip,
             commands::video_commands::delete_video_media,
-            commands::video_commands::list_montagens,
-            commands::video_commands::save_montagem,
-            commands::video_commands::delete_montagem,
-            commands::video_commands::render_montagem,
-            commands::video_commands::importar_audio_montagem,
-            commands::video_commands::gravar_audio_montagem,
             // edição: diagnóstico da prévia (Configurações > Vídeo)
             commands::edicao_diagnostico_commands::edicao_diagnostico_midias,
             commands::edicao_diagnostico_commands::edicao_diagnostico_salvar,

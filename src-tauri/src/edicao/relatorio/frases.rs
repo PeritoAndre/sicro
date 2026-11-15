@@ -33,6 +33,9 @@ pub mod tipo {
     // CONTRATO: acréscimo (revisão do fecho da Fase 1, contratos-fase1 (g) R2).
     /// Selo: o aviso que o programa escreve na imagem (`feito.roteiro[].selos`).
     pub const AVISO_NA_IMAGEM: &str = "aviso_na_imagem";
+    // CONTRATO: acréscimo (verificação da Fase 1).
+    /// Ocultação por mosaico ou desfoque: só o sólido opaco é irreversível (D17); a frase não promete o que não é.
+    pub const OCULTAR_PARCIAL: &str = "ocultar_parcial";
 }
 
 /// Condições que não são código de validação (seções 6 a 8 e anexos).
@@ -59,6 +62,9 @@ pub mod condicao {
     pub const REFAZER_GPU: &str = "refazer_gpu";
     pub const CIENTE: &str = "ciente";
     pub const SINCRONIA: &str = "sincronia";
+    // CONTRATO: acréscimo (verificação da Fase 1; §5.7).
+    /// Predefinição WhatsApp: o código do arquivo só confere no envio como documento.
+    pub const SO_COMO_DOCUMENTO: &str = "so_como_documento";
 }
 
 /// Frases com número ou nome no meio: `{n}`, `{item}`… são trocados por quem monta os dados (`juri::dados`).
@@ -201,11 +207,12 @@ const EFEITOS: &[(&str, Classe, &str, &str)] = &[
     ("girar", Classe::Mudanca, "Giro ou espelhamento", "A imagem foi girada ou espelhada para ficar na posição de leitura."),
     ("enquadramento", Classe::Mudanca, "Ampliação", "Mostra uma parte da imagem em tamanho maior. Ampliar não cria detalhe que a câmera não registrou."),
     ("ocultar", Classe::Mudanca, "Ocultação", "Parte da imagem foi coberta para preservar pessoa ou dado sem relação com o fato. No vídeo entregue não é possível desfazer; a gravação original continua íntegra."),
+    (tipo::OCULTAR_PARCIAL, Classe::Mudanca, "Ocultação", "Parte da imagem foi coberta por mosaico ou desfoque para preservar pessoa ou dado sem relação com o fato. Esse tipo de cobertura dificulta o reconhecimento, mas não garante impedi-lo. A gravação original continua íntegra."),
     ("holofote", Classe::Mudanca, "Holofote", "O entorno foi escurecido para guiar o olhar até uma parte da imagem. A parte realçada não foi alterada."),
     ("destaque", Classe::Acrescimo, "Marcação", "Desenho posto sobre a imagem para guiar o olhar. Não faz parte da gravação."),
     ("lupa", Classe::Acrescimo, "Lupa", "Repete, em tamanho maior, uma parte da própria imagem. Ampliar não cria detalhe que a câmera não registrou."),
     ("regua", Classe::Acrescimo, "Régua de escala", "Desenhada a partir de medidas tomadas pela perícia. Vale só no plano do chão em que foi calibrada."),
-    ("velocidade_exibida", Classe::Acrescimo, "Velocidade calculada", "Resultado de cálculo da perícia, mostrado com a faixa de erro. Não é leitura de aparelho."),
+    ("velocidade_exibida", Classe::Acrescimo, "Velocidade calculada", "Resultado de cálculo da perícia, mostrado com a faixa de erro ou, quando o cálculo não tem faixa, como valor aproximado. Não é leitura de aparelho."),
     ("texto", Classe::Acrescimo, "Texto", "Escrito pelo perito para identificar o local, o momento ou o que se vê."),
     ("carimbo", Classe::Acrescimo, "Relógio na imagem", "Posto pela perícia. O que ele conta está explicado na seção sobre tempo."),
     ("imagem", Classe::Acrescimo, "Imagem sobreposta", "Figura posta pela perícia sobre a gravação."),
@@ -244,6 +251,7 @@ const CONDICOES: &[(&str, &str)] = &[
     (codigo::SINCRONIA_EXTRAPOLADA, "O alinhamento entre as câmeras foi usado fora do intervalo em que foi medido."),
     (codigo::RELOGIO_DISTANTE, "O relógio da câmera mostrado na imagem foi acertado em momento distante do trecho exibido e pode ter se desviado."),
     (condicao::COM_PERDAS, "O vídeo entregue foi gravado em formato com compressão. Para exame técnico valem as gravações originais, e não este vídeo."),
+    (condicao::SO_COMO_DOCUMENTO, "Este vídeo foi preparado para envio por aplicativo de mensagens. O código de verificação só confere se ele for enviado como documento. Enviado como vídeo, o aplicativo o comprime de novo e o arquivo recebido passa a ser outro."),
     (condicao::SELO_DESLIGADO, "O perito desligou o aviso que o programa escreve na imagem quando ela é mostrada de outro jeito. As mudanças continuam listadas neste relatório."),
     (condicao::OCULTACAO_NAO_CONFERIDA, "As ocultações não foram conferidas pelo perito no arquivo final."),
     (condicao::OCULTACAO_PENDENTE, "A conferência das ocultações no arquivo final ainda não foi registrada."),
@@ -365,5 +373,12 @@ mod testes {
         let (lenta, rapida) = (do_efeito(tipo::CAMERA_LENTA).unwrap(), do_efeito(tipo::ACELERADO).unwrap());
         assert!(!lenta.contains("retirada") && lenta.contains("Nenhuma imagem foi criada"), "{lenta}");
         assert!(rapida.contains("pode não ser mostrada"), "{rapida}");
+        // a velocidade sem faixa sai na imagem como "≈ N km/h" (`medidas::texto_da_velocidade`): a frase não afirma
+        // faixa que a imagem não tem
+        let vel = do_efeito("velocidade_exibida").unwrap();
+        assert!(vel.contains("faixa de erro") && vel.contains("aproximado"), "{vel}");
+        // só o sólido opaco é dado como irreversível (D17)
+        assert!(do_efeito("ocultar").unwrap().contains("não é possível desfazer"));
+        assert!(!do_efeito(tipo::OCULTAR_PARCIAL).unwrap().contains("desfazer"));
     }
 }

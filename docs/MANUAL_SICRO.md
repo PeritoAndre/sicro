@@ -29,10 +29,11 @@
 5. [Croquis](#5-croquis)
 6. [Imagens](#6-imagens)
 7. [Vídeo e Áudio](#7-vídeo-e-áudio)
-8. [Configurações](#8-configurações)
-9. [Fluxo ponta a ponta](#9-fluxo-ponta-a-ponta)
-10. [Limites honestos (§13)](#10-limites-honestos-13)
-11. [Glossário e extensões de arquivo](#11-glossário-e-extensões-de-arquivo)
+8. [Edição](#8-edição)
+9. [Configurações](#9-configurações)
+10. [Fluxo ponta a ponta](#10-fluxo-ponta-a-ponta)
+11. [Limites honestos (§13)](#11-limites-honestos-13)
+12. [Glossário e extensões de arquivo](#12-glossário-e-extensões-de-arquivo)
 
 ---
 
@@ -48,7 +49,7 @@ pasta é o nome do caso (`Acidente BR-156.sicro`; sem nome,
 não renomeia a pasta. Dentro dela há só três pastas:
 
 - **`Exportações/`**: o que o SICRO produziu (PNG dos croquis, vídeos de
-  montagem e trechos, imagens tratadas, laudos, relatórios e backups).
+  edições e trechos, imagens tratadas, laudos, relatórios e backups).
 - **`Mídias/`**: o que você trouxe (vídeos, imagens, áudios e anexos originais).
 - **`Sistema/`**: o resto (banco SQLite, manifesto, croquis, dossiê, cache e logs).
   Não mexa aqui.
@@ -60,7 +61,7 @@ Backups antigos também são reorganizados ao restaurar.
 - **Autocontido:** mover a pasta `.sicro` move o caso inteiro.
 - **A verdade está no disco:** o app é só a janela que lê e edita esses arquivos.
 - **Um caso por máquina:** evite abrir o mesmo `.sicro` em dois PCs ao mesmo
-  tempo. Para transportar um caso, use o **backup** (item 3.6), não a cópia da
+  tempo. Para transportar um caso, use o **backup** (item 3.5), não a cópia da
   pasta viva.
 
 ### 1.2 Offline por design
@@ -197,7 +198,7 @@ e como fundo do croqui.
    corrupção por sync.
 
 Para copiar **todos** os casos de uma vez (incremental) e para **restaurar** um
-backup, use **Configurações → Backup geral** (item 8).
+backup, use **Configurações → Backup geral** (item 9).
 
 ### 3.6 Integridade
 
@@ -847,7 +848,283 @@ separar vozes.
 
 ---
 
-## 8. Configurações
+## 8. Edição
+
+Monta um vídeo novo com trechos dos vídeos do caso, quadros congelados, títulos e
+imagens, com marcações, narração e legendas. Os vídeos do caso não mudam: a
+Edição guarda o projeto e, ao exportar, grava um vídeo novo com o relatório
+técnico ao lado.
+
+### 8.1 Abrir e coletar trechos
+
+- **Central de Vídeo e Áudio:** a lâmina **Edição** cria uma edição (**Nova
+  edição**). Na lista, cada edição mostra o título, os clipes e a duração
+  (`5 clipes · 0:47`); clique para abrir. **Duplicar** faz uma cópia; **Excluir
+  edição** apaga o projeto (as exportações já feitas ficam na pasta do caso).
+- **Trilho de modos:** **Edição** (**Alt+6**) abre a edição corrente do caso (a
+  última aberta; se não houver, uma nova). **Alt+1** a **Alt+5** voltam à
+  análise, no ponto em que ela estava.
+- **Ctrl+3 na análise:** com entrada e saída marcadas (**I** / **O**), acrescenta
+  o trecho à edição corrente sem sair do vídeo; o aviso mostra o número do
+  clipe (`Trecho 7`).
+- **Proveniência do vídeo** (propriedades do vídeo, na análise): **Formato do
+  gravador** (Sim, Não), **Observação**, **Desvio do relógio (s)** e
+  **Gravador**. Vão para o relatório da exportação. Uma edição que já usa o vídeo
+  recebe o valor novo na próxima coleta dele (Ctrl+3 ou **Trecho…**).
+- **Gravação:** automática, 3 s depois da última mudança (no máximo 15 s);
+  **Ctrl+S** grava na hora. O ícone ao lado do título mostra **Salvo**,
+  **Alterado**, **Salvando…** ou **Não salvou**. **Desfazer** e **Refazer** guardam
+  até 200 passos; um arrasto conta como um passo.
+
+### 8.2 A tela
+
+Barra de cima: título da edição (editável), estado da gravação, **Desfazer**,
+**Refazer**, **Fila** e **Exportar…**. Abaixo, três colunas: **Sequência** à
+esquerda, **Palco** no meio e **Inspetor** à direita. As laterais se recolhem
+pelos botões nas pontas da barra e se alargam arrastando a divisa (a largura
+fica guardada). Rodapé: duração do vídeo, número de clipes e a contagem de
+problemas (`2 avisos`, `1 erro`); clicar na contagem leva ao primeiro erro (sem
+erro, ao primeiro aviso). Com uma marcação em andamento, o rodapé mostra a mira; clicar nela para
+a marcação.
+
+### 8.3 Sequência
+
+A lista dos clipes, na ordem do vídeo.
+
+- **Trecho…**: campos **Vídeo**, **Início**, **Fim** e **Evento** (escolher um
+  evento da análise preenche o início). **Início** e **Fim** aceitam `12,5`,
+  `1:02,5` ou o número do quadro (`#312`).
+- **Dos eventos…**: escolha o vídeo e marque eventos; em ordem de tempo, o 1º
+  com o 2º, o 3º com o 4º e assim por diante viram trechos.
+- **Título…**: **Modelo** (Cartela, Abertura, Evento, Terço inferior,
+  Encerramento), **Título** e **Subtítulo**.
+- **Congelar aqui** (**Ctrl+Shift+B**): divide o trecho no cursor e insere o
+  quadro mostrado como quadro congelado.
+- **Imagem…**: uma foto ou figura do disco como clipe.
+
+Cada cartão mostra o tipo (**Trecho**, **Título**, **Quadro congelado**,
+**Imagem**), o nome, a duração no vídeo final e os selos **Taxa variável**,
+**Vídeo ausente**, **Danificado** e a velocidade (`0,5×`). Problema de validação
+aparece numa linha vermelha no cartão. Ações: **Ver**, **Duplicar**, **Remover**;
+arraste pela alça para mudar a ordem. Abaixo do cartão ficam os itens **presos ao
+clipe**, que acompanham o clipe quando ele muda de lugar ou é aparado:
+**Adicionar** → **Título** (3 s), **Terço inferior** (até o fim do clipe),
+**Imagem**, **Narração**.
+
+### 8.4 Palco
+
+Mostra o clipe selecionado. A roda do mouse aproxima no ponto do cursor; arrastar
+o fundo move a vista; **Ajustar à tela** volta à imagem inteira; **Expandir**
+(**F**) esconde as colunas.
+
+- **Transporte:** a barra é o vídeo inteiro; a parte destacada é o clipe, com as
+  bordas arrastáveis para aparar ou alargar. Ao fundo, a forma de onda do som.
+  Botões **Início do clipe**, **Quadro anterior**, **Reproduzir**, **Próximo
+  quadro**, **Fim do clipe**; o tempo em `HH:MM:SS,mmm` e o número do quadro. **I**
+  e **O** gravam o início e o fim do clipe no quadro mostrado (o **O** inclui
+  esse quadro) e podem alargar o clipe.
+- **Prévia viva** (o palco parado ou tocando): o clipe com as marcações, o
+  enquadramento e o realce aproximados. Transições, itens presos, legendas,
+  selos e os ajustes de som não aparecem nela: veja no **Quadro final** e na
+  **Prévia do render**.
+- **Quadro final** (**Q**): o motor de exportação faz o quadro mostrado, como ele
+  sai no arquivo.
+- **Prévia do render**: o clipe inteiro feito pelo motor, em até 480 linhas, com
+  som, transições, itens presos e selos. Clicar de novo volta à prévia viva.
+
+No **Quadro final** e na **Prévia do render** as legendas aparecem quando a última
+escolha de **Legendas** na exportação as põe na imagem (**Na imagem** ou **As
+duas**).
+
+Ícones no palco indicam a cópia reduzida da mídia em uso e o vídeo intermediário
+do realce em preparo. Enquanto o intermediário é feito, o **Marcar** das
+marcações e do enquadramento fica desligado (o da ocultação não).
+
+### 8.5 Inspetor: aba Clipe
+
+As seções do clipe selecionado, de cima para baixo.
+
+- **Trecho:** **Nome**, **Vídeo**, **Início**, **Fim**, **Velocidade** (0,05× a
+  16×), **Manter o tom**, **Som** (mudo e volume, 0 a 200 %) e **Cor** (BT.601
+  ou BT.709, faixa Limitada ou Cheia; o ícone **Automática** volta à que o arquivo
+  declara). **Quadro congelado**: **Nome**, **Vídeo**, **Posição** (o quadro),
+  **Cor** e **Duração (s)**. **Imagem**: **Nome**, **Imagem** e **Duração (s)**.
+- **Som** (trecho): volume ao longo do clipe (**Som** no instante **Posição**) e
+  **Silenciar trecho** (**Tom** ou **Mudo**) com **De**, **Até** e **Motivo**;
+  **Da degravação…** cria os silêncios a partir das falas da degravação do vídeo.
+- **Entrada:** **Transição** (**Corte**, **Escurecer** e mais seis com ícone:
+  fundir, cortina para a esquerda ou para a direita, deslizar para a esquerda ou
+  para a direita, círculo), **Duração (s)** e **Som** (**Acompanhar** ou
+  **Cortar**). As transições com ícone sobrepõem o fim do clipe anterior ao
+  começo deste.
+- **Enquadramento:** **Girar**, **Espelhar**, região fixa ou animada (**Marcar
+  início**, **Marcar fim**, marcadas no palco), **Ajuste** (**Inteiro** com
+  barras ou **Preencher** cortando) e **Interpolação** (Vizinho, Bilinear,
+  Bicúbica).
+- **Realce:** **Estabilizar** (**Suavizar**, **Borda** Preta ou Ampliar,
+  **Refazer estabilização**), **Lente**, **Desentrelaçar** (**Quadro** ou
+  **Campo**), **Brilho**, **Contraste**, **Gama**, **Saturação**, **Nitidez** e
+  **Média de quadros**. Ligar ou mudar estabilizar ou lente com marcações feitas
+  pede confirmação e diz quantas ficam inválidas.
+- **Marcações:** **Adicionar** → **Destaque**, **Ocultar**, **Lupa**, **Régua**,
+  **Velocidade**, **Texto**, **Tempo**, **Imagem**. Cada linha liga, desliga e
+  remove; aberta, traz **De** e **Até** (quando ela aparece) e, nas que seguem
+  um objeto, **Marcar**: com ele ligado, desenhe a caixa no palco; ande pelos
+  quadros e desenhe de novo, ou arraste a caixa, onde o objeto mudou de lugar.
+  **Enter** grava, no quadro mostrado, a posição que está na tela. Entre duas
+  marcas a posição é interpolada; depois da última, fica parada. **Esc**
+  desliga.
+  - **Destaque:** **Forma** (retângulo, elipse, círculo, seta, colchetes), **Cor**,
+    **Espessura**, **Contorno**, **Rótulo**, **Tamanho**, **Direção**, **Margem**.
+  - **Ocultar:** **Conteúdo** (Rosto, Placa, Corpo, Tela, Documento, Outro),
+    **Forma** (retângulo, elipse), **Modo** (**Sólido**, **Mosaico**,
+    **Desfoque**), **Cor** ou **Intensidade**, **Borda suave**, **Margem**,
+    **Inverter**, **Motivo**. A ocultação vale no vídeo inteiro (em todo clipe que
+    usa aquele vídeo, também no quadro congelado); **Só neste clipe** a limita ao
+    clipe. Exportação com ocultação para em **A conferir** (8.8).
+  - **Lupa:** **Forma** (círculo, retângulo), **Ampliação**, **Janela**,
+    **Posição** (**Fixa** ou **Acompanha**), **Ligação**, **Interpolação**, **Cor**,
+    **Espessura**, **Contorno**.
+  - **Régua:** **Calibração** (as do modo **Velocidade** da análise, no mesmo vídeo),
+    **Comprimento (m)**, **Divisões**, **Direção**, **Cor**, **Espessura**,
+    **Contorno**, **Rótulo**. Régua fora da região calibrada é erro.
+  - **Velocidade:** **Cálculo** (os do modo **Velocidade**, no mesmo vídeo),
+    **Posição** (**Fixa** ou **Acompanha**), **Fonte**, **Tamanho**, **Cor**.
+    Mostra a faixa calculada, ou "≈"; fora do intervalo medido é erro.
+  - **Texto:** **Texto**, **Fonte**, **Tamanho**, **Cor**, **Posição**.
+  - **Tempo:** **Mostrar** (Tempo do original, Quadro, Tempo do vídeo),
+    **Fonte**, **Tamanho**, **Cor**, **Posição**.
+  - **Imagem:** **Imagem**, **Tamanho**, **Posição**.
+- **Título** (clipe de título ou item preso): **Nome**, **Modelo**, os campos do
+  modelo (**Título**, **Subtítulo**, **Texto**, **Rodapé**), **Fundo**, **Fonte**,
+  **Tamanho**, **Cor**, **Duração (s)** e, no item preso, **Até o fim do clipe**.
+  Imagem presa: **Nome**, **Imagem**, **Até o fim do clipe**, **Duração (s)** e
+  **Tamanho**.
+
+### 8.6 Abas Áudio, Legendas e Saída
+
+- **Áudio:** **Volume do original**, **Abaixar sob a narração** (o som do vídeo
+  baixa enquanto a narração fala), **Normalizar** (−16 LUFS, pico −1,5 dBTP) e
+  **Limitador**. Trilhas **Narração**, **Música** e **Efeitos**: **Importar…** um
+  arquivo ou **Gravar** / **Parar** pelo microfone. Cada clipe de áudio: **Preso a**
+  (um clipe da sequência; em branco, fica no tempo do vídeo final), **Posição**,
+  **De** e **Até** (o pedaço do arquivo), **Entrada (s)** e **Saída (s)** (subida
+  e descida do volume). O ícone de ouvido cortado marca o que só vale no arquivo
+  exportado (abaixar, normalizar, limitador).
+- **Legendas:** **Da degravação…** (as falas da degravação de um vídeo viram
+  legendas presas a ele), **Nova legenda**, **Posição** e **Linhas**. Cada legenda:
+  **Texto**, **De**, **Até** e **Conferida**. Legenda feita por IA e não conferida
+  barra a exportação com legendas.
+- **Saída:** **Automática** (proporção do vídeo mais usado, maior altura até
+  1080 e maior taxa até 60 quadros/s) ou **Largura**, **Altura** e **Quadros/s**;
+  **Fundo** (cor das barras e das transições pelo fundo) e **Áudio**. **Selo de
+  velocidade**, **Selo de ampliação** e **Selo de realce** escrevem um aviso no
+  canto da imagem nos trechos em que o vídeo aparece mudado (ligados por padrão).
+  **Fecho**: **Transição**, **Duração (s)** e **Som** do fim do vídeo para o
+  fundo.
+
+### 8.7 Exportar
+
+**Exportar…** (**Ctrl+E**) abre:
+
+- **Predefinição:**
+  - **Júri** — MP4, H.264 e AAC, no tamanho da saída. **Arquivo reprodutível**
+    ligado: codifica no processador, e o arquivo refeito no mesmo computador, com
+    as mesmas versões, sai idêntico. Desligado: usa a placa de vídeo, se ela
+    passou no teste. O codificador em uso aparece ao lado, com **Testar de novo**.
+  - **WhatsApp** — MP4, H.264 sem quadros B, AAC; reduz para caber em 1280×720
+    (deitado ou em pé) e 64 MB, e para 854×480 quando o vídeo é longo.
+  - **Preservação** — MKV, FFV1 e FLAC, sem perda.
+
+  WhatsApp e Preservação codificam sempre no processador.
+- **Legendas:** **Não**, **Na imagem**, **Arquivo** (`.srt` e `.vtt` ao lado do
+  vídeo) ou **As duas**.
+- **Revisado por**.
+- **Pacote do júri**, com **Incluir originais** e **PDF sem anexos** (PDF/A-2b
+  sem arquivos embutidos, para protocolo que recusa anexo). Ver 8.9.
+
+Abaixo, os problemas da análise: **erro** (vermelho) impede exportar; **aviso
+pericial** pede **Ciente** marcado; aviso comum só informa. Clicar num problema
+leva ao item. O botão diz **Exportar** ou **Exportar com N avisos**.
+
+### 8.8 Fila e saídas
+
+**Fila** mostra cada exportação com a fase (**Na fila**, **Preparando**,
+**Camadas**, **Vídeo 3/7**, **Áudio**, **Juntando**, **Conferindo**,
+**Relatório**, **Pacote do júri**, **Pronto**, **Falhou**, **Cancelado**), a
+barra de progresso e o tempo restante. **Cancelar** para a exportação sem deixar
+arquivo pela metade; **Ver registro** abre o registro de uma que falhou. A
+exportação **confere** o arquivo final: decodifica e compara a contagem de quadros
+com a prevista.
+
+Embaixo, as saídas já feitas da edição:
+
+- **Abrir pasta** e **Excluir** (com confirmação).
+- **A conferir** (exportação com ocultação ou silêncio): assista ao arquivo
+  exportado e clique **Conferido** (registra quem conferiu e quando) ou
+  **Concluir sem conferir**. O relatório diz qual foi.
+- **Refazer e comparar**: refaz a exportação a partir do retrato guardado e
+  compara: **Igual**, **Conteúdo igual, arquivo diferente**, **Diferente a partir
+  de 00:01:12,400** ou **Não comparável**. A refeita entra como saída nova.
+
+### 8.9 O que cada exportação grava
+
+Uma pasta nova por exportação, nunca reaproveitada:
+`Exportações/Vídeos/Edições/<Título> <AAAA-MM-DD HHhMMmSS>/`.
+
+| Arquivo | Conteúdo |
+|---|---|
+| `<Título>.mp4` ou `.mkv` | O vídeo (`.mkv` na Preservação). Com ocultação ou silêncio, o nome leva ` (ocultado)`. |
+| `<Título>.tecnico.json` | Relatório técnico: o que foi feito em cada clipe, mídias com SHA-256, programas e versões, avisos com ciência, conferência. |
+| `<Título>.srt`, `<Título>.vtt` | Legendas em arquivo. |
+| `Relatório.pdf` | Pacote do júri: relatório para leitura, com o SHA-256 de todos os outros arquivos. |
+| `SHA256SUMS.txt` | Pacote: SHA-256 de tudo, menos o PDF. |
+| `mapa.csv` | Pacote: de qual quadro do original sai cada quadro do vídeo. |
+| `quadros.compostos.sha256`, `quadros.decodificados.sha256` | Pacote: SHA-256 de cada quadro antes da compressão e do arquivo entregue decodificado. |
+| `audio.flac` | Pacote: o som sem perda. |
+| `projeto/` | Pacote: o projeto e os comandos usados, para refazer. |
+| `originais/` | Pacote, com **Incluir originais**: os vídeos usados. |
+
+O vídeo e os arquivos ficam somente leitura depois do SHA-256. A saída entra na
+**Integridade**. Cada exportação guarda também um retrato do projeto na pasta do
+caso; é dele que sai o **Refazer e comparar**, mesmo depois de mudanças na
+edição.
+
+### 8.10 Atalhos
+
+| Tecla | Ação |
+|---|---|
+| **Espaço** / **K** | Reproduzir / pausar |
+| **←** / **→** | Um quadro; segurar toca para a frente ou dá ré |
+| **Shift + ←** / **→** | 1 s para trás / para a frente |
+| **,** / **.** | Quadro anterior / próximo quadro |
+| **Home** / **End** | Início / fim do clipe |
+| **I** / **O** | Início / fim do clipe no quadro mostrado |
+| **PgUp** / **PgDn** | Clipe anterior / próximo clipe |
+| **Alt + PgUp** / **Alt + PgDn** | Mover o clipe para antes / para depois |
+| **Ctrl + B** | Dividir no cursor |
+| **Ctrl + Shift + B** | Congelar aqui |
+| **Ctrl + D** | Duplicar |
+| **Del** | Remover |
+| **Ctrl + Z** / **Ctrl + Shift + Z** ou **Ctrl + Y** | Desfazer / refazer |
+| **Ctrl + S** | Salvar |
+| **Ctrl + E** | Exportar |
+| **Enter** | Marcar neste quadro (com **Marcar** ligado) |
+| **Esc** | Fecha a prévia do render; para a marcação; sai do palco expandido |
+| **Q** | Quadro final |
+| **Ctrl + =** / **Ctrl + -** / **Ctrl + 0** | Aproximar / afastar / imagem inteira no palco |
+| **F** | Expandir o palco |
+| **Ctrl + M** | Mudo |
+| **Alt + 1** a **Alt + 6** | Modos (Alt + 6 = Edição) |
+| **Ctrl + 3** (na análise) | Coletar trecho para a edição |
+
+Os atalhos ficam desligados com um diálogo ou menu aberto e mudam em
+**Configurações → Atalhos de teclado** (grupo Edição; os de reprodução são os do
+Vídeo).
+
+---
+
+## 9. Configurações
 
 **Para que serve:** preferências do app e do perito que valem em **todas** as
 ocorrências. Em geral as mudanças acumulam e você clica **Salvar** (a Aparência
@@ -880,7 +1157,7 @@ Abas:
 
 ---
 
-## 9. Fluxo ponta a ponta
+## 10. Fluxo ponta a ponta
 
 Um caso típico, do campo à figura no laudo:
 
@@ -888,7 +1165,8 @@ Um caso típico, do campo à figura no laudo:
 2. **Início:** dê um nome ao caso e clique no módulo (ou *Importar
    .sicroapp…*).
 3. **Vídeo e Áudio / Imagens:** trate, meça e analise as evidências (sempre de
-   forma não-destrutiva); colete quadros e exporte trechos.
+   forma não-destrutiva); colete quadros, exporte trechos e monte na **Edição** o
+   vídeo para o júri.
 4. **Croquis:** desenhe a cena (viário/corporal/planta) e exporte o PNG.
 5. **Integridade:** confira as provas e gere o relatório.
 6. **Laudo:** escrito no Word ou LibreOffice, com as figuras exportadas pelo
@@ -898,7 +1176,7 @@ Um caso típico, do campo à figura no laudo:
 
 ---
 
-## 10. Limites honestos (§13)
+## 11. Limites honestos (§13)
 
 O que o SICRO **faz** e o que **não faz** — para você confiar na ferramenta sem
 ilusões:
@@ -920,7 +1198,7 @@ ilusões:
 
 ---
 
-## 11. Glossário e extensões de arquivo
+## 12. Glossário e extensões de arquivo
 
 | Termo / extensão | O que é |
 |---|---|
@@ -932,6 +1210,8 @@ ilusões:
 | **`.sicrocorpo`** | Croqui corporal. |
 | **`.sicroplanta`** | Croqui de planta baixa. |
 | **`.sicroimage`** | Análise de imagem (pilha não-destrutiva). |
+| **`.tecnico.json`** | Relatório técnico de uma exportação da Edição (ao lado do vídeo). |
+| **Pacote do júri** | Pasta da exportação com `Relatório.pdf`, `SHA256SUMS.txt` e os arquivos para conferir e refazer o vídeo. |
 | **SHA-256** | Impressão digital do arquivo, usada para garantir integridade. |
 | **Pilha de processamento** | Sequência de filtros aplicada por cima do original (reversível). |
 | **Cadeia de custódia** | Registro de origem, hash e operações de cada evidência. |

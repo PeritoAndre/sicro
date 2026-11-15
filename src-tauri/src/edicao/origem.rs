@@ -362,16 +362,7 @@ fn estabilizacao(
     if !certa && !(buscou && analisar(false)?.1) {
         return Err(erro(ERRO_LEITURA_DIVERGENTE, "análise do movimento"));
     }
-    let bytes = std::fs::read(trabalho.join(&nome))?;
-    let sha = executar::sha256_bytes(&bytes);
-    let destino = pasta_projeto.join("vidstab").join(format!("{sha}.trf"));
-    if !destino.is_file() {
-        std::fs::create_dir_all(pasta_projeto.join("vidstab"))?;
-        let tmp = destino.with_extension(format!("trf.{}.tmp", std::process::id()));
-        std::fs::write(&tmp, &bytes)?;
-        std::fs::rename(&tmp, &destino)?;
-    }
-    Ok(Some(sha))
+    Ok(Some(executar::guardar_trf(pasta_projeto, &std::fs::read(trabalho.join(&nome))?)?))
 }
 
 /// Último `Final zoom: <x>` do registro do `vidstabtransform`.
