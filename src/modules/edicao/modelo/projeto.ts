@@ -127,7 +127,12 @@ export const saidaPadrao = (): Saida => ({
   exportacao: exportacaoPadrao(),
 });
 
-/** Neutra; `normalizar` nulo na Fase 0 (a normalização é do P1.5). Igual ao `Default` do Rust. */
+// CONTRATO: `novoProjeto()` nasce com esta normalização (contratos-fase1 F6); `mixagemPadrao()` segue neutra.
+/** Normalização com que o projeto NOVO nasce (§2.4): −16 LUFS, pico de −1,5 dBTP. */
+export const NORMALIZAR_PADRAO = { lufs: -16, pico_db: -1.5 } as const;
+
+/** Neutra, igual ao `Default` do Rust: é o que completa o arquivo gravado sem `mixagem` (nunca ganha normalização
+ *  calado). O projeto novo parte dela com `NORMALIZAR_PADRAO`. */
 export const mixagemPadrao = (): Mixagem => ({
   volume_original: 1,
   abaixar: { db: -12, ataque_s: 0.3, soltura_s: 0.5 },
@@ -174,7 +179,7 @@ export function novoProjeto(titulo: string = TITULO_NOVO, agora: string = new Da
     rastreios: [],
     marcadores: [],
     sincronias: [],
-    mixagem: mixagemPadrao(),
+    mixagem: { ...mixagemPadrao(), normalizar: { ...NORMALIZAR_PADRAO } },
   };
 }
 
@@ -420,12 +425,25 @@ export function moverClipe(d: ProjetoEdicao, de: number, para: number): void {
   if (c) d.principal.splice(para, 0, c);
 }
 
-/** Mídia do caso já no projeto (mesmo SHA-256), ou a nova acrescentada. Devolve o id local. */
+/** Proveniência do `MidiaRef` igual? (as colunas da análise: formato do gravador, observação, desvio, gravador) */
+export function mesmaProveniencia(a: Pick<MidiaRef, "recebido" | "relogio_desvio_s" | "gravador">, b: Pick<MidiaRef, "recebido" | "relogio_desvio_s" | "gravador">): boolean {
+  return a.recebido.nativo === b.recebido.nativo && a.recebido.obs === b.recebido.obs && a.relogio_desvio_s === b.relogio_desvio_s && a.gravador === b.gravador;
+}
+
+/** Mídia já no projeto (mesmo SHA-256 e origem), ou a nova acrescentada. Devolve o id local.
+ *  Mídia do caso que já está no projeto: a proveniência do `m` (lida agora das colunas da análise por
+ *  `midiaDoCaso`) substitui a guardada quando mudou; dentro de `alterar`, entra no passo de quem chamou. */
+// CONTRATO: assinatura igual; passa a trocar a proveniência da mídia do caso já presente (contratos-fase1 F6).
 export function garantirMidia(d: ProjetoEdicao, m: MidiaRef): Id {
-  const ja = d.midias.find((x) => x.sha256 === m.sha256 && x.origem === m.origem);
-  if (ja) return ja.id;
-  d.midias.push(m);
-  return m.id;
+  const i = d.midias.findIndex((x) => x.sha256 === m.sha256 && x.origem === m.origem);
+  const ja = d.midias[i];
+  if (!ja) {
+    d.midias.push(m);
+    return m.id;
+  }
+  // item novo na lista (nunca muda o que o documento aberto ou lido ainda aponta)
+  if (m.origem === "caso" && !mesmaProveniencia(ja, m)) d.midias[i] = { ...ja, recebido: { ...m.recebido }, relogio_desvio_s: m.relogio_desvio_s, gravador: m.gravador };
+  return ja.id;
 }
 
 /** Grava um tempo preso a quadro (`Analise.prender`). Devolve true se mudou algo. */

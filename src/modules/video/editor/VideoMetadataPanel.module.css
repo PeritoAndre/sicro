@@ -24,6 +24,11 @@
   font-size: 10px;
   padding-top: 2px;
 }
+/* rótulos da proveniência como escritos: em caixa alta a unidade de "Desvio do relógio (s)" viraria "(S)" */
+.comoEscrito dt {
+  text-transform: none;
+  letter-spacing: 0;
+}
 .grid dd {
   color: var(--sicro-fg);
   margin: 0;

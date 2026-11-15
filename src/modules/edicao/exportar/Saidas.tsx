@@ -1,18 +1,20 @@
 /**
  * Saídas registradas do projeto aberto (`edicao_saidas`): estado por ícone (a conferir, conferida, não conferida,
- * pronta), "Abrir pasta", "Conferido" / "Concluir sem conferir" e "Excluir" (confirmação padrão do app).
+ * pronta), "Abrir pasta", "Conferido" / "Concluir sem conferir", "Refazer e comparar" com o resultado na saída
+ * refeita, e "Excluir" (confirmação padrão do app).
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, CircleDashed, FolderOpen, ShieldAlert, ShieldCheck, ShieldX, Trash2 } from "lucide-react";
+import { CheckCircle2, CircleDashed, CircleSlash, Diff, Equal, EqualNot, FolderOpen, Loader2, Repeat2, ShieldAlert, ShieldCheck, ShieldX, Trash2 } from "lucide-react";
 import { commands } from "@core/commands";
 import { revealExported } from "@core/reveal";
 import { askConfirm } from "@components/Dialog/ask";
 import { pushToast } from "@components/toast/toastStore";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
-import type { SaidaRegistrada } from "@domain/edicao";
+import type { Comparacao, SaidaRegistrada } from "@domain/edicao";
 import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
+import { useExportarUi } from "./avisos";
 import styles from "./Exportar.module.css";
 
 /** Estado mostrado: a conferir; concluída e conferida; concluída sem a conferência exigida; concluída. */
@@ -24,20 +26,54 @@ export function estadoDaSaida(s: SaidaRegistrada): EstadoMostrado {
   return s.conferida_por ? "conferida" : "nao_conferida";
 }
 
+/** Resultado do "Refazer e comparar", nos rótulos do §8.6. */
+export function rotuloComparacao(c: Comparacao): string {
+  switch (c.tipo) {
+    case "igual":
+      return "Igual";
+    case "conteudo_igual":
+      return "Conteúdo igual, arquivo diferente";
+    case "diferente":
+      return `Diferente a partir de ${formatarTempo(c.tempo)}`;
+    case "nao_comparavel":
+      return "Não comparável";
+  }
+}
+
+/** `edicao_refazer`: põe a refeita na fila e mostra a fila; o erro (retrato alterado, saída a conferir) vai no aviso. */
+export async function refazerSaida(ws: string, saidaId: string): Promise<void> {
+  try {
+    await commands.edicaoRefazer(ws, saidaId);
+    useExportarUi.getState().mostrarFila(true);
+  } catch (e) {
+    pushToast("error", separarErro(e).frase);
+  }
+}
+
 const ouvintes = new Set<() => void>();
 const avisar = () => ouvintes.forEach((f) => f());
 
 /** `edicao_conferir`: conclui a saída "A conferir" (conferida ou não). "Conferido" registra o perito: pede
  *  confirmação antes (contratos (h) 24). */
 export async function conferirSaida(ws: string, saidaId: string, conferida: boolean): Promise<void> {
-  if (conferida && !(await askConfirm({ title: "Conferido", confirmLabel: "Conferido" }))) return;
+  // a conferência monta o pacote (pode copiar os originais): o segundo clique não vira um segundo pedido
+  if (conferindo.has(saidaId)) return;
+  conferindo.add(saidaId);
+  avisar();
   try {
+    if (conferida && !(await askConfirm({ title: "Conferido", confirmLabel: "Conferido" }))) return;
     await commands.edicaoConferir(ws, saidaId, conferida);
   } catch (e) {
     pushToast("error", separarErro(e).frase);
+  } finally {
+    conferindo.delete(saidaId);
+    avisar();
   }
-  avisar();
 }
+
+/** Saídas com a conferência em curso (do clique até a resposta do comando). */
+const conferindo = new Set<string>();
+export const conferenciaEmCurso = (saidaId: string): boolean => conferindo.has(saidaId);
 
 export function Saidas() {
   const ws = useEdicaoStore((s) => s.ws);
@@ -57,8 +93,12 @@ export function Saidas() {
     };
   }, [ws, projeto]);
   useEffect(() => ler(), [ler, fins]);
+  const [, redesenhar] = useState(0);
   useEffect(() => {
-    const f = () => void ler();
+    const f = () => {
+      redesenhar((n) => n + 1);
+      void ler();
+    };
     ouvintes.add(f);
     return () => void ouvintes.delete(f);
   }, [ler]);
@@ -93,12 +133,25 @@ export function Saidas() {
               </button>
             </div>
             {est === "a_conferir" && (
-              <div className={styles.tarefaLinha}>
-                <button type="button" className={styles.mini} onClick={() => void conferirSaida(ws, s.id, true)}>
-                  <CheckCircle2 size={12} /> Conferido
+              <div className={styles.tarefaLinha} data-conferindo={conferindo.has(s.id) || undefined}>
+                <button type="button" className={styles.mini} disabled={conferindo.has(s.id)} onClick={() => void conferirSaida(ws, s.id, true)}>
+                  {conferindo.has(s.id) ? <Loader2 size={12} className={styles.gira} /> : <CheckCircle2 size={12} />} Conferido
                 </button>
-                <button type="button" className={styles.mini} onClick={() => void conferirSaida(ws, s.id, false)}>
+                <button type="button" className={styles.mini} disabled={conferindo.has(s.id)} onClick={() => void conferirSaida(ws, s.id, false)}>
                   <CircleDashed size={12} /> Concluir sem conferir
+                </button>
+              </div>
+            )}
+            {est !== "a_conferir" && (
+              <div className={styles.tarefaLinha}>
+                {s.comparacao && (
+                  <span className={styles.comparacao} data-comparacao={s.comparacao.tipo}>
+                    <IconeComparacao c={s.comparacao} />
+                    {rotuloComparacao(s.comparacao)}
+                  </span>
+                )}
+                <button type="button" className={styles.mini} data-acao="refazer" onClick={() => void refazerSaida(ws, s.id)}>
+                  <Repeat2 size={12} /> Refazer e comparar
                 </button>
               </div>
             )}
@@ -119,5 +172,18 @@ function IconeSaida({ e }: { e: EstadoMostrado }) {
       return <ShieldX size={14} className={styles.alerta} aria-hidden />;
     case "pronta":
       return <CheckCircle2 size={14} className={styles.ok} aria-hidden />;
+  }
+}
+
+function IconeComparacao({ c }: { c: Comparacao }) {
+  switch (c.tipo) {
+    case "igual":
+      return <Equal size={13} className={styles.ok} aria-hidden />;
+    case "conteudo_igual":
+      return <Diff size={13} className={styles.acento} aria-hidden />;
+    case "diferente":
+      return <EqualNot size={13} className={styles.perigo} aria-hidden />;
+    case "nao_comparavel":
+      return <CircleSlash size={13} className={styles.dim} aria-hidden />;
   }
 }

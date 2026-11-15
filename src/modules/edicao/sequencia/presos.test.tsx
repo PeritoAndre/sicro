@@ -17,6 +17,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => dialogo);
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useMenusAbertos } from "../menus";
 import { Presos, PRESOS_PRONTOS, prenderTituloNoModelo } from "./Presos";
+import { CartaoClipe } from "./CartaoClipe";
 import { moverPara } from "./acoes";
 import { DURACAO_PADRAO, presosAoClipe } from "./contas";
 import { resolver } from "../modelo/tempo";
@@ -67,10 +68,43 @@ afterEach(async () => {
 const focar = (id: string) => st().selecionar({ itens: [{ k: "clipe", id }], foco: { k: "clipe", id }, efeito: null });
 
 describe("Presos no cartão", () => {
-  // desligada: o teste do cartão em `telas.test.tsx` monta `CartaoClipe` sem id e sem store; liga com a queda do
-  // cartão para o bloco da Fase 0 sem id (relato ao integrador)
-  it("bandeira", () => {
-    expect(typeof PRESOS_PRONTOS).toBe("boolean");
+  it("bandeira ligada: o cartão com id mostra os presos do clipe pelo `Presos`; sem id, nada", async () => {
+    expect(PRESOS_PRONTOS).toBe(true);
+    const nada = () => {};
+    const cartao = (id: string | undefined, indice: number) => (
+      <CartaoClipe
+        id={id}
+        indice={indice}
+        tipo="Trecho"
+        tipoCru="trecho"
+        nome=""
+        duracao={1}
+        selos={[]}
+        problemas={[]}
+        selecionado={false}
+        desligado={false}
+        arrastando={false}
+        soltar={null}
+        soLeitura={false}
+        onSelecionar={nada}
+        onVer={nada}
+        onDuplicar={nada}
+        onRemover={nada}
+        onAlca={nada}
+      />
+    );
+    const t = await montar(
+      <ol>
+        {cartao(C1, 0)}
+        {cartao(undefined, 1)}
+      </ol>,
+    );
+    // a narração da fixture, presa ao primeiro trecho, dentro do cartão dele
+    expect(t.raiz.querySelector(`[data-cartao="0"] [data-presos="${C1}"] [aria-label="narracao.wav"]`)).not.toBeNull();
+    expect(t.raiz.querySelector('[data-cartao="1"] [data-presos]')).toBeNull();
+    // em foco: "Adicionar" no cartão
+    await esperar(() => focar(C1));
+    expect(botao(t.raiz.querySelector('[data-cartao="0"]')!, "Adicionar")).toBeTruthy();
   });
 
   it("mostra o que está preso ao clipe; sem preso, só no cartão em foco, com 'Adicionar'", async () => {

@@ -90,6 +90,78 @@ fn origem(efeitos_do_clipe: &[Tolerante<Efeito>]) -> Result<Origem<'_>> {
     Ok(o)
 }
 
+/// `trf_sha256` com forma de SHA-256 em minúsculas (o nome vira caminho e entra no grafo).
+fn sha_do_trf(sha: &str) -> bool {
+    sha.len() == 64 && sha.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+}
+
+/// Campo do efeito de origem fora do que os filtros aceitam (`eq`, `unsharp`, `lenscorrection`, `vidstabtransform`,
+/// `tmix`); None = ok (ou não é de origem). `exibido` = tamanho da fonte (a lente converte os coeficientes por ele).
+fn campo_fora(e: &Efeito, exibido: (u32, u32)) -> Option<&'static str> {
+    match e {
+        Efeito::MediaTemporal(m) => (!MEDIA_QUADROS.contains(&m.quadros)).then_some("quadros"),
+        Efeito::Estabilizar(s) => {
+            if !finito(s.zoom_pct, -100.0..=100.0) {
+                Some("zoom_pct")
+            } else if s.trf_sha256.as_deref().is_some_and(|x| !sha_do_trf(x)) {
+                // o nome vira arquivo e texto do grafo
+                Some("trf_sha256")
+            } else {
+                None
+            }
+        }
+        Efeito::Lente(l) => {
+            if ![l.k1, l.k2].iter().all(|v| v.is_finite()) {
+                return Some("k1");
+            }
+            if !finito(l.cx, 0.0..=1.0) {
+                return Some("cx");
+            }
+            if !finito(l.cy, 0.0..=1.0) {
+                return Some("cy");
+            }
+            let c = LensCoefficients { k1: l.k1 as f32, k2: l.k2 as f32, k3: 0.0 };
+            (!c.is_identity() && para_ffmpeg(c, exibido.0, exibido.1).is_none()).then_some("k1")
+        }
+        Efeito::Ajustes(a) => {
+            if !finito(a.brilho, -1.0..=1.0) {
+                Some("brilho")
+            } else if !finito(a.contraste, -1000.0..=1000.0) {
+                Some("contraste")
+            } else if !finito(a.gama, 0.1..=10.0) {
+                Some("gama")
+            } else if !finito(a.saturacao, 0.0..=3.0) {
+                Some("saturacao")
+            } else {
+                None
+            }
+        }
+        Efeito::Nitidez(n) => (!finito(n.quantidade, -2.0..=5.0)).then_some("quantidade"),
+        _ => None,
+    }
+}
+
+// CONTRATO: acréscimo (fecho da Fase 1): tudo o que a cadeia de origem recusa com `item_invalido`, para a validação
+// acusar antes com a MESMA regra (contratos (h) 1).
+/// Efeitos de origem ligados que a cadeia recusa: (id, campo). `ativo` = intervalo parcial (o efeito de origem vale
+/// no clipe inteiro); campo None = segundo efeito ligado do mesmo tipo; os demais, o campo fora da faixa do filtro.
+pub fn invalidos(efeitos_do_clipe: &[Tolerante<Efeito>], exibido: (u32, u32)) -> Vec<(String, Option<&'static str>)> {
+    let mut v = Vec::new();
+    let mut vistos: Vec<&'static str> = Vec::new();
+    for e in efeitos::ligados(efeitos_do_clipe, Familia::Origem) {
+        let (tipo, id) = (efeitos::tipo(e), efeitos::base(e).id.clone());
+        if efeitos::base(e).ativo.is_some() {
+            v.push((id, Some("ativo")));
+        } else if vistos.contains(&tipo) {
+            v.push((id, None));
+        } else if let Some(c) = campo_fora(e, exibido) {
+            v.push((id, Some(c)));
+        }
+        vistos.push(tipo);
+    }
+    v
+}
+
 /// Primeiro `desentrelacar` ligado.
 fn desentrelace(efeitos_do_clipe: &[Tolerante<Efeito>]) -> Option<&EfDesentrelacar> {
     efeitos_do_clipe.iter().find_map(|e| match e {
@@ -251,8 +323,7 @@ fn finito(v: f64, faixa: std::ops::RangeInclusive<f64>) -> bool {
 /// Cadeia de cor da fonte para este clipe (`cor::cadeia_fonte`). Com `desentrelacar` ligado o `scale` trata cada
 /// campo em separado (`interl=1`): a conversão comum mistura o croma dos dois campos antes do `bwdif` (26 % do croma
 /// do outro campo nas bordas em movimento, igual nos dois ffmpeg).
-// CONTRATO: acréscimo. O intermediário e a análise do movimento usam esta; `clipe::trecho` e `clipe::congelar`
-// (miolo) ainda chamam `cor::cadeia_fonte` direto.
+// CONTRATO: acréscimo. O intermediário, a análise do movimento, `clipe::trecho` e `clipe::congelar` usam esta.
 pub fn cor_da_fonte(efeitos: &[Tolerante<Efeito>], fonte: &FonteInfo) -> Option<String> {
     let c = cor::cadeia_fonte(fonte.matriz, fonte.faixa, &fonte.pix_fmt, fonte.exibido)?;
     if desentrelace(efeitos).is_none() {
@@ -279,12 +350,15 @@ fn guarda_do_inicio(p0: i64) -> String {
     filtro("select", None, &[("expr", format!("eq(start_pts,{p0})"))])
 }
 
-fn bwdif(d: &EfDesentrelacar, dobra: bool) -> String {
+/// `bwdif` com a paridade ESCRITA: a que o perito impôs, senão a do fluxo (`FonteInfo.ordem_campos`). A marca por
+/// quadro, que o `parity=auto` leria, não sobrevive à cadeia de cor da faixa cheia (`mergeplanes`): com `auto` o campo
+/// de baixo primeiro saía trocado. Só fica `auto` quando a fonte não tem marca nenhuma.
+fn bwdif(d: &EfDesentrelacar, dobra: bool, fonte: &FonteInfo) -> String {
     let modo = if dobra { "send_field" } else { "send_frame" };
-    let ordem = match d.ordem {
-        OrdemCampos::Auto => "auto",
-        OrdemCampos::Tff => "tff",
-        OrdemCampos::Bff => "bff",
+    let ordem = match (d.ordem, fonte.ordem_campos) {
+        (OrdemCampos::Tff, _) | (OrdemCampos::Auto, OrdemCampos::Tff) => "tff",
+        (OrdemCampos::Bff, _) | (OrdemCampos::Auto, OrdemCampos::Bff) => "bff",
+        (OrdemCampos::Auto, OrdemCampos::Auto) => "auto",
     };
     format!("bwdif=mode={modo}:parity={ordem}:deint=all")
 }
@@ -295,7 +369,7 @@ pub(crate) fn nome_do_trf(efeitos: &[Tolerante<Efeito>], e: &EfEstabilizar, font
         Some(sha) => format!("{sha}.trf"),
         None => {
             let tab = &fonte.quadros;
-            let d = desentrelace(efeitos).map(|d| bwdif(d, dobra(Some(d), tab))).unwrap_or_default();
+            let d = desentrelace(efeitos).map(|d| bwdif(d, dobra(Some(d), tab), fonte)).unwrap_or_default();
             let texto = format!("{}|{}|{}|{:?}|{:?}|{}|{d}", fonte.sha256, e.analise.de_pts, e.analise.ate_pts, fonte.matriz, fonte.faixa, fonte.pix_fmt);
             format!("vs{}.trf", &format!("{:x}", Sha256::digest(texto.as_bytes()))[..16])
         }
@@ -319,7 +393,7 @@ pub(crate) fn deteccao(efeitos: &[Tolerante<Efeito>], e: &EfEstabilizar, fonte: 
     f.push(guarda_do_inicio(tab.pts[d0]));
     f.push(cor_da_fonte(efeitos, fonte).ok_or_else(|| erro("pixel_nao_suportado", &fonte.sha256))?);
     if let Some(d) = desentrelace(efeitos) {
-        f.push(bwdif(d, dobra(Some(d), tab)));
+        f.push(bwdif(d, dobra(Some(d), tab), fonte));
     }
     f.extend(["format=yuv420p".to_string(), format!("vidstabdetect=result={nome}:{DETECCAO}")]);
     let mut a = args::globais();
@@ -339,7 +413,7 @@ pub(crate) fn quadros_da_analise(efeitos: &[Tolerante<Efeito>], e: &EfEstabiliza
 }
 
 /// `feito.estabilizacoes` (§10.2): os `estabilizar` ligados dos clipes ligados da principal, na ordem.
-// CONTRATO: acréscimo. `motor::proveniencia` (miolo) ainda grava a lista vazia.
+// CONTRATO: acréscimo. É o que `motor::proveniencia` grava.
 pub fn estabilizacoes(p: &ProjetoEdicao) -> Vec<ProvEstabilizacao> {
     let mut v = Vec::new();
     for c in &p.principal {
@@ -368,7 +442,7 @@ pub fn trazer_trf(estabilizacoes: &[ProvEstabilizacao], pasta_projeto: &Path, tr
     for e in estabilizacoes {
         let Some(sha) = &e.trf_sha256 else { continue };
         // o nome vira caminho: só SHA-256 em minúsculas
-        if sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase()) {
+        if !sha_do_trf(sha) {
             return Err(erro("item_invalido", format!("efeito estabilizar {}: trf_sha256", e.efeito)));
         }
         let destino = trabalho.join(format!("{sha}.trf"));
@@ -395,9 +469,9 @@ pub(crate) fn zoom_a_calcular(e: &EfEstabilizar) -> bool {
 /// `vidstabtransform` do efeito. Zoom: o gravado (`ampliar`), o calculado de novo (`zoom_a_calcular`: o mesmo em
 /// todo bloco, sai do `.trf` inteiro) ou nenhum.
 pub(crate) fn transformacao(e: &EfEstabilizar, nome: &str) -> Result<String> {
-    // faixa do `zoom` do filtro
-    if !finito(e.zoom_pct, -100.0..=100.0) {
-        return Err(erro("item_invalido", format!("efeito estabilizar {}: zoom_pct", e.base.id)));
+    // faixa do `zoom` do filtro e forma do nome do `.trf` (a mesma regra que a validação lê em `invalidos`)
+    if let Some(campo) = campo_fora(&Efeito::Estabilizar(e.clone()), (0, 0)) {
+        return Err(erro("item_invalido", format!("efeito estabilizar {}: {campo}", e.base.id)));
     }
     let zoom = match e.borda {
         BordaEstab::Ampliar if zoom_a_calcular(e) => "optzoom=1".to_string(),
@@ -412,7 +486,7 @@ fn por_quadro(o: &Origem, fonte: &FonteInfo) -> Result<Vec<String>> {
     let mut f = Vec::new();
     if let Some(l) = o.lente {
         let ruim = || erro("item_invalido", format!("efeito lente {}", l.base.id));
-        if ![l.k1, l.k2].iter().all(|v| v.is_finite()) || !finito(l.cx, 0.0..=1.0) || !finito(l.cy, 0.0..=1.0) {
+        if campo_fora(&Efeito::Lente(l.clone()), fonte.exibido).is_some() {
             return Err(ruim());
         }
         let c = LensCoefficients { k1: l.k1 as f32, k2: l.k2 as f32, k3: 0.0 };
@@ -423,7 +497,7 @@ fn por_quadro(o: &Origem, fonte: &FonteInfo) -> Result<Vec<String>> {
     }
     if let Some(a) = o.ajustes {
         // faixas do `eq`
-        if !finito(a.brilho, -1.0..=1.0) || !finito(a.contraste, -1000.0..=1000.0) || !finito(a.gama, 0.1..=10.0) || !finito(a.saturacao, 0.0..=3.0) {
+        if campo_fora(&Efeito::Ajustes(a.clone()), fonte.exibido).is_some() {
             return Err(erro("item_invalido", format!("efeito ajustes {}", a.base.id)));
         }
         if (a.brilho, a.contraste, a.gama, a.saturacao) != (0.0, 1.0, 1.0, 1.0) {
@@ -432,7 +506,7 @@ fn por_quadro(o: &Origem, fonte: &FonteInfo) -> Result<Vec<String>> {
     }
     if let Some(n) = o.nitidez {
         // faixa do `la` do `unsharp`
-        if !finito(n.quantidade, -2.0..=5.0) {
+        if campo_fora(&Efeito::Nitidez(n.clone()), fonte.exibido).is_some() {
             return Err(erro("item_invalido", format!("efeito nitidez {}", n.base.id)));
         }
         if n.quantidade != 0.0 {
@@ -456,7 +530,7 @@ pub fn aplicar(m: &mut dyn Montador, base: &str, efeitos: &[Tolerante<Efeito>], 
         f.extend([format!("settb={}/{}", tab.tb.num, tab.tb.den), guarda(lidos)]);
     }
     if let Some(d) = o.des {
-        f.push(bwdif(d, dobra));
+        f.push(bwdif(d, dobra, fonte));
     }
     if let Some(e) = o.est {
         let nome = nome_do_trf(efeitos, e, fonte);
@@ -880,6 +954,12 @@ pub(crate) mod testes {
             let e = filtro_de("ampliar", zoom).unwrap_err().to_string();
             assert!(e.contains("item_invalido") && e.contains("zoom_pct"), "{zoom}: {e}");
         }
+        // o nome do `.trf` gravado vai para o grafo: só SHA-256 em minúsculas, senão nem compila
+        let (maiusculo, curto) = ("A".repeat(64), "a".repeat(63));
+        for ruim in ["../x", maiusculo.as_str(), "x.trf:optzoom=1", curto.as_str(), ""] {
+            let e = transformacao(&est_de(estabilizar(&t, 0, 9, "preta", 0.0, Some(ruim))), "x.trf").unwrap_err().to_string();
+            assert!(e.contains("item_invalido") && e.contains("trf_sha256"), "{ruim}: {e}");
+        }
         assert_eq!(quadros_da_analise(&[], &est_de(estabilizar(&t, 3, 12, "preta", 0.0, None)), &t), 10);
         assert_eq!(quadros_da_analise(&efs(json!([desentrelacar("campo")])), &est_de(estabilizar(&t, 3, 12, "preta", 0.0, None)), &t), 20);
     }
@@ -1011,6 +1091,8 @@ pub(crate) mod testes {
 
     #[test]
     fn e1_completo_com_eq() {
+        // mede os pixels da cadeia; o selo (camada global) cairia na faixa medida
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
         let Some(cap) = fontes::cap() else { return };
         let casos: [(f64, (i64, i64), Option<(u64, u64)>); 6] =
             [(0.5, (30, 1), None), (1.0, (30, 1), None), (4.0, (30, 1), None), (0.5, (30000, 1001), None), (1.0, (25, 1), None), (0.5, (30, 1), Some((50, 80)))];
@@ -1038,6 +1120,8 @@ pub(crate) mod testes {
     /// `ocultar` + `tmix`: a máscara entra em cada quadro lido ANTES da média, também nos lidos antes do trecho.
     #[test]
     fn ocultar_e_tmix_sem_sobra() {
+        // mede os pixels da cadeia; o selo (camada global) cairia na faixa medida
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
         let Some(cap) = fontes::cap() else { return };
         let (mut slots, mut controle) = (0, 0);
         for fonte in [Fonte::Mp4, Fonte::Mkv30] {
@@ -1131,7 +1215,8 @@ pub(crate) mod testes {
 
         // quadro: mesma contagem, mesmo quadro, só o campo de cima
         let plano = plano_entrelacado(&cap, &m, Some("quadro"), false, NTSC, &alvo_final("cpu"));
-        assert!(plano.blocos[0].grafo.contains("bwdif=mode=send_frame:parity=auto:deint=all"));
+        // a ordem do fluxo (`tt`), escrita
+        assert!(plano.blocos[0].grafo.contains("bwdif=mode=send_frame:parity=tff:deint=all"), "{}", cap.versao);
         let o = plano.proveniencia.roteiro[0].origem.as_ref().unwrap();
         assert_eq!((plano.total_q, o.lidos as usize, &o.pts[..]), (n as u64, n, &tab.pts[j_in..j_out]));
         let (r, quadros) = renderizar(&cap, &plano, "quadro", &[]);
@@ -1143,7 +1228,7 @@ pub(crate) mod testes {
 
         // campo: o dobro de quadros, na taxa dos campos; par = campo de cima, ímpar = o de baixo (meio quadro depois)
         let plano = plano_entrelacado(&cap, &m, Some("campo"), false, NTSC_CAMPOS, &alvo_final("cpu"));
-        assert!(plano.blocos[0].grafo.contains("bwdif=mode=send_field:parity=auto:deint=all"));
+        assert!(plano.blocos[0].grafo.contains("bwdif=mode=send_field:parity=tff:deint=all"), "{}", cap.versao);
         let campos = tabela(&efs(json!([desentrelacar("campo")])), tab);
         let o = plano.proveniencia.roteiro[0].origem.as_ref().unwrap();
         assert_eq!((plano.total_q, o.lidos as usize, &o.pts[..]), (2 * n as u64, 2 * n, &campos.pts[2 * j_in..2 * j_out]));
@@ -1255,6 +1340,8 @@ pub(crate) mod testes {
     /// mídia a ponta repete.
     #[test]
     fn media_no_congelado_e_centrada() {
+        // mede os pixels da cadeia; o selo (camada global) cairia na faixa medida
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
         let Some(cap) = fontes::cap() else { return };
         let m = apoio::medida(&cap, Fonte::Mp4);
         let sem_efeito = cinza_por_digito(&cap, Fonte::Mp4);
@@ -1290,6 +1377,8 @@ pub(crate) mod testes {
     /// Congelado de fonte entrelaçada: o quadro desentrelaçado é o do trecho (por quadro, e o primeiro campo por campo).
     #[test]
     fn desentrelace_no_congelado() {
+        // mede os pixels da cadeia; o selo (camada global) cairia na faixa medida
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
         let Some(cap) = fontes::cap() else { return };
         let m = apoio::medida(&cap, Fonte::Entrelacado);
         let j = 30;
@@ -1617,7 +1706,6 @@ pub(crate) mod testes {
 
     /// O render por campo sem o croma do outro campo: depende de o motor usar `cor_da_fonte`.
     #[test]
-    #[ignore = "clipe::trecho e clipe::congelar (miolo) ainda chamam cor::cadeia_fonte direto; trocar por realce::cor_da_fonte"]
     fn render_por_campo_sem_croma_do_outro_campo() {
         let Some(cap) = fontes::cap() else { return };
         let f = fonte_bff(&cap, &fontes::pasta_temporaria("bff"));
@@ -1635,7 +1723,9 @@ pub(crate) mod testes {
         let f = fonte_bff(&cap, &fontes::pasta_temporaria("bff"));
         let centros = |ordem: &str| {
             let plano = Mundo::novo(&cap).com("m1", &f).compilar(&projeto_bff(&f, ordem), &alvo_final("cpu")).unwrap_or_else(|e| panic!("bff {ordem} ({}): {e}", cap.versao));
-            assert!(plano.blocos[0].grafo.contains(&format!("bwdif=mode=send_field:parity={ordem}:deint=all")));
+            // `auto` vira a ordem do fluxo, escrita
+            let escrita = if ordem == "auto" { "bff" } else { ordem };
+            assert!(plano.blocos[0].grafo.contains(&format!("bwdif=mode=send_field:parity={escrita}:deint=all")), "{ordem} ({})", cap.versao);
             let (_, quadros) = renderizar(&cap, &plano, "bff", &[]);
             assert_eq!(quadros.len(), 60);
             quadros.iter().map(|q| marca_de(q).1).collect::<Vec<f64>>()
@@ -1656,17 +1746,27 @@ pub(crate) mod testes {
     }
 
     /// Faixa cheia com o campo de baixo primeiro: a cadeia de cor da faixa cheia (`mergeplanes`) perde a marca de
-    /// ordem dos campos do quadro e o `bwdif` com `parity=auto` assume o de cima (medido nos dois ffmpeg).
+    /// ordem dos campos do quadro e o `bwdif` com `parity=auto` assumiria o de cima (medido nos dois ffmpeg). A
+    /// paridade vai escrita, pela ordem do fluxo (`FonteInfo.ordem_campos`); sem ela a marca vai e volta (controle).
     #[test]
-    #[ignore = "cor::cadeia_fonte (miolo) perde a ordem dos campos em faixa cheia e FonteInfo não a traz: com ordem = auto o campo de baixo primeiro sai trocado"]
     fn desentrelace_por_campo_em_faixa_cheia_segue_a_ordem_da_fonte() {
         let Some(cap) = fontes::cap() else { return };
         let f = fonte_bff_de(&cap, &fontes::pasta_temporaria("bff-cheia"), true);
-        let plano = Mundo::novo(&cap).com("m1", &f).compilar(&projeto_bff(&f, "auto"), &alvo_final("cpu")).expect("compila");
-        let (_, quadros) = renderizar(&cap, &plano, "bff-cheia", &[]);
-        let centros: Vec<f64> = quadros.iter().map(|q| marca_de(q).1).collect();
-        let voltas = centros.windows(2).filter(|p| p[1] < p[0]).count();
-        assert_eq!(voltas, 0, "({}) a marca vai e volta {voltas} vezes em 60 campos", cap.versao);
+        assert_eq!(f.ordem_campos, OrdemCampos::Bff, "({}) ordem lida do fluxo", cap.versao);
+        let voltas = |f: &FonteInfo, nome: &str| {
+            let plano = Mundo::novo(&cap).com("m1", f).compilar(&projeto_bff(f, "auto"), &alvo_final("cpu")).expect("compila");
+            let (_, quadros) = renderizar(&cap, &plano, nome, &[]);
+            assert_eq!(quadros.len(), 60);
+            let centros: Vec<f64> = quadros.iter().map(|q| marca_de(q).1).collect();
+            (plano.blocos[0].grafo.clone(), centros.windows(2).filter(|p| p[1] < p[0]).count())
+        };
+        let (grafo, n) = voltas(&f, "bff-cheia");
+        assert!(grafo.contains("mergeplanes") && grafo.contains("bwdif=mode=send_field:parity=bff:deint=all"), "({})", cap.versao);
+        assert_eq!(n, 0, "({}) a marca vai e volta {n} vezes em 60 campos", cap.versao);
+        // controle: a mesma fonte sem a ordem (o `auto` de antes) sai com os campos trocados
+        let (grafo, n) = voltas(&FonteInfo { ordem_campos: OrdemCampos::Auto, ..f.clone() }, "bff-cheia-auto");
+        assert!(grafo.contains("parity=auto"));
+        assert!(n >= 25, "controle ({}): sem a ordem a marca devia ir e voltar: {n} voltas", cap.versao);
     }
 
     /// Busca que abre UM quadro depois do previsto (injetada) em prévia de clipe com leitura alargada: a seleção por
@@ -1808,7 +1908,6 @@ pub(crate) mod testes {
 
     /// Por campo, o `mapa.csv` traz um campo por slot (pts do quadro e o meio até o seguinte).
     #[test]
-    #[ignore = "relatorio/mapa.rs (P1.R) exige todo pts do trecho entre os lidos; o do segundo campo não é pts de quadro da fonte"]
     fn exportacao_por_campo_da_o_mapa() {
         let Some(cap) = fontes::cap() else { return };
         let e = apoio::medida(&cap, Fonte::Entrelacado);

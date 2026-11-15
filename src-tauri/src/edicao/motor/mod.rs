@@ -11,8 +11,8 @@ use serde::{Deserialize, Serialize};
 use super::ffmpeg::args as ffmpeg_args;
 use super::ffmpeg::sonda::Capacidades;
 use super::modelo::{
-    ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, Nivel,
-    ProjetoEdicao, Racional, Tolerante,
+    ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, ModoLegendas, Nivel,
+    OrdemCampos, OrigemLegenda, Posicao, ProjetoEdicao, Racional, Tolerante,
 };
 use super::quadros::TabelaQuadros;
 use super::rastreio::avaliar::Como;
@@ -39,7 +39,7 @@ use juncao::Peca;
 use plano::{
     Bloco, Canvas, Entrada, Papel, Plano, ProvAudio, ProvAviso, ProvClipeAudio, ProvFaixa, ProvFfmpeg, ProvItem, ProvLegendas, ProvMapa, ProvMedido,
     ProvMidia, ProvNaSaida, ProvOcultacao, ProvOrigem, ProvProcessamento, ProvProjeto, ProvQuadrosOcultos, ProvRastreio, ProvSaida, ProvSilencio,
-    ProvTrilha, Proveniencia,
+    ProvSobreposto, ProvTrilha, Proveniencia,
 };
 
 /// Tudo que o compilador enxerga além do projeto. Montado por `executar::preparar`, o único lugar com E/S.
@@ -83,6 +83,10 @@ pub struct FonteInfo {
     pub sar: Racional,
     pub giro: i32,
     pub entrelacado: bool,
+    // CONTRATO: acréscimo (fecho da Fase 1). `entrelacado` só diz que há campos; o desentrelace precisa da ordem.
+    /// Ordem de exibição dos campos lida do fluxo (`field_order`: `tt`/`bt` = de cima primeiro, `bb`/`tb` = de
+    /// baixo); `Auto` = sem marca (progressivo ou desconhecido).
+    pub ordem_campos: OrdemCampos,
     pub pix_fmt: String,
     pub matriz: Matriz,
     pub faixa: Faixa,
@@ -92,6 +96,9 @@ pub struct FonteInfo {
     pub conteiner: String,
     /// `codec_name` do fluxo de vídeo.
     pub codec: String,
+    // CONTRATO: acréscimo (fecho da Fase 1): o relatório precisa do tamanho e o compilador não toca o disco.
+    /// Bytes do arquivo (`format.size` do ffprobe); 0 = não lido.
+    pub tamanho: u64,
 }
 
 /// O que renderizar. `Previa`: altura em px e slots [de_q, ate_q). `Quadro`: slot `q` e largura em px.
@@ -422,6 +429,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
                 j_in: j_in as u32,
                 quadro_do_slot,
                 pts: tab.pts[j_in..j_out].to_vec(),
+                campos: tab.pts.len() != fonte.quadros.pts.len(),
             });
             // ocultações aplicadas neste clipe, por quadro lido (no congelado, com o `ativo` local já resolvido)
             let midia_ref = p.midias.iter().find(|m| m.id == midia);
@@ -541,19 +549,59 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             },
         });
     }
+    // sobrepostos que entram no vídeo: os mesmos que `sobrepor::aplicar` desenha (trilha visível, com slots na linha)
+    let mut sobrepostos = Vec::new();
     for trilha in p.sobreposicoes.iter().filter(|t| !t.oculta) {
         for c in &trilha.clipes {
-            match c {
-                Tolerante::Conhecido(ClipeSobreposto::Imagem(x)) => drop(citadas.insert(x.midia.clone())),
+            let (b, tipo, midia, modelo, textos) = match c {
+                Tolerante::Conhecido(ClipeSobreposto::Imagem(x)) => (&x.base, "imagem", Some(x.midia.clone()), None, Vec::new()),
                 Tolerante::Conhecido(ClipeSobreposto::Titulo(x)) => {
-                    if let Fundo::Imagem { midia } = &x.titulo.fundo {
-                        citadas.insert(midia.clone());
-                    }
+                    let fundo = match &x.titulo.fundo {
+                        Fundo::Imagem { midia } => Some(midia.clone()),
+                        _ => None,
+                    };
+                    let textos = x.titulo.blocos.iter().map(|b| b.conteudo.clone()).filter(|t| !t.trim().is_empty()).collect();
+                    (&x.base, "titulo", fundo, Some(x.titulo.modelo), textos)
                 }
-                _ => {}
+                _ => continue,
+            };
+            if let Some(m) = &midia {
+                citadas.insert(m.clone());
             }
+            let Some(l) = linha.livres.iter().find(|l| l.id == b.id && l.trilha == trilha.id) else { continue };
+            // fora do programa não aparece
+            let (de, ate) = (l.inicio_q.min(total_q), (l.inicio_q + l.n_q as u64).min(total_q));
+            if ate <= de {
+                continue;
+            }
+            sobrepostos.push(ProvSobreposto {
+                trilha: trilha.id.clone(),
+                clipe: b.id.clone(),
+                tipo: tipo.to_string(),
+                nome: b.rotulo.clone(),
+                na_saida: ProvNaSaida { de_q: de, n_q: (ate - de) as u32, de_s: seg(de), ate_s: seg(ate) },
+                midia,
+                preso_a: match &b.pos {
+                    Posicao::Clipe { clipe, .. } => Some(clipe.clone()),
+                    Posicao::Programa { .. } => None,
+                },
+                modelo,
+                textos,
+            });
         }
     }
+    // legendas: só as que saem (aparecem no programa e o modo as entrega)
+    let no_programa: BTreeSet<usize> = legendas::no_programa(p, linha).into_iter().filter(|(_, a, b)| b > a).map(|(i, _, _)| i).collect();
+    let saem = |i: &usize| exportacao.legendas != ModoLegendas::Nenhuma && no_programa.contains(i);
+    let legendas_prov = ProvLegendas {
+        origem: p.legendas.origem.clone(),
+        n: (0..p.legendas.itens.len()).filter(saem).count() as u32,
+        conferidas: p.legendas.itens.iter().enumerate().filter(|(i, l)| saem(i) && l.conferida).count() as u32,
+        modo: exportacao.legendas,
+        no_projeto: p.legendas.itens.len() as u32,
+        ia: p.legendas.itens.iter().enumerate().filter(|(i, l)| saem(i) && l.origem == OrigemLegenda::Ia).count() as u32,
+        ia_conferidas: p.legendas.itens.iter().enumerate().filter(|(i, l)| saem(i) && l.origem == OrigemLegenda::Ia && l.conferida).count() as u32,
+    };
     // trilhas de som (narração): a mídia de cada clipe que toca também é fonte do vídeo entregue
     let mut trilhas = Vec::new();
     if p.saida.audio {
@@ -615,6 +663,9 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             erros_decodificacao: tab.erros_decodificacao,
             usado,
             usado_total_s,
+            largura: f.exibido.0,
+            altura: f.exibido.1,
+            tamanho: f.tamanho,
         });
     }
     let mut rastreios = Vec::new();
@@ -651,16 +702,17 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         roteiro,
         ocultacoes,
         audio: ProvAudio { silencios, tolerancia_atempo_ms, mixagem: p.saida.audio.then(|| p.mixagem.clone()), trilhas },
-        legendas: ProvLegendas { origem: p.legendas.origem.clone(), n: p.legendas.itens.len() as u32, conferidas: p.legendas.itens.iter().filter(|l| l.conferida).count() as u32 },
+        legendas: legendas_prov,
         sincronias: Vec::new(),
         rastreios,
         ia: Vec::new(),
-        estabilizacoes: Vec::new(),
+        estabilizacoes: efeitos::realce::estabilizacoes(p),
         avisos: Vec::new(),
         selos_desligados,
         revisado_por: exportacao.revisado_por.clone(),
         ffmpeg: ProvFfmpeg { versao: ctx.cap.versao.clone(), configuracao: ctx.cap.configuracao.clone(), origem: ctx.cap.origem, sha256: ctx.cap.sha256.clone() },
         fecho: p.fecho.clone(),
+        sobrepostos,
     })
 }
 

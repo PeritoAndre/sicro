@@ -1090,6 +1090,8 @@ mod testes {
     /// A janela sem nenhum slot ativo (a cópia vai ao `nullsink`) roda de verdade e dá os quadros do clipe sem lupa.
     #[test]
     fn sem_slot_ativo_renderiza_igual_ao_clipe_sem_lupa() {
+        // mede os pixels da cadeia; o selo (camada global) cairia na faixa medida
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
         let Some(cap) = fontes::cap() else { return };
         let pasta = fontes::pasta_temporaria("lupa-inativa");
         let (w, h, n) = (640usize, 360usize, 6u32);

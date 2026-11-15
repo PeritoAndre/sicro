@@ -14,6 +14,7 @@ import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import type { MidiaInfo, MidiaRef, Pts, Seg, TabelaQuadros, Titulo } from "@domain/edicao";
 import type { VideoEvent, VideoMedia } from "@domain/video";
 import { midiaDoCaso } from "../store/coleta";
+import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { exibido, fimDaMidia, fimDoPar, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 import { garantirMidia, recursoDe, useRecursos } from "../palco/recursos";
 import { MODELOS, novoTitulo, paresDeEventos, tempoDoEvento, type ModeloNovo } from "./novos";
@@ -92,6 +93,22 @@ function useMidia(ws: string, v: VideoMedia | null): { info: MidiaInfo | null; t
   return { info: r.info, tabela: r.info?.marcavel ? r.tabela : null, travado: r.info?.marcavel === false };
 }
 
+/** Frase do catálogo (ou a mensagem do erro) de uma falha de comando. */
+function fraseDoErro(e: unknown): string {
+  const r = separarErro(e);
+  return r.frase || r.codigo || "";
+}
+
+/** Erro do "Adicionar" (leitura da proveniência): a linha vermelha do cartão, dentro do diálogo. */
+function LinhaDeErro({ frase }: { frase: string | null }) {
+  if (frase === null) return null;
+  return (
+    <p className={`${styles.erroLinha} ${styles.larga}`} role="alert" data-erro="">
+      {frase}
+    </p>
+  );
+}
+
 function CampoVideo({ lista, valor, onChange }: { lista: VideoMedia[]; valor: string; onChange(id: string): void }) {
   return (
     <label className={`${styles.campo} ${styles.larga}`}>
@@ -131,11 +148,18 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
     setFim(video ? ate : null);
   }, [video?.id, de, ate]); // eslint-disable-line react-hooks/exhaustive-deps
   const p = video && ini !== null && fim !== null ? pontas(tabela, ini, fim) : null;
+  const [erro, setErro] = useState<string | null>(null);
+  useEffect(() => setErro(null), [video?.id]);
   const adicionar = async () => {
     if (!video || !p) return;
-    // proveniência gravada na análise (P1.10)
-    const prov = await provenienciaDaMidia(ws, video.id).catch(() => null);
-    onTrechos([{ midia: midiaDoCaso(video, lista, info, prov), ...p }]);
+    setErro(null);
+    try {
+      // proveniência gravada na análise (P1.10); se a leitura falha, nada é adicionado
+      const prov = await provenienciaDaMidia(ws, video.id);
+      onTrechos([{ midia: midiaDoCaso(video, lista, info, prov), ...p }]);
+    } catch (e) {
+      setErro(fraseDoErro(e));
+    }
   };
   return (
     <Dialog
@@ -205,9 +229,16 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
             ))}
           </select>
         </label>
+        <LinhaDeErro frase={erro} />
       </div>
     </Dialog>
   );
+}
+
+/** Canvas da saída do projeto aberto (o arranjo do modelo é gravado para ele). */
+function canvasDaSaida(): { w: number; h: number } {
+  const s = useEdicaoStore.getState().doc?.saida;
+  return { w: s?.largura ?? 1920, h: s?.altura ?? 1080 };
 }
 
 function FormTitulo({ onFechar, onTitulo }: Pick<Props, "onFechar" | "onTitulo">) {
@@ -224,7 +255,7 @@ function FormTitulo({ onFechar, onTitulo }: Pick<Props, "onFechar" | "onTitulo">
           <Button variant="ghost" onClick={onFechar}>
             Cancelar
           </Button>
-          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onTitulo(novoTitulo(modelo, titulo.trim(), sub.trim()))}>
+          <Button variant="primary" leftIcon={<Plus size={14} />} onClick={() => onTitulo(novoTitulo(modelo, titulo.trim(), sub.trim(), canvasDaSaida()))}>
             Adicionar
           </Button>
         </>
@@ -263,13 +294,20 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   useEffect(() => setMarcados(new Set()), [id]);
   const pares = useMemo(() => paresDeEventos(eventos.filter((e) => marcados.has(e.id)).map(tempoDoEvento)), [eventos, marcados]);
+  const [erro, setErro] = useState<string | null>(null);
+  useEffect(() => setErro(null), [id]);
   const adicionar = async () => {
     if (!video) return;
-    const prov = await provenienciaDaMidia(ws, video.id).catch(() => null);
-    const ref = midiaDoCaso(video, lista, info, prov);
-    const itens = pares.map(([a, b]) => pontas(tabela, a, b)).filter((x): x is NonNullable<typeof x> => x !== null);
-    // o mesmo retrato da mídia para todos os trechos (um id só no projeto)
-    onTrechos(itens.map((p) => ({ midia: ref, ...p })));
+    setErro(null);
+    try {
+      const prov = await provenienciaDaMidia(ws, video.id);
+      const ref = midiaDoCaso(video, lista, info, prov);
+      const itens = pares.map(([a, b]) => pontas(tabela, a, b)).filter((x): x is NonNullable<typeof x> => x !== null);
+      // o mesmo retrato da mídia para todos os trechos (um id só no projeto)
+      onTrechos(itens.map((p) => ({ midia: ref, ...p })));
+    } catch (e) {
+      setErro(fraseDoErro(e));
+    }
   };
   return (
     <Dialog
@@ -312,6 +350,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
             </li>
           ))}
         </ul>
+        <LinhaDeErro frase={erro} />
       </div>
     </Dialog>
   );

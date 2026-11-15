@@ -940,6 +940,11 @@ pub struct RetratoCalibracao {
     pub pontos_sha256: String,
     pub residuo_m: f64,
     pub regiao: Vec<Ponto>,
+    // CONTRATO: acréscimo (fecho da Fase 1). None = retrato gravado antes (nada a conferir). A falta do campo lê como
+    // None sem atributo de padrão: o front não precisa completá-lo (contratos (g) 12).
+    /// SHA-256 da mídia em que a calibração foi marcada: a régua só vale em clipe dessa mídia.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub midia_sha256: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -969,6 +974,10 @@ pub struct RetratoCalculo {
     pub de_s: f64,
     pub ate_s: f64,
     pub metodo: String,
+    // CONTRATO: acréscimo (fecho da Fase 1). None = retrato gravado antes (nada a conferir).
+    /// SHA-256 da mídia em que a velocidade foi medida: o texto só vale em clipe dessa mídia.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub midia_sha256: Option<String>,
 }
 
 /// Onde o texto fica: lugar fixo ou deslocamento (0..1 do canvas) de um rastreio.

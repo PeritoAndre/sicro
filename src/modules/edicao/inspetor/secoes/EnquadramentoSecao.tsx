@@ -10,6 +10,7 @@ import { ehChaves } from "../../modelo/curva";
 import { useEdicaoStore } from "../../store/edicaoStore";
 import { enquadramentoDe, giroEm, girarDe, marcarRegiao, mudarGiro, noEfeito, removerEfeito, tirarFimRegiao, type ClipeQualquer } from "../acoes";
 import { pedirMarcacao } from "../contexto";
+import { useOrigemPendente } from "../../palco/origem";
 import { Escolha, Grade, Icone, Mini, Secao } from "../campos";
 import type { SecaoProps } from "../registro";
 import { useInspetorUi } from "../ui";
@@ -23,6 +24,8 @@ export function EnquadramentoSecao({ clipe: c }: SecaoProps<ClipeQualquer>) {
   const e = enquadramentoDe(c);
   const proporcao = useEdicaoStore((s) => (s.doc ? s.doc.saida.largura / s.doc.saida.altura : 16 / 9));
   const chave = useInspetorUi((s) => s.chave);
+  // a região é marcada no espaço de origem: espera o intermediário (§7.5)
+  const parada = useOrigemPendente(c);
   const marcar = (ponta: "inicio" | "fim") =>
     pedirMarcacao(
       { tipo: "regiao", efeito: e?.id, proporcao },
@@ -65,13 +68,13 @@ export function EnquadramentoSecao({ clipe: c }: SecaoProps<ClipeQualquer>) {
         </div>
         <div className={`${styles.larga} ${styles.marcasLinha}`}>
           <span className={styles.marcas}>
-            <Mini ativo={marcando("inicio")} onClick={() => marcar("inicio")} data-acao="marcar-inicio">
+            <Mini ativo={marcando("inicio")} disabled={parada} onClick={() => marcar("inicio")} data-acao="marcar-inicio">
               <Crop size={12} /> Marcar início
             </Mini>
             {ks && <span className={styles.tempoMarca} data-dado>{formatarTempo((ks[0] as Chave<Caixa>).t)}</span>}
           </span>
           <span className={styles.marcas}>
-            <Mini ativo={marcando("fim")} onClick={() => marcar("fim")} data-acao="marcar-fim">
+            <Mini ativo={marcando("fim")} disabled={parada} onClick={() => marcar("fim")} data-acao="marcar-fim">
               <Crop size={12} /> Marcar fim
             </Mini>
             {ks && ks.length > 1 && (

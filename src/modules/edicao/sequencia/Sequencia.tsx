@@ -1,26 +1,28 @@
 /**
  * Sequência (§8.2, D24): vista permanente da trilha principal. Botões de item novo, um cartão por item (os de versão
  * futura e os inválidos apagados), arrastar pela alça para reordenar (pointer events: o arrastar HTML5 briga com o
- * dragDrop do Tauri no Windows) e o que está preso a cada clipe.
+ * dragDrop do Tauri no Windows). O que está preso a cada clipe é do `Presos`, dentro do cartão.
  */
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode, type RefObject } from "react";
 import { CalendarRange, Film, Image as IconeImagem, Snowflake, Type } from "lucide-react";
 import { open as abrirArquivo } from "@tauri-apps/plugin-dialog";
 import { commands } from "@core/commands";
-import type { Analise, ClipePrincipal, Id, ItemSel, LinhaResolvida, Problema, ProjetoEdicao, Titulo } from "@domain/edicao";
+import type { Analise, ClipePrincipal, Id, LinhaResolvida, Problema, ProjetoEdicao, Titulo } from "@domain/edicao";
 import { pushToast } from "@components/toast/toastStore";
 import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { acharMidia, garantirMidia } from "../modelo/projeto";
 import { resolver } from "../modelo/tempo";
 import { garantirMidia as pedirMidia, recursoDe, useRecursos, type EstadoRecurso } from "../palco/recursos";
-import { CartaoClipe, type TipoPreso } from "./CartaoClipe";
+import { CartaoClipe } from "./CartaoClipe";
 import { NovoClipe, type Formulario } from "./NovoClipe";
-import { clipeNaTela, destinoDoArrasto, duracaoNaLinha, presosAoClipe, problemasDoItem, rotuloDoTipo, selosDoClipe, type Preso } from "./contas";
-import { novoClipeImagem, novoClipeTitulo, prenderImagem, prenderNarracao, prenderTitulo } from "./novos";
+import { clipeNaTela, destinoDoArrasto, duracaoNaLinha, problemasDoItem, rotuloDoTipo, selosDoClipe } from "./contas";
+import { novoClipeImagem, novoClipeTitulo } from "./novos";
 import { congelar, duplicar, inserir, inserirTrechos, moverPara, podeCongelar, remover, selecionarClipe } from "./acoes";
 import styles from "./Sequencia.module.css";
 import { capturar } from "../palco/capturar";
+import { useOrigemStore, type OrigemDoClipe } from "../store/origemStore";
+import { useOrigensDosClipes } from "./origens";
 // as listas que o Rust aceita (`armazem::{EXT_IMAGEM, EXT_AUDIO}`): o diálogo não oferece o que a importação recusa
 import { EXTENSOES } from "../inspetor/secoes/importar";
 
@@ -52,6 +54,8 @@ export function Sequencia({
   const cursor = useEdicaoStore((s) => s.cursor);
   const soLeitura = useEdicaoStore((s) => s.soLeitura);
   const versao = useRecursos((s) => s.versao);
+  const origens = useOrigemStore((s) => s.porClipe);
+  useOrigensDosClipes();
   const [form, setForm] = useState<Formulario | null>(null);
   const [arrasto, setArrasto] = useState<{ de: number; para: number } | null>(null);
   const listaRef = useRef<HTMLOListElement | null>(null);
@@ -127,27 +131,6 @@ export function Sequencia({
     if (m) inserir("Imagem", () => [novoClipeImagem(m.id)]);
   };
 
-  const adicionarPreso = async (clipe: Id, t: TipoPreso) => {
-    const st = useEdicaoStore.getState();
-    if (t === "Título" || t === "Terço inferior") {
-      st.alterar(t, (d) => {
-        prenderTitulo(d, clipe, t === "Título" ? "evento" : "terco_inferior");
-      });
-      return;
-    }
-    const m = await importar(t === "Imagem" ? "imagem" : "audio").catch(falhou);
-    if (!m) return;
-    useEdicaoStore.getState().alterar(t, (d) => {
-      if (t === "Imagem") prenderImagem(d, clipe, m.id);
-      else prenderNarracao(d, clipe, m.id, m.nome.replace(/\.[^.]+$/, ""));
-    });
-  };
-
-  const selecionarPreso = (p: Preso) => {
-    const item: ItemSel = { k: p.k, id: p.id, trilha: p.trilha };
-    useEdicaoStore.getState().selecionar({ itens: [item], foco: item, efeito: null });
-  };
-
   const novoTitulo = (t: Titulo) => {
     setForm(null);
     inserir("Título", () => [novoClipeTitulo(t)]);
@@ -164,6 +147,7 @@ export function Sequencia({
       podeCongelar={podeCong}
       recurso={recursoDe}
       arrasto={arrasto}
+      origens={origens}
       listaRef={listaRef}
       onForm={setForm}
       onCongelar={() => {
@@ -175,8 +159,6 @@ export function Sequencia({
       onDuplicar={duplicar}
       onRemover={remover}
       onAlca={comecarArrasto}
-      onAdicionar={(id, t) => void adicionarPreso(id, t)}
-      onPreso={selecionarPreso}
     >
       <NovoClipe
         qual={form}
@@ -192,6 +174,7 @@ export function Sequencia({
   );
 }
 
+// CONTRATO: saem `onAdicionar` e `onPreso`; entra `origens?` (contratos-fase1 F8).
 export interface VistaSequenciaProps {
   doc: ProjetoEdicao;
   analise: Analise | null;
@@ -202,6 +185,8 @@ export interface VistaSequenciaProps {
   podeCongelar: boolean;
   recurso(sha: string | undefined): EstadoRecurso;
   arrasto: { de: number; para: number } | null;
+  /** Intermediário de origem por clipe (progresso no cartão). */
+  origens?: Record<Id, OrigemDoClipe | undefined>;
   listaRef?: RefObject<HTMLOListElement>;
   onForm(f: Formulario): void;
   onCongelar(): void;
@@ -210,8 +195,6 @@ export interface VistaSequenciaProps {
   onDuplicar(id: Id | null): void;
   onRemover(id: Id | null): void;
   onAlca(i: number): (e: PE<HTMLElement>) => void;
-  onAdicionar(id: Id, t: TipoPreso): void;
-  onPreso(p: Preso): void;
   children?: ReactNode;
 }
 
@@ -262,19 +245,17 @@ export function VistaSequencia(p: VistaSequenciaProps) {
               duracao={conhecido && id ? duracaoNaLinha(id, linha) : null}
               selos={conhecido ? selosDoClipe(c, ref, rec.info, estado, probs) : []}
               problemas={probs}
-              presos={conhecido && id ? presosAoClipe(doc, id) : []}
               selecionado={!!id && id === focoId}
               desligado={conhecido && c.desligado}
               arrastando={arrasto?.de === i}
               soltar={soltar}
               soLeitura={soLeitura}
+              origem={conhecido && id ? p.origens?.[id] : undefined}
               onSelecionar={() => p.onSelecionar(id ?? null)}
               onVer={() => p.onSelecionar(id ?? null)}
               onDuplicar={() => p.onDuplicar(id ?? null)}
               onRemover={() => p.onRemover(id ?? null)}
               onAlca={p.onAlca(i)}
-              onAdicionar={(t) => id && p.onAdicionar(id, t)}
-              onPreso={p.onPreso}
             />
           );
         })}

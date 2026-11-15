@@ -95,7 +95,7 @@ export type Posicao =
 
 // ---- transição (catálogo em motor/juncao.rs; id desconhecido = erro de validação, preservado) ----
 export interface Transicao {
-  tipo: string;        // "escurecer" (sai e entra pelo fundo, sem sobrepor) | "fundir" | "clarear" | "deslizar_esq" | ... (xfade)
+  tipo: string;        // "escurecer" (sai e entra pelo fundo, sem sobrepor) | "fundir" | "cortina_esq" | "cortina_dir" | "deslizar_esq" | "deslizar_dir" | "circulo" (xfade)
   duracao_s: Seg;
   audio: "acompanhar" | "cortar";        // cortar = som de quem sai até o meio da sobreposição, de quem entra depois (afade de 10 ms)
 }
@@ -208,13 +208,13 @@ export interface EfLupa extends EfBase {
 export interface EfRegua extends EfBase {
   tipo: "regua";
   calibracao: { id: string; metodo: "line" | "plane" | "cross_ratio"; h: number[]; espaco: { w: number; h: number };
-                pontos_sha256: string; residuo_m: number; regiao: Ponto[] };   // retrato: homografia, resíduo e polígono dos pontos de controle
+                pontos_sha256: string; residuo_m: number; regiao: Ponto[]; midia_sha256?: string };   // retrato: homografia, resíduo e polígono dos pontos de controle
   ancora: Ponto; direcao_graus: number;  // no plano do chão
   comprimento_m: number; divisoes: number; traco: Traco; rotulo: boolean;
 }
 export interface EfVelocidadeExibida extends EfBase {
   tipo: "velocidade_exibida";
-  calculo: { id: string; kmh: number; faixa: [number, number] | null; de_s: Seg; ate_s: Seg; metodo: string };   // retrato
+  calculo: { id: string; kmh: number; faixa: [number, number] | null; de_s: Seg; ate_s: Seg; metodo: string; midia_sha256?: string };   // retrato (CONTRATO: midia_sha256, fecho da Fase 1)
   onde: { modo: "fixa"; lugar: Lugar } | { modo: "segue"; rastreio: Id; dx: number; dy: number };
   estilo: EstiloTexto;                   // texto automático: "42 km/h (39 a 45)" com faixa, "≈ 42 km/h" sem; `ativo` dentro de [de_s, ate_s]
 }
@@ -473,8 +473,11 @@ export interface TrechoFala { de: Seg; ate: Seg; texto: string; locutor: string 
 export interface Degravacao { origem: { audio_sha256: string; importado_em: string; motor: string | null; modelo_sha256: string | null }; trechos: TrechoFala[] }
 /** Retratos lidos das análises (medidas.rs, P1.3): o mesmo formato de `EfRegua.calibracao` e `EfVelocidadeExibida.calculo`. */
 export interface RetratoCalibracao { id: string; metodo: "line" | "plane" | "cross_ratio"; h: number[]; espaco: { w: number; h: number };
-                                     pontos_sha256: string; residuo_m: number; regiao: Ponto[] }
-export interface RetratoCalculo { id: string; kmh: number; faixa: [number, number] | null; de_s: Seg; ate_s: Seg; metodo: string }
+                                     pontos_sha256: string; residuo_m: number; regiao: Ponto[];
+                                     // CONTRATO: fecho da Fase 1. SHA-256 da mídia da calibração; ausente em retrato antigo.
+                                     midia_sha256?: string }
+// CONTRATO: fecho da Fase 1. `midia_sha256` = mídia em que a velocidade foi medida; ausente em retrato antigo.
+export interface RetratoCalculo { id: string; kmh: number; faixa: [number, number] | null; de_s: Seg; ate_s: Seg; metodo: string; midia_sha256?: string }
 /** Proveniência da mídia na análise (video_proveniencia_commands.rs, P1.10); null = não informado. */
 export interface ProvenienciaMidia { recebido_nativo: boolean | null; recebido_obs: string; relogio_desvio_s: number | null; gravador: string | null }
 

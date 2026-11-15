@@ -11,7 +11,7 @@ use crate::edicao::modelo::{
     Confirmacao, ConteudoOculto, CorMidia, Derivacao, Efeito, FaixaAnalise, FormaRegiao, ModoOcultar, ModoSilencio, Normalizar,
     OrigemLegendas, OrigemRastreio, Predefinicao, Racional, Recebido, SincroniaRef, TamanhoPx, Titulo, Transicao, Velocidade,
 };
-use crate::edicao::modelo::{Animavel, AudioClipe, Ausencia, Mixagem, PapelAudio};
+use crate::edicao::modelo::{Animavel, AudioClipe, Ausencia, Mixagem, ModeloTitulo, ModoLegendas, PapelAudio};
 use crate::edicao::motor::Alvo;
 use crate::edicao::quadros::Declarado;
 
@@ -210,7 +210,8 @@ pub struct PassoAudio {
     /// "audio.sha256" (hash do PCM).
     pub hash: String,
     pub amostras: u64,
-    /// Alvo da normalização; None = só mede (para o aviso de pico).
+    /// Alvo da normalização; None = só mede (para o aviso de pico). Com o limitador ligado, `pico_db` vem como 120
+    /// (`audio::PICO_COM_LIMITADOR_DB`): o teto de pico passa a ser do `alimiter` e não limita o ganho.
     pub normalizar: Option<Normalizar>,
     /// Maior desvio do `atempo` entre os clipes, em ms (vai para `feito.audio`).
     pub tolerancia_atempo_ms: f64,
@@ -255,6 +256,26 @@ pub struct Proveniencia {
     // CONTRATO: abertura da Fase 1 (contratos (i): o `feito` não registrava o `fecho`).
     #[serde(default)]
     pub fecho: Option<Transicao>,
+    // CONTRATO: acréscimo (fecho da Fase 1): o `feito` só citava a mídia dos sobrepostos.
+    /// Clipes sobrepostos que entram no vídeo (título, terço inferior, imagem, marca), um por clipe, das trilhas de
+    /// baixo para cima.
+    #[serde(default)]
+    pub sobrepostos: Vec<ProvSobreposto>,
+}
+
+/// Um clipe sobreposto na saída. `tipo` = "titulo" | "imagem"; `midia` = a imagem (ou o fundo de imagem do título);
+/// `preso_a` = clipe da principal a que está preso; `modelo` e `textos` (o conteúdo dos blocos, na ordem) só no título.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct ProvSobreposto {
+    pub trilha: String,
+    pub clipe: String,
+    pub tipo: String,
+    pub nome: String,
+    pub na_saida: ProvNaSaida,
+    pub midia: Option<String>,
+    pub preso_a: Option<String>,
+    pub modelo: Option<ModeloTitulo>,
+    pub textos: Vec<String>,
 }
 
 /// O SHA-256 do `projeto.json` não está aqui (o compilador não vê o arquivo): vem do retrato.
@@ -325,6 +346,15 @@ pub struct ProvMidia {
     pub erros_decodificacao: u32,
     pub usado: Vec<ProvFaixa>,
     pub usado_total_s: f64,
+    // CONTRATO: acréscimo (fecho da Fase 1): o relatório não tinha a resolução nem o tamanho de cada gravação.
+    /// Tamanho exibido em px (com giro e proporção do pixel); 0 em arquivo só de som.
+    #[serde(default)]
+    pub largura: u32,
+    #[serde(default)]
+    pub altura: u32,
+    /// Bytes do arquivo (0 = não lido).
+    #[serde(default)]
+    pub tamanho: u64,
 }
 
 /// Onde o item cai na saída: slots e segundos do programa.
@@ -362,6 +392,11 @@ pub struct ProvOrigem {
     pub j_in: u32,
     pub quadro_do_slot: Vec<u32>,
     pub pts: Vec<i64>,
+    // CONTRATO: acréscimo (fecho da Fase 1; P1.4 item 4).
+    /// Os índices (`j_in`, `quadro_do_slot`) e `pts` são de CAMPO (`desentrelacar` por campo): o de índice par é o
+    /// quadro da fonte; o ímpar, o segundo campo dele, que não é pts lido.
+    #[serde(default)]
+    pub campos: bool,
 }
 
 /// Um processamento aplicado, na ordem da cadeia; `parametros` = objeto JSON com os valores usados.
@@ -481,12 +516,29 @@ pub struct ProvClipeAudio {
     pub saida_s: f64,
 }
 
-/// `feito.legendas`: origem, quantas e quantas conferidas.
+/// `feito.legendas`: origem, como saíram e quantas. `n` e `conferidas` contam só as legendas que SAEM (as que
+/// aparecem no programa, com `modo` diferente de `nenhuma`); `no_projeto` = itens da trilha, saiam ou não.
+// CONTRATO: `modo`, `no_projeto`, `ia` e `ia_conferidas` acrescentados e `n` passou a contar só o que sai (fecho da Fase 1): o relatório
+// não tinha como saber se as legendas foram entregues, nem como.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvLegendas {
     pub origem: Option<OrigemLegendas>,
     pub n: u32,
     pub conferidas: u32,
+    /// `Exportacao.legendas` do render: queimadas na imagem, em arquivo ao lado, as duas ou nenhuma.
+    #[serde(default = "sem_legendas")]
+    pub modo: ModoLegendas,
+    #[serde(default)]
+    pub no_projeto: u32,
+    /// Das que saem: as de origem automática (`origem: ia`) e, dessas, as conferidas pelo perito.
+    #[serde(default)]
+    pub ia: u32,
+    #[serde(default)]
+    pub ia_conferidas: u32,
+}
+
+fn sem_legendas() -> ModoLegendas {
+    ModoLegendas::Nenhuma
 }
 
 /// Rastreio usado (sem o nome). `corridas` = as do arquivo denso.

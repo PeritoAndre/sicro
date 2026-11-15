@@ -181,6 +181,8 @@ pub fn run() {
             commands::edicao_commands::edicao_degravacao,
             commands::edicao_commands::edicao_retrato_calibracao,
             commands::edicao_commands::edicao_retrato_calculo,
+            commands::edicao_commands::edicao_origem_estado,
+            commands::edicao_commands::edicao_proxy_pedir,
             commands::video_proveniencia_commands::video_proveniencia,
             commands::video_proveniencia_commands::video_proveniencia_salvar,
             // áudio
@@ -327,7 +329,7 @@ mod tests {
             .map(str::trim)
             .filter_map(|l| l.strip_suffix(',').filter(|n| n.starts_with("edicao_")))
             .collect();
-        assert_eq!(lista.len(), 31, "{lista:?}");
+        assert_eq!(lista.len(), 33, "{lista:?}");
         // só o corpo de `run()` (este teste também traz os nomes)
         let corpo = &fonte[fonte.find("pub fn run()").unwrap()..fonte.find("#[cfg(test)]").unwrap()];
         for n in &lista {

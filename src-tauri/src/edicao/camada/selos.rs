@@ -14,11 +14,10 @@ use crate::edicao::motor::plano::{Desenho, ItemCamada, QuadroItem};
 use crate::edicao::tempo;
 use crate::error::Result;
 
-/// Os selos saem na imagem e no `feito`? Fica DESLIGADO até o integrador ligar: com eles todo bloco que tem clipe
-/// marcado ganha a camada global, e mudam junto a lista exata de camadas de
-/// `testes::aceite::compilar_e_deterministica_e_nao_toca_o_disco` e a faixa de cima dos vídeos que os testes de
-/// pixel da onda renderizam com velocidade, ampliação, quadro parado ou realce.
-pub const NA_IMAGEM: bool = false;
+/// Os selos saem na imagem e no `feito`. Ligado no fecho da Fase 1: todo bloco que tem clipe marcado ganha a camada
+/// global. Os testes de pixel que medem a cadeia de um efeito (e não o selo) desligam na própria thread
+/// (`desligar_no_teste`); o selo é medido em `camada::selos::testes` e na ponta a ponta.
+pub const NA_IMAGEM: bool = true;
 
 #[cfg(test)]
 thread_local! {
@@ -50,16 +49,27 @@ fn na_imagem() -> bool {
     chave()
 }
 
+#[cfg(test)]
+struct Volta(Option<bool>);
+
+#[cfg(test)]
+impl Drop for Volta {
+    fn drop(&mut self) {
+        FORCADO.with(|f| f.set(self.0));
+    }
+}
+
 /// Liga os selos na thread do teste enquanto o valor devolvido viver.
 #[cfg(test)]
 pub(crate) fn ligar_no_teste() -> impl Drop {
-    struct Volta(Option<bool>);
-    impl Drop for Volta {
-        fn drop(&mut self) {
-            FORCADO.with(|f| f.set(self.0));
-        }
-    }
     Volta(FORCADO.with(|f| f.replace(Some(true))))
+}
+
+/// Tira os selos da thread do teste enquanto o valor devolvido viver: para o teste que mede os pixels da cadeia de
+/// um efeito na faixa de cima da imagem, onde o selo cairia.
+#[cfg(test)]
+pub(crate) fn desligar_no_teste() -> impl Drop {
+    Volta(FORCADO.with(|f| f.replace(Some(false))))
 }
 
 /// Textos escritos na imagem (os mesmos que vão para `feito.roteiro[].selos`).

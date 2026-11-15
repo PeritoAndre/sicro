@@ -13,6 +13,17 @@ use crate::edicao::tempo;
 /// Limites de um bloco: entradas de mídia e duração (s).
 pub const MAX_ENTRADAS: usize = 12;
 pub const MAX_DURACAO_S: f64 = 300.0;
+/// Peso de um clipe na conta do bloco, em meias entradas: o que entra por transição que sobrepõe pesa uma vez e
+/// meia (medido em 1080p no 7.0.2: cerca de 77 MB por clipe encadeado contra 55 MB no corte seco; com 12 deles o
+/// pico passava de `PICO_GIB` com a máquina ocupada).
+const PESO_ENTRADA: usize = 2;
+const PESO_SOBREPOSTA: usize = 3;
+
+#[cfg(test)]
+thread_local! {
+    /// Só nos testes: a exportação final num bloco único (a referência de "os mesmos quadros com e sem divisão").
+    pub(crate) static UM_BLOCO: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
 
 /// Janela de slots de um bloco: [de_q, de_q + n_q).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,7 +65,9 @@ pub(crate) fn escurecimentos(p: &ProjetoEdicao, linha: &LinhaResolvida, i: usize
     (entrada, slots_da_transicao(seguinte, linha, c.n_q))
 }
 
-/// Divide o programa em blocos: em corte seco quando houver, senão em fronteira de slot fora de transição.
+/// Divide o programa em blocos de até `MAX_ENTRADAS` entradas de mídia (menos quando há transição que sobrepõe:
+/// `PESO_SOBREPOSTA`) e `MAX_DURACAO_S`: em corte seco quando houver, no primeiro slot da transição que sobrepõe, ou
+/// no meio do clipe longo, fora das transições.
 /// `Alvo::Previa` e `Alvo::Quadro` dão uma janela só.
 pub fn dividir(p: &ProjetoEdicao, linha: &LinhaResolvida, alvo: &Alvo) -> Vec<JanelaBloco> {
     let total = linha.total_q;
@@ -67,17 +80,23 @@ pub fn dividir(p: &ProjetoEdicao, linha: &LinhaResolvida, alvo: &Alvo) -> Vec<Ja
         Alvo::Quadro { q, .. } => return janela(*q, q.saturating_add(1)).into_iter().collect(),
         Alvo::Final { .. } => {}
     }
+    #[cfg(test)]
+    if UM_BLOCO.with(|c| c.get()) {
+        return janela(0, total).into_iter().collect();
+    }
     let max_q = tempo::slots(MAX_DURACAO_S, linha.fps).max(1);
     let mut blocos = Vec::new();
-    let (mut inicio, mut entradas) = (0u64, 0usize);
+    let (mut inicio, mut peso) = (0u64, 0usize);
     for (i, c) in linha.clipes.iter().enumerate() {
         let fim = c.inicio_q + c.n_q as u64;
-        // corte seco antes deste clipe: fecha se ele não cabe
-        if c.sobrepoe_q == 0 && c.inicio_q > inicio && (entradas + 1 > MAX_ENTRADAS || fim - inicio > max_q) {
+        let custo = if c.sobrepoe_q > 0 { PESO_SOBREPOSTA } else { PESO_ENTRADA };
+        // o clipe não cabe: fecha antes dele. No corte seco, na fronteira; com transição que sobrepõe, no primeiro
+        // slot dela (o bloco seguinte abre com a cauda do anterior, que conta como entrada; a junção corta ali)
+        if c.inicio_q > inicio && (peso + custo > PESO_ENTRADA * MAX_ENTRADAS || fim - inicio > max_q) {
             blocos.extend(janela(inicio, c.inicio_q));
-            (inicio, entradas) = (c.inicio_q, 0);
+            (inicio, peso) = (c.inicio_q, if c.sobrepoe_q > 0 { PESO_ENTRADA } else { 0 });
         }
-        entradas += 1;
+        peso += custo;
         // clipe maior que o limite: corta no meio dele, fora do escurecimento
         let (entra, sai) = escurecimentos(p, linha, i);
         while fim - inicio > max_q {
@@ -86,7 +105,7 @@ pub fn dividir(p: &ProjetoEdicao, linha: &LinhaResolvida, alvo: &Alvo) -> Vec<Ja
                 break;
             }
             blocos.extend(janela(inicio, corte));
-            (inicio, entradas) = (corte, 1);
+            (inicio, peso) = (corte, PESO_ENTRADA);
         }
     }
     blocos.extend(janela(inicio, total));
@@ -206,6 +225,82 @@ mod testes {
             q += j.n_q as u64;
         }
         assert_eq!(q, 38_108);
+    }
+
+    /// Linha com transição que sobrepõe em todo clipe: `n` slots cada, `s` de sobreposição (0 no primeiro).
+    fn linha_sobreposta(clipes: usize, n: u32, s: u32) -> LinhaResolvida {
+        let mut q = 0u64;
+        let clipes = (0..clipes)
+            .map(|i| {
+                let sobrepoe_q = if i == 0 { 0 } else { s };
+                q -= sobrepoe_q as u64;
+                let c = ClipeResolvido { id: format!("c{i}"), inicio_q: q, n_q: n, sobrepoe_q, fonte: None };
+                q += n as u64;
+                c
+            })
+            .collect();
+        LinhaResolvida { fps: Racional { num: 30, den: 1 }, total_q: q, clipes, livres: Vec::new() }
+    }
+
+    /// Clipes do programa que têm slot na janela.
+    fn entradas_na_janela(l: &LinhaResolvida, j: &JanelaBloco) -> usize {
+        l.clipes.iter().filter(|c| c.inicio_q < j.de_q + j.n_q as u64 && c.inicio_q + c.n_q as u64 > j.de_q).count()
+    }
+
+    #[test]
+    fn com_transicao_que_sobrepoe_fecha_em_12_entradas_no_primeiro_slot_dela() {
+        let fundir = json!({ "tipo": "fundir", "duracao_s": 0.2, "audio": "acompanhar" });
+        let clipes: Vec<_> = (0..60).map(|i| titulo(&format!("c{i}"), if i == 0 { json!(null) } else { fundir.clone() })).collect();
+        let p = projeto(json!(clipes), json!(null));
+        // 60 clipes de 15 slots, 6 de sobreposição: 900 − 59 × 6
+        let l = linha_sobreposta(60, 15, 6);
+        assert_eq!(l.total_q, 546);
+        let b = dividir(&p, &l, &alvo_final());
+        let (mut q, mut maior) = (0, 0);
+        for j in &b {
+            assert_eq!(j.de_q, q, "sem buraco nem repetição");
+            q += j.n_q as u64;
+            maior = maior.max(entradas_na_janela(&l, j));
+            // o corte cai no primeiro slot de uma transição: o clipe que abre o bloco começa ali
+            assert!(j.de_q == 0 || l.clipes.iter().any(|c| c.inicio_q == j.de_q && c.sobrepoe_q > 0), "corte em {}", j.de_q);
+        }
+        assert_eq!(q, l.total_q);
+        // o encadeado pesa uma vez e meia: 1 + 7 no primeiro; os seguintes abrem com a cauda do anterior e levam 7
+        // novos (2 + 7 × 3 = 23 meias entradas de 24): 8 + 7 × 7 + 3
+        assert_eq!(maior, 8, "{b:?}");
+        assert_eq!(b.iter().map(|j| entradas_na_janela(&l, j)).collect::<Vec<_>>(), vec![8, 8, 8, 8, 8, 8, 8, 8, 4]);
+        // misturado: corte seco a cada 4 clipes; o bloco fecha no corte seco ou na transição, sem passar do peso
+        let mut m = linha_sobreposta(40, 15, 6);
+        let mut q = 0u64;
+        for (i, c) in m.clipes.iter_mut().enumerate() {
+            if i % 4 == 0 {
+                c.sobrepoe_q = 0;
+            }
+            q -= c.sobrepoe_q as u64;
+            c.inicio_q = q;
+            q += c.n_q as u64;
+        }
+        m.total_q = q;
+        let clipes: Vec<_> = (0..40).map(|i| titulo(&format!("c{i}"), if i % 4 == 0 { json!(null) } else { fundir.clone() })).collect();
+        let b = dividir(&projeto(json!(clipes), json!(null)), &m, &alvo_final());
+        assert_eq!(b.iter().map(|j| j.n_q as u64).sum::<u64>(), m.total_q);
+        for j in &b {
+            let dentro: Vec<&ClipeResolvido> = m.clipes.iter().filter(|c| c.inicio_q < j.de_q + j.n_q as u64 && c.inicio_q + c.n_q as u64 > j.de_q).collect();
+            // a cauda que abre o bloco e o corte seco pesam 2; o que entra por transição dentro do bloco, 3
+            let peso: usize = dentro.iter().map(|c| if c.sobrepoe_q > 0 && c.inicio_q >= j.de_q { PESO_SOBREPOSTA } else { PESO_ENTRADA }).sum();
+            assert!(peso <= PESO_ENTRADA * MAX_ENTRADAS && dentro.len() <= 9, "{j:?}: {} clipes, peso {peso}", dentro.len());
+            assert!(j.de_q == 0 || m.clipes.iter().any(|c| c.inicio_q == j.de_q), "corte fora de fronteira: {}", j.de_q);
+        }
+        // só corte seco: a conta da Fase 0 não muda (12 por bloco)
+        let b = dividir(&projeto(json!((0..30).map(|i| titulo(&format!("c{i}"), json!(null))).collect::<Vec<_>>()), json!(null)), &linha(&[15; 30]), &alvo_final());
+        assert_eq!(b.iter().map(|j| (j.de_q, j.n_q)).collect::<Vec<_>>(), vec![(0, 180), (180, 180), (360, 90)]);
+        // os 5 min também valem com sobreposição: 4 clipes de 2 min fecham antes do terceiro
+        let clipes: Vec<_> = (0..4).map(|i| titulo(&format!("c{i}"), if i == 0 { json!(null) } else { fundir.clone() })).collect();
+        let p = projeto(json!(clipes), json!(null));
+        let l = linha_sobreposta(4, 3600, 6);
+        let b = dividir(&p, &l, &alvo_final());
+        assert_eq!(b.iter().map(|j| (j.de_q, j.n_q)).collect::<Vec<_>>(), vec![(0, 7188), (7188, 7194)]);
+        assert!(b.iter().all(|j| j.n_q as u64 <= 9000));
     }
 
     #[test]

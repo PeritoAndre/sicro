@@ -90,6 +90,7 @@ fn calibracao(conn: &Connection, occ: &Uuid, id: &str) -> Result<RetratoCalibrac
         // `residuals_px` é o RMS de reprojeção em METROS (`rms_reprojection` da análise; o nome da coluna é antigo)
         residuo_m: c.residuals_px.filter(|r| r.is_finite()).unwrap_or(0.0),
         regiao: regiao(&c, metodo, espaco),
+        midia_sha256: Some(c.media_hash.clone()),
     })
 }
 
@@ -172,6 +173,7 @@ fn retrato_do_calculo(c: &VideoSpeedCalculation) -> RetratoCalculo {
         de_s: t.iter().copied().fold(f64::INFINITY, f64::min),
         ate_s: t.iter().copied().fold(f64::NEG_INFINITY, f64::max),
         metodo: metodo.into(),
+        midia_sha256: Some(c.media_hash.clone()),
     }
 }
 
@@ -424,6 +426,16 @@ pub fn fora_do_intervalo(e: &EfVelocidadeExibida, t_fonte: Option<f64>) -> bool 
     }
 }
 
+// CONTRATO: acréscimo (fecho da Fase 1). A medida vale só na mídia em que foi feita.
+/// O retrato é de OUTRA mídia que a do clipe? `do_clipe` = SHA-256 da mídia que o clipe mostra; None = clipe sem
+/// fonte (foto, título): nenhuma medida vale. Retrato sem mídia gravada (projeto anterior ao campo): não se confere.
+pub fn de_outra_midia(do_retrato: Option<&str>, do_clipe: Option<&str>) -> bool {
+    match do_clipe {
+        None => true,
+        Some(sha) => do_retrato.is_some_and(|r| !r.is_empty() && r != sha),
+    }
+}
+
 // ------------------------------------------------------------------ retrato desatualizado
 
 /// Régua e velocidade ligadas do projeto, com o clipe de cada uma.
@@ -475,8 +487,19 @@ pub fn desatualizados(ws: &Path, p: &ProjetoEdicao) -> Vec<Problema> {
     let mut v = Vec::new();
     for (clipe, e) in usos {
         let (id, campo, mudou) = match e {
-            Efeito::Regua(r) => (&r.base.id, "calibracao", calibracao(&conn, &occ, &r.calibracao.id).map_or(true, |x| x != r.calibracao)),
-            Efeito::VelocidadeExibida(x) => (&x.base.id, "calculo", calculo(&conn, &occ, &x.calculo.id).map_or(true, |c| c != x.calculo)),
+            // retrato gravado antes de `midia_sha256` existir: o campo vazio não é mudança
+            Efeito::Regua(r) => (&r.base.id, "calibracao", calibracao(&conn, &occ, &r.calibracao.id).map_or(true, |mut x| {
+                if r.calibracao.midia_sha256.is_none() {
+                    x.midia_sha256 = None;
+                }
+                x != r.calibracao
+            })),
+            Efeito::VelocidadeExibida(x) => (&x.base.id, "calculo", calculo(&conn, &occ, &x.calculo.id).map_or(true, |mut c| {
+                if x.calculo.midia_sha256.is_none() {
+                    c.midia_sha256 = None;
+                }
+                c != x.calculo
+            })),
             _ => continue,
         };
         if mudou {
@@ -532,7 +555,7 @@ pub(crate) mod testes {
     }
 
     fn retrato(metodo: MetodoCalibracao, h: &Homography, regiao: Vec<Ponto>) -> RetratoCalibracao {
-        RetratoCalibracao { id: "k1".into(), metodo, h: linhas(h), espaco: ESPACO, pontos_sha256: "a".repeat(64), residuo_m: 0.0, regiao }
+        RetratoCalibracao { id: "k1".into(), metodo, h: linhas(h), espaco: ESPACO, pontos_sha256: "a".repeat(64), residuo_m: 0.0, regiao, midia_sha256: None }
     }
 
     /// `plane`: retângulo de 8 × 10 m no chão da câmera sintética, pelo DLT da análise.
@@ -731,7 +754,7 @@ pub(crate) mod testes {
     }
 
     fn calc(kmh: f64, faixa: Option<(f64, f64)>) -> RetratoCalculo {
-        RetratoCalculo { id: "c".into(), kmh, faixa, de_s: 3.0, ate_s: 5.0, metodo: "x".into() }
+        RetratoCalculo { id: "c".into(), kmh, faixa, de_s: 3.0, ate_s: 5.0, metodo: "x".into(), midia_sha256: None }
     }
 
     /// Aceite (§11): velocidade sempre com faixa ou "≈"; a faixa impressa contém a calculada.
@@ -986,7 +1009,8 @@ pub(crate) mod testes {
             video_speed_repo::insert_calculation(&conn, c).unwrap();
         }
         let rc = retrato_calculo(&ws, &mc.id.to_string()).unwrap();
-        assert_eq!(rc, RetratoCalculo { id: mc.id.to_string(), kmh: 41.6, faixa: Some((38.7, 45.2)), de_s: 3.0, ate_s: 4.2, metodo: "monte_carlo".into() });
+        assert_eq!(rc, RetratoCalculo { id: mc.id.to_string(), kmh: 41.6, faixa: Some((38.7, 45.2)), de_s: 3.0, ate_s: 4.2, metodo: "monte_carlo".into(), midia_sha256: Some(mc.media_hash.clone()) });
+        assert_eq!(rc.midia_sha256.as_deref().map(str::len), Some(64), "o retrato leva a mídia do cálculo");
         let ri = retrato_calculo(&ws, &ic.id.to_string()).unwrap();
         assert_eq!((ri.faixa, ri.de_s, ri.ate_s, ri.metodo.as_str()), (Some((39.0, 44.0)), 1.0, 2.0, "regressao"));
         let rd = retrato_calculo(&ws, &dois.id.to_string()).unwrap();

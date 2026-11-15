@@ -927,6 +927,7 @@ pub(crate) mod testes {
             sar,
             giro,
             entrelacado: !matches!(v["field_order"].as_str(), None | Some("progressive" | "unknown")),
+            ordem_campos: crate::edicao::quadros::ordem_dos_campos(v["field_order"].as_str()),
             pix_fmt,
             matriz,
             faixa,
@@ -934,6 +935,7 @@ pub(crate) mod testes {
             audio,
             conteiner: j["format"]["format_name"].as_str().unwrap_or("").to_string(),
             codec: v["codec_name"].as_str().unwrap_or("").to_string(),
+            tamanho: std::fs::metadata(video).map_or(0, |m| m.len()),
         }
     }
 
@@ -1086,6 +1088,7 @@ pub(crate) mod testes {
             sar: Racional { num: 1, den: 1 },
             giro: 0,
             entrelacado: false,
+            ordem_campos: crate::edicao::modelo::OrdemCampos::Auto,
             pix_fmt: pix_fmt.into(),
             matriz: Matriz::Bt709,
             faixa: Faixa::Tv,
@@ -1107,6 +1110,7 @@ pub(crate) mod testes {
             audio: None,
             conteiner: conteiner.into(),
             codec: codec.into(),
+            tamanho: 0,
         }
     }
 

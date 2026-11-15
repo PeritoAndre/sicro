@@ -453,8 +453,19 @@ pub fn exigir_sucesso(cmd: &Comando, t: &Termino) -> Result<()> {
     Err(SicroError::Validation(format!("{classe}: {} (código {:?}): {}", cmd.nome, t.codigo, linhas.join(" | "))))
 }
 
+/// Posto por `matar_todos`: o app está saindo.
+static ENCERRANDO: AtomicBool = AtomicBool::new(false);
+
+// CONTRATO: acréscimo (revisão do fecho da Fase 1, contratos-fase1 (g) R4).
+/// `matar_todos` já rodou (o app está saindo)? O que um filho morto por ele "mediu" não vale: quem grava resultado
+/// de medição (a sonda de GPU) pergunta aqui antes.
+pub(crate) fn encerrando() -> bool {
+    ENCERRANDO.load(Ordering::SeqCst)
+}
+
 /// Mata todos os filhos vivos (chamada no `ExitRequested`); quem esperava por eles recebe `cancelado`.
 pub fn matar_todos() {
+    ENCERRANDO.store(true, Ordering::SeqCst);
     let vivos: Vec<Arc<Vivo>> = vivos().lock().unwrap_or_else(|e| e.into_inner()).values().cloned().collect();
     for v in vivos {
         v.morto.store(true, Ordering::SeqCst);

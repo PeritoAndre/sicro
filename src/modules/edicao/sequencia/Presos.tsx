@@ -18,7 +18,7 @@ import { prenderImagem, prenderNarracao } from "./novos";
 import { EXTENSOES } from "../inspetor/secoes/importar";
 import styles from "./Sequencia.module.css";
 
-export const PRESOS_PRONTOS = false;
+export const PRESOS_PRONTOS = true;
 
 export type TipoPreso = "Título" | "Terço inferior" | "Imagem" | "Narração";
 const TIPOS: readonly TipoPreso[] = ["Título", "Terço inferior", "Imagem", "Narração"];

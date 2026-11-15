@@ -27,7 +27,13 @@ const XFADE: &[(&str, &str)] = &[
 ];
 
 /// Maior duração que o `xfade` aceita (s).
-const XFADE_MAX_S: f64 = 60.0;
+pub const XFADE_MAX_S: f64 = 60.0;
+
+// CONTRATO: acréscimo (fecho da Fase 1): a validação acusa antes o que `misturar` recusa.
+/// Transição que sobrepõe com mais slots do que o `xfade` aceita (`XFADE_MAX_S`)? As de `fade` (`escurecer`) não têm limite.
+pub fn longa_demais(t: &Transicao, fps: Racional) -> bool {
+    nome_xfade(&t.tipo).is_some() && fps.num > 0 && fps.den > 0 && !(crate::edicao::tempo::slots(t.duracao_s, fps) as f64 * fps.den as f64 / fps.num as f64 <= XFADE_MAX_S)
+}
 
 const ETIQUETA_709_TV: &str = "setparams=colorspace=bt709:color_primaries=bt709:color_trc=bt709:range=tv";
 
@@ -852,6 +858,8 @@ mod testes {
     /// sozinho com o seu `escurecer`; dentro, a conta do `fundir` sobre esses quadros.
     #[test]
     fn escurecer_e_sobreposicao_no_mesmo_clipe() {
+        // mede os pixels da cadeia; o selo (camada global) cairia na faixa medida
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
         let Some(cap) = fontes::cap() else { return };
         let m = apoio::medida(&cap, Fonte::Mp4);
         let mundo = Mundo::novo(&cap).com("m1", &m.info);

@@ -3,15 +3,18 @@
  *  tempo de fonte do evento (contratos (h) 27). */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MidiaInfo, TabelaQuadros } from "@domain/edicao";
+import type { MidiaInfo, TabelaQuadros, Titulo } from "@domain/edicao";
 import type { VideoEvent, VideoMedia } from "@domain/video";
 
-const cmd = vi.hoisted(() => ({ listVideoMedia: vi.fn(), openVideoMedia: vi.fn(), edicaoMidiaInfo: vi.fn(), edicaoTabelaQuadros: vi.fn() }));
+const cmd = vi.hoisted(() => ({ listVideoMedia: vi.fn(), openVideoMedia: vi.fn(), edicaoMidiaInfo: vi.fn(), edicaoTabelaQuadros: vi.fn(), videoProveniencia: vi.fn() }));
 vi.mock("@core/commands", () => ({ commands: cmd }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 
 import { NovoClipe, type TrechoNovo } from "./NovoClipe";
-import { tempoDoEvento } from "./novos";
+import { tempoDoEvento, tituloDaFase0 } from "./novos";
+import { useEdicaoStore } from "../store/edicaoStore";
+import { novoProjeto } from "../modelo/projeto";
+import { arranjo, escalaDoCanvas } from "../modelo/titulos";
 import { botao, clicar, desmontarTudo, digitar, entradaDe, escolher, esperar, montar, tecla } from "../inspetor/testeTela";
 
 const SHA = "a".repeat(64);
@@ -28,6 +31,8 @@ const tabela: TabelaQuadros = { tb: { num: 1, den: 30 }, pts0: 30, passos: Array
 let soltar: () => void;
 beforeEach(() => {
   for (const f of Object.values(cmd)) f.mockReset();
+  // proveniência da análise: nada gravado (a coleta e o "Trecho…" leem sempre)
+  cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: null, recebido_obs: "", relogio_desvio_s: null, gravador: null });
   cmd.listVideoMedia.mockResolvedValue([video]);
   // o evento de 12 s gravado com pts na base 1/1000: o tempo de fonte é o do pts (12,5)
   cmd.openVideoMedia.mockResolvedValue({ events: [ev("e2", 20), ev("e1", 12, { pts: 12500, time_base: "1/1000" })] });
@@ -95,6 +100,69 @@ describe("Trecho…", () => {
     expect(caixas.every((c) => c.disabled)).toBe(true);
     expect(botao(document.body, "Adicionar").disabled).toBe(true);
     e.desmontar();
+  });
+
+  it("erro de leitura da proveniência: 'Trecho…' e 'Dos eventos…' mostram a frase no diálogo e não adicionam; lida, vai no MidiaRef", async () => {
+    soltar();
+    const recebidos: TrechoNovo[][] = [];
+    const erroDe = () => document.body.querySelector("[data-erro]")?.textContent ?? null;
+    const falha = { kind: "validation", message: "validation error: midia_ausente: Mídia ausente" };
+    const pausa = () => esperar(() => new Promise((r) => setTimeout(r, 0)));
+    cmd.videoProveniencia.mockRejectedValue(falha);
+    const t = await montar(<NovoClipe qual="trecho" ws="/c3" onFechar={() => {}} onTrechos={(x) => recebidos.push(x)} onTitulo={() => {}} />);
+    await pausa();
+    await escolher(document.body.querySelector("select")!, "v1");
+    await pausa();
+    expect(erroDe()).toBeNull();
+    await clicar(botao(document.body, "Adicionar"));
+    await pausa();
+    expect(recebidos).toEqual([]);
+    expect(erroDe()).toBe("Mídia ausente");
+    // a leitura volta: o erro some e o trecho leva a proveniência
+    cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: false, recebido_obs: "cópia", relogio_desvio_s: 12, gravador: "DVR" });
+    await clicar(botao(document.body, "Adicionar"));
+    await pausa();
+    expect(erroDe()).toBeNull();
+    expect(recebidos[0]![0]!.midia).toMatchObject({ recebido: { nativo: false, obs: "cópia" }, relogio_desvio_s: 12, gravador: "DVR" });
+    t.desmontar();
+    // Dos eventos: erro fora do catálogo aparece com a mensagem crua
+    cmd.videoProveniencia.mockRejectedValue({ kind: "database", message: "database error: database is locked" });
+    const e = await montar(<NovoClipe qual="eventos" ws="/c3" onFechar={() => {}} onTrechos={(x) => recebidos.push(x)} onTitulo={() => {}} />);
+    await pausa();
+    await escolher(document.body.querySelector("select")!, "v1");
+    await pausa();
+    for (const c of document.body.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')) await clicar(c);
+    await clicar(botao(document.body, "Adicionar"));
+    await pausa();
+    expect(recebidos).toHaveLength(1);
+    expect(erroDe()).toBe("database is locked");
+    e.desmontar();
+  });
+
+  it("Título…: cria no modelo escolhido (P1.7), para o canvas da saída do projeto aberto", async () => {
+    const canvas = { w: 1080, h: 1920 };
+    useEdicaoStore.setState({ doc: { ...novoProjeto(), saida: { ...novoProjeto().saida, largura: canvas.w, altura: canvas.h } } });
+    const recebidos: Titulo[] = [];
+    const t = await montar(<NovoClipe qual="titulo" ws="/c" onFechar={() => {}} onTrechos={() => {}} onTitulo={(x) => recebidos.push(x)} />);
+    const raiz = document.body;
+    await escolher(raiz.querySelector("select")!, "encerramento");
+    const [campoTitulo, campoSub] = [...raiz.querySelectorAll<HTMLInputElement>("input")];
+    await digitar(campoTitulo!, "Fim");
+    await digitar(campoSub!, "Laudo 77");
+    await clicar(botao(raiz, "Adicionar"));
+    const feito = recebidos[0]!;
+    expect(feito.modelo).toBe("encerramento");
+    expect(feito.blocos.map((b) => [b.papel, b.conteudo, b.lugar])).toEqual([
+      ["titulo", "Fim", arranjo("encerramento", "titulo").lugar],
+      ["subtitulo", "Laudo 77", arranjo("encerramento", "subtitulo").lugar],
+    ]);
+    // vertical: o texto do modelo encolhe com a largura
+    expect(feito.blocos[0]!.estilo.tamanho).toBe(arranjo("encerramento", "titulo").tamanho * escalaDoCanvas(canvas));
+    expect(escalaDoCanvas(canvas)).toBeLessThan(1);
+    // o arranjo da Fase 0 para o mesmo pedido era outro (cartão centrado, igual à cartela)
+    expect(feito.blocos[0]!.lugar).not.toEqual(tituloDaFase0("encerramento", "Fim", "Laudo 77").blocos[0]!.lugar);
+    useEdicaoStore.setState({ doc: null });
+    t.desmontar();
   });
 
   it("tempoDoEvento: pts × time_base quando há; senão timestamp_s", () => {

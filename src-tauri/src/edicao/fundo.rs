@@ -487,13 +487,15 @@ mod testes {
     /// Depois dos 10 s (aqui encurtados) o pedido comum refaz o que falhou.
     #[test]
     fn falha_vence_a_espera() {
+        // espera encurtada; o sono abaixo dá 3× de folga (máquina carregada: falhou uma vez com 1,5×)
+        const ESPERA: Duration = Duration::from_millis(100);
         let mut f = Fundo::nova(1);
-        Arc::get_mut(&mut f).unwrap().espera_falha = Duration::from_millis(100);
+        Arc::get_mut(&mut f).unwrap().espera_falha = ESPERA;
         f.pedir(TipoFundo::Proxy, "proxy:x", Box::new(|_, _| Err(SicroError::Validation("fonte_danificada: x".into()))), false);
         ate(&f, |l| l.iter().any(|t| matches!(t.estado, EstadoFundo::Falhou { .. })));
         let antes = f.pedir(TipoFundo::Proxy, "proxy:x", Box::new(|_, _| Ok(())), false);
         assert!(matches!(estado_de(&f.listar(), "proxy:x"), EstadoFundo::Falhou { .. }));
-        std::thread::sleep(Duration::from_millis(150));
+        std::thread::sleep(ESPERA * 3);
         let depois = f.pedir(TipoFundo::Proxy, "proxy:x", Box::new(|_, _| Ok(())), false);
         assert_ne!(antes, depois);
         ate(&f, |l| l.iter().any(|t| t.id == depois && t.estado == EstadoFundo::Pronta));

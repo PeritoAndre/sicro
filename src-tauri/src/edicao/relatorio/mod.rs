@@ -92,6 +92,7 @@ pub(crate) mod apoio {
     pub fn origem(tab: &TabelaQuadros, m: &MapaQuadros) -> ProvOrigem {
         let fim = if m.j_out < tab.pts.len() { tab.tempo(m.j_out) } else { tab.fim_s() };
         ProvOrigem {
+            campos: false,
             midia: "m1".into(),
             de_s: tab.tempo(m.j_in),
             ate_s: fim,
@@ -169,6 +170,9 @@ pub(crate) mod apoio {
             erros_decodificacao: 0,
             usado: vec![ProvFaixa { de_s: 1.0, ate_s: 3.0 }],
             usado_total_s: 2.0,
+            largura: 1280,
+            altura: 720,
+            tamanho: 123_456_789,
         };
         let bloco = Bloco {
             indice: 0,
@@ -227,7 +231,7 @@ pub(crate) mod apoio {
                     rastreio: "r1".into(),
                 }],
                 audio: ProvAudio { silencios: vec![ProvSilencio { midia: "m1".into(), de_s: 1.5, ate_s: 2.0, modo: ModoSilencio::Tom, motivo: "nome".into() }], tolerancia_atempo_ms: 0.0, mixagem: None, trilhas: vec![] },
-                legendas: ProvLegendas { origem: None, n: 0, conferidas: 0 },
+                legendas: ProvLegendas { origem: None, n: 0, conferidas: 0, modo: crate::edicao::modelo::ModoLegendas::Nenhuma, no_projeto: 0, ia: 0, ia_conferidas: 0 },
                 sincronias: vec![],
                 rastreios: vec![ProvRastreio {
                     id: "r1".into(),
@@ -260,6 +264,7 @@ pub(crate) mod apoio {
                     sha256: "f".repeat(64),
                 },
                 fecho: None,
+                sobrepostos: vec![],
             },
         }
     }

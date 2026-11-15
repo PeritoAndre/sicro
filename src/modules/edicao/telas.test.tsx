@@ -123,7 +123,6 @@ const cartao = (p: Partial<CartaoProps> = {}): CartaoProps => ({
   duracao: 12,
   selos: [],
   problemas: [],
-  presos: [],
   selecionado: false,
   desligado: false,
   arrastando: false,
@@ -134,8 +133,6 @@ const cartao = (p: Partial<CartaoProps> = {}): CartaoProps => ({
   onDuplicar() {},
   onRemover() {},
   onAlca() {},
-  onAdicionar() {},
-  onPreso() {},
   ...p,
 });
 const prob = (nivel: Problema["nivel"], mensagem: string): Problema => ({ nivel, codigo: "x", mensagem, clipe: "c", efeito: null, trilha: null, midia: null, campo: null, n: null });
@@ -151,8 +148,9 @@ describe("CartaoClipe", () => {
     expect(html).toContain('data-problema="x"');
   });
 
-  it("selecionado mostra 'Adicionar'; desconhecido fica apagado com o tipo cru e sem Ver nem Duplicar", () => {
-    expect(textos(renderToStaticMarkup(createElement(CartaoClipe, cartao({ selecionado: true }))))).toContain("Adicionar");
+  // os presos e o "Adicionar" são do `Presos` (lê a store pelo id): conferidos montados em `presos.test.tsx`
+  it("desconhecido fica apagado com o tipo cru e sem Ver nem Duplicar; sem id não há presos", () => {
+    expect(renderToStaticMarkup(createElement(CartaoClipe, cartao({ selecionado: true })))).not.toContain("data-presos");
     const html = renderToStaticMarkup(createElement(CartaoClipe, cartao({ tipo: null, tipoCru: "do_futuro", nome: "", duracao: null })));
     const ts = textos(html);
     expect(ts).toContain("do_futuro");
@@ -208,8 +206,6 @@ describe("Sequência com o projeto aberto", () => {
         onDuplicar: nada,
         onRemover: nada,
         onAlca: () => nada,
-        onAdicionar: nada,
-        onPreso: nada,
       }),
     );
     const ts = textos(html);

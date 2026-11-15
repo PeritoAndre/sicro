@@ -41,6 +41,8 @@ const LISTA_DE_QUADROS: &str = "quadros.decodificados.sha256";
 /// Teto do texto de parâmetros de um processamento no anexo C (o inteiro está no `tecnico.json` anexado).
 const MAX_PARAMETROS: usize = 600;
 const MAX_VALOR: usize = 160;
+/// Texto do sobreposto que identifica a linha dele na lista de acréscimos.
+const MAX_TEXTO_SOBREPOSTO: usize = 60;
 
 // ---------------------------------------------------------------------------
 // O que se lê do `tecnico.json` (campo que falta vale o padrão: um relatório de versão anterior ainda gera)
@@ -77,6 +79,17 @@ struct Feito {
     selos_desligados: Vec<String>,
     revisado_por: String,
     fecho: Option<FTransicao>,
+    sobrepostos: Vec<FSobreposto>,
+}
+
+/// `feito.sobrepostos[]`: título ou imagem por cima da principal.
+#[derive(Debug, Default, Deserialize)]
+#[serde(default)]
+struct FSobreposto {
+    tipo: String,
+    nome: String,
+    na_saida: FNaSaida,
+    textos: Vec<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -118,6 +131,9 @@ struct FMidia {
     erros_decodificacao: u64,
     usado: Vec<FFaixa>,
     usado_total_s: f64,
+    largura: u32,
+    altura: u32,
+    tamanho: u64,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -290,14 +306,17 @@ struct FClipeAudio {
     n_q: u32,
 }
 
-/// `modo` = `Exportacao.legendas` do render ("nenhuma" | "queimar" | "arquivo" | "ambos"). A proveniência ainda não
-/// o traz (`ProvLegendas`, do integrador): sem ele o relatório não sabe se as legendas saíram e não fala delas.
+/// `modo` = `Exportacao.legendas` do render ("nenhuma" | "queimar" | "arquivo" | "ambos"); `n` = as que saíram.
+/// `feito` antigo, sem o modo: o relatório não sabe se as legendas saíram e não fala delas. `ia` = as que saíram com
+/// origem automática; `ia_conferidas` = dessas, as com conferência registrada.
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct FLegendas {
     origem: Option<FOrigemLegendas>,
     n: u32,
     modo: Option<String>,
+    ia: u32,
+    ia_conferidas: u32,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -958,10 +977,10 @@ fn original(i: usize, m: &FMidia) -> Original {
         rotulo: m.nome.clone(),
         arquivo: m.nome.clone(),
         sha256: m.sha256.clone(),
-        tamanho: None,
+        tamanho: (m.tamanho > 0).then(|| tamanho(m.tamanho)),
         // foto e som não têm tabela de quadros: a duração não vem daqui
         duracao: if med.quadros <= 1 { "—".into() } else { duracao(med.ate_s - med.de_s) },
-        imagem: None,
+        imagem: (m.largura > 0 && m.altura > 0).then(|| format!("{} × {} pontos", m.largura, m.altura)),
         ritmo,
         formato: formato(&m.conteiner, &m.codec),
         taxa_variavel: variavel,
@@ -1193,10 +1212,41 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         }
     }
     let (mut acrescimos, mut mudancas) = (Vec::new(), Vec::new());
-    // legendas que saíram (na imagem ou em arquivo): não são de um item, valem ao longo do vídeo
-    let com_legendas = f.legendas.n > 0 && f.legendas.modo.as_deref().is_some_and(|m| m != "nenhuma");
-    if com_legendas {
-        acrescimos.push(Linha { o_que: frases::rotulo_do_efeito(tipo::LEGENDAS).unwrap_or("").to_string(), onde: rot("onde.video").to_string(), explicacao: frases::do_efeito(tipo::LEGENDAS).unwrap_or("").to_string() });
+    // legendas que saíram: na imagem, em arquivo ao lado do vídeo ou as duas; valem ao longo do vídeo
+    let modo_das_legendas = f.legendas.modo.as_deref().filter(|m| *m != "nenhuma" && f.legendas.n > 0);
+    let com_legendas = modo_das_legendas.is_some();
+    if let Some(modo) = modo_das_legendas {
+        let onde = frases::rotulo(&format!("legendas.{modo}")).unwrap_or(rot("onde.video")).to_string();
+        acrescimos.push(Linha { o_que: format!("{} ({})", frases::rotulo_do_efeito(tipo::LEGENDAS).unwrap_or(""), f.legendas.n), onde, explicacao: frases::do_efeito(tipo::LEGENDAS).unwrap_or("").to_string() });
+    }
+    // sobrepostos (texto, terço inferior, imagem, marca): um por linha, com o tempo do vídeo e os itens que cobrem
+    for s in &f.sobrepostos {
+        let t = if s.tipo == "titulo" { tipo::TEXTO_SOBREPOSTO } else { "imagem" };
+        let rotulo = frases::rotulo_do_efeito(t).unwrap_or(t);
+        // o que identifica o item para quem lê: o primeiro texto, senão o nome dado pelo perito
+        let qual = s.textos.first().map(|x| x.replace('\n', " ")).or_else(|| Some(s.nome.clone())).filter(|x| !x.trim().is_empty());
+        let o_que = match qual {
+            Some(q) => format!("{rotulo}: {}", cortar(q.trim().to_string(), MAX_TEXTO_SOBREPOSTO)),
+            None => rotulo.to_string(),
+        };
+        let itens = itens_nos_slots(&f.roteiro, s.na_saida.de_q, s.na_saida.n_q);
+        let faixa = frases::preencher(rot("onde.de_ate"), &[("de", &tempo(s.na_saida.de_s)), ("ate", &tempo(s.na_saida.ate_s))]);
+        let onde = if itens.is_empty() { faixa } else { format!("{}, {faixa}", onde(&itens)) };
+        acrescimos.push(Linha { o_que, onde, explicacao: frases::do_efeito(t).unwrap_or("").to_string() });
+    }
+    // avisos que o programa escreve na imagem (selos): também são acréscimo; um por texto, com os itens que o levam
+    let mut avisos: Vec<(&str, Vec<u32>)> = Vec::new();
+    for it in &f.roteiro {
+        for s in it.selos.iter().filter(|s| !s.trim().is_empty()) {
+            match avisos.iter_mut().find(|a| a.0 == s.as_str()) {
+                Some(a) => a.1.push(it.n),
+                None => avisos.push((s.as_str(), vec![it.n])),
+            }
+        }
+    }
+    for (texto, itens) in &avisos {
+        let rotulo = frases::rotulo_do_efeito(tipo::AVISO_NA_IMAGEM).unwrap_or("");
+        acrescimos.push(Linha { o_que: format!("{rotulo}: {texto}"), onde: onde(itens), explicacao: frases::do_efeito(tipo::AVISO_NA_IMAGEM).unwrap_or("").to_string() });
     }
     for (t, rotulo, itens) in &usos {
         let linha = Linha { o_que: rotulo.clone(), onde: onde(itens), explicacao: frases::do_efeito(t).unwrap_or("").to_string() };
@@ -1232,7 +1282,9 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         ia_resumo.push(frases::preencher(modelo::IA_IMAGENS, &[("n", &a.n.max(1).to_string())]));
     }
     if com_legendas && f.legendas.origem.as_ref().is_some_and(|o| o.motor.as_deref().is_some_and(|m| !m.trim().is_empty())) {
-        ia_resumo.push(modelo::IA_LEGENDAS.to_string());
+        // "conferidas" só quando o `feito` não conta legenda automática sem a conferência registrada
+        let sem = f.legendas.ia.saturating_sub(f.legendas.ia_conferidas);
+        ia_resumo.push(if sem == 0 { modelo::IA_LEGENDAS.to_string() } else { frases::preencher(modelo::IA_LEGENDAS_SEM_CONFERENCIA, &[("n", &sem.to_string())]) });
     }
     if !f.ia.is_empty() {
         ia_resumo.push(modelo::IA_MODELOS.to_string());
@@ -1377,7 +1429,10 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
             let v = fator(&it.velocidade).filter(|x| (x - 1.0).abs() > 1e-9).map(|x| format!(", a {}×", num(x, 3))).unwrap_or_default();
             diferencas.push(Diferenca {
                 item: item.clone(),
-                imagem: format!("para {}×{}", f.saida.largura, f.saida.altura),
+                imagem: match f.midias.iter().find(|m| m.id == o.midia).filter(|m| m.largura > 0 && m.altura > 0) {
+                    Some(m) => format!("{}×{} para {}×{}", m.largura, m.altura, f.saida.largura, f.saida.altura),
+                    None => format!("para {}×{}", f.saida.largura, f.saida.altura),
+                },
                 taxa: if it.tipo == "congelar" { "quadro único".into() } else { format!("{} → {}{v}", fonte.unwrap_or_else(|| "—".into()), taxa(f.saida.fps.num, f.saida.fps.den)) },
                 quadros: format!("{} → {}", o.lidos, it.na_saida.n_q),
                 repetidos: o.repetidos.to_string(),
@@ -1944,7 +1999,7 @@ mod testes {
         plano.proveniencia.ia.clear();
         plano.proveniencia.rastreios.iter_mut().for_each(|r| r.origem = OrigemRastreio::Manual);
         let base = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
-        let legendas = |d: &Value| d["acrescimos"].as_array().unwrap().iter().filter(|l| l["o_que"] == "Legendas").map(|l| l["onde"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+        let legendas = |d: &Value| d["acrescimos"].as_array().unwrap().iter().filter(|l| l["o_que"].as_str().unwrap().starts_with("Legendas")).map(|l| format!("{}: {}", l["o_que"].as_str().unwrap(), l["onde"].as_str().unwrap())).collect::<Vec<_>>();
         let ia = |d: &Value| d["ia_resumo"].as_array().unwrap().iter().map(|l| l.as_str().unwrap().to_string()).collect::<Vec<_>>();
         let com = |n: u32, modo: Value, motor: Value| {
             let mut t = base.clone();
@@ -1956,13 +2011,104 @@ mod testes {
         for d in [dados(&base, &[], &[]).unwrap(), com(3, Value::Null, json!("whisper")), com(3, json!("nenhuma"), json!("whisper")), com(0, json!("queimar"), json!("whisper"))] {
             assert_eq!((legendas(&d), ia(&d)), (vec![], nenhuma_ia.clone()));
         }
-        for modo in ["queimar", "arquivo", "ambos"] {
+        // o modo que saiu vai escrito, com a contagem do que saiu
+        for (modo, onde) in [("queimar", "na imagem, ao longo do vídeo"), ("arquivo", "em arquivo que acompanha o vídeo"), ("ambos", "na imagem e em arquivo que acompanha o vídeo")] {
             let d = com(3, json!(modo), json!("whisper"));
-            assert_eq!((legendas(&d), ia(&d)), (vec!["ao longo do vídeo".to_string()], vec![modelo::IA_LEGENDAS.to_string()]), "{modo}");
+            assert_eq!((legendas(&d), ia(&d)), (vec![format!("Legendas (3): {onde}")], vec![modelo::IA_LEGENDAS.to_string()]), "{modo}");
             // escritas pelo perito: acréscimo sem IA
             let d = com(3, json!(modo), Value::Null);
-            assert_eq!((legendas(&d), ia(&d)), (vec!["ao longo do vídeo".to_string()], nenhuma_ia.clone()), "{modo}");
+            assert_eq!((legendas(&d), ia(&d)), (vec![format!("Legendas (3): {onde}")], nenhuma_ia.clone()), "{modo}");
         }
+        // "conferidas pelo perito" só quando o `feito` não conta automática sem conferência
+        let mut t = base.clone();
+        t["feito"]["legendas"] = json!({ "origem": { "audio_sha256": "a", "importado_em": "", "motor": "whisper", "modelo_sha256": null }, "n": 5, "conferidas": 3, "modo": "queimar", "no_projeto": 7, "ia": 4, "ia_conferidas": 4 });
+        assert_eq!(ia(&dados(&t, &[], &[]).unwrap()), vec![modelo::IA_LEGENDAS.to_string()]);
+        t["feito"]["legendas"]["ia_conferidas"] = json!(3);
+        let d = dados(&t, &[], &[]).unwrap();
+        assert_eq!(ia(&d), vec!["Legendas escritas a partir de degravação automática; sem conferência registrada pelo perito: 1.".to_string()]);
+        assert!(!serde_json::to_string(&d).unwrap().contains("e conferidas pelo perito"), "o PDF não afirma a conferência que o feito não registra");
+    }
+
+    /// Sobrepostos (texto, terço inferior, imagem, marca): cada um vira uma linha dos acréscimos, com o tempo do
+    /// vídeo e os itens que cobre. Sem eles no `feito` (exportação anterior), nada é inventado.
+    #[test]
+    fn sobrepostos_item_por_item() {
+        let c = Cena::nova("juri");
+        let (plano, res) = apoio::plano_e_resultado(&c);
+        let mut t = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let linhas = |t: &Value| {
+            let d = dados(t, &[], &[]).unwrap();
+            d["acrescimos"].as_array().unwrap().iter().map(|l| (l["o_que"].as_str().unwrap().to_string(), l["onde"].as_str().unwrap().to_string(), l["explicacao"].as_str().unwrap().to_string())).collect::<Vec<_>>()
+        };
+        let antes = linhas(&t);
+        assert!(!antes.iter().any(|l| l.0.starts_with("Texto sobreposto") || l.0.starts_with("Imagem sobreposta")));
+        // o roteiro da cena: item 1 nos slots 0..30, item 2 em 30..(30 + n), a 30 qps
+        let n2 = t["feito"]["roteiro"][1]["na_saida"]["n_q"].as_u64().unwrap();
+        t["feito"]["sobrepostos"] = json!([
+            { "trilha": "s1", "clipe": "t1", "tipo": "titulo", "nome": "", "na_saida": { "de_q": 15, "n_q": 30, "de_s": 0.5, "ate_s": 1.5 }, "midia": null, "preso_a": "c1", "modelo": "terco_inferior", "textos": ["Rua das Flores, 120\nPortão", "14/11/2026"] },
+            { "trilha": "s1", "clipe": "i1", "tipo": "imagem", "nome": "Brasão", "na_saida": { "de_q": 0, "n_q": 30 + n2, "de_s": 0.0, "ate_s": (30 + n2) as f64 / 30.0 }, "midia": "m9", "preso_a": null, "modelo": null, "textos": [] },
+            { "trilha": "s2", "clipe": "i2", "tipo": "imagem", "nome": "", "na_saida": { "de_q": 40, "n_q": 5, "de_s": 40.0 / 30.0, "ate_s": 1.5 }, "midia": "m9", "preso_a": null, "modelo": null, "textos": [] },
+        ]);
+        let novas: Vec<_> = linhas(&t).into_iter().filter(|l| !antes.contains(l)).collect();
+        assert_eq!(novas.len(), 3, "{novas:#?}");
+        assert_eq!((novas[0].0.as_str(), novas[0].1.as_str()), ("Texto sobreposto: Rua das Flores, 120 Portão", "itens 1, 2, de 0:00,500 a 0:01,500"));
+        assert_eq!(novas[0].2, frases::do_efeito(tipo::TEXTO_SOBREPOSTO).unwrap());
+        assert_eq!(novas[1].0, "Imagem sobreposta: Brasão");
+        assert!(novas[1].1.starts_with("itens 1, 2, de 0:00,000 a "), "{}", novas[1].1);
+        assert_eq!((novas[2].0.as_str(), novas[2].1.as_str()), ("Imagem sobreposta", "item 2, de 0:01,333 a 0:01,500"));
+        assert_eq!(novas[2].2, frases::do_efeito("imagem").unwrap());
+        // texto longo do perito não estoura a coluna
+        t["feito"]["sobrepostos"][0]["textos"] = json!(["x".repeat(500)]);
+        assert!(linhas(&t).iter().any(|l| l.0.chars().count() == "Texto sobreposto: ".chars().count() + 61));
+    }
+
+    /// O aviso que o programa escreve na imagem (selo) é acréscimo: com ele na imagem o PDF não diz "Nada foi
+    /// acrescentado"; um por texto, com os itens que o levam.
+    #[test]
+    fn selos_entram_nos_acrescimos() {
+        let c = Cena::nova("juri");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let pv = &mut plano.proveniencia;
+        // só mudança de forma de mostrar: nenhuma marcação, legenda, som posto nem sobreposto
+        pv.roteiro.iter_mut().for_each(|it| {
+            it.processamentos.clear();
+            it.selos.clear();
+        });
+        pv.sobrepostos.clear();
+        let sem = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let avisos = |t: &Value| {
+            let d = dados(t, &[], &[]).unwrap();
+            d["acrescimos"].as_array().unwrap().iter().filter(|l| l["o_que"].as_str().unwrap().starts_with("Aviso escrito na imagem")).map(|l| (l["o_que"].as_str().unwrap().to_string(), l["onde"].as_str().unwrap().to_string(), l["explicacao"].as_str().unwrap().to_string())).collect::<Vec<_>>()
+        };
+        assert_eq!(avisos(&sem), vec![]);
+        let antes = dados(&sem, &[], &[]).unwrap()["acrescimos"].as_array().unwrap().len();
+        let mut com = sem.clone();
+        com["feito"]["roteiro"][0]["selos"] = json!(["Velocidade 0,5×", "Imagem ampliada"]);
+        com["feito"]["roteiro"][1]["selos"] = json!(["Imagem ampliada"]);
+        let frase = frases::do_efeito(tipo::AVISO_NA_IMAGEM).unwrap().to_string();
+        assert_eq!(avisos(&com), vec![
+            ("Aviso escrito na imagem: Velocidade 0,5×".to_string(), "item 1".to_string(), frase.clone()),
+            ("Aviso escrito na imagem: Imagem ampliada".to_string(), "itens 1, 2".to_string(), frase),
+        ]);
+        assert_eq!(dados(&com, &[], &[]).unwrap()["acrescimos"].as_array().unwrap().len(), antes + 2);
+        assert_eq!(frases::classe_do_efeito(tipo::AVISO_NA_IMAGEM), Some(Classe::Acrescimo));
+    }
+
+    /// Resolução e tamanho de cada gravação (18-V §4.3.1) saem do `feito`; sem eles, vazio, nunca inventado.
+    #[test]
+    fn resolucao_e_tamanho_dos_originais() {
+        let c = Cena::nova("juri");
+        let (plano, res) = apoio::plano_e_resultado(&c);
+        let mut t = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let d = dados(&t, &[], &[]).unwrap();
+        assert_eq!((d["originais"][0]["imagem"].as_str(), d["originais"][0]["tamanho"].as_str()), (Some("1280 × 720 pontos"), Some("123 MB (123.456.789 bytes)")));
+        assert!(d["diferencas"][0]["imagem"].as_str().unwrap().starts_with("1280×720 para "), "{}", d["diferencas"][0]["imagem"]);
+        for k in ["largura", "altura", "tamanho"] {
+            t["feito"]["midias"][0].as_object_mut().unwrap().remove(k);
+        }
+        let d = dados(&t, &[], &[]).unwrap();
+        assert_eq!((&d["originais"][0]["imagem"], &d["originais"][0]["tamanho"]), (&Value::Null, &Value::Null));
+        assert!(d["diferencas"][0]["imagem"].as_str().unwrap().starts_with("para "));
     }
 
     /// "PDF sem anexos": nenhum arquivo anexado e PDF/A-2b; a data e o identificador são os do render.

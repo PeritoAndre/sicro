@@ -8,24 +8,31 @@ import {
   aplicarMudanca,
   aplicarPrender,
   aplicarSaidaAuto,
-  garantirMidia,
+  garantirMidia, mesmaProveniencia,
   moverClipe,
   novoProjeto,
   porChave,
   removerClipe,
   tirarChave,
+  completar,
+  mixagemPadrao,
 } from "./projeto";
 import { ler } from "./testeFixtures";
 
 const ch = (t: number, v: number, pts: number | null = null): Chave<number> => ({ t, pts, v, interp: "linear" });
 
 describe("projeto novo", () => {
-  it("nasce com saída automática, normalização nula e os padrões do Rust (M7)", () => {
+  it("nasce com saída automática, normalização em −16 LUFS / −1,5 dBTP (§2.4) e os padrões do Rust (M7)", () => {
     const p = novoProjeto("X", "2026-11-14T04:00:00.000Z");
     expect(p).toMatchObject({ esquema: ESQUEMA_EDICAO, esquema_menor: ESQUEMA_MENOR, titulo: "X", created_at: "2026-11-14T04:00:00.000Z", fecho: null });
     expect(p.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(p.saida.auto).toBe(true);
-    expect(p.mixagem).toEqual({ volume_original: 1, abaixar: { db: -12, ataque_s: 0.3, soltura_s: 0.5 }, normalizar: null, limitador: false });
+    expect(p.mixagem).toEqual({ volume_original: 1, abaixar: { db: -12, ataque_s: 0.3, soltura_s: 0.5 }, normalizar: { lufs: -16, pico_db: -1.5 }, limitador: false });
+    // cada projeto com o seu objeto; o que completa arquivo antigo sem `mixagem` segue neutro (o `Default` do Rust)
+    expect(novoProjeto().mixagem.normalizar).not.toBe(p.mixagem.normalizar);
+    expect(mixagemPadrao().normalizar).toBeNull();
+    const { mixagem: _sem, ...semMixagem } = p;
+    expect(completar(semMixagem as ProjetoEdicao).mixagem.normalizar).toBeNull();
     expect(p.legendas.lugar).toEqual({ x: 0.5, y: 0.94, h: "centro", v: "base" });
     expect(p.legendas.estilo.caixa).toEqual({ cor: "#0000008c", margem: 0.013, raio: 0 });
     expect(p.legendas.linhas_max).toBe(2);
@@ -104,7 +111,30 @@ describe("busca e mudanças", () => {
     expect(p.principal).toHaveLength(ids.length - 1);
     const m = p.midias[0]!;
     expect(garantirMidia(p, { ...m, id: "outro" })).toBe(m.id);
+    expect(p.midias[0]).toBe(m);
     expect(garantirMidia(p, { ...m, id: "outro", sha256: "b".repeat(64) })).toBe("outro");
+  });
+
+  it("garantirMidia: mídia do caso já no projeto recebe a proveniência nova; a própria do projeto, não", () => {
+    const p = ler<ProjetoEdicao>("completo.json");
+    const m = p.midias.find((x) => x.origem === "caso")!;
+    const i = p.midias.indexOf(m);
+    const nova = { recebido: { nativo: !m.recebido.nativo, obs: `${m.recebido.obs} (conferido)` }, relogio_desvio_s: (m.relogio_desvio_s ?? 0) + 2, gravador: "DVR X" };
+    expect(mesmaProveniencia(m, nova)).toBe(false);
+    expect(garantirMidia(p, { ...m, id: "outro", nome: "outro nome", ...nova })).toBe(m.id);
+    // só os três campos mudam, num item novo (o antigo fica como estava)
+    expect(p.midias[i]).toEqual({ ...m, ...nova });
+    expect(p.midias[i]).not.toBe(m);
+    expect(mesmaProveniencia(p.midias[i]!, nova)).toBe(true);
+    // cada campo sozinho conta como mudança
+    for (const campo of [{ recebido: { ...nova.recebido, nativo: null } }, { recebido: { ...nova.recebido, obs: "" } }, { relogio_desvio_s: null }, { gravador: null }]) {
+      expect(mesmaProveniencia(nova, { ...nova, ...campo })).toBe(false);
+    }
+    const propria = p.midias.find((x) => x.origem === "projeto");
+    if (!propria) throw new Error("fixture sem mídia própria");
+    const j = p.midias.indexOf(propria);
+    garantirMidia(p, { ...propria, id: "z", ...nova });
+    expect(p.midias[j]).toBe(propria);
   });
 
   it("aplicarPrender grava (t, pts) onde o Rust mandou; nada muda se já está igual", () => {

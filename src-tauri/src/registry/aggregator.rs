@@ -429,6 +429,7 @@ pub fn build_registry(
             "composto_sha256": s.composto_sha256, "decodificado_sha256": s.decodificado_sha256, "audio_sha256": s.audio_sha256,
             "n_quadros": s.n_quadros, "duracao_s": s.duracao_s, "predefinicao": s.predefinicao, "codificador": s.codificador,
             "exige_conferencia": s.exige_conferencia, "conferida_por": s.conferida_por, "conferida_em": s.conferida_em,
+            "refeita_de": s.refeita_de,
         });
         out.push(EvidenceRegistryItem {
             id: format!("video_edit:{}", s.id),
@@ -644,6 +645,70 @@ mod tests {
             metadata_json: "{}".to_string(),
             created_at: Utc::now(),
         }
+    }
+
+    /// Aceite do P1.8: a exportação da Edição aparece na Integridade com o vídeo, o hash, o relatório técnico como
+    /// sidecar e o tipo certo do contêiner (MP4 e MKV da Preservação); a refeita diz de qual saída veio.
+    #[test]
+    fn saida_da_edicao_aparece_na_integridade() {
+        use crate::database::migrations::run_migrations;
+        use crate::models::{EstadoSaida, VideoEditOutput};
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", "ON").unwrap();
+        run_migrations(&mut conn).unwrap();
+        let occ = Uuid::new_v4();
+        conn.execute("INSERT INTO occurrences (id, created_at, updated_at) VALUES (?1, ?2, ?2)", rusqlite::params![occ.to_string(), "2026-11-15T12:00:00Z"]).unwrap();
+        let saida = |arquivo: &str, predefinicao: &str, estado: EstadoSaida, tecnico: Option<&str>, refeita_de: Option<Uuid>| VideoEditOutput {
+            id: Uuid::new_v4(),
+            occurrence_id: occ,
+            projeto_id: "p1".into(),
+            titulo: "Abordagem".into(),
+            pasta: "Exportações/Vídeos/Edições/Abordagem 2026-11-15 12h00m00".into(),
+            arquivo: format!("Exportações/Vídeos/Edições/Abordagem 2026-11-15 12h00m00/{arquivo}"),
+            sha256: "a".repeat(64),
+            composto_sha256: Some("b".repeat(64)),
+            decodificado_sha256: Some("e".repeat(64)),
+            audio_sha256: Some("c".repeat(64)),
+            tamanho: 6_000_000,
+            duracao_s: 47.3,
+            n_quadros: 1419,
+            predefinicao: predefinicao.into(),
+            codificador: "libx264".into(),
+            tecnico_rel: tecnico.map(String::from),
+            retrato_rel: "Sistema/videos/edicao/p1/exportacoes/x".into(),
+            projeto_sha256: "d".repeat(64),
+            autor: serde_json::json!({ "nome": "Perita" }),
+            refeita_de,
+            estado,
+            conferida_por: None,
+            conferida_em: None,
+            criado_em: Utc::now(),
+            exige_conferencia: estado == EstadoSaida::AConferir,
+        };
+        let pronta = saida("Abordagem.mp4", "juri", EstadoSaida::Concluida, Some("Exportações/Vídeos/Edições/Abordagem 2026-11-15 12h00m00/Abordagem.tecnico.json"), None);
+        let a_conferir = saida("Abordagem (ocultado).mp4", "juri", EstadoSaida::AConferir, None, None);
+        let refeita = saida("Abordagem.mkv", "preservacao", EstadoSaida::Concluida, Some("x/Abordagem.tecnico.json"), Some(pronta.id));
+        for s in [&pronta, &a_conferir, &refeita] {
+            video_edit_output_repo::inserir(&conn, s).unwrap();
+        }
+        let itens = build_registry(&conn, &occ).unwrap();
+        let da_edicao: Vec<&EvidenceRegistryItem> = itens.iter().filter(|i| i.kind == EvidenceKind::VideoEdit).collect();
+        assert_eq!(da_edicao.len(), 3);
+        let achar = |id: Uuid| *da_edicao.iter().find(|i| i.id == format!("video_edit:{id}")).expect("item da saída");
+        let i = achar(pronta.id);
+        assert_eq!((i.source_module.as_str(), i.relative_path.as_deref(), i.hash_sha256.as_deref()), ("edicao", Some(pronta.arquivo.as_str()), Some(pronta.sha256.as_str())));
+        assert_eq!((i.sidecar_relative_path.as_deref(), i.size_bytes, i.mime_type.as_deref()), (pronta.tecnico_rel.as_deref(), Some(6_000_000), Some("video/mp4")));
+        assert_eq!((i.status.as_deref(), i.subtype.as_deref(), i.title.as_deref()), (Some("concluida"), Some("juri"), Some("Abordagem")));
+        let m: serde_json::Value = serde_json::from_str(&i.metadata_json).unwrap();
+        assert_eq!((m["refeita_de"].clone(), m["decodificado_sha256"].as_str()), (serde_json::Value::Null, Some("e".repeat(64).as_str())));
+        // a conferir: sem relatório ainda
+        let i = achar(a_conferir.id);
+        assert_eq!((i.status.as_deref(), i.sidecar_relative_path.as_deref()), (Some("a_conferir"), None));
+        // refeita em MKV
+        let i = achar(refeita.id);
+        let m: serde_json::Value = serde_json::from_str(&i.metadata_json).unwrap();
+        assert_eq!((i.mime_type.as_deref(), m["refeita_de"].as_str(), m["predefinicao"].as_str()), (Some("video/x-matroska"), Some(pronta.id.to_string().as_str()), Some("preservacao")));
+        assert_eq!(build_summary(&itens).total_items, 3);
     }
 
     #[test]

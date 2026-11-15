@@ -1548,6 +1548,18 @@ export const commands = {
     return safeInvoke<RetratoCalculo>("edicao_retrato_calculo", { workspacePath, calculoId });
   },
 
+  // CONTRATO: fecho da Fase 1 (contratos-fase1 (g)).
+  /** Situação do intermediário de origem do clipe SEM pedir (o cartão e o palco perguntam); null = nem pronto nem na fila. */
+  edicaoOrigemEstado(workspacePath: string, projeto: ProjetoEdicao, clipeId: string): Promise<EstadoOrigem | null> {
+    return safeInvoke<EstadoOrigem | null>("edicao_origem_estado", { workspacePath, projeto, clipeId });
+  },
+
+  /** Prévia do clipe para o palco (§7.6): com busca lenta medida (p50 de 3 buscas pausadas, ms; null = sem medição)
+   *  ou clipe com rampa, ré ou abaixo de 0,25×, pede o proxy à fila de fundo; devolve o que toca agora. */
+  edicaoProxyPedir(workspacePath: string, projeto: ProjetoEdicao, clipeId: string, buscaP50Ms: number | null): Promise<PreviaMidia> {
+    return safeInvoke<PreviaMidia>("edicao_proxy_pedir", { workspacePath, projeto, clipeId, buscaP50Ms });
+  },
+
   /** Proveniência da mídia na análise (P1.10; `video_proveniencia_commands.rs`). */
   videoProveniencia(workspacePath: string, mediaId: string): Promise<ProvenienciaMidia> {
     return safeInvoke<ProvenienciaMidia>("video_proveniencia", { workspacePath, mediaId });

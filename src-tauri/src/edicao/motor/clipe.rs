@@ -576,7 +576,8 @@ fn trecho(mut m: Montagem, t: &ClipeTrecho, res: &ClipeResolvido, janela: Janela
         (alvo, fim - alvo + 1.0)
     });
     let ent = m.entrada_midia(fonte, &t.midia, alvo_busca);
-    let cor = cor::cadeia_fonte(fonte.matriz, fonte.faixa, &fonte.pix_fmt, fonte.exibido).ok_or_else(|| erro("pixel_nao_suportado", &t.midia))?;
+    // com `desentrelacar` ligado a cor sai por campo (P1.4): sem isso o croma do outro campo entra no quadro
+    let cor = realce::cor_da_fonte(&t.base.efeitos, fonte).ok_or_else(|| erro("pixel_nao_suportado", &t.midia))?;
     let mut f = vec![match tab.pts.get(jb) {
         Some(fim) => format!("trim=start_pts={}:end_pts={fim}", tab.pts[ja]),
         None => format!("trim=start_pts={}", tab.pts[ja]),
@@ -638,7 +639,7 @@ fn congelar(mut m: Montagem, c: &ClipeCongelar, res: &ClipeResolvido, janela: Ja
         (alvo, fim - alvo + 1.0)
     });
     let ent = m.entrada_midia(fonte, &c.midia, alvo_busca);
-    let cor = cor::cadeia_fonte(fonte.matriz, fonte.faixa, &fonte.pix_fmt, fonte.exibido).ok_or_else(|| erro("pixel_nao_suportado", &c.midia))?;
+    let cor = realce::cor_da_fonte(&c.base.efeitos, fonte).ok_or_else(|| erro("pixel_nao_suportado", &c.midia))?;
     // com pts repetido vale o primeiro quadro desse pts
     let mut f = vec![format!("trim=start_pts={}:end_pts={}", tab.pts[ja], tab.pts[jb - 1].saturating_add(1)), format!("trim=end_frame={}", jb - ja)];
     if m.exportacao_final {

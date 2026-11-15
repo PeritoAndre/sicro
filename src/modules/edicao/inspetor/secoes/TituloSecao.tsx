@@ -10,7 +10,7 @@ import { noClipe } from "../acoes";
 import { Cor, Escolha, Grade, Lista, Marca, Numero, Secao, Texto } from "../campos";
 import { novoBloco } from "../novos";
 import { novoId } from "../../modelo/projeto";
-import { aplicarModelo, blocoNoModelo } from "../../modelo/titulos";
+import { aplicarModelo, blocoNoModelo, noArranjo } from "../../modelo/titulos";
 import type { SecaoProps } from "../registro";
 import { round } from "./comum";
 import styles from "../Inspetor.module.css";
@@ -18,7 +18,7 @@ import { EDITOR_TITULO_PRONTO, EditorTitulo } from "../../titulos/EditorTitulo";
 
 type Mut = (d: Draft<ProjetoEdicao>) => void;
 
-const MODELOS: { v: Titulo["modelo"]; r: string }[] = [
+const MODELOS: { v: Titulo["modelo"] | ""; r: string }[] = [
   { v: "cartela", r: "Cartela" },
   { v: "abertura", r: "Abertura" },
   { v: "evento", r: "Evento" },
@@ -53,7 +53,14 @@ export function TituloSecao({ clipe: c }: SecaoProps<ComTitulo>) {
       {EDITOR_TITULO_PRONTO && <EditorTitulo key={id} clipe={c} />}
       <Grade>
         <Texto rotulo="Nome" larga valor={c.rotulo} aplicar={(v) => noClipe<ComTitulo>(id, (x) => void (x.rotulo = v))} />
-        <Lista rotulo="Modelo" larga valor={t.modelo} opcoes={MODELOS} aplicar={(v) => noClipe<ComTitulo>(id, (x, d) => void (x.titulo = noModelo(x.titulo, v, preso, d)))} />
+        {/* fora do arranjo do modelo a lista fica em branco: escolher o MESMO modelo é uma mudança e rearranja */}
+        <Lista<Titulo["modelo"] | "">
+          rotulo="Modelo"
+          larga
+          valor={noArranjo(t) ? t.modelo : ""}
+          opcoes={MODELOS}
+          aplicar={(v) => noClipe<ComTitulo>(id, (x, d) => void (v !== "" && (x.titulo = noModelo(x.titulo, v, preso, d))))}
+        />
         {PAPEIS.map(({ papel, rotulo, linhas }) => (
           <Texto
             key={papel}

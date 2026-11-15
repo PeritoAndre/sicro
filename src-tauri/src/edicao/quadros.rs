@@ -14,7 +14,7 @@ use super::cor;
 use super::ffmpeg::exec::{self, Comando};
 use super::ffmpeg::sonda::{self, Capacidades};
 use super::geometria;
-use super::modelo::{CorMidia, Faixa, Matriz, Racional, TamanhoPx};
+use super::modelo::{CorMidia, Faixa, Matriz, OrdemCampos, Racional, TamanhoPx};
 use super::motor::{AudioInfo, FonteInfo};
 use super::tempo;
 use crate::error::{Result, SicroError};
@@ -178,6 +178,7 @@ struct FluxoVideo {
     /// Graus no sentido horário.
     giro: i32,
     entrelacado: bool,
+    ordem_campos: OrdemCampos,
     faixa_etiqueta: String,
     matriz_etiqueta: String,
     tb: Option<Racional>,
@@ -192,9 +193,22 @@ struct Info {
     conteiner: String,
     inicio: Option<f64>,
     duracao: Option<f64>,
+    /// Bytes do arquivo (`format.size`).
+    tamanho: u64,
     video: Option<FluxoVideo>,
     audio: Option<AudioInfo>,
     imagem: bool,
+}
+
+/// Ordem de EXIBIÇÃO dos campos pelo `field_order` do ffprobe (`AVFieldOrder`: a segunda letra é o campo exibido
+/// primeiro). `tt` e `bb` medidos nos dois ffmpeg contra a marca de cada quadro (`top_field_first`); `tb` e `bt` pela
+/// definição do ffmpeg.
+pub(crate) fn ordem_dos_campos(field_order: Option<&str>) -> OrdemCampos {
+    match field_order {
+        Some("tt" | "bt") => OrdemCampos::Tff,
+        Some("bb" | "tb") => OrdemCampos::Bff,
+        _ => OrdemCampos::Auto,
+    }
 }
 
 fn numero(v: &Value) -> Option<f64> {
@@ -231,6 +245,7 @@ fn sondar(cap: &Capacidades, video: &Path) -> Result<Info> {
             sar: s["sample_aspect_ratio"].as_str().and_then(fracao).unwrap_or(Racional { num: 1, den: 1 }),
             giro: (giro.round() as i64).rem_euclid(360) as i32,
             entrelacado: matches!(s["field_order"].as_str(), Some("tt" | "bb" | "tb" | "bt")),
+            ordem_campos: ordem_dos_campos(s["field_order"].as_str()),
             faixa_etiqueta: texto(&s["color_range"]),
             matriz_etiqueta: texto(&s["color_space"]),
             tb: s["time_base"].as_str().and_then(fracao),
@@ -247,7 +262,8 @@ fn sondar(cap: &Capacidades, video: &Path) -> Result<Info> {
         canais: numero(&s["channels"]).unwrap_or(0.0) as u32,
     });
     let imagem = video.is_some() && (conteiner == "image2" || conteiner.ends_with("_pipe"));
-    Ok(Info { conteiner, inicio, duracao: numero(&j["format"]["duration"]), video, audio, imagem })
+    let tamanho = numero(&j["format"]["size"]).filter(|t| *t >= 0.0).map_or(0, |t| t as u64);
+    Ok(Info { conteiner, inicio, duracao: numero(&j["format"]["duration"]), tamanho, video, audio, imagem })
 }
 
 /// Um pacote de vídeo: tempo (pts, ou dts quando ele falta) e se é quadro-chave. Sem os de descarte.
@@ -838,6 +854,7 @@ pub fn fonte_info(cap: &Capacidades, video: &Path, sha256: &str, quadros: Arc<Ta
         sar: v.map_or(um, |v| v.sar),
         giro: v.map_or(0, |v| v.giro),
         entrelacado: v.is_some_and(|v| v.entrelacado),
+        ordem_campos: v.map_or(OrdemCampos::Auto, |v| v.ordem_campos),
         pix_fmt: v.map(|v| v.pix_fmt.clone()).unwrap_or_default(),
         matriz,
         faixa,
@@ -845,6 +862,7 @@ pub fn fonte_info(cap: &Capacidades, video: &Path, sha256: &str, quadros: Arc<Ta
         audio: info.audio,
         conteiner: info.conteiner,
         codec: v.map(|v| v.codec.clone()).unwrap_or_default(),
+        tamanho: info.tamanho,
     })
 }
 
@@ -905,6 +923,7 @@ pub(crate) mod apoio {
             sar: Racional { num: 1, den: 1 },
             giro: 0,
             entrelacado: false,
+            ordem_campos: OrdemCampos::Auto,
             pix_fmt: "yuv420p".into(),
             matriz: Matriz::Bt709,
             faixa: Faixa::Tv,
@@ -912,6 +931,7 @@ pub(crate) mod apoio {
             audio: None,
             conteiner: "mov,mp4,m4a,3gp,3g2,mj2".into(),
             codec: "h264".into(),
+            tamanho: 0,
         }
     }
 
@@ -1053,6 +1073,17 @@ mod testes {
         ((1, 90000), (2, 25), 135_518_643_900_000),
         ((1, 1000), (1, 15), 1_505_762_710_000),
     ];
+
+    /// `field_order` do ffprobe → ordem de EXIBIÇÃO (`AVFieldOrder`: a segunda letra é o campo exibido primeiro; no
+    /// `fiel` do QuickTime e no FieldOrder do Matroska, 9 = `tb` = de baixo exibido primeiro, 14 = `bt` = de cima).
+    /// `tt` e `bb` são medidos em `realce::testes`; `tb` e `bt` ficam presos aqui pela definição.
+    #[test]
+    fn ordem_dos_campos_pelo_field_order() {
+        for (campo, ordem) in [("tt", OrdemCampos::Tff), ("bt", OrdemCampos::Tff), ("bb", OrdemCampos::Bff), ("tb", OrdemCampos::Bff), ("progressive", OrdemCampos::Auto), ("unknown", OrdemCampos::Auto), ("", OrdemCampos::Auto)] {
+            assert_eq!(ordem_dos_campos(Some(campo)), ordem, "{campo}");
+        }
+        assert_eq!(ordem_dos_campos(None), OrdemCampos::Auto);
+    }
 
     #[test]
     fn alvo_quadro_pelo_nome_do_campo() {

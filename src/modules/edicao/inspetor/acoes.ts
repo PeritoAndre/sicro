@@ -373,7 +373,7 @@ export function tirarFimRegiao(clipeId: Id, rotulo: string): void {
 export const CAIXA_INTEIRA: Caixa = { x: 0, y: 0, w: 1, h: 1 };
 // ---- transição de entrada ----
 
-/** Catálogo da Fase 0 (`juncao::TRANSICOES`): só "escurecer"; null = corte. */
+/** `tipo` do catálogo (`juncao::TRANSICOES`: "escurecer" e os que sobrepõem); null = corte. */
 export const transicaoEm = (clipeId: Id, tipo: string | null): Mut =>
   noClipe<ClipePrincipal>(clipeId, (c) => {
     if (tipo === null) c.transicao_entrada = null;

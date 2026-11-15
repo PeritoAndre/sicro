@@ -93,6 +93,7 @@ pub fn feito(plano: &Plano, amb: &Ambiente, fecho: &Fecho) -> Result<Value> {
         "selos_desligados": pv.selos_desligados,
         "revisado_por": pv.revisado_por,
         "fecho": pv.fecho,
+        "sobrepostos": pv.sobrepostos,
     });
     // raízes conhecidas primeiro (o caminho pode ter espaço); depois o que sobrou no texto gerado pela máquina.
     // `processamentos` fica de fora: os parâmetros não têm caminho e o texto do perito sai como foi desenhado

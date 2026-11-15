@@ -310,3 +310,22 @@
   color: var(--sicro-fg-muted);
   font-size: var(--text-xs);
 }
+
+/* intermediário de origem do clipe em preparo: barra fina no cartão, sem texto */
+.origemTrilho {
+  display: block;
+  height: 3px;
+  margin-top: var(--space-1);
+  border-radius: 2px;
+  background: var(--sicro-surface-2);
+  overflow: hidden;
+}
+.origemBarra {
+  display: block;
+  height: 100%;
+  background: var(--sicro-accent);
+}
+.origemFalhou {
+  display: inline-flex;
+  color: var(--sicro-danger, #c0392b);
+}

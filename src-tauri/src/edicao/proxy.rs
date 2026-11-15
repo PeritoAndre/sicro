@@ -6,10 +6,11 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::edicao::ffmpeg::sonda::Capacidades;
-use crate::edicao::modelo::{Faixa, Racional};
+use crate::edicao::modelo::{ClipePrincipal, Faixa, Racional, Tolerante, Velocidade};
+use crate::edicao::{armazem, executar};
 use crate::edicao::motor::FonteInfo;
 use crate::edicao::previa::{self, PreviaMidia, PROXY_GOP, SAIDA};
-use crate::error::Result;
+use crate::error::{Result, SicroError};
 
 // CONTRATO: acréscimo (P1.9): limites de `precisa`, para o palco e os testes.
 /// Lado menor acima disso pede proxy (4K por desempenho; 1080×1920 em pé toca como 1080p).
@@ -138,6 +139,48 @@ pub(crate) fn args_gpu(fonte: &Path, audio: &[String], tb: Racional, (w, h): (u3
     a.extend(audio.iter().cloned());
     a.extend(previa::s(&["-movflags", "+faststart", SAIDA]));
     a
+}
+
+/// Velocidade abaixo disso pede proxy (§7.6: o `<video>` não acompanha).
+pub const VELOCIDADE_MIN: f64 = 0.25;
+
+// CONTRATO: acréscimo (fecho da Fase 1): a parte do §7.6 que é do clipe.
+/// O clipe pede proxy por si: rampa, ré ou abaixo de 0,25×.
+pub fn clipe_pede(v: &Velocidade) -> bool {
+    match v {
+        Velocidade::Rampa { .. } => true,
+        Velocidade::Constante { fator } => !(*fator >= VELOCIDADE_MIN),
+    }
+}
+
+// CONTRATO: acréscimo (fecho da Fase 1). Corpo de `edicao_proxy_pedir`.
+/// O que o palco toca do clipe `clipe_id` (trecho ou congelado) do `projeto` da tela. Com busca lenta medida
+/// (`busca_p50_ms`: p50 de 3 buscas pausadas) ou clipe que pede (`clipe_pede`), o proxy entra na fila de fundo e a
+/// resposta é o que já toca (o proxy quando pronto). Sem medição nem pedido do clipe: igual a `edicao_midia_previa`.
+pub fn pedir_do_projeto(ws: &Path, cache: &Path, projeto: &serde_json::Value, clipe_id: &str, busca_p50_ms: Option<f64>) -> Result<PreviaMidia> {
+    let invalido = |d: String| SicroError::Validation(format!("item_invalido: {d}"));
+    if busca_p50_ms.is_some_and(|ms| !ms.is_finite() || ms < 0.0) {
+        return Err(invalido("busca_p50_ms".into()));
+    }
+    let p = armazem::tipado(projeto)?;
+    if !armazem::id_valido(&p.id) {
+        return Err(invalido("id do projeto".into()));
+    }
+    let (midia, do_clipe) = p
+        .principal
+        .iter()
+        .find_map(|c| match c {
+            Tolerante::Conhecido(ClipePrincipal::Trecho(t)) if t.base.id == clipe_id => Some((t.midia.clone(), clipe_pede(&t.velocidade))),
+            Tolerante::Conhecido(ClipePrincipal::Congelar(c)) if c.base.id == clipe_id => Some((c.midia.clone(), false)),
+            _ => None,
+        })
+        .ok_or_else(|| invalido(format!("clipe {clipe_id}")))?;
+    let prep = executar::preparar(ws, &p, cache, false)?;
+    let fonte = prep.fontes.get(&midia).ok_or_else(|| SicroError::Validation(format!("midia_ausente: {midia}")))?;
+    let pedido = do_clipe || precisa(fonte, busca_p50_ms);
+    let previa = previa::consultar_com(ws, cache, fonte, pedido)?;
+    previa::pedir_falta_com(&prep.cap, cache, fonte, &previa, pedido);
+    Ok(previa)
 }
 
 #[cfg(test)]

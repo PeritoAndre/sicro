@@ -19,7 +19,7 @@ use super::{Alvo, Contexto, FonteInfo};
 use crate::edicao::ffmpeg::args;
 use crate::edicao::ffmpeg::sonda::Capacidades;
 use crate::edicao::modelo::{
-    Animavel, AudioTransicao, Chave, ClipeBase, ClipePrincipal, ClipeSobreposto, Interp, LinhaResolvida, ModoSilencio, Normalizar, ProjetoEdicao, Racional,
+    Animavel, AudioTransicao, Chave, ClipeBase, ClipePrincipal, ClipeSobreposto, Interp, LinhaResolvida, Mixagem, ModoSilencio, Normalizar, ProjetoEdicao, Racional,
     Silencio, Tolerante, Transicao, Velocidade,
 };
 use crate::edicao::tempo::{self, TAXA_AUDIO};
@@ -104,6 +104,25 @@ const RECUSAS: &[&str] = &[];
 /// `detalhe` ainda é recusado pelo motor de áudio?
 pub fn recusa(detalhe: &str) -> bool {
     RECUSAS.contains(&detalhe)
+}
+
+/// Alvo de volume aceito pelo `loudnorm` (LUFS) e teto de pico (dBTP; o do limitador: −24..0).
+pub const NORMALIZAR_LUFS: std::ops::RangeInclusive<f64> = -70.0..=-5.0;
+pub const NORMALIZAR_PICO_DB: std::ops::RangeInclusive<f64> = -24.0..=0.0;
+
+// CONTRATO: acréscimo (fecho da Fase 1): a validação acusa antes o que o motor recusa ou ajustaria calado.
+/// Campo da mixagem fora do que o motor faz: `abaixar` (rampa negativa ou não finita, ou ganho acima de 0 dB, que
+/// não abaixa) e `normalizar` (alvo ou pico fora da faixa). None = ok.
+pub fn mixagem_invalida(m: &Mixagem) -> Option<&'static str> {
+    let rampa_ok = |x: f64| x.is_finite() && x >= 0.0;
+    let ab = &m.abaixar;
+    if !(ab.db <= 0.0) || !rampa_ok(ab.ataque_s) || !rampa_ok(ab.soltura_s) {
+        return Some("abaixar");
+    }
+    match &m.normalizar {
+        Some(n) if !(NORMALIZAR_LUFS.contains(&n.lufs) && NORMALIZAR_PICO_DB.contains(&n.pico_db)) => Some("normalizar"),
+        _ => None,
+    }
 }
 
 /// Recorte de mídia que vira som (tempo de fonte). `ate` None = até o fim do som. `curva`, `mudos` e `tons` valem

@@ -5,7 +5,7 @@
  * Shift: mantém a proporção (na região, solta a proporção da saída). Alt: a partir do centro.
  */
 
-import type { Alca, Caixa, Chave, Efeito, EfEnquadramento, Id, Mudanca, Ponto, Pts, Seg } from "@domain/edicao";
+import type { Alca, Caixa, Chave, Efeito, EfEnquadramento, EfLupa, EfRegua, EfVelocidadeExibida, Id, Mudanca, Ponto, Pts, Seg } from "@domain/edicao";
 import { efeitoConhecido, porChave } from "../modelo/projeto";
 import { aDe, inversa, ponto, seguidaDe, type Afim, type Tamanho } from "../modelo/geometria";
 import { ehChaves } from "../modelo/curva";
@@ -205,3 +205,42 @@ export function alcaDeLugar(e: Extract<Efeito, { lugar: unknown }>): Alca {
     arrastar: (de, para) => ({ efeito: { ...e, lugar: { ...l, x: lim(l.x + para.x - de.x), y: lim(l.y + para.y - de.y) } } as Efeito }),
   };
 }
+
+// CONTRATO: acréscimos (contratos-fase1 F9): `alcaDaAncora`, `alcaDoLugarFixo`, `alcaNaOrigem`.
+/** Âncora da régua (ponto no espaço de origem do clipe): o arrasto volta ao espaço dela pela inversa de A. */
+export function alcaDaAncora(e: EfRegua, A: Afim): Alca[] {
+  const inv = inversa(A);
+  if (!inv) return [];
+  const p = e.ancora;
+  return [
+    {
+      id: `ancora:${e.id}`,
+      tipo: "ponto",
+      em: ponto(A, p),
+      cursor: "move",
+      arrastar: (de, para) => {
+        const a = ponto(inv, de);
+        const b = ponto(inv, para);
+        return { efeito: { ...e, ancora: { x: lim(p.x + b.x - a.x), y: lim(p.y + b.y - a.y) } } };
+      },
+    },
+  ];
+}
+
+/** Centro da lupa fixa e lugar da velocidade fixa (canvas): mover. Na que acompanha, não há o que arrastar aqui. */
+export function alcaDoLugarFixo(e: EfLupa | EfVelocidadeExibida): Alca[] {
+  const mover = (de: Ponto, para: Ponto, p: Ponto): Ponto => ({ x: lim(p.x + para.x - de.x), y: lim(p.y + para.y - de.y) });
+  if (e.tipo === "lupa") {
+    const o = e.onde;
+    if (o.modo !== "fixa") return [];
+    return [{ id: `centro:${e.id}`, tipo: "mover", em: { x: o.x, y: o.y }, cursor: "move", arrastar: (de, para) => ({ efeito: { ...e, onde: { modo: "fixa", ...mover(de, para, o) } } }) }];
+  }
+  const o = e.onde;
+  if (o.modo !== "fixa") return [];
+  const l = o.lugar;
+  return [{ id: `centro:${e.id}`, tipo: "mover", em: { x: l.x, y: l.y }, cursor: "move", arrastar: (de, para) => ({ efeito: { ...e, onde: { modo: "fixa", lugar: { ...l, ...mover(de, para, l) } } } }) }];
+}
+
+/** A alça mexe em dado do espaço de ORIGEM do clipe (caixa, ponto, região, âncora)? As de `lugar` e de centro moram
+ *  no canvas. */
+export const alcaNaOrigem = (a: Pick<Alca, "id">): boolean => !(a.id.startsWith("lugar:") || a.id.startsWith("centro:"));

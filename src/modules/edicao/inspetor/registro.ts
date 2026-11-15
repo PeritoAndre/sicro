@@ -2,7 +2,8 @@
  * Registro do Inspetor (§8.3): tipo de efeito → descritor, e tipo de item → seções. Inspetor e palco só percorrem
  * o registro: efeito novo = um arquivo em `secoes/` e uma linha aqui. Tipo fora do registro (versão futura) e item
  * que o Rust acusa com `item_invalido` usam o descritor "desconhecido": linha apagada, só o tipo, sem editor.
- * Efeitos conhecidos sem edição nesta fase (realce, holofote, lupa, régua, velocidade) têm editor só de leitura.
+ * Lupa, régua e velocidade têm o editor do pacote (Fase 1); o realce é editado na seção Realce do clipe. O holofote
+ * (fase seguinte) tem editor só de leitura.
  */
 
 import { createElement, type FC } from "react";

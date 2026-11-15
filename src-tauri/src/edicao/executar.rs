@@ -755,7 +755,12 @@ impl Execucao<'_> {
             "blocos": plano.blocos.iter().map(|b| &b.chave).collect::<Vec<_>>(),
             "camadas": plano.camadas.iter().map(camada::hash_do_pedido).collect::<Vec<_>>(),
         });
-        fs::write(self.trabalho().join(CHAVES), serde_json::to_vec(&chaves)?)?;
+        {
+            // com a trava da limpeza: ou as chaves desta tarefa já estão no disco quando ela limpa (e ficam), ou a
+            // limpeza acabou antes e o que saiu é refeito
+            let _g = trava_da_limpeza();
+            fs::write(self.trabalho().join(CHAVES), serde_json::to_vec(&chaves)?)?;
+        }
 
         // prévias (o áudio cita os auxiliares dele já na medição)
         rel.avisar(Fase::Previas, 0, 0.0);
@@ -878,6 +883,8 @@ impl Execucao<'_> {
     fn previas(&mut self) -> Result<(Option<Loudnorm>, Vec<TrfNovo>)> {
         let mut loudnorm = None;
         let mut trf = Vec::new();
+        // `.trf` guardado no projeto (ou no retrato, no "refazer"): o grafo do bloco cita `<sha256>.trf` na pasta de trabalho
+        super::motor::efeitos::realce::trazer_trf(&self.plano.proveniencia.estabilizacoes, &self.amb.pasta_projeto, self.trabalho())?;
         for (i, p) in self.plano.previas.iter().enumerate() {
             self.checar_cancelado()?;
             match p {
@@ -1395,10 +1402,91 @@ const IDADE_TMP: Duration = Duration::from_secs(6 * 3600);
 /// Teto padrão do cache da Edição (§4).
 pub(crate) const TETO_CACHE: u64 = 20 * 1024 * 1024 * 1024;
 
+/// Pasta das marcas de instância do app dentro do cache da Edição.
+const INSTANCIAS: &str = "instancias";
+/// Pastas do cache de um caso com temporários `<nome>.tmp-<pid>-<n>` de processo morto.
+const PASTAS_COM_TMP: &[&str] = &["previa", "proxies", "camadas", "mascaras", "origem", "ondas"];
+
+/// Há outra instância viva do app neste cache? Cada processo segura uma marca presa por trava de arquivo em
+/// `<raiz>/instancias/` até acabar; a marca que se deixa prender é de processo morto e sai. Sem trava no sistema de
+/// arquivos a resposta é "há": na dúvida, nada de outra instância é apagado.
+fn outra_instancia(raiz: &Path) -> bool {
+    static MINHAS: Mutex<Vec<(PathBuf, PathBuf, fs::File)>> = Mutex::new(Vec::new());
+    let dir = raiz.join(INSTANCIAS);
+    if fs::create_dir_all(&dir).is_err() {
+        return true;
+    }
+    let mut minhas = MINHAS.lock().unwrap_or_else(|e| e.into_inner());
+    if !minhas.iter().any(|(r, _, _)| r == raiz) {
+        // a marca só aparece com o nome final já presa: ninguém a vê solta enquanto nasce
+        let nome = format!("{}-{}", std::process::id(), uuid::Uuid::new_v4());
+        let (tmp, fim) = (dir.join(format!("{nome}.nascendo")), dir.join(format!("{nome}.trava")));
+        let presa = fs::OpenOptions::new().read(true).write(true).create_new(true).open(&tmp).ok().filter(|a| a.try_lock().is_ok());
+        match presa {
+            Some(a) if fs::rename(&tmp, &fim).is_ok() => minhas.push((raiz.to_path_buf(), fim, a)),
+            _ => {
+                let _ = fs::remove_file(&tmp);
+                return true;
+            }
+        }
+    }
+    let minha = minhas.iter().find(|(r, _, _)| r == raiz).map(|(_, m, _)| m.clone());
+    let mut outra = false;
+    for e in fs::read_dir(&dir).into_iter().flatten().flatten() {
+        let c = e.path();
+        if Some(&c) == minha.as_ref() || c.extension().and_then(|x| x.to_str()) != Some("trava") {
+            continue;
+        }
+        match fs::OpenOptions::new().read(true).write(true).open(&c) {
+            Ok(a) if a.try_lock().is_ok() => {
+                drop(a);
+                let _ = fs::remove_file(&c);
+            }
+            _ => outra = true,
+        }
+    }
+    outra
+}
+
+/// `render/<tarefa>` de exportação interrompida (processo morto): saem os temporários grandes (saída, PCM, blocos
+/// ligados, registros) e ficam o id do projeto e as chaves do cache, por onde a limpeza por projeto acha os blocos.
+/// Devolve os bytes liberados.
+fn enxugar_render(d: &Path) -> u64 {
+    let mut liberado = 0;
+    for e in fs::read_dir(d).into_iter().flatten().flatten() {
+        let n = e.file_name();
+        if n == super::fila::RETRATO_TAREFA || n == CHAVES {
+            continue;
+        }
+        liberado += tamanho_de(&e.path());
+        remover(&e.path());
+    }
+    let retrato = d.join(super::fila::RETRATO_TAREFA);
+    let id = fs::read(&retrato).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()).and_then(|v| v.get("id").and_then(|i| i.as_str()).map(String::from));
+    if let (Some(id), Ok(m)) = (id, fs::metadata(&retrato)) {
+        let curto = serde_json::json!({ "id": id }).to_string();
+        if m.len() > curto.len() as u64 && fs::write(&retrato, &curto).is_ok() {
+            liberado += m.len() - curto.len() as u64;
+        }
+    }
+    liberado
+}
+
 /// Limpeza do cache da Edição (`raiz` = `app_cache_dir()/edicao`): temporários de processo morto, `render/<tarefa>`
-/// com mais de 7 dias (salvo `vivas`) e, acima do `teto`, os arquivos mais antigos. Devolve os bytes liberados.
+/// com mais de 7 dias (salvo `vivas`), o de exportação interrompida (enxugado) e, acima do `teto`, os arquivos mais
+/// antigos. Devolve os bytes liberados.
 pub(crate) fn limpar_cache(raiz: &Path, teto: u64, vivas: &[String]) -> u64 {
+    // o que é mais novo que este processo pode ser dele (tarefa posta na fila enquanto a limpeza da partida roda)
+    static PARTIDA: OnceLock<SystemTime> = OnceLock::new();
+    limpar_cache_em(raiz, teto, vivas, *PARTIDA.get_or_init(SystemTime::now))
+}
+
+/// `limpar_cache` com o instante de partida do processo dado (testes). Com outra instância do app viva no mesmo
+/// cache, o `render/<tarefa>` que não é desta só sai pela idade, e o teto não tira arquivo mais novo que `IDADE_TMP`
+/// (pode ser bloco que a outra acabou de fazer e ainda vai juntar).
+pub(crate) fn limpar_cache_em(raiz: &Path, teto: u64, vivas: &[String], partida: SystemTime) -> u64 {
     let agora = SystemTime::now();
+    let outra = outra_instancia(raiz);
     let velho = |p: &Path, idade: Duration| {
         fs::metadata(p).and_then(|m| m.modified()).is_ok_and(|d| agora.duration_since(d).is_ok_and(|i| i > idade))
     };
@@ -1406,9 +1494,9 @@ pub(crate) fn limpar_cache(raiz: &Path, teto: u64, vivas: &[String]) -> u64 {
     let mut candidatos: Vec<(SystemTime, u64, PathBuf)> = Vec::new();
     let mut total = 0u64;
     let Ok(casos) = fs::read_dir(raiz) else { return 0 };
-    for caso in casos.flatten().filter(|e| e.path().is_dir()) {
+    for caso in casos.flatten().filter(|e| e.path().is_dir() && e.file_name() != INSTANCIAS) {
         let caso = caso.path();
-        for sub in ["previa", "proxies", "camadas", "mascaras"] {
+        for sub in PASTAS_COM_TMP {
             for e in fs::read_dir(caso.join(sub)).into_iter().flatten().flatten() {
                 let nome = e.file_name().to_string_lossy().into_owned();
                 // `<hash>.tmp-<pid>-<n>`: o deste processo pode estar em uso
@@ -1421,9 +1509,15 @@ pub(crate) fn limpar_cache(raiz: &Path, teto: u64, vivas: &[String]) -> u64 {
         }
         for e in fs::read_dir(caso.join("render")).into_iter().flatten().flatten() {
             let nome = e.file_name().to_string_lossy().into_owned();
-            if !vivas.contains(&nome) && velho(&e.path(), IDADE_RENDER) {
+            if vivas.contains(&nome) {
+                continue;
+            }
+            if velho(&e.path(), IDADE_RENDER) {
                 liberado += tamanho_de(&e.path());
                 remover(&e.path());
+            } else if !outra && mais_novo(&e.path()).is_some_and(|d| d < partida) {
+                // nenhuma outra instância e parada desde antes deste processo: ninguém mais a usa
+                liberado += enxugar_render(&e.path());
             }
         }
         for sub in PASTAS_DO_TETO {
@@ -1434,6 +1528,9 @@ pub(crate) fn limpar_cache(raiz: &Path, teto: u64, vivas: &[String]) -> u64 {
                 let t = tamanho_de(&e.path());
                 let d = e.metadata().and_then(|m| m.modified()).unwrap_or(SystemTime::UNIX_EPOCH);
                 total += t;
+                if outra && agora.duration_since(d).is_ok_and(|i| i < IDADE_TMP) {
+                    continue;
+                }
                 candidatos.push((d, t, e.path()));
             }
         }
@@ -1492,6 +1589,10 @@ pub(crate) const CHAVES: &str = "chaves.json";
 /// as tarefas do projeto (o que foi renderizado antes da ocultação não fica no cache). `exportacao` = a que limpa (sai
 /// o cache, fica a pasta); `intocadas` = tarefas vivas que entraram depois da parada das prévias.
 pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exportacao: &str, intocadas: &[String]) {
+    let _g = trava_da_limpeza();
+    // o que as vivas usam fica, mesmo quando uma tarefa antiga do projeto usou a mesma chave
+    let vivas: Vec<String> = intocadas.iter().filter(|t| *t != exportacao).cloned().collect();
+    let (blocos_vivos, camadas_vivas) = chaves_das_vivas(cache, &vivas);
     for e in fs::read_dir(cache.join("render")).into_iter().flatten().flatten() {
         let d = e.path();
         let deste = [d.join(super::fila::RETRATO_TAREFA), d.join("projeto").join(super::fila::RETRATO_TAREFA)]
@@ -1511,14 +1612,14 @@ pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exportacao: &str
                 Some("quadro") => "quadro",
                 _ => "blocos",
             };
-            for chave in lista("blocos") {
+            for chave in lista("blocos").into_iter().filter(|c| !blocos_vivos.contains(c)) {
                 for ext in fs::read_dir(cache.join(dir)).into_iter().flatten().flatten() {
                     if ext.file_name().to_string_lossy().split('.').next() == Some(chave.as_str()) {
                         remover(&ext.path());
                     }
                 }
             }
-            for h in lista("camadas") {
+            for h in lista("camadas").into_iter().filter(|h| !camadas_vivas.contains(h)) {
                 for sub in ["camadas", "mascaras"] {
                     remover(&cache.join(sub).join(&h));
                 }
@@ -1530,11 +1631,33 @@ pub(crate) fn limpar_do_projeto(cache: &Path, projeto_id: &str, exportacao: &str
     }
 }
 
+/// Uma limpeza por plano de cada vez, e nunca no meio da gravação das chaves de uma tarefa.
+fn trava_da_limpeza() -> std::sync::MutexGuard<'static, ()> {
+    static T: Mutex<()> = Mutex::new(());
+    T.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// Blocos e camadas que as tarefas `vivas` puseram (ou vão usar) no cache: o `chaves.json` de `render/<tarefa>/`.
+fn chaves_das_vivas(cache: &Path, vivas: &[String]) -> (HashSet<String>, HashSet<String>) {
+    let (mut blocos, mut camadas) = (HashSet::new(), HashSet::new());
+    for t in vivas {
+        let Some(c) = fs::read(cache.join("render").join(t).join(CHAVES)).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) else { continue };
+        let lista = |k: &str| c.get(k).and_then(|v| v.as_array()).into_iter().flatten().filter_map(|x| x.as_str().map(String::from)).collect::<Vec<_>>();
+        blocos.extend(lista("blocos"));
+        camadas.extend(lista("camadas"));
+    }
+    (blocos, camadas)
+}
+
 /// Ao concluir exportação com `ocultar`: saem os blocos e as camadas daquele plano (renderizados antes da
-/// ocultação, não podem ficar no cache).
-pub(crate) fn limpar_do_plano(cache: &Path, plano: &Plano) {
+/// ocultação, não podem ficar no cache). `vivas` = tarefas que entraram depois da parada das prévias: o que elas
+/// usam fica (a prévia nova, já com a ocultação, falhava por arquivo sumido no meio do render).
+// CONTRATO: 3º parâmetro acrescentado no fecho da Fase 1 (contratos-fase1 (g) L12).
+pub(crate) fn limpar_do_plano(cache: &Path, plano: &Plano, vivas: &[String]) {
+    let _g = trava_da_limpeza();
+    let (blocos_vivos, camadas_vivas) = chaves_das_vivas(cache, vivas);
     for b in &plano.blocos {
-        if !sha_valido(&b.chave) {
+        if !sha_valido(&b.chave) || blocos_vivos.contains(&b.chave) {
             continue;
         }
         for dir in ["blocos", "quadro"] {
@@ -1547,6 +1670,9 @@ pub(crate) fn limpar_do_plano(cache: &Path, plano: &Plano) {
     }
     for c in &plano.camadas {
         let h = camada::hash_do_pedido(c);
+        if camadas_vivas.contains(&h) {
+            continue;
+        }
         for dir in ["camadas", "mascaras"] {
             remover(&cache.join(dir).join(&h));
         }
@@ -1623,7 +1749,7 @@ pub(crate) mod apoio {
             roteiro: vec![],
             ocultacoes: vec![],
             audio: ProvAudio { silencios: vec![], tolerancia_atempo_ms: 0.0, mixagem: None, trilhas: vec![] },
-            legendas: ProvLegendas { origem: None, n: 0, conferidas: 0 },
+            legendas: ProvLegendas { origem: None, n: 0, conferidas: 0, modo: ModoLegendas::Nenhuma, no_projeto: 0, ia: 0, ia_conferidas: 0 },
             sincronias: vec![],
             rastreios: vec![],
             ia: vec![],
@@ -1633,6 +1759,7 @@ pub(crate) mod apoio {
             revisado_por: String::new(),
             ffmpeg: ProvFfmpeg { versao: cap.versao.clone(), configuracao: String::new(), origem: Origem::Path, sha256: cap.sha256.clone() },
             fecho: None,
+            sobrepostos: vec![],
         }
     }
 
@@ -2171,6 +2298,50 @@ mod testes {
         assert_eq!(shas[0], shas[1], "{}", cap.versao);
     }
 
+    /// Clipe estabilizado com o `.trf` já gravado (`trf_sha256`): o executor leva `vidstab/<sha256>.trf` do projeto à
+    /// pasta de trabalho, onde o grafo do bloco o procura. Sem o arquivo no projeto: `arquivo_ausente`, antes do bloco.
+    #[test]
+    fn trf_guardado_chega_a_pasta_de_trabalho_do_bloco() {
+        use crate::edicao::modelo::FaixaAnalise;
+        use crate::edicao::motor::plano::ProvEstabilizacao;
+        let Some(cap) = fontes::cap() else { return };
+        let (f, pts) = fonte(&cap);
+        // o `.trf` de verdade, feito pela prévia numa exportação anterior
+        let d = pasta("trf-guardado");
+        let amb = ambiente(cap.clone(), d.path(), "t0");
+        let mut primeiro = plano(&cap, &f, &pts, &cpu(), alvo_final(EscolhaCodificador::Cpu));
+        let args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-i", &f.to_string_lossy(), "-frames:v", "90", "-vf", "format=yuv420p,vidstabdetect=result=e001.trf", "-f", "null", "-"].iter().map(|s| s.to_string()).collect();
+        primeiro.previas = vec![Previa::Vidstab { efeito: "e1".into(), args, trf: "e001.trf".into() }];
+        let sha = executar(&primeiro, &amb, &AtomicBool::new(false), &mut |_| {}).unwrap().trf[0].sha256.clone();
+        // agora o projeto cita o `.trf`: o grafo usa `<sha256>.trf` e não há prévia
+        let com_trf = |tarefa: &str, raiz: &Path| {
+            let mut p = plano(&cap, &f, &pts, &cpu(), alvo_final(EscolhaCodificador::Cpu));
+            for b in &mut p.blocos {
+                b.grafo = b.grafo.replace("format=yuv420p,split", &format!("format=yuv420p,vidstabtransform=input={sha}.trf:optzoom=0:zoom=0:crop=black:smoothing=5:interpol=bilinear,split"));
+                assert!(b.grafo.contains(".trf"));
+                b.chave = sha256_bytes(format!("{}{}", b.chave, b.grafo).as_bytes());
+            }
+            p.proveniencia.estabilizacoes = vec![ProvEstabilizacao { efeito: "e1".into(), trf_sha256: Some(sha.clone()), analise: FaixaAnalise { de_s: 0.0, ate_s: 3.0, de_pts: 0, ate_pts: pts[89] }, zoom_pct: 0.0 }];
+            (p, ambiente(cap.clone(), raiz, tarefa))
+        };
+        let (p, amb1) = com_trf("t1", d.path());
+        let r = executar(&p, &amb1, &AtomicBool::new(false), &mut |_| {}).unwrap_or_else(|e| panic!("{}: {e}", cap.versao));
+        assert!(r.trf.is_empty(), "nada analisado de novo");
+        assert_eq!(sha256_bytes(&fs::read(amb1.trabalho.join(format!("{sha}.trf"))).unwrap()), sha);
+        assert_eq!(r.conferencia.as_ref().map(|c| c.quadros), Some(90), "{}", cap.versao);
+        // projeto sem o arquivo: falha dizendo qual, sem rodar bloco nenhum
+        let vazio = pasta("trf-ausente");
+        let (p, amb2) = com_trf("t1", vazio.path());
+        let e = executar(&p, &amb2, &AtomicBool::new(false), &mut |_| {}).unwrap_err().to_string();
+        assert!(e.contains("arquivo_ausente") && e.contains(&format!("vidstab/{sha}.trf")), "{e}");
+        // com outro conteúdo no lugar: recusado, nunca usado
+        let troca = amb2.pasta_projeto.join("vidstab");
+        fs::create_dir_all(&troca).unwrap();
+        fs::write(troca.join(format!("{sha}.trf")), b"VID.STAB 1\nlixo").unwrap();
+        let e = executar(&p, &amb2, &AtomicBool::new(false), &mut |_| {}).unwrap_err().to_string();
+        assert!(e.contains("leitura_divergente"), "{e}");
+    }
+
     /// `preparar` num caso: mídia achada pelo relativo ou, sem ele, pelo SHA-256 no banco; trocada; ausente;
     /// na exportação final espera a tabela do decodificador da fila de fundo. Leitor de rastreios confere o SHA-256.
     #[test]
@@ -2334,6 +2505,49 @@ mod testes {
         assert_eq!(arquivos(&cache.join("render")), ["t2", "t4", "t5"], "a viva que entrou depois fica inteira");
     }
 
+    /// Exportação com `ocultar` que termina com uma prévia NOVA do mesmo projeto já na fila (entrou depois da parada):
+    /// o bloco e a camada que a nova usa ficam, ainda que o plano da exportação e uma prévia antiga usem as mesmas
+    /// chaves; o resto do plano e da antiga sai. Antes, a nova falhava por arquivo sumido no meio do render.
+    #[test]
+    fn limpeza_nao_tira_o_que_a_previa_nova_usa() {
+        let Some(cap) = fontes::cap() else { return };
+        let (f, pts) = fonte(&cap);
+        let d = pasta("limpeza-viva");
+        let cache = d.path();
+        let plano = plano(&cap, &f, &pts, &cpu(), alvo_final(EscolhaCodificador::Cpu));
+        let (b0, b1) = (plano.blocos[0].chave.clone(), plano.blocos[1].chave.clone());
+        // camadas: uma só do plano antigo, outra que a nova também usa
+        let (k_velha, k_viva) = ("1".repeat(64), "2".repeat(64));
+        let tarefa = |t: &str, blocos: &[&str], camadas: &[&str]| {
+            let r = cache.join("render").join(t);
+            fs::create_dir_all(&r).unwrap();
+            fs::write(r.join(super::super::fila::RETRATO_TAREFA), serde_json::json!({ "id": "p1" }).to_string()).unwrap();
+            fs::write(r.join(CHAVES), serde_json::json!({ "dir": "blocos", "blocos": blocos, "camadas": camadas }).to_string()).unwrap();
+        };
+        tarefa("exportacao", &[&b0, &b1], &[&k_velha, &k_viva]);
+        tarefa("antiga", &[&b0], &[&k_velha, &k_viva]);
+        tarefa("nova", &[&b1], &[&k_viva]);
+        fs::create_dir_all(cache.join("blocos")).unwrap();
+        for b in [&b0, &b1] {
+            fs::write(cache.join("blocos").join(format!("{b}.mp4")), b"x").unwrap();
+            fs::write(cache.join("blocos").join(format!("{b}.framehash")), b"x").unwrap();
+        }
+        for k in [&k_velha, &k_viva] {
+            fs::create_dir_all(cache.join("camadas").join(k)).unwrap();
+        }
+        let vivas = vec!["nova".to_string()];
+        limpar_do_plano(cache, &plano, &vivas);
+        assert_eq!(arquivos(&cache.join("blocos")), [format!("{b1}.framehash"), format!("{b1}.mp4")], "o bloco da nova fica; o outro do plano sai");
+        // a limpeza do projeto (que roda em seguida, com a exportação e a nova na lista das vivas) também respeita
+        limpar_do_projeto(cache, "p1", "exportacao", &["exportacao".to_string(), "nova".to_string()]);
+        assert_eq!(arquivos(&cache.join("blocos")), [format!("{b1}.framehash"), format!("{b1}.mp4")]);
+        assert_eq!(arquivos(&cache.join("camadas")), [k_viva.clone()], "a camada da nova fica; a só das antigas sai");
+        assert_eq!(arquivos(&cache.join("render")), ["exportacao", "nova"]);
+        // sem tarefa viva, tudo do plano sai
+        limpar_do_plano(cache, &plano, &[]);
+        assert!(arquivos(&cache.join("blocos")).is_empty());
+    }
+
     /// (Só Unix: abre pasta para mudar a data, o que o Windows não deixa sem `FILE_FLAG_BACKUP_SEMANTICS`.)
     #[cfg(unix)]
     #[test]
@@ -2366,6 +2580,62 @@ mod testes {
         assert!(!antigo.exists() && novo.exists(), "acima do teto sai o mais antigo");
         assert!(tabela.exists(), "tabelas de quadros não entram no teto");
         assert_eq!(liberado, 10 + 10 + 1000);
+    }
+
+    /// Pendência (e) do P1.8: `render/<tarefa>` de exportação interrompida (processo morto) perde os temporários grandes e
+    /// guarda só o id do projeto e as chaves; com outra instância do app viva no mesmo cache nada alheio é tocado, nem
+    /// pelo teto; a tarefa viva desta instância e a mais nova que a partida do processo ficam; temporários de `origem/`
+    /// e `ondas/` de processo morto saem. (Só Unix: muda a data de pasta.)
+    #[cfg(unix)]
+    #[test]
+    fn render_interrompido_e_enxugado_so_sem_outra_instancia() {
+        let d = pasta("instancias");
+        let raiz = d.path();
+        let caso = raiz.join("caso1");
+        let tarefa = |nome: &str| {
+            let t = caso.join("render").join(nome);
+            fs::create_dir_all(t.join("miniaturas")).unwrap();
+            fs::write(t.join(super::super::fila::RETRATO_TAREFA), serde_json::json!({ "id": "p1", "titulo": "x".repeat(500) }).to_string()).unwrap();
+            fs::write(t.join(CHAVES), r#"{"dir":"blocos","blocos":[],"camadas":[]}"#).unwrap();
+            fs::write(t.join("saida.mp4"), vec![0u8; 4000]).unwrap();
+            fs::write(t.join("audio.wav"), vec![0u8; 6000]).unwrap();
+            fs::write(t.join("miniaturas").join("b000.bmp"), vec![0u8; 300]).unwrap();
+            t
+        };
+        let (morta, viva) = (tarefa("t-morta"), tarefa("t-viva"));
+        let velho = SystemTime::now() - IDADE_TMP - Duration::from_secs(600);
+        for sub in ["origem/aa.tmp-1-0", "ondas/bb.pk.tmp-1-0"] {
+            fs::create_dir_all(caso.join(sub)).unwrap();
+            fs::write(caso.join(sub).join("x"), vec![0u8; 50]).unwrap();
+            fs::File::open(caso.join(sub)).unwrap().set_modified(velho).unwrap();
+        }
+        let bloco = caso.join("blocos").join("a.mp4");
+        fs::create_dir_all(bloco.parent().unwrap()).unwrap();
+        fs::write(&bloco, vec![0u8; 1000]).unwrap();
+        let vivas = ["t-viva".to_string()];
+        let depois = SystemTime::now() + Duration::from_secs(5);
+        // tarefa mais nova que a partida do processo pode ser dele: fica inteira
+        assert_eq!(limpar_cache_em(raiz, u64::MAX, &vivas, SystemTime::now() - Duration::from_secs(3600)), 100, "só os temporários");
+        assert!(morta.join("saida.mp4").exists() && !caso.join("origem/aa.tmp-1-0").exists() && !caso.join("ondas/bb.pk.tmp-1-0").exists());
+        // outra instância viva (marca presa por outro descritor): nem o render parado nem o bloco recente saem
+        let outra = raiz.join(INSTANCIAS).join("99999-de-outro-processo.trava");
+        let presa = fs::File::create(&outra).unwrap();
+        presa.try_lock().expect("trava de arquivo");
+        assert_eq!(limpar_cache_em(raiz, 500, &vivas, depois), 0);
+        assert!(morta.join("saida.mp4").exists() && bloco.exists() && outra.exists());
+        // a outra instância morre: a marca solta sai, o render interrompido é enxugado e o teto volta a valer
+        drop(presa);
+        let liberado = limpar_cache_em(raiz, 500, &vivas, depois);
+        assert!(!outra.exists(), "marca de processo morto");
+        assert!(!morta.join("saida.mp4").exists() && !morta.join("audio.wav").exists() && !morta.join("miniaturas").exists());
+        assert_eq!(fs::read_to_string(morta.join(super::super::fila::RETRATO_TAREFA)).unwrap(), r#"{"id":"p1"}"#);
+        assert!(morta.join(CHAVES).is_file(), "as chaves ficam: a limpeza por projeto acha os blocos por elas");
+        assert!(viva.join("saida.mp4").exists() && viva.join("audio.wav").exists(), "tarefa viva desta instância fica");
+        assert!(!bloco.exists(), "acima do teto");
+        assert!(liberado >= 4000 + 6000 + 300 + 1000, "{liberado}");
+        // de novo: nada mais a tirar, e a marca desta instância segue de pé
+        assert_eq!(limpar_cache_em(raiz, 500, &vivas, depois), 0);
+        assert_eq!(fs::read_dir(raiz.join(INSTANCIAS)).unwrap().count(), 1);
     }
 
     /// Partida depois de processo morto: a pasta de trabalho da tabela do decodificador (stderr de ~300 B por quadro)

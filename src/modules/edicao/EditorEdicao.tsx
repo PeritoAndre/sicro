@@ -9,8 +9,8 @@ import { Check, CircleDot, Crosshair, Loader2, PanelLeftClose, PanelLeftOpen, Pa
 import { Button } from "@components/Button/Button";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
 import { useMenusAbertos } from "./menus";
-import { isEditableTarget } from "@core/keymap";
 import { useShortcuts } from "@core/useShortcuts";
+import { useGestoTransporte } from "@modules/video/editor/useGestoTransporte";
 import type { Caixa, Lugar, Ponto, Pts, Seg } from "@domain/edicao";
 import { useEdicaoStore } from "./store/edicaoStore";
 import { useRenderStore } from "./store/renderStore";
@@ -166,21 +166,19 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
   useEffect(() => {
     if (!ativo) palco.current?.pausar();
   }, [ativo]);
-  // ←/→ um quadro e Shift+←/→ um segundo, fixos como no reprodutor (fora do catálogo)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (!atalhos || isEditableTarget(e.target) || e.ctrlKey || e.altKey || e.metaKey) return;
-      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
-      const p = palco.current;
-      if (!p) return;
-      e.preventDefault();
-      const d = e.key === "ArrowLeft" ? -1 : 1;
-      if (e.shiftKey) p.irPara(p.tempo() + d);
-      else p.passo(d);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [atalhos]);
+  // ←/→ (toque = um quadro; segurar toca ou dá ré) e Shift+←/→ (±1 s): o gesto do reprodutor da análise (§8.5)
+  useGestoTransporte(
+    {
+      passo: (d) => palco.current?.passo(d),
+      mover: (d) => palco.current?.tocar(d),
+      parar: () => palco.current?.pausar(),
+      saltar: (s) => {
+        const p = palco.current;
+        if (p) p.irPara(p.tempo() + s);
+      },
+    },
+    atalhos,
+  );
 
   // ---- arrastar a divisa das colunas ----
   const arrastarDivisa = (qual: "seq" | "insp") => (e: PE<HTMLDivElement>) => {

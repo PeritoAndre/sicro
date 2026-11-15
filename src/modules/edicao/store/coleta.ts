@@ -108,7 +108,8 @@ async function preparar(ws: string, itens: TrechoColetado[]): Promise<Preparado[
       const v = lista.find((x) => x.sha256 === it.sha256);
       if (!v) throw new Error("midia_ausente");
       const info = await commands.edicaoMidiaInfo(ws, it.sha256).catch(() => null);
-      const prov = await provenienciaDaMidia(ws, v.id).catch(() => null);
+      // erro de leitura sobe (o Ctrl+3 mostra): nunca vira "não informado"
+      const prov = await provenienciaDaMidia(ws, v.id);
       m = { ref: midiaDoCaso(v, lista, info, prov), info };
       midias.set(it.sha256, m);
     }

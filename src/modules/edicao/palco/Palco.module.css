@@ -87,6 +87,36 @@
   z-index: 3;
   pointer-events: none;
 }
+/* estado da prévia no canto do palco: só ícone */
+.cantos {
+  position: absolute;
+  right: var(--space-2);
+  top: var(--space-2);
+  display: flex;
+  gap: var(--space-2);
+  z-index: 3;
+  pointer-events: none;
+}
+.canto {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 3px 5px;
+  border-radius: var(--radius-sm, 4px);
+  background: rgb(0 0 0 / 55%);
+  color: #ddd;
+  pointer-events: auto;
+}
+.trilho {
+  display: block;
+  width: 48px;
+  height: 3px;
+  background: rgb(255 255 255 / 20%);
+}
+.trilho .barraFundo {
+  min-width: 0;
+}
+
 .barraFundo {
   display: block;
   height: 3px;

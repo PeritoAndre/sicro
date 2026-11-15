@@ -7,6 +7,7 @@ const cmd = vi.hoisted(() => ({
   edicaoAnalisar: vi.fn(),
   edicaoExcluir: vi.fn(),
   listVideoMedia: vi.fn(),
+  videoProveniencia: vi.fn(),
   edicaoMidiaInfo: vi.fn(),
   edicaoQuadroEm: vi.fn(),
   edicaoEnfileirar: vi.fn(),
@@ -330,7 +331,7 @@ describe("salvamento", () => {
   it("edição nova só é gravada depois da primeira mudança", async () => {
     const id = await st().novo(WS);
     expect(st().doc!.saida.auto).toBe(true);
-    expect(st().doc!.mixagem.normalizar).toBeNull();
+    expect(st().doc!.mixagem.normalizar).toEqual({ lufs: -16, pico_db: -1.5 });
     expect(correnteDe(WS)).toBe(id);
     await vi.advanceTimersByTimeAsync(TETO_MS * 2);
     expect(cmd.edicaoSalvar).not.toHaveBeenCalled();
@@ -498,6 +499,8 @@ describe("coleta de trechos", () => {
   const sha = "a".repeat(64);
   beforeEach(() => {
     definirCorrente(WS2, null);
+    // proveniência da análise: nada gravado (a coleta e o "Trecho…" leem sempre)
+    cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: null, recebido_obs: "", relogio_desvio_s: null, gravador: null });
     cmd.listVideoMedia.mockResolvedValue([
       {
         id: "vm1",
@@ -584,5 +587,63 @@ describe("coleta de trechos", () => {
     expect(cmd.edicaoSalvar).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(ATRASO_MS);
     expect(cmd.edicaoSalvar).toHaveBeenCalledTimes(1);
+  });
+
+  const PROV = { recebido_nativo: true, recebido_obs: "Pendrive do DVR", relogio_desvio_s: -3.5, gravador: "Intelbras MHDX" };
+  const noRef = { recebido: { nativo: true, obs: "Pendrive do DVR" }, relogio_desvio_s: -3.5, gravador: "Intelbras MHDX" };
+  const VAZIO = { recebido: { nativo: null, obs: "" }, relogio_desvio_s: null, gravador: null };
+
+  it("proveniência preenchida DEPOIS da primeira coleta chega ao MidiaRef que já está no projeto (tela fechada)", async () => {
+    const r1 = await receber(WS2, [{ sha256: sha, inicio_s: 1, fim_s: 2 }]);
+    const p1 = salvo();
+    expect(p1.midias[0]).toMatchObject(VAZIO);
+    // o perito preenche "Gravador" na análise e coleta outro trecho da mesma mídia
+    cmd.videoProveniencia.mockResolvedValue(PROV);
+    cmd.edicaoAbrir.mockResolvedValueOnce({ projeto: p1, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "" });
+    await receber(WS2, [{ sha256: sha, inicio_s: 3, fim_s: 4 }]);
+    const p2 = salvo();
+    expect(p2.id).toBe(r1.projeto);
+    expect(p2.midias).toHaveLength(1);
+    expect(p2.midias[0]).toMatchObject({ id: p1.midias[0]!.id, ...noRef });
+    // o resto do retrato da mídia fica; o documento lido não foi mexido
+    expect({ ...p2.midias[0], ...VAZIO }).toEqual(p1.midias[0]);
+    expect(p1.midias[0]).toMatchObject(VAZIO);
+    // apagada na análise: volta a "não informado"
+    cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: null, recebido_obs: "", relogio_desvio_s: null, gravador: null });
+    cmd.edicaoAbrir.mockResolvedValueOnce({ projeto: p2, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "" });
+    await receber(WS2, [{ sha256: sha, inicio_s: 5, fim_s: 6 }]);
+    expect(salvo().midias[0]).toMatchObject(VAZIO);
+  });
+
+  it("com a tela aberta: a proveniência nova entra no mesmo passo do trecho e o Desfazer a devolve", async () => {
+    await st().novo(WS2);
+    await receber(WS2, [{ sha256: sha, inicio_s: 1, fim_s: 2 }], st().doc!.id);
+    const antes = st().doc!.midias[0]!;
+    expect(antes).toMatchObject(VAZIO);
+    cmd.videoProveniencia.mockResolvedValue(PROV);
+    const passos = st().passado.length;
+    await receber(WS2, [{ sha256: sha, inicio_s: 3, fim_s: 4 }], st().doc!.id);
+    expect(st().passado).toHaveLength(passos + 1);
+    expect(st().passado.at(-1)?.rotulo).toBe("Trecho");
+    expect(st().doc!.midias).toHaveLength(1);
+    expect(st().doc!.midias[0]).toMatchObject({ id: antes.id, ...noRef });
+    st().desfazer();
+    expect(st().doc!.midias[0]).toBe(antes);
+    // mesma proveniência: o MidiaRef não é trocado
+    st().refazer();
+    const com = st().doc!.midias[0]!;
+    await receber(WS2, [{ sha256: sha, inicio_s: 5, fim_s: 6 }], st().doc!.id);
+    expect(st().doc!.midias[0]).toBe(com);
+  });
+
+  it("erro de leitura da proveniência: a coleta rejeita e nada é gravado (nunca vira 'não informado')", async () => {
+    cmd.videoProveniencia.mockRejectedValue({ kind: "database", message: "database error: database is locked" });
+    await expect(receber(WS2, [{ sha256: sha, inicio_s: 1, fim_s: 2 }])).rejects.toMatchObject({ message: "database error: database is locked" });
+    expect(cmd.edicaoSalvar).not.toHaveBeenCalled();
+    expect(correnteDe(WS2)).toBeNull();
+    // resposta fora do formato também é erro
+    cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: "sim" });
+    await expect(receber(WS2, [{ sha256: sha, inicio_s: 1, fim_s: 2 }])).rejects.toThrow("item_invalido: proveniencia");
+    expect(cmd.edicaoSalvar).not.toHaveBeenCalled();
   });
 });

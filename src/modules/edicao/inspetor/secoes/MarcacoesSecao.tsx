@@ -9,7 +9,8 @@ import { ChevronDown, ChevronRight, Crosshair, Eye, EyeOff, Film, Plus, Trash2 }
 import { useContextMenu } from "@components/ContextMenu/ContextMenu";
 import { useEffect, useRef, type MouseEvent } from "react";
 import type { ContextoClipe, Desconhecido, Efeito, Intervalo, TabelaQuadros } from "@domain/edicao";
-import { useEdicaoStore } from "../../store/edicaoStore";
+import { pushToast } from "@components/toast/toastStore";
+import { separarErro, useEdicaoStore } from "../../store/edicaoStore";
 import { aplicarMudanca, efeitoConhecido } from "../../modelo/projeto";
 import { askConfirm } from "@components/Dialog/ask";
 import {
@@ -32,11 +33,18 @@ import { ADICIONAR, ADICIONAR_PROPRIO, descritor, REGISTRO, type SecaoProps } fr
 import { useInspetorUi } from "../ui";
 import { escolherMidia } from "./importar";
 import { useMenuAberto } from "../../menus";
+import { useOrigemPendente } from "../../palco/origem";
 import styles from "../Inspetor.module.css";
 
 interface Item {
   e: Efeito | Desconhecido;
   daMidia: boolean;
+}
+
+/** Erro de um "Adicionar" que rejeitou: aviso do app com a frase (ou o código). */
+function falhou(e: unknown): void {
+  const r = separarErro(e);
+  pushToast("error", r.frase || r.codigo || "");
 }
 
 /** A ocultação da mídia vale no clipe quando o `ativo` (tempo de fonte) cruza a faixa dele. */
@@ -70,8 +78,9 @@ export function MarcacoesSecao({ clipe: c, ctx, info, tabela: lida }: SecaoProps
           icon: <Ic size={12} />,
           onSelect: () => {
             const proprio = ADICIONAR_PROPRIO[tipo];
-            if (proprio) void proprio(c.id, d.rotulo).catch(() => {});
-            else if (tipo === "imagem") void escolherMidia("imagem").then((m) => m && adicionarImagem(c.id, m, d.rotulo));
+            // falha de "Adicionar": a frase do catálogo no aviso do app, nunca calada
+            if (proprio) void proprio(c.id, d.rotulo).catch(falhou);
+            else if (tipo === "imagem") void escolherMidia("imagem").then((m) => m && adicionarImagem(c.id, m, d.rotulo), falhou);
             else adicionarEfeito(c.id, tipo as Exclude<typeof tipo, "imagem" | "lupa" | "regua" | "velocidade_exibida">, d.rotulo);
           },
         };
@@ -128,6 +137,8 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
   // ocultação da mídia: `ativo` sempre em tempo de fonte
   const fonte = clipe.tipo === "trecho" || daMidia;
   const li = useRef<HTMLLIElement>(null);
+  // anotação só se marca sobre o intermediário de origem; a ocultação mora no original e não espera
+  const parada = useOrigemPendente(clipe) && (efeitoConhecido(e) ? e.tipo !== "ocultar" : true);
   // estabilizar e lente: mexer neles invalida as marcações do clipe; pede confirmação com a contagem (§3.2)
   const confirmado = async (acao: string): Promise<boolean> => {
     const doc = useEdicaoStore.getState().doc;
@@ -185,6 +196,7 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
               <div className={styles.larga}>
                 <Mini
                   ativo={chave === `${ef.id}:caixa`}
+                  disabled={parada}
                   data-acao="marcar"
                   onClick={() =>
                     pedirMarcacao({ tipo: "caixa", rastreio, efeito: ef.id }, (v, t, pts) => "w" in v && marcarAncora(rastreio, { t, pts, v }, "Marcar"), `${ef.id}:caixa`)

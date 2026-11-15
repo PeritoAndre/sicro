@@ -999,6 +999,8 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
               mediaKey={media.sha256}
               startTime={startTime}
               loop={loop}
+              // entrada e saída marcadas, com ou sem repetição: é o que o Ctrl+3 coleta
+              trecho={range}
               hasAudio={probeHasAudio(media.raw_probe_json)}
               menuItems={videoMenuItems}
               fullscreen={bigScreen}

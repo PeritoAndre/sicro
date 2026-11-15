@@ -24,11 +24,12 @@ use crate::edicao::camada::texto::{self, Atlas, PedidoSprite, Sprite};
 use crate::edicao::executar::{self, abrir_banco, sha_valido};
 use crate::edicao::ffmpeg::sonda::{self, Capacidades, ResumoCapacidades};
 use crate::edicao::fila::{self, Estado, PedidoRender, SaidaRegistrada, Tarefa, TipoTarefa};
-use crate::edicao::fundo::{self, TarefaFundo, TipoFundo};
+use crate::edicao::fundo::{self, TarefaFundo};
 use crate::edicao::mensagens::{self, codigo};
 use crate::edicao::modelo::{Analise, EstiloTexto, LinhaResolvida, MidiaRef, Problema, Racional, RetratoCalculo, RetratoCalibracao, TipoMidia};
 use crate::edicao::motor::{Alvo, FonteInfo};
-use crate::edicao::previa::{self, MidiaInfo, PreviaMidia, TipoPrevia};
+use crate::edicao::previa::{self, MidiaInfo, PreviaMidia};
+use crate::edicao::proxy;
 use crate::edicao::quadros::{AlvoQuadro, OrigemTabela, QuadroEm, TabelaCompacta, TabelaQuadros};
 use crate::edicao::validar;
 use crate::error::{Result, SicroError};
@@ -228,24 +229,11 @@ pub(crate) fn fonte_do_caso(ws: &Path, sha256: &str, cache: &Path) -> Result<(Vi
     Ok((vm, fonte, cap))
 }
 
-/// Pede a cópia ou o proxy à fila de fundo (o original nunca entra).
-fn pedir_previa(cap: &Arc<Capacidades>, cache: &Path, fonte: &FonteInfo, p: &PreviaMidia) {
-    let tipo = match p.tipo {
-        TipoPrevia::Copia => TipoFundo::CopiaPrevia,
-        TipoPrevia::Proxy => TipoFundo::Proxy,
-        TipoPrevia::Original | TipoPrevia::Origem => return,
-    };
-    let (cap, cache, fonte) = (cap.clone(), cache.to_path_buf(), fonte.clone());
-    let chave = fundo::chave(tipo, &fonte.sha256);
-    fundo::pedir(tipo, &chave, Box::new(move |c, prog| previa::produzir(&cap, &cache, &fonte, c, prog).map(|_| ())));
-}
-
 pub(crate) fn midia_previa(ws: &Path, sha256: &str, cache: &Path) -> Result<PreviaMidia> {
     let (_, fonte, cap) = fonte_do_caso(ws, sha256, cache)?;
     let p = previa::consultar(ws, cache, &fonte)?;
-    if !p.pronta {
-        pedir_previa(&cap, cache, &fonte, &p);
-    }
+    // a cópia ou o proxy que faltam e, com o tocável pronto, o proxy por desempenho (P1.9)
+    previa::pedir_falta(&cap, cache, &fonte, &p);
     Ok(p)
 }
 
@@ -258,9 +246,7 @@ pub async fn edicao_midia_info(app: AppHandle, workspace_path: String, sha256: S
         let cache = cache_do_caso(&raiz, ws)?;
         let (vm, fonte, cap) = fonte_do_caso(ws, &sha256, &cache)?;
         let p = previa::consultar(ws, &cache, &fonte)?;
-        if !p.pronta {
-            pedir_previa(&cap, &cache, &fonte, &p);
-        }
+        previa::pedir_falta(&cap, &cache, &fonte, &p);
         Ok(previa::midia_info(&vm.id.to_string(), &vm.filename, &fonte, p))
     })
     .await
@@ -490,8 +476,13 @@ pub async fn edicao_saida_excluir(app: AppHandle, workspace_path: String, saida_
 
 /// Refaz uma exportação a partir do retrato (§10.4): o id da tarefa `Refazer` (P1.8, `refazer::pedir`).
 #[tauri::command]
-pub async fn edicao_refazer(workspace_path: String, saida_id: String) -> Result<String> {
-    em_fundo(move || refazer::pedir(Path::new(&workspace_path), &saida_id)).await
+pub async fn edicao_refazer(app: AppHandle, workspace_path: String, saida_id: String) -> Result<String> {
+    let raiz = app_cache(&app)?;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        refazer::pedir(ws, &cache_do_caso(&raiz, ws)?, &saida_id)
+    })
+    .await
 }
 
 // ---------------------------------------------------------------------------------------------- Fase 1
@@ -536,6 +527,32 @@ pub async fn edicao_retrato_calculo(workspace_path: String, calculo_id: String) 
     em_fundo(move || medidas::retrato_calculo(Path::new(&workspace_path), &calculo_id)).await
 }
 
+// CONTRATO: acréscimo do fecho da Fase 1 (contratos-fase1 (g)). O estado do intermediário SEM pedir: o cartão e o
+// palco perguntam por todo clipe; `edicao_origem_pedir` poria um render de 1,1× a duração na fila a cada pergunta.
+/// Situação do intermediário de origem do clipe (§7.5), sem pedir: null = nem pronto nem na fila.
+#[tauri::command]
+pub async fn edicao_origem_estado(app: AppHandle, workspace_path: String, projeto: Value, clipe_id: String) -> Result<Option<EstadoOrigem>> {
+    let raiz = app_cache(&app)?;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        origem::estado_do_projeto(ws, &cache_do_caso(&raiz, ws)?, &projeto, &clipe_id)
+    })
+    .await
+}
+
+// CONTRATO: acréscimo do fecho da Fase 1 (contratos-fase1 (g)). O proxy que o palco pede (§7.6).
+/// Prévia do clipe para o palco: com busca lenta medida (`busca_p50_ms`: p50 de 3 buscas pausadas, ms; null = sem
+/// medição) ou clipe com rampa, ré ou abaixo de 0,25×, pede o proxy à fila de fundo. Devolve o que toca agora.
+#[tauri::command]
+pub async fn edicao_proxy_pedir(app: AppHandle, workspace_path: String, projeto: Value, clipe_id: String, busca_p50_ms: Option<f64>) -> Result<PreviaMidia> {
+    let raiz = app_cache(&app)?;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        proxy::pedir_do_projeto(ws, &cache_do_caso(&raiz, ws)?, &projeto, &clipe_id, busca_p50_ms)
+    })
+    .await
+}
+
 // ---------------------------------------------------------------------------------------------- partida e saída
 
 struct OuvinteTauri(AppHandle);
@@ -573,16 +590,51 @@ pub fn iniciar(app: &AppHandle) {
     });
 }
 
-/// No `ExitRequested`: cancela as filas e mata os filhos.
+/// O que o `ExitRequested` espera das filas, no máximo. O que não olha o cancelamento (a publicação copiando e
+/// conferindo o arquivo numa pasta de rede, a sonda de GPU) segurava a janela parada até acabar.
+pub const ESPERA_NA_SAIDA: std::time::Duration = std::time::Duration::from_secs(4);
+
+/// No `ExitRequested`: cancela as filas e mata os filhos, sem prender a janela além de `ESPERA_NA_SAIDA`.
 pub fn encerrar() {
-    fila::encerrar();
-    fundo::encerrar();
+    let acoes: Vec<Box<dyn FnOnce() + Send>> = vec![Box::new(fila::encerrar), Box::new(fundo::encerrar)];
+    if !esperar_ate(acoes, ESPERA_NA_SAIDA) {
+        tracing::warn!("edição: filas ainda ocupadas depois de {ESPERA_NA_SAIDA:?}; saindo");
+    }
+    // o que nasceu depois do primeiro corte (a sonda lança um filho por tentativa) também morre
     crate::edicao::ffmpeg::exec::matar_todos();
+}
+
+/// Roda cada ação numa thread própria (o sinal de cancelamento de todas sobe já) e espera todas até `espera`.
+/// Devolve se todas acabaram; as que sobram ficam soltas (o processo está saindo).
+pub(crate) fn esperar_ate(acoes: Vec<Box<dyn FnOnce() + Send>>, espera: std::time::Duration) -> bool {
+    let (tx, rx) = std::sync::mpsc::channel::<()>();
+    let n = acoes.len();
+    for a in acoes {
+        let tx = tx.clone();
+        let lancada = std::thread::Builder::new().name("edicao-saida".into()).spawn(move || {
+            a();
+            let _ = tx.send(());
+        });
+        if lancada.is_err() {
+            return false;
+        }
+    }
+    drop(tx);
+    let fim = std::time::Instant::now() + espera;
+    for _ in 0..n {
+        let falta = fim.saturating_duration_since(std::time::Instant::now());
+        if rx.recv_timeout(falta).is_err() {
+            return false;
+        }
+    }
+    true
 }
 
 #[cfg(test)]
 mod testes {
     use super::*;
+    use crate::edicao::fundo::TipoFundo;
+    use crate::edicao::previa::TipoPrevia;
     use crate::edicao::testes::fontes::{self, Fonte};
 
     /// Caso de verdade (manifesto e banco) e uma pasta de cache, com espaço e acento no caminho.
@@ -790,6 +842,99 @@ mod testes {
         }
     }
 
+    /// Ligação do P1.9 nos comandos: mídia que toca mas pede proxy por desempenho (aqui, 120 qps) sai de
+    /// `midia_previa` no original, já tocável, e o proxy entra na fila de fundo; pronto, ele passa a ser a resposta.
+    /// Com o `if !p.pronta` de antes o proxy por desempenho nunca era pedido.
+    #[test]
+    fn previa_pronta_ainda_pede_o_proxy_por_desempenho() {
+        let Some(cap) = fontes::cap() else { return };
+        let (_d, ws, app) = caso();
+        // fonte só deste teste (a chave da fila de fundo é o SHA-256 da mídia)
+        let dir = fontes::pasta_temporaria("comandos-120qps");
+        let video = dir.join("rápida 120.mp4");
+        let st = crate::tools::command(&cap.binario)
+            .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=s=326x184:r=120:d=1", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-bf", "0", "-pix_fmt", "yuv420p"])
+            .args(["-metadata", &format!("comment=desempenho {}", cap.versao)])
+            .arg(&video)
+            .status()
+            .unwrap();
+        assert!(st.success());
+        let vm = tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(
+            ws.to_string_lossy().into(),
+            crate::models::RegisterVideoInput { source_path: video.to_string_lossy().into(), allow_duplicate: false },
+        ))
+        .unwrap();
+        let cache = cache_do_caso(&app, &ws).unwrap();
+        let chave = fundo::chave(TipoFundo::Proxy, &vm.sha256);
+        assert!(fundo::estado(&chave).is_none());
+        let p = midia_previa(&ws, &vm.sha256, &cache).unwrap();
+        assert_eq!((p.tipo, p.pronta), (TipoPrevia::Original, true), "{}: toca o original enquanto o proxy falta", cap.versao);
+        assert!(fundo::estado(&chave).is_some(), "{}: o proxy por desempenho não foi pedido", cap.versao);
+        let t0 = std::time::Instant::now();
+        loop {
+            match fundo::estado(&chave).map(|t| t.estado) {
+                Some(fundo::EstadoFundo::NaFila | fundo::EstadoFundo::Rodando) => {}
+                Some(fim) => {
+                    assert_eq!(fim, fundo::EstadoFundo::Pronta, "{}", cap.versao);
+                    break;
+                }
+                None => panic!("tarefa do proxy sumiu"),
+            }
+            assert!(t0.elapsed() < std::time::Duration::from_secs(180), "proxy de fundo preso");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        let p = midia_previa(&ws, &vm.sha256, &cache).unwrap();
+        assert_eq!((p.tipo, p.pronta), (TipoPrevia::Proxy, true), "{}", cap.versao);
+        assert!(cache.join(&p.relativo).is_file(), "{}", p.relativo);
+        // a tabela pedida ao fundo grava no cache deste caso: espera antes de a pasta temporária sair
+        let tabela = fundo::chave(TipoFundo::Tabela, &vm.sha256);
+        while fundo::estado(&tabela).is_some_and(|t| matches!(t.estado, fundo::EstadoFundo::NaFila | fundo::EstadoFundo::Rodando)) {
+            assert!(t0.elapsed() < std::time::Duration::from_secs(300), "tabela de fundo presa");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+    }
+
+    /// Folga do relógio dos testes de tempo, com outros agentes na máquina (O1).
+    const FOLGA: u32 = 3;
+
+    /// A saída do app não espera além do teto por quem não olha o cancelamento (a publicação, a sonda): as ações
+    /// rápidas terminam, a lenta fica solta e a espera volta dentro do teto.
+    #[test]
+    fn saida_nao_espera_alem_do_teto() {
+        use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+        use std::time::{Duration, Instant};
+        let feitas = Arc::new(AtomicUsize::new(0));
+        let solta = Arc::new(AtomicBool::new(false));
+        let rapida = |f: &Arc<AtomicUsize>| {
+            let f = f.clone();
+            Box::new(move || {
+                f.fetch_add(1, Ordering::SeqCst);
+            }) as Box<dyn FnOnce() + Send>
+        };
+        // tudo acaba: verdadeiro, sem gastar o teto
+        let t0 = Instant::now();
+        assert!(esperar_ate(vec![rapida(&feitas), rapida(&feitas)], Duration::from_secs(30)));
+        assert_eq!(feitas.load(Ordering::SeqCst), 2);
+        assert!(t0.elapsed() < Duration::from_secs(10), "{:?}", t0.elapsed());
+        // uma ação presa (a publicação numa pasta de rede): a espera volta no teto, com a rápida feita
+        let teto = Duration::from_millis(300);
+        let presa = {
+            let s = solta.clone();
+            Box::new(move || {
+                while !s.load(Ordering::SeqCst) {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+            }) as Box<dyn FnOnce() + Send>
+        };
+        let t0 = Instant::now();
+        assert!(!esperar_ate(vec![presa, rapida(&feitas)], teto));
+        let levou = t0.elapsed();
+        assert!(levou >= teto && levou < teto * FOLGA, "{levou:?} (teto {teto:?})");
+        assert_eq!(feitas.load(Ordering::SeqCst), 3, "a rápida roda ao lado da presa, não depois dela");
+        solta.store(true, Ordering::SeqCst);
+        assert!(ESPERA_NA_SAIDA <= Duration::from_secs(5));
+    }
+
     #[test]
     fn corpo_da_gravacao_e_cabecalhos() {
         use tauri::ipc::InvokeBody;
@@ -852,6 +997,8 @@ mod testes {
             edicao_degravacao,
             edicao_retrato_calibracao,
             edicao_retrato_calculo,
+            edicao_origem_estado,
+            edicao_proxy_pedir,
         ]);
     }
 }

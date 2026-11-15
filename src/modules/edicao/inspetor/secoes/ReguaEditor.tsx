@@ -16,6 +16,7 @@ import { pontasConferidas } from "../../palco/desenho/medidas";
 import { mudar, noClipe, noEfeito, selecionarEfeito } from "../acoes";
 import { Cor, Escolha, Grade, Icone, Marca, Mini, Numero } from "../campos";
 import { pedirMarcacao } from "../contexto";
+import { useOrigemPendente } from "../../palco/origem";
 import { COR_DESENHO } from "../novos";
 import type { EditorEfeitoProps } from "../registro";
 import { useInspetorUi } from "../ui";
@@ -144,6 +145,8 @@ export function ReguaEditor({ valor: e, ctx }: EditorEfeitoProps<EfRegua>) {
   const [vez, setVez] = useState(0);
   const cals = useLista<VideoSpeedCalibration>(sha ? `${ctx.ws}|${sha}` : null, () => commands.listSpeedCalibrations(ctx.ws, sha!), vez);
   const chave = useInspetorUi((s) => s.chave);
+  // a âncora é marcada no espaço de origem: espera o intermediário do clipe (§7.5)
+  const parada = useOrigemPendente(ctx.clipe);
   const trocar = async (calId: string) => {
     const r = await pedirRetrato((ws) => commands.edicaoRetratoCalibracao(ws, calId));
     if (r) noEfeitoSeExiste<EfRegua>(id, "Calibração", (x) => void (x.calibracao = r));
@@ -187,6 +190,7 @@ export function ReguaEditor({ valor: e, ctx }: EditorEfeitoProps<EfRegua>) {
       <div>
         <Mini
           ativo={chave === `${id}:ancora`}
+          disabled={parada}
           data-acao="marcar-ancora"
           onClick={() => pedirMarcacao({ tipo: "ponto", efeito: id }, (v) => mudar("Marcar", em((x) => void (x.ancora = { x: v.x, y: v.y }))), `${id}:ancora`)}
         >

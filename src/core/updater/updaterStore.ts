@@ -10,7 +10,7 @@ import { open as abrirUrl } from "@tauri-apps/plugin-shell";
 import { check, type Update } from "@tauri-apps/plugin-updater";
 import { create } from "zustand";
 import { pushToast } from "@/components/toast/toastStore";
-import { useEdicaoStore } from "@/modules/edicao/store/edicaoStore";
+import { guardaDeSaida } from "@/modules/edicao/guarda";
 
 const RELEASES_API = "https://api.github.com/repos/PeritoAndre/sicro/releases/latest";
 const RELEASES_PAGE = "https://github.com/PeritoAndre/sicro/releases/latest";
@@ -109,12 +109,16 @@ export async function verificarAtualizacao(silencioso: boolean): Promise<void> {
   }
 }
 
+// CONTRATO: assinatura igual; instalar e reiniciar passam pela guarda de saída da Edição (contratos-fase1 F10, F15).
 export async function instalarAtualizacao(): Promise<void> {
   const st = useUpdaterStore.getState();
   if (!st.instalavel || !pendente) {
     await abrirUrl(RELEASES_PAGE);
     return;
   }
+  // A guarda da Edição vem ANTES de instalar: no Windows o instalador fecha o app e nada depois dele roda.
+  // Gravação pendente que falha: o perito decide; sem "Descartar", nada é instalado.
+  if (!(await guardaDeSaida())) return;
   set({ status: "downloading", progresso: 0, aviso: true });
   let total = 0;
   let feito = 0;
@@ -127,9 +131,9 @@ export async function instalarAtualizacao(): Promise<void> {
       } else if (ev.event === "Finished") set({ progresso: 1 });
     });
     set({ status: "installed" });
-    // No Windows o instalador já fecha e reabre o app; nos outros, reinicia aqui.
-    await useEdicaoStore.getState().descarregar().catch(() => undefined);
-    await relaunch().catch(() => undefined);
+    // No Windows o instalador já fechou e reabriu o app; nos outros, reinicia aqui, de novo pela guarda (o que foi
+    // editado durante a descarga): sem reinício, a versão nova vale na próxima abertura.
+    if (await guardaDeSaida()) await relaunch().catch(() => undefined);
   } catch (e) {
     set({ status: "error", erro: String(e) });
     pushToast("error", `A atualização falhou: ${String(e)}`, { title: "Atualização" });

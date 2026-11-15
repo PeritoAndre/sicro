@@ -202,13 +202,15 @@ describe("Clipe · Realce", () => {
 
     // Suavizar e Borda; "Ampliar" zera o zoom, que o intermediário calcula e devolve
     const l = linha("estabilizar");
-    await clicar(botao(l, "Ampliar"));
-    expect(um<EfEstabilizar>("estabilizar")).toMatchObject({ borda: "ampliar", zoom_pct: 0, trf_sha256: sha });
-    expect(ultimo()).toBe("Borda");
+    // a resposta nova fica posta ANTES do clique (o pedido sai 5 ms depois dele: com a máquina carregada a resposta
+    // de antes chegava primeiro e o zoom nunca vinha)
     cmd.edicaoOrigemPedir.mockImplementation(async (_ws: string, p: ProjetoEdicao) => {
       const ef = (p.principal[1] as ClipeTrecho).efeitos.find((x) => (x as Efeito).tipo === "estabilizar") as EfEstabilizar;
-      return pronto(ef.zoom_pct > 0 ? null : { efeito: e.id, sha256: sha, zoom_pct: 5.25 });
+      return pronto(ef.borda === "ampliar" && ef.zoom_pct === 0 ? { efeito: e.id, sha256: sha, zoom_pct: 5.25 } : null);
     });
+    await clicar(botao(l, "Ampliar"));
+    expect(um<EfEstabilizar>("estabilizar")).toMatchObject({ borda: "ampliar", trf_sha256: sha });
+    expect(st().passado.map((x) => x.rotulo)).toContain("Borda");
     await pausa(30);
     expect(um<EfEstabilizar>("estabilizar")).toMatchObject({ borda: "ampliar", zoom_pct: 5.25, trf_sha256: sha });
     expect((entradaDe(linha("estabilizar"), "Suavizar") as HTMLInputElement).value).toBe("15");
@@ -362,6 +364,34 @@ describe("Clipe · Realce em base de um tique por quadro", () => {
     await clicar(botao(linha("desentrelacar"), "Quadro"));
     expect(um<EfDesentrelacar>("desentrelacar").modo).toBe("quadro");
     expect(opcoes()).toEqual(["Quadro"]);
+  });
+});
+
+describe("Clipe · Realce, projeto aberto de novo", () => {
+  it("o `.trf` gravado numa abertura e não salvo é gravado outra vez na seguinte (o que foi gravado vale por abertura)", async () => {
+    const sha = "cd".repeat(32);
+    const estab: EfEstabilizar = { id: "estab", tipo: "estabilizar", ligado: true, nome: "", ativo: null, suavizar: 15, borda: "preta", zoom_pct: 0, trf_sha256: null, analise: { de_s: 12, ate_s: 15, de_pts: 360 * 512, ate_pts: 450 * 512 } };
+    const comEstabilizar = () => {
+      const p = projeto();
+      (p.principal[1] as ClipeTrecho).efeitos.push(estab);
+      return p;
+    };
+    cmd.edicaoOrigemPedir.mockImplementation(async (_ws: string, p: ProjetoEdicao): Promise<EstadoOrigem> => {
+      const ef = (p.principal[1] as ClipeTrecho).efeitos.find((x) => (x as Efeito).tipo === "estabilizar") as EfEstabilizar;
+      return { tipo: "pronto", previa: { relativo: "origem/k.mp4", tipo: "origem", desloc_s: 12, de_s: 12, ate_s: 15.5, largura: 640, altura: 360, pronta: true }, trf: ef.trf_sha256 ? null : { efeito: "estab", sha256: sha, zoom_pct: 0 } };
+    });
+    for (const vez of [1, 2]) {
+      await abrir(comEstabilizar());
+      // o documento aberto não tem o `.trf`
+      expect(um<EfEstabilizar>("estabilizar").trf_sha256, `abertura ${vez}`).toBeNull();
+      await selecionar(trecho().id);
+      await pausa(40);
+      expect(um<EfEstabilizar>("estabilizar").trf_sha256, `abertura ${vez}`).toBe(sha);
+      expect([passos(), ultimo()], `abertura ${vez}`).toEqual([1, "Estabilizar"]);
+      // fechado sem gravar: o documento volta a não ter o `.trf`
+      desmontarTudo();
+      await st().fechar({ descartar: true });
+    }
   });
 });
 

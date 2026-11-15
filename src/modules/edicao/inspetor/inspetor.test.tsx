@@ -25,6 +25,7 @@ vi.mock("@tauri-apps/plugin-dialog", () => ({ open: vi.fn(async () => "/fora/arq
 const ask = vi.hoisted(() => ({ askConfirm: vi.fn(async (_o: { title: string; message?: string; confirmLabel?: string; danger?: boolean }) => true) }));
 vi.mock("@components/Dialog/ask", () => ask);
 
+import { useToastStore } from "@components/toast/toastStore";
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useFundoStore } from "../store/fundoStore";
 import { Inspetor } from "./Inspetor";
@@ -33,6 +34,21 @@ import { marcacoesNoEspaco, removerEfeito } from "./acoes";
 import { useInspetorUi } from "./ui";
 import { arrastar, botao, campo, clicar, desmontarTudo, digitar, entradaDe, escolher, esperar, lerFixture as ler, montar, sair, tecla, textosVisiveis, type Tela } from "./testeTela";
 import { ROTULOS, textoPermitido } from "./rotulos.teste";
+import { ADICIONAR, ADICIONAR_PROPRIO, EDITAVEIS, REGISTRO, secoesDe } from "./registro";
+import { FECHO_PRONTO, EntradaSecao } from "./secoes/EntradaSecao";
+import { LUPA_PRONTA, LupaEditor } from "./secoes/LupaEditor";
+import { REGUA_PRONTA, ReguaEditor } from "./secoes/ReguaEditor";
+import { VELOCIDADE_PRONTA, VelocidadeEditor } from "./secoes/VelocidadeEditor";
+import { REALCE_PRONTO, RealceSecao } from "./secoes/RealceSecao";
+import { AUDIO_CLIPE_PRONTO, AudioClipeSecao } from "./secoes/AudioClipeSecao";
+import { SELOS_PRONTOS } from "./secoes/SelosSecao";
+import { TrechoSecao } from "./secoes/TrechoSecao";
+import { EnquadramentoSecao } from "./secoes/EnquadramentoSecao";
+import { MarcacoesSecao } from "./secoes/MarcacoesSecao";
+import { TituloSecao } from "./secoes/TituloSecao";
+import { PAINEL_AUDIO_PRONTO } from "../audio/PainelAudio";
+import { EDITOR_TITULO_PRONTO } from "../titulos/EditorTitulo";
+import { PRESOS_PRONTOS } from "../sequencia/Presos";
 import { LEGENDAS_PRONTAS } from "../legendas/PainelLegendas";
 
 const WS = "/casos/c1";
@@ -386,6 +402,33 @@ describe("Clipe · Marcações", () => {
     await escolher(entradaDe(linha, "Mostrar") as HTMLSelectElement, "quadro");
     expect(principal()[1].efeitos.at(-1)).toMatchObject({ tipo: "carimbo", mostra: "quadro" });
     expect(ultimo()).toBe("Mostrar");
+  });
+
+  it("Adicionar que falha mostra o erro no aviso do app (nada calado): o diálogo de arquivo que não abre", async () => {
+    const id = principal()[1].id;
+    await esperar(() => selecionar("clipe", id));
+    const { open } = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(open).mockRejectedValueOnce(new Error("portal de arquivos indisponível"));
+    useToastStore.getState().clear();
+    const n = passos();
+    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="adicionar"]')!);
+    await clicar([...document.querySelectorAll<HTMLElement>("button")].find((x) => x.textContent?.trim() === "Imagem")!);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    expect(useToastStore.getState().toasts.map((t) => [t.kind, t.message])).toEqual([["error", "portal de arquivos indisponível"]]);
+    expect(passos()).toBe(n);
+    useToastStore.getState().clear();
+    // o "Adicionar" próprio de um pacote (lupa, régua, velocidade) que rejeita: a frase do catálogo
+    const lupa = ADICIONAR_PROPRIO.lupa;
+    ADICIONAR_PROPRIO.lupa = async () => Promise.reject({ kind: "validation", message: "validation error: calibracao_ausente: Calibração não encontrada" });
+    try {
+      await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="adicionar"]')!);
+      await clicar([...document.querySelectorAll<HTMLElement>("button")].find((x) => x.textContent?.trim() === "Lupa")!);
+      await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    } finally {
+      ADICIONAR_PROPRIO.lupa = lupa;
+    }
+    expect(useToastStore.getState().toasts.map((t) => [t.kind, t.message])).toEqual([["error", "Calibração não encontrada"]]);
+    useToastStore.getState().clear();
   });
 
   it("De e Até: um passo cada; Até antes de De não entra; Remover", async () => {
@@ -977,6 +1020,31 @@ describe("rótulos", () => {
     // cobertura: os rótulos centrais apareceram
     for (const r of ["Nome", "Vídeo", "Início", "Fim", "Velocidade", "Manter o tom", "Transição", "Girar", "Espelhar", "Marcar início", "Marcar fim", "Ajuste", "Interpolação", "Adicionar", "De", "Até", "Marcar", "Forma", "Cor", "Espessura", "Contorno", "Rótulo", "Conteúdo", "Modo", "Intensidade", "Borda suave", "Margem", "Inverter", "Motivo", "Só neste clipe", "Texto", "Fonte", "Tamanho", "Posição", "Modelo", "Título", "Subtítulo", "Rodapé", "Fundo", "Volume do original", "Narração", "Preso a", "Entrada (s)", "Saída (s)", "Importar…", "Gravar", "Automática", "Largura", "Altura", "Quadros/s", "Áudio"])
       expect(vistos.has(r), r).toBe(true);
+    // Fase 1: cada casca no lugar dela (§8.6), com os rótulos dela na tela
+    const FASE_1: Record<string, string[]> = {
+      "Clipe · Som do trecho (P1.5)": ["Som", "Silenciar trecho", "Da degravação…"],
+      "Clipe · Realce (P1.4)": ["Realce", "Estabilizar", "Lente", "Desentrelaçar", "Brilho", "Nitidez", "Média de quadros"],
+      "Áudio (P1.5)": ["Abaixar sob a narração", "Normalizar", "Limitador", "Música", "Efeitos"],
+      "Legendas (P1.6)": ["Da degravação…", "Nova legenda"],
+      "Saída · selos (P1.R)": ["Selo de velocidade", "Selo de ampliação", "Selo de realce"],
+      "Saída · Fecho (P1.1)": ["Fecho", "Duração (s)"],
+    };
+    for (const [onde, rotulos] of Object.entries(FASE_1)) for (const r of rotulos) expect(vistos.has(r), `${onde}: ${r}`).toBe(true);
     expect(ROTULOS.size).toBeGreaterThan(50);
+  });
+
+  it("cascas da Fase 1: as onze bandeiras ligadas e cada casca no registro, no lugar do §8.6", () => {
+    expect({ FECHO_PRONTO, LUPA_PRONTA, REGUA_PRONTA, VELOCIDADE_PRONTA, REALCE_PRONTO, AUDIO_CLIPE_PRONTO, PAINEL_AUDIO_PRONTO, LEGENDAS_PRONTAS, EDITOR_TITULO_PRONTO, PRESOS_PRONTOS, SELOS_PRONTOS }).toEqual({
+      FECHO_PRONTO: true, LUPA_PRONTA: true, REGUA_PRONTA: true, VELOCIDADE_PRONTA: true, REALCE_PRONTO: true, AUDIO_CLIPE_PRONTO: true, PAINEL_AUDIO_PRONTO: true, LEGENDAS_PRONTAS: true, EDITOR_TITULO_PRONTO: true, PRESOS_PRONTOS: true, SELOS_PRONTOS: true,
+    });
+    // "Adicionar" na ordem do §8.6 (Holofote é de fase seguinte), com o editor do pacote
+    expect(ADICIONAR.map((t) => REGISTRO[t].rotulo)).toEqual(["Destaque", "Ocultar", "Lupa", "Régua", "Velocidade", "Texto", "Tempo", "Imagem"]);
+    expect([REGISTRO.lupa.Editor, REGISTRO.regua.Editor, REGISTRO.velocidade_exibida.Editor]).toEqual([LupaEditor, ReguaEditor, VelocidadeEditor]);
+    for (const t of ["lupa", "regua", "velocidade_exibida"] as const) expect(EDITAVEIS.has(t), t).toBe(true);
+    // seções por tipo de item: som do trecho depois do Trecho; Realce (P1.4) antes das Marcações
+    expect(secoesDe("principal", "trecho")).toEqual([TrechoSecao, AudioClipeSecao, EntradaSecao, EnquadramentoSecao, RealceSecao, MarcacoesSecao]);
+    expect(secoesDe("principal", "congelar")?.slice(-2)).toEqual([RealceSecao, MarcacoesSecao]);
+    expect(secoesDe("principal", "titulo")).toEqual([TituloSecao, EntradaSecao, MarcacoesSecao]);
+    expect(secoesDe("livre", "titulo")).toEqual([TituloSecao]);
   });
 });

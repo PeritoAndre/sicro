@@ -191,6 +191,16 @@ export function aplicarModelo(t: Titulo, modelo: ModeloTitulo, sobreposto: boole
   return { modelo, fundo, blocos: t.blocos.map((b) => arranjado(b, naEscala(arranjo(modelo, b.papel), k))) };
 }
 
+/** Os blocos estão no lugar e na largura que o modelo dá a cada papel? (tamanho, cor e fonte são do perito; `livre`
+ *  não arranja). Falso = escolher o modelo de novo rearranja. */
+export function noArranjo(t: Pick<Titulo, "modelo" | "blocos">): boolean {
+  if (t.modelo === "livre") return false;
+  return t.blocos.every((b) => {
+    const a = arranjo(t.modelo, b.papel);
+    return b.lugar.x === a.lugar.x && b.lugar.y === a.lugar.y && b.lugar.h === a.lugar.h && b.lugar.v === a.lugar.v && b.largura_max === a.largura_max;
+  });
+}
+
 /** Bloco novo do papel no modelo do título, para o canvas da saída. Do primeiro bloco vêm a fonte, o itálico, a escala
  *  do "Tamanho" e a cor, quando o perito trocou a do modelo. */
 export function blocoNoModelo(t: Pick<Titulo, "modelo" | "blocos">, papel: Papel, id: Id, conteudo: string, canvas: Tamanho): BlocoTexto {

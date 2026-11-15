@@ -133,6 +133,11 @@ fn sem_perdas() -> Opcoes {
     Opcoes { sem_perdas: true, ..Opcoes::default() }
 }
 
+/// Selos de cada item do roteiro (`feito.roteiro[].selos`).
+fn pr_selos(plano: &Plano) -> Vec<Vec<String>> {
+    plano.proveniencia.roteiro.iter().map(|i| i.selos.clone()).collect()
+}
+
 /// Números desenhados que o plano prevê em cada slot do clipe `n` do roteiro (pelo mapa da proveniência).
 fn previstos(plano: &Plano, n: usize, m: &Medida) -> Vec<u32> {
     let o = plano.proveniencia.roteiro[n].origem.as_ref().expect("clipe com fonte");
@@ -201,9 +206,11 @@ fn compilar_e_deterministica_e_nao_toca_o_disco() {
     // ocultar é o primeiro efeito depois da cor; depois dele o clone e o mapa
     let (cor, alpha, mapa, persp) = (b.grafo.find("setparams=").unwrap(), b.grafo.find("alphamerge").unwrap(), b.grafo.find("setpts=expr=ceil").unwrap(), b.grafo.find("perspective=").unwrap());
     assert!(cor < alpha && alpha < mapa && mapa < persp);
-    // camadas pedidas, nunca desenhadas: máscara por quadro lido (2 clipes da mesma mídia), anotação, foto, título
+    // camadas pedidas, nunca desenhadas: máscara por quadro lido (2 clipes da mesma mídia), anotação, foto, título e a
+    // camada global do bloco inteiro, com os selos (câmera lenta e ampliação no c1, imagem parada no c2)
     let tipos: Vec<(TipoCamada, u32)> = f.camadas.iter().map(|c| (c.tipo, c.n)).collect();
-    assert_eq!(tipos, vec![(TipoCamada::MascaraFonte, 600), (TipoCamada::Anotacao, 1200), (TipoCamada::MascaraFonte, 1), (TipoCamada::Anotacao, 1), (TipoCamada::Anotacao, 1)]);
+    assert_eq!(tipos, vec![(TipoCamada::MascaraFonte, 600), (TipoCamada::Anotacao, 1200), (TipoCamada::MascaraFonte, 1), (TipoCamada::Anotacao, 1), (TipoCamada::Anotacao, 1), (TipoCamada::Anotacao, 1335)]);
+    assert_eq!(pr_selos(&f), vec![vec!["Velocidade 0,5×".to_string(), "Imagem ampliada".to_string()], vec!["Imagem parada".to_string()], vec![], vec![]]);
     for c in &f.camadas {
         assert_eq!(c.hash.len(), 64);
         assert!(c.caixa_px.iter().all(|v| v % 2 == 0), "{:?}", c.caixa_px);
@@ -773,6 +780,87 @@ fn proveniencia_leva_os_campos_da_abertura_da_fase_1() {
     assert_eq!((sem.audio.mixagem.is_none(), sem.audio.trilhas.len()), (true, 0));
 }
 
+/// Sobrepostos e legendas no `feito`: cada clipe sobreposto que entra no vídeo, um por um (os de trilha oculta e os
+/// fora do programa não); as legendas com o modo que saiu, contando só as que saem. Resolução e tamanho da mídia.
+#[test]
+fn proveniencia_lista_sobrepostos_e_legendas_que_saem() {
+    use crate::edicao::modelo::{ModeloTitulo, ModoLegendas};
+    let (mut mundo, midias) = mundo_das_recusas();
+    mundo.fontes.get_mut("m1").unwrap().tamanho = 5_129_295;
+    let t = &mundo.fontes["m1"].quadros;
+    let estilo = json!({ "fonte": "sans", "negrito": true, "italico": false, "tamanho": 0.05, "cor": "#ffffff", "alinhamento": "centro", "caixa": null, "contorno": null });
+    let lugar = json!({ "x": 0.5, "y": 0.9, "h": "centro", "v": "base" });
+    let tr = json!({ "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 });
+    let bloco = |id: &str, texto: &str| json!({ "id": id, "papel": "titulo", "conteudo": texto, "estilo": estilo, "lugar": lugar, "largura_max": 0.9 });
+    let sob_titulo = |id: &str, pos: Value, dur: Value, modelo: &str, textos: &[&str]| {
+        json!({ "tipo": "titulo", "id": id, "rotulo": format!("rótulo {id}"), "pos": pos, "duracao_s": dur, "transformacao": tr, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [],
+                "titulo": { "modelo": modelo, "fundo": { "tipo": "transparente" }, "blocos": textos.iter().enumerate().map(|(i, x)| bloco(&format!("{id}b{i}"), x)).collect::<Vec<_>>() } })
+    };
+    let sob_imagem = |id: &str, pos: Value, dur: Value| json!({ "tipo": "imagem", "id": id, "rotulo": "Brasão", "pos": pos, "duracao_s": dur, "transformacao": tr, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [], "midia": "foto" });
+    let sobreposicoes = json!([
+        { "id": "s1", "nome": "S1", "oculta": false, "clipes": [
+            // terço inferior preso ao c2 até o fim dele; marca no programa inteiro; imagem que começa depois do fim
+            sob_titulo("t1", json!({ "ref": "clipe", "clipe": "c2", "desloc": 0.0 }), json!(null), "terco_inferior", &["Rua das Flores", "", "Portão 2"]),
+            sob_imagem("i1", json!({ "ref": "programa", "t": 0.0 }), json!(null)),
+            sob_imagem("i2", json!({ "ref": "programa", "t": 50.0 }), json!(1.0)),
+        ] },
+        { "id": "s2", "nome": "S2", "oculta": true, "clipes": [sob_titulo("t9", json!({ "ref": "programa", "t": 0.0 }), json!(1.0), "livre", &["oculto"])] },
+    ]);
+    let legenda = |id: &str, origem: &str, conferida: bool, r: Value| json!({ "id": id, "texto": format!("fala {id}"), "locutor": null, "origem": origem, "conferida": conferida, "locutor_auto": false, "ref": r });
+    let legendas = json!({ "estilo": estilo, "lugar": lugar, "linhas_max": 2, "origem": { "audio_sha256": "c".repeat(64), "importado_em": "2026-11-14T03:00:00Z", "motor": "whisper", "modelo_sha256": null },
+        "itens": [
+            legenda("g1", "ia", true, json!({ "tipo": "programa", "de": 0.5, "ate": 1.5 })),
+            legenda("g2", "perito", false, json!({ "tipo": "fonte", "midia": "m1", "de": t.tempo(40), "ate": t.tempo(50) })),
+            // fora do programa (3 s) e de trecho que não está na linha: não saem
+            legenda("g3", "ia", true, json!({ "tipo": "programa", "de": 40.0, "ate": 41.0 })),
+            legenda("g4", "perito", true, json!({ "tipo": "fonte", "midia": "m1", "de": t.tempo(200), "ate": t.tempo(210) })),
+        ] });
+    // estabilização com o `.trf` já gravado: vai para `feito.estabilizacoes`
+    let estab = efeito("estabilizar", "est1", json!({ "suavizar": 10, "borda": "preta", "zoom_pct": 0.0, "trf_sha256": "a".repeat(64),
+        "analise": { "de_s": t.tempo(30), "ate_s": t.tempo(59), "de_pts": t.pts[30], "ate_pts": t.pts[59] } }));
+    let principal = vec![trecho("c1", "m1", t, 30, 60, 1.0, json!([estab])), trecho("c2", "m1", t, 100, 160, 1.0, json!([]))];
+    let p = projeto(320, 180, (30, 1), midias, principal, json!({ "sobreposicoes": sobreposicoes, "legendas": legendas }));
+    let com = |modo: &str| {
+        let mut e = exportacao("cpu");
+        e["legendas"] = json!(modo);
+        mundo.compilar(&p, &serde_json::from_value(json!({ "tipo": "final", "exportacao": e })).unwrap()).unwrap_or_else(|e| panic!("{modo}: {e}")).proveniencia
+    };
+    let pv = com("queimar");
+    // um por clipe que entra, na ordem das trilhas; nem o da trilha oculta nem o que cai fora do programa
+    let s = &pv.sobrepostos;
+    assert_eq!(s.iter().map(|x| (x.clipe.as_str(), x.tipo.as_str(), x.trilha.as_str())).collect::<Vec<_>>(), vec![("t1", "titulo", "s1"), ("i1", "imagem", "s1")]);
+    assert_eq!((s[0].na_saida.de_q, s[0].na_saida.n_q, s[0].na_saida.de_s, s[0].na_saida.ate_s), (30, 60, 1.0, 3.0), "preso ao c2 até o fim dele");
+    assert_eq!((s[0].preso_a.as_deref(), s[0].modelo, s[0].midia.as_deref(), s[0].nome.as_str()), (Some("c2"), Some(ModeloTitulo::TercoInferior), None, "rótulo t1"));
+    assert_eq!(s[0].textos, vec!["Rua das Flores".to_string(), "Portão 2".to_string()], "os blocos com texto, na ordem");
+    assert_eq!((s[1].na_saida.de_q, s[1].na_saida.n_q, s[1].preso_a.as_deref(), s[1].midia.as_deref(), s[1].modelo), (0, 90, None, Some("foto"), None), "marca no programa inteiro");
+    // a mídia do sobreposto segue citada, com a resolução; a do trecho leva o tamanho do arquivo
+    let m = |id: &str| pv.midias.iter().find(|m| m.id == id).unwrap_or_else(|| panic!("mídia {id} fora do feito"));
+    assert_eq!((m("foto").largura, m("foto").altura), (400, 300));
+    assert_eq!((m("m1").largura, m("m1").altura, m("m1").tamanho), (320, 180, 5_129_295));
+    // legendas: o modo que saiu e só as que aparecem no programa (g1 de programa, g2 de fonte dentro do c1)
+    let l = &pv.legendas;
+    assert_eq!((l.modo, l.n, l.conferidas, l.no_projeto, l.ia, l.ia_conferidas), (ModoLegendas::Queimar, 2, 1, 4, 1, 1));
+    for (modo, esperado) in [("arquivo", ModoLegendas::Arquivo), ("ambos", ModoLegendas::Ambos)] {
+        let l = com(modo).legendas;
+        assert_eq!((l.modo, l.n), (esperado, 2), "{modo}");
+    }
+    // sem legendas na exportação: nenhuma saiu, e o `feito` diz quantas ficaram no projeto
+    let l = com("nenhuma").legendas;
+    assert_eq!((l.modo, l.n, l.conferidas, l.no_projeto, l.ia), (ModoLegendas::Nenhuma, 0, 0, 4, 0));
+    assert_eq!(pv.estabilizacoes.iter().map(|e| (e.efeito.as_str(), e.trf_sha256.clone())).collect::<Vec<_>>(), vec![("est1", Some("a".repeat(64)))]);
+    // o `feito` do relatório técnico leva os dois
+    let v = serde_json::to_value(&pv).unwrap();
+    assert_eq!((v["sobrepostos"].as_array().map(Vec::len), v["legendas"]["modo"].as_str()), (Some(2), Some("queimar")));
+    // `feito` gravado antes dos campos novos continua lendo
+    let mut antigo = v.clone();
+    antigo.as_object_mut().unwrap().remove("sobrepostos");
+    for k in ["modo", "no_projeto", "ia", "ia_conferidas"] {
+        antigo["legendas"].as_object_mut().unwrap().remove(k);
+    }
+    let lido: crate::edicao::motor::plano::Proveniencia = serde_json::from_value(antigo).unwrap();
+    assert_eq!((lido.sobrepostos.len(), lido.legendas.modo), (0, ModoLegendas::Nenhuma));
+}
+
 /// Congelado da Fase 0 depois da abertura (a leitura vem de `realce::leitura` antes de ler, contratos-fase1 (b) B5):
 /// o mesmo corte de um quadro só (com pts repetido, o primeiro) e a mesma conferência (1 lido, o pts dele).
 #[test]
@@ -985,7 +1073,7 @@ fn centro_da_caixa(q: &QuadroRgb, f: impl Fn(&[u8]) -> bool) -> Option<(f64, f64
 
 /// Caixa prevista (px do canvas) de uma caixa da origem por `A(τ)`, e se ela cabe, com a margem do destaque,
 /// na parte da imagem que aparece (no `conter` com barras e no `cobrir`, o retângulo de destino).
-fn no_canvas(efeitos: &[crate::edicao::modelo::Tolerante<crate::edicao::modelo::Efeito>], tau: f64, c: [f64; 4], origem: (u32, u32), canvas: (u32, u32)) -> ([f64; 4], bool) {
+pub(crate) fn no_canvas(efeitos: &[crate::edicao::modelo::Tolerante<crate::edicao::modelo::Efeito>], tau: f64, c: [f64; 4], origem: (u32, u32), canvas: (u32, u32)) -> ([f64; 4], bool) {
     use crate::edicao::modelo::{Caixa, TamanhoPx};
     let (o, k) = (TamanhoPx { w: origem.0, h: origem.1 }, TamanhoPx { w: canvas.0, h: canvas.1 });
     let a = crate::edicao::geometria::a_de(efeitos, tau, o, k);
@@ -1971,6 +2059,77 @@ fn sessenta_trechos_com_pico_abaixo_de_1_5_gib() {
     assert_eq!(r.lidos.iter().map(|l| l.len()).sum::<usize>(), 60);
 }
 
+/// 60 trechos de `n` quadros da mesma mídia, todos (menos o primeiro) com `fundir` de `d_s`: o plano dividido e o de
+/// bloco único (a referência).
+fn sessenta_com_fundir(cap: &Arc<Capacidades>, info: &FonteInfo, (w, h): (u32, u32), n: usize, d_s: f64) -> (Plano, Plano) {
+    let tab = &info.quadros;
+    let clipes: Vec<Value> = (0..60)
+        .map(|i| {
+            let mut c = trecho(&format!("c{i}"), "m1", tab, n * i, n * (i + 1), 1.0, json!([]));
+            if i > 0 {
+                c["transicao_entrada"] = json!({ "tipo": "fundir", "duracao_s": d_s, "audio": "acompanhar" });
+            }
+            c
+        })
+        .collect();
+    let p = projeto(w, h, (30, 1), vec![midia("m1", "video", json!([]))], clipes, json!({}));
+    let mundo = Mundo::novo(cap).com("m1", info);
+    let dividido = mundo.compilar(&p, &alvo_final("cpu")).unwrap();
+    crate::edicao::motor::blocos::UM_BLOCO.with(|c| c.set(true));
+    let unico = mundo.compilar(&p, &alvo_final("cpu"));
+    crate::edicao::motor::blocos::UM_BLOCO.with(|c| c.set(false));
+    (dividido, unico.unwrap())
+}
+
+/// Entradas de mídia de um bloco.
+fn midias_do_bloco(b: &crate::edicao::motor::plano::Bloco) -> usize {
+    b.entradas.iter().filter(|e| matches!(e.papel, Papel::Midia { .. })).count()
+}
+
+/// Transição que sobrepõe em todo clipe: o bloco fecha em 12 entradas no primeiro slot da transição, e cada slot sai
+/// igual ao do bloco único (hash por slot), inclusive os da transição cortada pela fronteira.
+#[test]
+fn sessenta_trechos_com_fundir_dao_os_quadros_do_bloco_unico() {
+    let Some(cap) = fontes::cap() else { return };
+    let m = apoio::medida(&cap, Fonte::Mp4);
+    // 60 trechos de 7 quadros com 3 de sobreposição: 420 − 59 × 3
+    let (dividido, unico) = sessenta_com_fundir(&cap, &m.info, (320, 180), 7, 0.1);
+    assert_eq!((dividido.total_q, unico.total_q, unico.blocos.len()), (243, 243, 1));
+    assert_eq!(midias_do_bloco(&unico.blocos[0]), 60);
+    assert_eq!(dividido.blocos.iter().map(midias_do_bloco).collect::<Vec<_>>(), vec![8, 8, 8, 8, 8, 8, 8, 8, 4], "{}", cap.versao);
+    let d = executor::rodar(&cap, &dividido, &pasta("fundir-dividido"), &sem_perdas()).unwrap_or_else(|e| panic!("{}: {e}", cap.versao));
+    let u = executor::rodar(&cap, &unico, &pasta("fundir-unico"), &sem_perdas()).unwrap_or_else(|e| panic!("{}: {e}", cap.versao));
+    assert_eq!(d.compostos.len(), 243);
+    let diferentes: Vec<usize> = (0..243).filter(|&q| d.compostos[q] != u.compostos[q]).collect();
+    assert!(diferentes.is_empty(), "{}: slots com outro quadro: {diferentes:?}", cap.versao);
+    // e os quadros não são todos iguais entre si (a comparação mede alguma coisa)
+    assert!(d.compostos.iter().collect::<std::collections::HashSet<_>>().len() > 200);
+}
+
+#[test]
+#[ignore = "completo: 60 trechos de 1080p com fundir, memória medida (o bloco único de referência passa de 5 GiB no 7.0.2)"]
+fn sessenta_trechos_com_fundir_com_pico_abaixo_de_1_5_gib() {
+    let Some(cap) = fontes::cap() else { return };
+    let dir = pasta("60-fundir");
+    let video = gerar(&cap, &dir, "f1080.mp4", "testsrc2=s=1920x1080:r=30:d=45", &["-c:v", "libx264", "-preset", "ultrafast", "-g", "60", "-pix_fmt", "yuv420p"]);
+    let info = fonte_de(&cap, &video);
+    // 60 trechos de 15 quadros com 6 de sobreposição (0,2 s): 900 − 59 × 6
+    let (dividido, unico) = sessenta_com_fundir(&cap, &info, (1920, 1080), 15, 0.2);
+    assert_eq!((dividido.total_q, unico.blocos.len()), (546, 1));
+    assert!(dividido.blocos.iter().all(|b| midias_do_bloco(b) <= crate::edicao::motor::blocos::MAX_ENTRADAS));
+    assert_eq!(dividido.blocos.iter().map(midias_do_bloco).collect::<Vec<_>>(), vec![8, 8, 8, 8, 8, 8, 8, 8, 4]);
+    let d = executor::rodar(&cap, &dividido, &dir.join("d"), &Opcoes { juntar: true, ..Opcoes::default() }).unwrap();
+    let gib = d.pico_kb as f64 / (1024.0 * 1024.0);
+    assert!(d.pico_kb > 0, "pico de memória não medido");
+    let u = executor::rodar(&cap, &unico, &dir.join("u"), &Opcoes::default()).unwrap();
+    let gib_unico = u.pico_kb as f64 / (1024.0 * 1024.0);
+    eprintln!("60 trechos de 1080p com fundir ({}): {} blocos, pico de {gib:.2} GiB num ffmpeg; bloco único {gib_unico:.2} GiB", cap.versao, dividido.blocos.len());
+    assert!(gib < PICO_GIB, "{gib:.2} GiB");
+    assert_eq!(medir::pts(&cap, d.junto.as_ref().unwrap()).unwrap().len(), 546);
+    let diferentes: Vec<usize> = (0..546).filter(|&q| d.compostos[q] != u.compostos[q]).collect();
+    assert!(diferentes.is_empty(), "slots com outro quadro: {diferentes:?}");
+}
+
 /// Tempo aceito para o quadro final no fim de um clipe de 10 min (s) e a folga com a máquina ocupada.
 const QUADRO_FINAL_S: f64 = 1.0;
 const FOLGA: f64 = 3.0;
@@ -2085,6 +2244,173 @@ fn escurecer_do_video_e_do_som_com_o_mesmo_d() {
             assert_eq!(v.2, (d * fps.0 as f64 / fps.1 as f64).round().min(n_q as f64) as u64, "{fps:?} clipe {k}");
         }
     }
+}
+
+/// Fonte 320×180 a 30 qps com som de nível constante (`nivel` de 0 a 1, PCM): cada amostra do programa diz de que
+/// clipe veio e com que ganho.
+fn fonte_com_nivel(cap: &Capacidades, pasta: &Path, nome: &str, cena: &str, nivel: f64) -> FonteInfo {
+    std::fs::create_dir_all(pasta).unwrap();
+    let (v, a) = (format!("{cena}=s=320x180:r=30:d=6"), format!("aevalsrc={nivel}|{nivel}:s=48000:d=6"));
+    let args: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i", &v, "-f", "lavfi", "-i", &a, "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-bf", "0",
+        "-pix_fmt", "yuv420p", "-c:a", "pcm_s16le", nome]
+        .map(String::from)
+        .into();
+    let cmd = crate::edicao::ffmpeg::exec::Comando { nome: "gerar".into(), programa: cap.binario.clone(), args, pasta: pasta.to_path_buf(), ambiente: Vec::new(), sem_ambiente: Vec::new(), stderr: pasta.join(format!("{nome}.stderr")) };
+    let fim = crate::edicao::ffmpeg::exec::rodar(&cmd, &std::sync::atomic::AtomicBool::new(false)).expect("ffmpeg");
+    crate::edicao::ffmpeg::exec::exigir_sucesso(&cmd, &fim).expect("gerar fonte com som");
+    let f = fonte_de(cap, &pasta.join(nome));
+    assert!(f.audio.is_some() && f.quadros.pts.len() == 180, "fonte com som");
+    f
+}
+
+/// Rampa de `len` amostras que começa em `ini`: 0 antes, 1 depois (a do `afade`, linear).
+fn rampa(s: i64, ini: i64, len: i64) -> f64 {
+    ((s - ini) as f64 / len.max(1) as f64).clamp(0.0, 1.0)
+}
+
+/// Amostras do corte seco do som ("Cortar": 10 ms de cada lado).
+const CORTE: i64 = 480;
+/// Amostras do som de um trecho de 60 quadros da fonte de 30 qps.
+const SOM_DO_TRECHO: i64 = 96_000;
+/// Erro aceito por amostra (LSB de 16 bits): arredondamento da rampa e da soma.
+const TOLERANCIA_PCM: f64 = 1.0;
+
+/// O som das transições (P1.5) e a imagem (P1.1) juntos, pelo compilador inteiro (validação, vídeo e som) e pela
+/// exportação inteira (blocos, passo de som, junção, conferência), para cada tipo do catálogo, a 30 e a 29,97 qps:
+/// os quadros são os do mesmo projeto sem som (hash por slot; a imagem é medida pixel a pixel em `motor::juncao`),
+/// cada amostra é a soma dos clipes com a rampa da transição, "Acompanhar" cruza os dois sons na sobreposição
+/// inteira e "Cortar" troca o som no MEIO dela.
+#[test]
+fn transicoes_com_som_quadros_e_amostras_pela_exportacao() {
+    use crate::edicao::modelo::Nivel;
+    use crate::edicao::motor::{blocos, compilar, juncao};
+    use crate::edicao::{tempo as tp, validar};
+    let Some(cap) = fontes::cap() else { return };
+    let dir = pasta("transicoes-com-som");
+    let (a, b) = (fonte_com_nivel(&cap, &dir, "a.mov", "testsrc2", 0.5), fonte_com_nivel(&cap, &dir, "b.mov", "testsrc", 0.25));
+    let mundo = Mundo::novo(&cap).com("a", &a).com("b", &b);
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &[] };
+    let (na, nb) = (0.5 * 32768.0, 0.25 * 32768.0);
+    let mut conferidas = 0usize;
+    for fps in [(30, 1), (30000, 1001)] {
+        let fr = Racional { num: fps.0, den: fps.1 };
+        for &tipo in juncao::TRANSICOES {
+            let tr = |d: f64, som: &str| json!({ "tipo": tipo, "duracao_s": d, "audio": som });
+            let mut c0 = trecho("c0", "a", &a.quadros, 30, 90, 1.0, json!([]));
+            c0["transicao_entrada"] = tr(0.3, "acompanhar");
+            let mut c1 = trecho("c1", "b", &b.quadros, 30, 90, 1.0, json!([]));
+            c1["transicao_entrada"] = tr(0.5, "acompanhar");
+            let mut c2 = trecho("c2", "a", &a.quadros, 90, 150, 1.0, json!([]));
+            c2["transicao_entrada"] = tr(0.4, "cortar");
+            let midias = vec![midia("a", "video", json!([])), midia("b", "video", json!([]))];
+            let mut p = projeto(320, 180, fps, midias, vec![c0, c1, c2], json!({ "fecho": tr(0.2, "cortar") }));
+            p.saida.audio = true;
+            let linha = tp::resolver(&p, &ctx);
+            let erros: Vec<_> = validar::validar(&p, &linha, &ctx, Some(&alvo_final("cpu"))).into_iter().filter(|x| x.nivel == Nivel::Erro).collect();
+            assert!(erros.is_empty(), "{tipo} a {fps:?}: {erros:?}");
+            // o compilador inteiro: valida, monta o vídeo e o som
+            let plano = compilar(&p, &ctx, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{tipo} a {fps:?} ({}): {e}", cap.versao));
+            let passo = plano.audio.clone().expect("passo de som");
+            let nome = format!("{tipo}-{}", fps.1);
+            let (r, res) = executor::exportar(&cap, &plano, &dir.join(&nome), "2026-11-15T00:00:00Z").unwrap_or_else(|e| panic!("{tipo} a {fps:?} ({}): {e}", cap.versao));
+            let sobrepoe = tp::transicao_sobrepoe(tipo);
+            let total_q = plano.total_q;
+            assert_eq!(linha.clipes.iter().map(|c| c.sobrepoe_q).collect::<Vec<_>>(), if sobrepoe { vec![0, tp::slots(0.5, fr) as u32, tp::slots(0.4, fr) as u32] } else { vec![0, 0, 0] }, "{tipo} a {fps:?}");
+            // ---- imagem: os mesmos quadros do projeto sem som, e o arquivo entregue com som e a contagem certa
+            let mut mudo = p.clone();
+            mudo.saida.audio = false;
+            let so_video = executor::rodar(&cap, &mundo.compilar(&mudo, &alvo_final("cpu")).unwrap(), &dir.join(format!("{nome}-mudo")), &Opcoes::default()).unwrap();
+            assert_eq!((r.compostos.len() as u64, res.conferencia.as_ref().map(|c| c.quadros)), (total_q, Some(total_q)), "{tipo} a {fps:?}");
+            assert_eq!(r.compostos, so_video.compostos, "{tipo} a {fps:?}: o som mudou a imagem");
+            assert!(r.compostos.iter().collect::<std::collections::HashSet<_>>().len() as u64 > total_q / 2, "quadros todos iguais não medem nada");
+            // ---- som: cada amostra do PCM do passo
+            let pcm = pcm_do_wav(&std::fs::read(dir.join(&nome).join(&passo.saida)).unwrap());
+            let am = |q: u64| tp::amostra_do_slot(q, fr) as i64;
+            assert_eq!((pcm.len() as i64 / 2, passo.amostras as i64), (am(total_q), am(total_q)), "{tipo} a {fps:?}: amostras");
+            assert!(res.audio_sha256.is_some());
+            let faixa = |k: usize| (am(linha.clipes[k].inicio_q), am(linha.clipes[k].inicio_q + linha.clipes[k].n_q as u64));
+            // rampas de entrada e de saída de cada clipe: (início, amostras) no tempo do programa; None = sem rampa
+            let mut entra: [Option<(i64, i64)>; 3] = [None; 3];
+            let mut sai: [Option<(i64, i64)>; 3] = [None; 3];
+            let dur = [0.3, 0.5, 0.4];
+            let cortar = [false, false, true];
+            for i in 0..3 {
+                let (ini, fim) = faixa(i);
+                if i > 0 && sobrepoe {
+                    // os dois clipes tocam juntos de `ini` ao fim do anterior
+                    let s = faixa(i - 1).1 - ini;
+                    assert_eq!(s, am(linha.clipes[i].inicio_q + linha.clipes[i].sobrepoe_q as u64) - ini, "a sobreposição do som é a da imagem");
+                    if cortar[i] {
+                        let meio = s / 2;
+                        let k = CORTE.min(meio).min(s - meio).max(1);
+                        entra[i] = Some((ini + meio, k));
+                        sai[i - 1] = Some((ini + meio - k, k));
+                    } else {
+                        entra[i] = Some((ini, s));
+                        sai[i - 1] = Some((ini, s));
+                    }
+                    continue;
+                }
+                // sem sobreposição (escurecer, ou a entrada do primeiro clipe): rampa na ponta, dentro do clipe
+                let d = tp::slots(dur[i], fr).min(linha.clipes[i].n_q as u64);
+                let n = am(linha.clipes[i].inicio_q + d) - ini;
+                entra[i] = Some((ini, if cortar[i] { CORTE.min(n) } else { n }));
+                if i > 0 {
+                    let (_, fim_ant) = faixa(i - 1);
+                    let ant = &linha.clipes[i - 1];
+                    let d = tp::slots(dur[i], fr).min(ant.n_q as u64);
+                    let n = fim_ant - am(ant.inicio_q + ant.n_q as u64 - d);
+                    let k = if cortar[i] { CORTE.min(n) } else { n };
+                    sai[i - 1] = Some((fim_ant - k, k));
+                }
+                let _ = fim;
+            }
+            // fecho: "cortar" de 0,2 s na ponta do último
+            let (_, fim2) = faixa(2);
+            let (_, d_fecho) = blocos::escurecimentos(&p, &linha, 2);
+            let n = fim2 - am(linha.clipes[2].inicio_q + linha.clipes[2].n_q as u64 - d_fecho as u64);
+            sai[2] = Some((fim2 - CORTE.min(n), CORTE.min(n)));
+            let niveis = [na, nb, na];
+            let esperado = |s: i64| -> f64 {
+                (0..3)
+                    .map(|i| {
+                        let (ini, fim) = faixa(i);
+                        // o som do trecho dura o que a fonte dura (60 quadros a 30 qps = 2 s): a 29,97 o clipe ocupa
+                        // 96 amostras a mais, de silêncio
+                        if s < ini || s >= fim || s - ini >= SOM_DO_TRECHO {
+                            return 0.0;
+                        }
+                        let sobe = entra[i].map_or(1.0, |(a, n)| rampa(s, a, n));
+                        let desce = sai[i].map_or(1.0, |(a, n)| 1.0 - rampa(s, a, n));
+                        niveis[i] * sobe * desce
+                    })
+                    .sum()
+            };
+            let mut pior = 0.0f64;
+            for (s, par) in pcm.chunks_exact(2).enumerate() {
+                assert_eq!(par[0], par[1], "{tipo} a {fps:?}: canais diferentes na amostra {s}");
+                let erro = (par[0] as f64 - esperado(s as i64)).abs();
+                assert!(erro <= TOLERANCIA_PCM, "{tipo} a {fps:?} ({}): amostra {s}: {} × {:.1} previsto", cap.versao, par[0], esperado(s as i64));
+                pior = pior.max(erro);
+            }
+            // "Cortar" troca no meio da sobreposição: antes da rampa só o que sai (b), depois só o que entra (a)
+            let v = |s: i64| pcm[2 * s as usize] as f64;
+            if sobrepoe {
+                let (ini, fim_ant) = (faixa(2).0, faixa(1).1);
+                let meio = ini + (fim_ant - ini) / 2;
+                assert!(fim_ant - ini > 4 * CORTE, "sobreposição curta demais para medir o corte");
+                assert!((v(meio - CORTE - 1) - nb).abs() <= TOLERANCIA_PCM && (v(meio + CORTE) - na).abs() <= TOLERANCIA_PCM, "{tipo} a {fps:?}: {} e {}", v(meio - CORTE - 1), v(meio + CORTE));
+                assert!((v(ini + 10) - nb).abs() <= TOLERANCIA_PCM && (v(fim_ant - 10) - na).abs() <= TOLERANCIA_PCM, "{tipo} a {fps:?}: fora do meio só toca um");
+                // "Acompanhar" cruza os dois na sobreposição inteira: no meio dela, metade de cada
+                let (ini, fim_ant) = (faixa(1).0, faixa(0).1);
+                let m = ini + (fim_ant - ini) / 2;
+                assert!((v(m) - (na + nb) / 2.0).abs() <= TOLERANCIA_PCM + 1.0, "{tipo} a {fps:?}: {} no meio do cruzamento", v(m));
+            }
+            conferidas += 1;
+            eprintln!("{tipo} a {fps:?} ({}): {total_q} quadros iguais aos do projeto sem som, {} amostras a até {pior:.1} LSB", cap.versao, pcm.len() / 2);
+        }
+    }
+    assert_eq!(conferidas, 2 * juncao::TRANSICOES.len());
 }
 
 /// PCM s16 estéreo intercalado do `data` de um WAV.

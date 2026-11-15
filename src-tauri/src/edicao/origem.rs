@@ -20,7 +20,7 @@ use crate::edicao::ffmpeg::args;
 use crate::edicao::ffmpeg::exec::{self, Comando};
 use crate::edicao::ffmpeg::sonda::Capacidades;
 use crate::edicao::fundo::{self, EstadoFundo, TipoFundo};
-use crate::edicao::modelo::{BordaEstab, ClipePrincipal, ClipeTrecho, EfEstabilizar, Efeito, Racional, Tolerante};
+use crate::edicao::modelo::{BordaEstab, ClipePrincipal, ClipeTrecho, EfEstabilizar, Efeito, ProjetoEdicao, Racional, Tolerante};
 use crate::edicao::motor::clipe::Montador;
 use crate::edicao::motor::efeitos::{self, realce, Familia};
 use crate::edicao::motor::grafo::{scale, Grafo};
@@ -89,6 +89,7 @@ pub fn chave(clipe: &ClipeTrecho, fonte: &FonteInfo, cap: &Capacidades) -> Strin
     let texto = json!({
         "versao": VERSAO, "midia": fonte.sha256, "faixa": lida, "efeitos": efeitos,
         "cor": [format!("{:?}", fonte.matriz), format!("{:?}", fonte.faixa), fonte.pix_fmt], "exibido": [fonte.exibido.0, fonte.exibido.1],
+        "campos": format!("{:?}", fonte.ordem_campos),
         "ffmpeg": cap.sha256,
     });
     format!("{:x}", Sha256::digest(texto.to_string().as_bytes()))
@@ -162,25 +163,58 @@ pub fn pedir(ws: &Path, cache: &Path, pasta_projeto: &Path, cap: &Capacidades, c
     }
 }
 
-/// `edicao_origem_pedir`: acha o clipe `clipe_id` no `projeto` (JSON da tela), prepara a fonte e chama `pedir`.
-/// Clipe sem efeito de origem: `nao_suportado`.
-pub fn pedir_do_projeto(ws: &Path, cache: &Path, projeto: &Value, clipe_id: &str) -> Result<EstadoOrigem> {
+// CONTRATO: acréscimo (fecho da Fase 1, `edicao_origem_estado`): a consulta que não põe nada na fila.
+/// Situação do intermediário do clipe sem pedir: o pronto do cache, o que está na fila de fundo, ou None (nem um
+/// nem outro; clipe sem efeito de origem também). O que falhou há pouco devolve o motivo.
+pub fn estado(cache: &Path, cap: &Capacidades, clipe: &ClipeTrecho, fonte: &FonteInfo) -> Result<Option<EstadoOrigem>> {
+    if !realce::ativos(&clipe.base.efeitos, true) {
+        return Ok(None);
+    }
+    let k = chave(clipe, fonte, cap);
+    if let Some(p) = pronto(cache, &k, fonte) {
+        return Ok(Some(p));
+    }
+    match fundo::estado(&fundo::chave(TipoFundo::Origem, &k)) {
+        Some(t) => match t.estado {
+            EstadoFundo::NaFila | EstadoFundo::Rodando => Ok(Some(EstadoOrigem::Fazendo { tarefa: t.id, feito: t.feito })),
+            EstadoFundo::Falhou { mensagem } => Err(SicroError::Validation(mensagem)),
+            EstadoFundo::Pronta | EstadoFundo::Cancelada => Ok(None),
+        },
+        None => Ok(None),
+    }
+}
+
+/// O trecho `clipe_id` da principal do `projeto` (JSON da tela). Outro tipo de clipe: `Ok(None)` com `tolerante`,
+/// senão `nao_suportado`.
+fn trecho_do_projeto<'a>(p: &'a ProjetoEdicao, clipe_id: &str, tolerante: bool) -> Result<Option<&'a ClipeTrecho>> {
+    let outro = |o_que: &str| if tolerante { Ok(None) } else { Err(erro("nao_suportado", format!("intermediário de {o_que}"))) };
+    for c in &p.principal {
+        let Tolerante::Conhecido(c) = c else { continue };
+        match c {
+            ClipePrincipal::Trecho(t) if t.base.id == clipe_id => return Ok(Some(t)),
+            ClipePrincipal::Congelar(c) if c.base.id == clipe_id => return outro("quadro congelado"),
+            ClipePrincipal::Imagem(c) if c.base.id == clipe_id => return outro("imagem"),
+            ClipePrincipal::Titulo(c) if c.base.id == clipe_id => return outro("título"),
+            ClipePrincipal::Tela(c) if c.base.id == clipe_id => return outro("tela dividida"),
+            _ => {}
+        }
+    }
+    Err(erro("item_invalido", format!("clipe {clipe_id}")))
+}
+
+fn projeto_da_tela(projeto: &Value) -> Result<ProjetoEdicao> {
     let p = armazem::tipado(projeto)?;
     if !armazem::id_valido(&p.id) {
         return Err(erro("item_invalido", "id do projeto"));
     }
-    let clipe = p
-        .principal
-        .iter()
-        .find_map(|c| match c {
-            Tolerante::Conhecido(ClipePrincipal::Trecho(t)) if t.base.id == clipe_id => Some(Ok(t)),
-            Tolerante::Conhecido(ClipePrincipal::Congelar(c)) if c.base.id == clipe_id => Some(Err(erro("nao_suportado", "intermediário de quadro congelado"))),
-            Tolerante::Conhecido(ClipePrincipal::Imagem(c)) if c.base.id == clipe_id => Some(Err(erro("nao_suportado", "intermediário de imagem"))),
-            Tolerante::Conhecido(ClipePrincipal::Titulo(c)) if c.base.id == clipe_id => Some(Err(erro("nao_suportado", "intermediário de título"))),
-            Tolerante::Conhecido(ClipePrincipal::Tela(c)) if c.base.id == clipe_id => Some(Err(erro("nao_suportado", "intermediário de tela dividida"))),
-            _ => None,
-        })
-        .unwrap_or_else(|| Err(erro("item_invalido", format!("clipe {clipe_id}"))))?;
+    Ok(p)
+}
+
+/// `edicao_origem_pedir`: acha o clipe `clipe_id` no `projeto` (JSON da tela), prepara a fonte e chama `pedir`.
+/// Clipe sem efeito de origem: `nao_suportado`.
+pub fn pedir_do_projeto(ws: &Path, cache: &Path, projeto: &Value, clipe_id: &str) -> Result<EstadoOrigem> {
+    let p = projeto_da_tela(projeto)?;
+    let clipe = trecho_do_projeto(&p, clipe_id, false)?.ok_or_else(|| erro("item_invalido", format!("clipe {clipe_id}")))?;
     let prep = executar::preparar(ws, &p, cache, false)?;
     let fonte = prep.fontes.get(&clipe.midia).ok_or_else(|| erro("midia_ausente", &clipe.midia))?;
     // o corte é por pts do decodificador: com a tabela de pacotes a tela pede de novo depois
@@ -188,6 +222,23 @@ pub fn pedir_do_projeto(ws: &Path, cache: &Path, projeto: &Value, clipe_id: &str
         return Err(erro("tabela_pendente", &clipe.midia));
     }
     pedir(ws, cache, &prep.pasta_projeto, &prep.cap, clipe, fonte)
+}
+
+// CONTRATO: acréscimo (fecho da Fase 1). Corpo de `edicao_origem_estado`.
+/// `estado` do clipe `clipe_id` do `projeto` da tela. Clipe que não é trecho, sem efeito de origem ou com a tabela do
+/// decodificador pendente: None (não há intermediário a esperar).
+pub fn estado_do_projeto(ws: &Path, cache: &Path, projeto: &Value, clipe_id: &str) -> Result<Option<EstadoOrigem>> {
+    let p = projeto_da_tela(projeto)?;
+    let Some(clipe) = trecho_do_projeto(&p, clipe_id, true)? else { return Ok(None) };
+    if !realce::ativos(&clipe.base.efeitos, true) {
+        return Ok(None);
+    }
+    let prep = executar::preparar(ws, &p, cache, false)?;
+    let fonte = prep.fontes.get(&clipe.midia).ok_or_else(|| erro("midia_ausente", &clipe.midia))?;
+    if fonte.quadros.origem != OrigemTabela::Decodificador {
+        return Ok(None);
+    }
+    estado(cache, &prep.cap, clipe, fonte)
 }
 
 // ---------------------------------------------------------------- produção
@@ -581,6 +632,52 @@ mod testes {
         let (p, trf) = produzir_com(&cache, &projeto, cap, c, fonte, desvio_s, &AtomicBool::new(false), &mut |_| {}).unwrap_or_else(|e| panic!("intermediário ({}): {e}", cap.versao));
         let arquivo = cache.join(&p.relativo);
         (p, trf, arquivo)
+    }
+
+    /// `estado` não pede: sem nada na fila nem no cache, None; com o trabalho na fila ou rodando, "fazendo" com a
+    /// tarefa e o progresso; o que falhou devolve o motivo; clipe sem efeito de origem, None sem olhar a fila.
+    #[test]
+    fn estado_acompanha_a_fila_sem_pedir() {
+        use std::sync::atomic::Ordering;
+        let Some(cap) = fontes::cap() else { return };
+        let tab = apoio::tabela((1, 15360), apoio::pts_regulares(120, (1, 30), (1, 15360), 0));
+        let mut fonte = apoio::fonte(tab.clone(), (640, 360));
+        // chave só deste teste (a fila de fundo é do processo)
+        fonte.sha256 = "e57ad0".repeat(11)[..64].to_string();
+        let cache = fontes::pasta_temporaria("origem-estado");
+        let c = clipe(&tab, 10, 70, json!([ajustes(0.1, 1.0)]));
+        let chave_fundo = fundo::chave(TipoFundo::Origem, &chave(&c, &fonte, &cap));
+        assert_eq!(estado(&cache, &cap, &c, &fonte).unwrap(), None);
+        assert!(fundo::estado(&chave_fundo).is_none(), "perguntar não põe na fila");
+        // um trabalho com essa chave (o que `pedir` enfileira), preso até o teste soltar, e que falha
+        let soltar = Arc::new(AtomicBool::new(false));
+        let trabalho = {
+            let soltar = soltar.clone();
+            Box::new(move |_: &AtomicBool, progresso: &mut dyn FnMut(f32)| {
+                progresso(0.25);
+                let t0 = Instant::now();
+                while !soltar.load(Ordering::SeqCst) && t0.elapsed() < Duration::from_secs(120) {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(erro("fonte_danificada", "quadro 12"))
+            })
+        };
+        let tarefa = fundo::pedir(TipoFundo::Origem, &chave_fundo, trabalho);
+        match estado(&cache, &cap, &c, &fonte).unwrap() {
+            Some(EstadoOrigem::Fazendo { tarefa: t, feito }) => assert!(t == tarefa && (0.0..=1.0).contains(&feito), "{t} {feito}"),
+            outro => panic!("na fila ou rodando: {outro:?}"),
+        }
+        soltar.store(true, Ordering::SeqCst);
+        let t0 = Instant::now();
+        while fundo::estado(&chave_fundo).is_some_and(|t| matches!(t.estado, EstadoFundo::NaFila | EstadoFundo::Rodando)) {
+            assert!(t0.elapsed() < Duration::from_secs(180), "tarefa de fundo presa");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        let e = estado(&cache, &cap, &c, &fonte).unwrap_err().to_string();
+        assert!(e.contains("fonte_danificada") && e.contains("quadro 12"), "{e}");
+        // sem efeito de origem não há o que esperar, nem com a fila dizendo outra coisa
+        assert_eq!(estado(&cache, &cap, &clipe(&tab, 10, 70, json!([])), &fonte).unwrap(), None);
+        assert!(!cache.join("origem").exists(), "nada foi feito");
     }
 
     /// Busca que abre adiante do previsto (injetada: 1,5 s depois, o decodificador entrega do quadro-chave seguinte,

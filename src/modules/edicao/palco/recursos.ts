@@ -7,8 +7,8 @@
 import { create } from "zustand";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { commands } from "@core/commands";
-import type { AtlasCarimbo, EstiloTexto, MidiaInfo, PedidoSprite, SpriteTexto, TabelaQuadros, TarefaFundo } from "@domain/edicao";
-import { separarErro, type ErroComando } from "../store/edicaoStore";
+import type { AtlasCarimbo, ClipePrincipal, EstiloTexto, Id, MidiaInfo, PedidoSprite, PreviaMidia, ProjetoEdicao, SpriteTexto, TabelaQuadros, TarefaFundo } from "@domain/edicao";
+import { separarErro, useEdicaoStore, type ErroComando } from "../store/edicaoStore";
 import { useFundoStore } from "../store/fundoStore";
 
 export interface EstadoRecurso {
@@ -16,6 +16,13 @@ export interface EstadoRecurso {
   tabela: TabelaQuadros | null;
   erro: ErroComando | null;
   pedindo: boolean;
+  // CONTRATO: acréscimos (contratos-fase1 F5): `busca_p50_ms`, `pedida`, `erroDoProxy`.
+  /** Busca pausada medida pelo palco (p50 de 3, ms; §7.6); ausente = ainda não mediu nesta sessão. */
+  busca_p50_ms?: number | null;
+  /** O que `edicao_proxy_pedir` respondeu (o proxy quando pronto; senão o que já toca); ausente = não pedido. */
+  pedida?: PreviaMidia | null;
+  /** O pedido do proxy falhou (ícone no palco). */
+  erroDoProxy?: ErroComando | null;
 }
 
 interface RecursosState {
@@ -41,6 +48,7 @@ function caso(ws: string) {
   wsAtual = ws;
   sprites.clear();
   atlas.clear();
+  proxies.clear();
   useRecursos.setState({ midias: {}, versao: useRecursos.getState().versao + 1 });
 }
 
@@ -85,8 +93,108 @@ function ouvirFundo() {
       prontas.add(t.id);
       const sha = t.chave.slice(t.chave.indexOf(":") + 1);
       if (wsAtual && useRecursos.getState().midias[sha]) void buscar(wsAtual, sha);
+      // o proxy que o palco pediu ficou pronto: a resposta nova traz o arquivo
+      if (t.tipo === "proxy") void proxies.get(sha)?.();
     }
   });
+}
+
+// ---- proxy pedido pelo palco (§7.6) ----
+
+/** Busca pausada medida (p50 de 3, ms) acima disso pede proxy: a de `proxy::BUSCA_P50_MAX_MS`. */
+export const BUSCA_P50_MAX_MS = 120;
+/** Clipe abaixo desta velocidade toca pelo proxy: a de `proxy::VELOCIDADE_MIN`. */
+export const VELOCIDADE_MIN = 0.25;
+
+/** Mediana das buscas medidas; null sem medida. */
+export function p50(tempos: readonly number[]): number | null {
+  if (tempos.length === 0) return null;
+  const o = [...tempos].sort((a, b) => a - b);
+  const m = o.length >> 1;
+  return o.length % 2 ? (o[m] as number) : ((o[m - 1] as number) + (o[m] as number)) / 2;
+}
+
+/** O clipe pede proxy por si (§7.6): rampa, ré ou abaixo de 0,25×. */
+export function clipePedeProxy(c: Pick<ClipePrincipal, "tipo"> & { velocidade?: { tipo: string; fator?: number } }): boolean {
+  if (c.tipo !== "trecho" || !c.velocidade) return false;
+  return c.velocidade.tipo !== "constante" || !((c.velocidade.fator as number) >= VELOCIDADE_MIN);
+}
+
+/** O palco pede o proxy? Busca medida lenta, ou o clipe pede. */
+export function precisaDeProxy(c: Parameters<typeof clipePedeProxy>[0], buscaP50Ms: number | null | undefined): boolean {
+  return clipePedeProxy(c) || (buscaP50Ms != null && buscaP50Ms > BUSCA_P50_MAX_MS);
+}
+
+/** Guarda a busca medida da mídia (uma vez por sessão; null = não deu para medir). */
+export function registrarBusca(ws: string, sha: string, ms: number | null): void {
+  if (wsAtual !== ws || !useRecursos.getState().midias[sha]) return;
+  definir(sha, { busca_p50_ms: ms });
+}
+
+/** Mídias com proxy pedido nesta sessão → como pedir de novo (quando a fila de fundo termina). */
+const proxies = new Map<string, () => Promise<void>>();
+
+/** Trecho da principal que usa a mídia: o `clipe` se ainda está no projeto; senão outro da mesma mídia. */
+function trechoDaMidia(doc: ProjetoEdicao, clipe: Id, sha: string): Id | null {
+  const midias = new Set(doc.midias.filter((m) => m.sha256 === sha).map((m) => m.id));
+  const trechos = (doc.principal as { id?: Id; tipo?: string; midia?: Id }[]).filter((c) => c.tipo === "trecho" && !!c.id && !!c.midia && midias.has(c.midia));
+  return (trechos.find((c) => c.id === clipe) ?? trechos[0])?.id ?? null;
+}
+
+/** `edicao_proxy_pedir`, a chamada isolada: pede o proxy da mídia do clipe e guarda a resposta em `pedida` (o proxy
+ *  quando pronto; senão o que já toca). Pronto o proxy na fila de fundo, pede de novo sozinho. Falha: `erroDoProxy`.
+ *  O clipe que pediu pode sair do projeto enquanto o proxy é feito: o pedido seguinte vai por outro trecho da mesma
+ *  mídia; sem nenhum, a mídia volta a "não pedido". */
+export function pedirProxy(ws: string, clipe: Id, sha: string, buscaP50Ms: number | null): Promise<void> {
+  caso(ws);
+  ouvirFundo();
+  const pedir = async () => {
+    const doc = useEdicaoStore.getState().doc;
+    if (!doc || wsAtual !== ws) return;
+    const id = trechoDaMidia(doc, clipe, sha);
+    if (id === null) {
+      if (proxies.get(sha) === pedir) proxies.delete(sha);
+      return;
+    }
+    try {
+      const pedida = await commands.edicaoProxyPedir(ws, doc, id, buscaP50Ms);
+      if (wsAtual === ws) definir(sha, { pedida, erroDoProxy: null });
+    } catch (e) {
+      if (wsAtual === ws) definir(sha, { erroDoProxy: separarErro(e) });
+    }
+  };
+  proxies.set(sha, pedir);
+  return pedir();
+}
+
+/** Proxy já pedido para a mídia nesta sessão? */
+export const proxyPedido = (sha: string): boolean => proxies.has(sha);
+
+/** A prévia da mídia que o palco toca: o proxy pedido quando pronto; senão a da `MidiaInfo`. */
+export function previaDaMidia(r: EstadoRecurso): PreviaMidia | null {
+  return r.pedida?.pronta && r.pedida.tipo === "proxy" ? r.pedida : (r.info?.previa ?? null);
+}
+
+/** Quadros das buscas medidas: três GOPs espalhados na mídia (20, 50 e 80 %), no meio de cada um (a busca aleatória
+ *  cai em média a meio GOP do quadro-chave), nunca o quadro que está na tela. */
+export function alvosDaMedida(tab: Pick<TabelaQuadros, "passos" | "chaves">, atual: number | null): number[] {
+  const n = tab.passos.length + 1;
+  if (n < 4) return [];
+  const chaves = tab.chaves.filter((c) => c >= 0 && c < n);
+  const alvos: number[] = [];
+  for (const f of [0.2, 0.5, 0.8]) {
+    let j = Math.floor(n * f);
+    if (chaves.length > 1) {
+      let a = 0;
+      for (const c of chaves) if (c <= j) a = c;
+      const b = chaves.find((c) => c > j) ?? n;
+      j = a + Math.floor((b - a) / 2);
+    }
+    j = Math.min(Math.max(j, 0), n - 1);
+    if (j === atual || alvos.includes(j)) j = j + 1 < n ? j + 1 : j - 1;
+    if (j !== atual && !alvos.includes(j)) alvos.push(j);
+  }
+  return alvos;
 }
 
 // ---- sprites e atlas: pedidos ao backend, guardados pelo pedido ----

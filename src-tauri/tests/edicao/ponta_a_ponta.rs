@@ -498,6 +498,35 @@ fn projeto_do_store_exporta_e_confere() {
     let meio_borrao = ((BORRAO[1] + BORRAO[3] / 2.0) * CANVAS.1 as f64) as u32;
     let (dentro_b, fora_b) = (salto_max(&q, meio_borrao, bx0 + 4, bx1 - 4), salto_max(&q, (0.45 * CANVAS.1 as f64) as u32, bx0 + 4, bx1 - 4));
     assert!(fora_b > 100 && (dentro_b as u32) * 3 < fora_b as u32, "{v}: borda dentro {dentro_b}, fora {fora_b}");
+    // zoom ATIVO × ocultar: no meio do zoom animado o borrão vai com a imagem (a ocultação é da fonte, antes do
+    // enquadramento). A caixa do borrão pela `A(τ)` do quadro mostrado já saiu de onde estava sem zoom: mede-se a
+    // parte dela que fica FORA da posição antiga (ocultação aplicada depois do zoom deixaria a borda nítida ali)
+    {
+        let kz = 56u32;
+        let tipado = armazem::tipado(&doc).unwrap();
+        let efeitos = tipado
+            .principal
+            .iter()
+            .find_map(|c| match c {
+                crate::edicao::modelo::Tolerante::Conhecido(crate::edicao::modelo::ClipePrincipal::Trecho(t)) if t.base.id == "00000000-0000-4000-8000-000000000003" => Some(&t.base.efeitos),
+                _ => None,
+            })
+            .expect("clipe 2");
+        let tau = mt.m2.tab.tempo(mapa2[kz as usize] as usize);
+        let origem = (mt.m2.vm.width.unwrap_or(320), mt.m2.vm.height.unwrap_or(180));
+        let (cz, _) = crate::edicao::testes::aceite::no_canvas(efeitos, tau, BORRAO, origem, CANVAS);
+        // linha de referência: a mesma faixa de colunas, na altura 0,45 da fonte (fora do borrão)
+        let (rz, _) = crate::edicao::testes::aceite::no_canvas(efeitos, tau, [BORRAO[0], 0.44, BORRAO[2], 0.02], origem, CANVAS);
+        assert!((cz[0] - bx0 as f64).abs() > 30.0, "{v}: o zoom ainda não moveu a caixa ({cz:?})");
+        let (x0, x1) = ((cz[0].max(0.0) + 4.0) as u32, ((cz[0] + cz[2] - 4.0).min(bx0 as f64 - 2.0)) as u32);
+        assert!(x1 > x0 + 20, "{v}: faixa medida estreita demais: {x0}..{x1} ({cz:?})");
+        let y_dentro = ((cz[1].max(0.0) + cz[1] + cz[3]) / 2.0) as u32;
+        let y_fora = (rz[1] + rz[3] / 2.0) as u32;
+        let qz = medir::quadro(&cap, &mp4, (q2 + kz as u64) as u32).unwrap();
+        let (dentro_z, fora_z) = (salto_max(&qz, y_dentro, x0, x1), salto_max(&qz, y_fora, x0, x1));
+        // a ampliação (bilinear) amacia a borda: 98 medido fora da caixa, 11 dentro
+        assert!(fora_z > 60 && (dentro_z as u32) * 3 < fora_z as u32, "{v}: com o zoom ativo: borda dentro {dentro_z}, fora {fora_z} (caixa {cz:?}, colunas {x0}..{x1})");
+    }
     let j = mt.m2.numeros[mapa2[k as usize] as usize];
     assert!(j / 100 % 10 != 9 && j / 10 % 10 != 9, "faixa do texto branca no quadro {j}");
     let brancos = |q: &QuadroRgb| {
@@ -679,7 +708,11 @@ fn repetir_reaproveita_mapa_e_auto() {
             eprintln!("auto ({v}): h264_nvenc, composto igual ao da CPU");
         }
         outro => {
+            // `auto` sem NVENC aprovado: é a exportação de CPU, sem queda nenhuma, e o relatório diz o codificador
             assert_eq!((sg.codificador.as_str(), &sg.sha256), ("libx264", &sa.sha256), "{v}: sem GPU aprovada ({outro:?})");
+            let tg = ler_json(&c.ws.join(sg.tecnico_rel.as_ref().expect("tecnico.json")));
+            assert_eq!((tg["execucao"]["saida"]["codificador"].as_str(), &tg["execucao"]["saida"]["queda_para_cpu"]), (Some("libx264"), &Value::Null), "{v}");
+            assert_eq!(tg["execucao"]["sistema"]["gpu"], Value::Null, "{v}: sem GPU aprovada, o relatório não cita placa");
             eprintln!("auto ({v}): sem NVENC aprovado, libx264");
         }
     }
@@ -778,7 +811,9 @@ fn previa_com_gpu_que_falha_cai_para_a_cpu() {
     let render = Arc::new(Capacidades { binario: script, ..(*prep.cap).clone() });
     let alvo = Alvo::Previa { altura: 180, de_q: 0, ate_q: 45 };
     let gpu = |pl: &Plano| pl.blocos.iter().any(|b| b.codificador.iter().any(|a| a.ends_with("_nvenc")));
-    assert!(gpu(&fila::compilar_alvo(&p, &prep, &alvo, false).unwrap()), "{v}: a prévia usa a GPU aprovada");
+    // a codificação de prova no tamanho do alvo (`compilar_alvo`, P1.8) é da placa de verdade: a falsa "serve"
+    let serve = |_: &Capacidades, _: u32, _: u32, _: Racional| true;
+    assert!(gpu(&fila::compilar_alvo_com(&p, &prep, &alvo, false, &serve).unwrap()), "{v}: a prévia usa a GPU aprovada");
     let ambiente = |cap: Arc<Capacidades>, tarefa: &str| executar::Ambiente {
         cap,
         trabalho: cache.join("render").join(tarefa),
@@ -790,7 +825,7 @@ fn previa_com_gpu_que_falha_cai_para_a_cpu() {
         ciencias: vec![],
     };
     let (usado, r) = executar::executar_com_queda(
-        &|cpu| fila::compilar_alvo(&p, &prep, &alvo, cpu),
+        &|cpu| fila::compilar_alvo_com(&p, &prep, &alvo, cpu, &serve),
         &ambiente(render, "previa-gpu"),
         &AtomicBool::new(false),
         &mut |_| {},
@@ -1044,4 +1079,465 @@ fn amostras_de_gravador_exportam() {
         assert!(discriminados >= 12, "{v}: só {discriminados} comparações com vizinho que discrimina");
     }
     eprintln!("amostras lidas: {lidas}; comparações com vizinho que discrimina: {discriminados}");
+}
+
+// ------------------------------------------------------------------ Fase 1: um projeto com tudo
+
+/// Canvas e taxa do projeto da Fase 1.
+const F1_CANVAS: (u32, u32) = (640, 360);
+/// Trechos da m1 (índices da tabela): o das medidas (lupa, régua, velocidade) e o do realce (estabilizar e média).
+const F1_MEDIDAS: (usize, usize) = (30, 90);
+const F1_REALCE: (usize, usize) = (150, 210);
+/// Volume do arquivo entregue contra o medido mais o ganho (LU): o AAC e o limite do aceite do P1.5.
+const F1_LU: f64 = 0.5;
+
+fn titulo_do_modelo(modelo: &str, preso: bool, textos: &[&str]) -> Value {
+    use crate::edicao::camada::titulo;
+    use crate::edicao::modelo::{ModeloTitulo, PapelTexto, TamanhoPx};
+    let m: ModeloTitulo = serde_json::from_value(json!(modelo)).unwrap();
+    let canvas = TamanhoPx { w: F1_CANVAS.0, h: F1_CANVAS.1 };
+    let mut t = titulo::titulo_no_modelo(m, preso, "b0", canvas);
+    t.blocos[0].conteudo = textos[0].to_string();
+    for (i, x) in textos.iter().enumerate().skip(1) {
+        let b = titulo::bloco_no_modelo(&t, PapelTexto::Subtitulo, &format!("b{i}"), x, canvas);
+        t.blocos.push(b);
+    }
+    serde_json::to_value(&t).unwrap()
+}
+
+fn clipe_titulo(id: &str, modelo: &str, textos: &[&str]) -> Value {
+    json!({ "tipo": "titulo", "id": id, "rotulo": format!("Tela {modelo}"), "desligado": false, "transicao_entrada": null, "efeitos": [], "duracao_s": 1.0,
+            "titulo": titulo_do_modelo(modelo, false, textos) })
+}
+
+/// Um projeto com tudo o que a Fase 1 entrega: transição, lupa, régua, velocidade, realce (estabilizar e média), som
+/// com narração, silêncio e normalização, legendas na imagem e em arquivo, um título de cada modelo e sobrepostos
+/// presos (terço inferior no clipe das medidas, marca no programa inteiro).
+fn projeto_da_fase_1(c: &Caso, cap: &Capacidades, m1: &Fonte1, trf: Option<(&str, f64)>) -> Value {
+    let id = uuid::Uuid::new_v4().to_string();
+    let t = &m1.tab;
+    let sha = m1.vm.sha256.clone();
+    // foto (a marca) e narração: mídia própria do projeto, pelos comandos de importar
+    let dir = fontes::pasta_temporaria("fase1-midias");
+    let png = dir.join("marca.png");
+    image::RgbaImage::from_fn(64, 64, |x, y| if (x / 8 + y / 8) % 2 == 0 { image::Rgba([255, 0, 255, 255]) } else { image::Rgba([0, 255, 255, 255]) }).save(&png).unwrap();
+    let mut foto = serde_json::to_value(armazem::importar_midia(&c.ws, &id, &png, TipoMidia::Imagem).expect("importar imagem")).unwrap();
+    foto["id"] = json!("foto");
+    let wav = dir.join("narração.wav");
+    gerar_wav(cap, &wav);
+    let mut narra = serde_json::to_value(armazem::importar_midia(&c.ws, &id, &wav, TipoMidia::Audio).expect("importar narração")).unwrap();
+    narra["id"] = json!("narra");
+    let estilo = json!({ "fonte": "sans", "negrito": true, "italico": false, "tamanho": 0.05, "cor": "#ffffff", "alinhamento": "centro", "caixa": { "cor": "#000000c0", "margem": 0.01, "raio": 0.2 }, "contorno": null });
+    let traco = json!({ "cor": "#ffff00", "espessura": 0.008, "contorno": true });
+    let base = |tipo: &str, id: &str| json!({ "tipo": tipo, "id": id, "ligado": true, "nome": "", "ativo": null });
+    let com = |mut a: Value, b: Value| {
+        for (k, v) in b.as_object().unwrap() {
+            a[k] = v.clone();
+        }
+        a
+    };
+    let trecho = |id: &str, (j_in, j_out): (usize, usize), efeitos: Value, silencios: Value, transicao: Value| {
+        json!({ "tipo": "trecho", "id": id, "rotulo": id, "desligado": false, "transicao_entrada": transicao, "efeitos": efeitos, "midia": "m1",
+                "inicio_s": t.tempo(j_in), "fim_s": t.tempo(j_out), "inicio_pts": t.pts[j_in], "fim_pts": t.pts[j_out],
+                "velocidade": { "tipo": "constante", "fator": 1.0 }, "audio": { "volume": 1.0, "mudo": false, "manter_tom": true, "silencios": silencios } })
+    };
+    // medidas: a calibração é da m1 (plano com H = identidade no espaço de 320×180: 1 m = 1 px)
+    let lupa = com(base("lupa", "e-lupa"), json!({ "rastreio": "r-lupa", "janela": 0.2, "fator": 2.0, "forma": "circulo", "interpolacao": "bilinear",
+        "onde": { "modo": "fixa", "x": 0.25, "y": 0.35 }, "moldura": traco, "ligacao": true }));
+    let regua = com(base("regua", "e-regua"), json!({ "calibracao": { "id": "k1", "metodo": "plane", "h": [1, 0, 0, 0, 1, 0, 0, 0, 1], "espaco": { "w": 320, "h": 180 },
+        "pontos_sha256": "a".repeat(64), "residuo_m": 0.02, "regiao": [{ "x": 0.1, "y": 0.5 }, { "x": 0.9, "y": 0.5 }, { "x": 0.9, "y": 0.95 }, { "x": 0.1, "y": 0.95 }], "midia_sha256": sha },
+        "ancora": { "x": 0.3, "y": 0.8 }, "direcao_graus": 0.0, "comprimento_m": 100.0, "divisoes": 4, "traco": traco, "rotulo": true }));
+    let velocidade = com(base("velocidade_exibida", "e-vel"), json!({ "calculo": { "id": "v1", "kmh": 42.0, "faixa": [39.0, 45.0], "de_s": t.tempo(F1_MEDIDAS.0), "ate_s": t.tempo(F1_MEDIDAS.1 - 1),
+        "metodo": "monte_carlo", "midia_sha256": sha }, "onde": { "modo": "fixa", "lugar": { "x": 0.25, "y": 0.6, "h": "centro", "v": "topo" } }, "estilo": estilo }));
+    // realce: estabilizar com a análise no trecho inteiro e média de 3
+    let (d0, d1) = (F1_REALCE.0, F1_REALCE.1 - 1);
+    let estabilizar = com(base("estabilizar", "e-estab"), json!({ "suavizar": 10, "borda": "preta", "analise": { "de_s": t.tempo(d0), "ate_s": t.tempo(d1), "de_pts": t.pts[d0], "ate_pts": t.pts[d1] },
+        "zoom_pct": trf.map_or(0.0, |x| x.1), "trf_sha256": trf.map(|x| x.0) }));
+    let media = com(base("media_temporal", "e-media"), json!({ "quadros": 3 }));
+    let silencio = json!([{ "id": "si1", "de": t.tempo(165), "ate": t.tempo(180), "modo": "tom", "motivo": "nome de terceiro" }]);
+    let tr = json!({ "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 });
+    let legenda = |id: &str, texto: &str, origem: &str, r: Value| json!({ "id": id, "texto": texto, "locutor": null, "origem": origem, "conferida": true, "locutor_auto": false, "ref": r });
+    json!({
+        "esquema": 2, "esquema_menor": 0, "id": id, "titulo": "Fase 1", "created_at": "2026-11-15T00:00:00Z", "updated_at": "2026-11-15T00:00:00Z", "gravado_por": "6.0.0",
+        "saida": { "largura": F1_CANVAS.0, "altura": F1_CANVAS.1, "fps": { "num": 30, "den": 1 }, "auto": false, "cor_fundo": "#101010", "audio": true,
+                   "selos": { "velocidade": true, "ampliacao": true, "realce": true },
+                   "exportacao": { "predefinicao": "juri", "codificador": "cpu", "legendas": "ambos", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } },
+        "midias": [midia_ref("m1", m1, json!([])), foto, narra],
+        "principal": [
+            clipe_titulo("t-abertura", "abertura", &["Exame de vídeo", "Caso 77/26"]),
+            trecho("c-medidas", F1_MEDIDAS, json!([lupa, regua, velocidade]), json!([]), json!(null)),
+            clipe_titulo("t-evento", "evento", &["O portão abre"]),
+            trecho("c-realce", F1_REALCE, json!([estabilizar, media]), silencio, json!({ "tipo": "fundir", "duracao_s": 0.5, "audio": "acompanhar" })),
+            clipe_titulo("t-cartela", "cartela", &["Fim da gravação"]),
+            clipe_titulo("t-fim", "encerramento", &["Perícia criminal"]),
+        ],
+        "fecho": { "tipo": "escurecer", "duracao_s": 0.3, "audio": "acompanhar" },
+        "sobreposicoes": [{ "id": "s1", "nome": "S1", "oculta": false, "clipes": [
+            { "tipo": "titulo", "id": "sob-terco", "rotulo": "Local", "pos": { "ref": "clipe", "clipe": "c-medidas", "desloc": 0.0 }, "duracao_s": null, "transformacao": tr,
+              "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [], "titulo": titulo_do_modelo("terco_inferior", true, &["Rua das Flores, 120"]) },
+            { "tipo": "imagem", "id": "sob-marca", "rotulo": "Marca", "pos": { "ref": "programa", "t": 0.0 }, "duracao_s": null,
+              "transformacao": { "x": 0.08, "y": 0.12, "escala": 0.1, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [], "midia": "foto" },
+        ] }],
+        "audios": [{ "id": "a1", "nome": "Narração", "papel": "narracao", "volume": 1.0, "mudo": false, "abaixa_original": true,
+            "clipes": [{ "id": "ca1", "nome": "fala", "midia": "narra", "pos": { "ref": "clipe", "clipe": "c-medidas", "desloc": 0.2 }, "de_s": 0.0, "ate_s": 1.0, "volume": 1.0, "entrada_s": 0.0, "saida_s": 0.1 }] }],
+        "mixagem": { "volume_original": 1.0, "abaixar": { "db": -12.0, "ataque_s": 0.3, "soltura_s": 0.5 }, "normalizar": { "lufs": -16.0, "pico_db": -1.5 }, "limitador": false },
+        "legendas": { "estilo": estilo, "lugar": { "x": 0.5, "y": 0.95, "h": "centro", "v": "base" }, "linhas_max": 2, "origem": null, "itens": [
+            legenda("g1", "Abertura do exame", "perito", json!({ "tipo": "programa", "de": 0.2, "ate": 0.8 })),
+            legenda("g2", "O portão está fechado", "ia", json!({ "tipo": "fonte", "midia": "m1", "de": t.tempo(50), "ate": t.tempo(70) })),
+        ] },
+        "rastreios": [{ "id": "r-lupa", "nome": "alvo", "cor": "#ff0000", "midia": "m1", "base": "fonte", "tipo": "caixa", "espaco": "original",
+            "ancoras": [{ "t": t.tempo(F1_MEDIDAS.0), "pts": t.pts[F1_MEDIDAS.0], "v": caixa([0.6, 0.45, 0.1, 0.15]), "interp": "linear" }],
+            "denso": null, "silhuetas": null, "ausencias": [], "origem": { "tipo": "manual" }, "confirmacao": null }],
+        "marcadores": [], "sincronias": []
+    })
+}
+
+/// Pixels claros (os três canais acima de 200) na caixa `[x0, y0, x1, y1]` em fração do quadro.
+fn claros(q: &QuadroRgb, c: [f64; 4]) -> usize {
+    let (x0, y0, x1, y1) = ((c[0] * q.w as f64) as u32, (c[1] * q.h as f64) as u32, (c[2] * q.w as f64) as u32, (c[3] * q.h as f64) as u32);
+    (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| px(q, x, y).iter().all(|v| *v > 200)).count()
+}
+
+/// Pixels em que os dois quadros diferem em mais de 24 num canal, na caixa (fração do quadro).
+fn diferentes(a: &QuadroRgb, b: &QuadroRgb, c: [f64; 4]) -> usize {
+    let (x0, y0, x1, y1) = ((c[0] * a.w as f64) as u32, (c[1] * a.h as f64) as u32, (c[2] * a.w as f64) as u32, (c[3] * a.h as f64) as u32);
+    (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| px(a, x, y).iter().zip(px(b, x, y)).any(|(p, q)| p.abs_diff(q) > 24)).count()
+}
+
+/// Volume integrado (LUFS) de um arquivo, pela mesma medição do motor.
+fn lufs_de(cap: &Capacidades, arquivo: &Path) -> f64 {
+    let out = crate::tools::command(&cap.binario)
+        .args(["-hide_banner", "-nostdin", "-cpuflags", "0", "-i"])
+        .arg(arquivo)
+        .args(["-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=50:print_format=json", "-f", "null", "-"])
+        .output()
+        .expect("ffmpeg");
+    let texto = String::from_utf8_lossy(&out.stderr).into_owned();
+    crate::edicao::motor::audio::ler_loudnorm(&texto).expect("loudnorm").integrado.expect("volume medido")
+}
+
+/// Texto do PDF como um leitor de PDF o entrega (`pdftotext`); None sem o programa.
+fn texto_do_pdf(pdf: &Path) -> Option<String> {
+    let out = std::process::Command::new("pdftotext").args(["-layout", "-enc", "UTF-8"]).arg(pdf).arg("-").output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// O projeto da Fase 1 pela fila, em CPU, até conferido: MP4 com a contagem certa, legendas em arquivo, cada recurso
+/// na imagem ou no som, `tecnico.json` com tudo no `feito` e o PDF do júri gerado dele, aberto por fora e com os
+/// números do `feito`. A segunda exportação, com o `.trf` já gravado no projeto, dá os mesmos quadros compostos.
+#[test]
+fn fase_1_projeto_com_tudo_exporta_com_relatorio_e_pdf() {
+    use crate::edicao::modelo::ModoPdf;
+    use crate::edicao::relatorio::juri;
+    let Some(cap) = fontes::cap() else { return };
+    let cap_app = sonda_do_app();
+    assert_eq!(cap_app.sha256, cap.sha256, "o ffmpeg do app é o dos testes");
+    let v = cap.versao.clone();
+    let c = Caso::novo("fase1");
+    let m1 = registrar(&cap, &c.ws, &fontes::gerar(Fonte::Mp4).unwrap());
+    let projeto = projeto_da_fase_1(&c, &cap, &m1, None);
+    let id = projeto["id"].as_str().unwrap().to_string();
+
+    let (doc, analise, fim) = exportar(&c, &projeto, "cpu");
+    let erros: Vec<_> = analise.problemas.iter().filter(|p| p.nivel == Nivel::Erro && p.codigo != mensagens::codigo::TABELA_PENDENTE).collect();
+    assert!(erros.is_empty(), "{v}: {erros:#?}");
+    // a média de quadros pede ciência; o silêncio pede conferência
+    assert!(analise.problemas.iter().any(|p| p.codigo == mensagens::codigo::MEDIA_DE_QUADROS && p.nivel == Nivel::Pericial), "{v}");
+    let Estado::AConferir { saida_id } = fim else { panic!("{v}: esperava a conferir, veio {fim:?}") };
+    let s = cmd::conferir(&c.ws, &saida_id, true).expect("edicao_conferir");
+    assert_eq!(s.estado, EstadoSaida::Concluida);
+    let plano = plano_de(&c, &doc, "cpu");
+    // 30 + 60 + 30 + 60 − 15 (fundir de 0,5 s) + 30 + 30
+    let total_q = 225u64;
+    assert_eq!((plano.total_q, analise.linha.total_q, s.n_quadros), (total_q, total_q, total_q), "{v}");
+    let fps = plano.canvas.fps;
+    assert_eq!(mapa_do_item(&plano, 1).2, (0..60).map(|k| quadro_pela_tabela(&m1.tab, F1_MEDIDAS, k, fps)).collect::<Vec<_>>(), "{v}: mapa do clipe das medidas");
+
+    // ---- o arquivo entregue
+    let mp4 = c.ws.join(&s.arquivo);
+    let decodificados = medir::framehash(&cap, &mp4).unwrap();
+    assert_eq!(decodificados.len() as u64, total_q, "{v}");
+    assert_eq!(s.decodificado_sha256, Some(conferir::hash_de_conteudo(&decodificados)), "{v}");
+    let pasta = mp4.parent().unwrap().to_path_buf();
+    let base = mp4.file_stem().unwrap().to_string_lossy().into_owned();
+    // legendas em arquivo ao lado do vídeo (`<Título>.srt` e `.vtt`), com os dois textos e os tempos do programa
+    let na_pasta: Vec<String> = std::fs::read_dir(&pasta).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+    let com_ext = |ext: &str| {
+        let nomes: Vec<&String> = na_pasta.iter().filter(|n| n.ends_with(ext)).collect();
+        assert_eq!(nomes.len(), 1, "{v}: um {ext} na pasta da saída: {na_pasta:?}");
+        std::fs::read_to_string(pasta.join(nomes[0])).unwrap()
+    };
+    let (srt, vtt) = (com_ext(".srt"), com_ext(".vtt"));
+    assert!(srt.contains("Abertura do exame") && srt.contains("O portão está fechado") && srt.contains("00:00:00,200 --> 00:00:00,800"), "{v}: {srt}");
+    assert!(vtt.starts_with("WEBVTT") && vtt.contains("O portão está fechado"), "{v}");
+    // a legenda de fonte (quadros 50 a 70 do trecho que começa no 30) cai nos slots 30 + 20 .. 30 + 40
+    assert!(srt.contains("00:00:01,667 --> 00:00:02,333"), "{v}: {srt}");
+
+    // ---- imagem: cada recurso onde tem de estar
+    let quadro = |q: u32| medir::quadro(&cap, &mp4, q).unwrap_or_else(|e| panic!("{v}: quadro {q}: {e}"));
+    let embaixo = [0.2, 0.84, 0.8, 0.99];
+    // legenda queimada: no slot 10 (0,33 s) sim, no 27 (0,9 s) não, sobre a mesma tela de abertura
+    let (com_legenda, sem_legenda) = (quadro(10), quadro(27));
+    assert!(claros(&com_legenda, embaixo) > claros(&sem_legenda, embaixo) + 150, "{v}: legenda queimada: {} × {}", claros(&com_legenda, embaixo), claros(&sem_legenda, embaixo));
+    // régua (traço amarelo de 0,3 a 0,61 da largura, na altura 0,8) e a lupa (moldura amarela em volta de (0,25; 0,35))
+    let medidas = quadro(30 + 5);
+    let amarelos = |q: &QuadroRgb, c: [f64; 4]| {
+        let (x0, y0, x1, y1) = ((c[0] * q.w as f64) as u32, (c[1] * q.h as f64) as u32, (c[2] * q.w as f64) as u32, (c[3] * q.h as f64) as u32);
+        (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y))).filter(|&(x, y)| eh_amarelo(px(q, x, y))).count()
+    };
+    assert!(amarelos(&medidas, [0.28, 0.76, 0.64, 0.84]) > 150, "{v}: régua: {}", amarelos(&medidas, [0.28, 0.76, 0.64, 0.84]));
+    assert!(amarelos(&medidas, [0.05, 0.05, 0.45, 0.6]) > 150, "{v}: moldura da lupa: {}", amarelos(&medidas, [0.05, 0.05, 0.45, 0.6]));
+    // a marca (xadrez magenta e ciano no canto de cima à esquerda) no programa inteiro: títulos e trechos
+    let magenta = |q: &QuadroRgb| {
+        let (w, h) = (q.w, q.h);
+        (0..h / 4).flat_map(|y| (0..w / 5).map(move |x| (x, y))).filter(|&(x, y)| { let p = px(q, x, y); p[0] > 180 && p[1] < 90 && p[2] > 180 }).count()
+    };
+    for q in [3u32, 40, 100, 150, 220] {
+        assert!(magenta(&quadro(q)) > 100, "{v}: marca no slot {q}: {}", magenta(&quadro(q)));
+    }
+    // selo no canto de cima à direita: no clipe do realce (média e imagem tratada) e no das medidas (ampliada); a tela
+    // de texto não leva
+    let selo = [0.5, 0.02, 0.99, 0.12];
+    let (realce, tela) = (quadro(150), quadro(125));
+    assert!(claros(&realce, selo) > 80, "{v}: selo do realce: {}", claros(&realce, selo));
+    assert!(claros(&medidas, selo) > 80, "{v}: selo da ampliação: {}", claros(&medidas, selo));
+    assert!(diferentes(&realce, &tela, selo) > 80, "{v}");
+    // terço inferior preso ao clipe das medidas: aparece nele e some na tela seguinte
+    let terco = [0.02, 0.62, 0.7, 0.9];
+    assert!(claros(&medidas, terco) > claros(&quadro(95), terco) + 100, "{v}: terço inferior: {} × {}", claros(&medidas, terco), claros(&quadro(95), terco));
+    // transição: no meio do fundir (slots 120 a 134) o quadro não é nem a tela do evento nem o trecho
+    let (antes, meio, depois) = (quadro(118), quadro(127), quadro(140));
+    let tudo = [0.0, 0.15, 1.0, 0.8];
+    assert!(diferentes(&meio, &antes, tudo) > 2000 && diferentes(&meio, &depois, tudo) > 2000, "{v}: fundir: {} e {}", diferentes(&meio, &antes, tudo), diferentes(&meio, &depois, tudo));
+
+    // ---- relatório técnico: o `feito` conta tudo
+    let tec = ler_json(&c.ws.join(s.tecnico_rel.as_ref().expect("tecnico.json")));
+    let f = &tec["feito"];
+    assert_eq!((f["saida"]["n_quadros"].as_u64(), f["saida"]["largura"].as_u64(), f["roteiro"].as_array().map(Vec::len)), (Some(total_q), Some(640), Some(6)), "{v}");
+    let nomes = |item: usize| f["roteiro"][item]["processamentos"].as_array().unwrap().iter().map(|p| p["nome"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!(nomes(1), ["lupa", "regua", "velocidade_exibida"], "{v}");
+    assert_eq!(nomes(3), ["estabilizar", "media_temporal"], "{v}");
+    assert_eq!(f["roteiro"][3]["transicao"]["tipo"], "fundir");
+    let selos = |item: usize| f["roteiro"][item]["selos"].as_array().unwrap().iter().map(|x| x.as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!((selos(1), selos(3), selos(0)), (vec!["Imagem ampliada".to_string()], vec!["Imagem tratada".to_string(), "Média de 3 imagens".to_string()], vec![]), "{v}");
+    let sob = f["sobrepostos"].as_array().expect("sobrepostos no feito");
+    assert_eq!(sob.iter().map(|x| (x["clipe"].as_str().unwrap(), x["tipo"].as_str().unwrap(), x["na_saida"]["de_q"].as_u64().unwrap(), x["na_saida"]["n_q"].as_u64().unwrap())).collect::<Vec<_>>(),
+               vec![("sob-terco", "titulo", 30, 60), ("sob-marca", "imagem", 0, total_q)], "{v}");
+    assert_eq!((sob[0]["preso_a"].as_str(), sob[0]["modelo"].as_str(), sob[0]["textos"][0].as_str()), (Some("c-medidas"), Some("terco_inferior"), Some("Rua das Flores, 120")));
+    assert_eq!((f["legendas"]["modo"].as_str(), f["legendas"]["n"].as_u64(), f["legendas"]["ia"].as_u64(), f["legendas"]["ia_conferidas"].as_u64()), (Some("ambos"), Some(2), Some(1), Some(1)), "{v}");
+    assert_eq!((f["audio"]["silencios"].as_array().map(Vec::len), f["audio"]["trilhas"][0]["papel"].as_str(), f["audio"]["mixagem"]["normalizar"]["lufs"].as_f64()), (Some(1), Some("narracao"), Some(-16.0)), "{v}");
+    assert_eq!(f["estabilizacoes"].as_array().map(Vec::len), Some(1), "{v}");
+    let midia1 = f["midias"].as_array().unwrap().iter().find(|m| m["id"] == "m1").unwrap();
+    assert_eq!((midia1["largura"].as_u64(), midia1["altura"].as_u64(), midia1["tamanho"].as_u64()), (Some(320), Some(180), Some(std::fs::metadata(&m1.caminho).unwrap().len())), "{v}");
+    assert_eq!(f["avisos"].as_array().unwrap().iter().filter(|a| a["codigo"] == "media_de_quadros" && a["ciente"] == true).count(), 1, "{v}");
+    // normalização pelo executor de verdade: medição, ganho pela regra e o volume do arquivo entregue
+    let e = &tec["execucao"];
+    let (medido, pico, ganho) = (e["audio"]["loudnorm"]["integrado"].as_f64().expect("volume medido"), e["audio"]["loudnorm"]["pico"].as_f64().expect("pico medido"), e["audio"]["ganho_db"].as_f64().expect("ganho"));
+    assert!((ganho - (-16.0 - medido).min(-1.5 - pico)).abs() < 1e-6, "{v}: ganho {ganho} com {medido} LUFS e {pico} dBTP");
+    let entregue = lufs_de(&cap, &mp4);
+    assert!((entregue - (medido + ganho)).abs() <= F1_LU, "{v}: entregue {entregue:.2} LUFS × {:.2} (medido {medido:.2} + ganho {ganho:.2})", medido + ganho);
+    assert_eq!(e["conferencia"]["quadros"].as_u64(), Some(total_q));
+    // o `.trf` da estabilização ficou no projeto
+    let vidstab = armazem::pasta_projeto(&c.ws, &id).join("vidstab");
+    let trfs: Vec<PathBuf> = std::fs::read_dir(&vidstab).unwrap_or_else(|e| panic!("{v}: vidstab: {e}")).flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "trf")).collect();
+    assert_eq!(trfs.len(), 1, "{v}: {trfs:?}");
+    let trf_sha = trfs[0].file_stem().unwrap().to_string_lossy().into_owned();
+    assert_eq!(sha256_bytes(&std::fs::read(&trfs[0]).unwrap()), trf_sha);
+
+    // ---- PDF do júri, gerado do `tecnico.json` como o pacote faz
+    let arquivos = vec![juri::ArquivoDoPacote { rel: format!("{base}.mp4"), sha256: s.sha256.clone() }];
+    let dados = juri::dados(&tec, &[], &arquivos).unwrap_or_else(|e| panic!("{v}: dados do júri: {e}"));
+    let projeto_json = serde_json::to_vec(&doc).unwrap();
+    let entrada = juri::entrada(&tec, dados.clone(), &[], &projeto_json, ModoPdf::A3).unwrap();
+    let saida = crate::relatorio_pdf::gerar(&entrada).unwrap_or_else(|e| panic!("{v}: PDF: {e}"));
+    assert!(saida.pdf.starts_with(b"%PDF-") && saida.paginas >= 6, "{v}: {} páginas", saida.paginas);
+    assert!(saida.avisos.is_empty(), "{v}: {:?}", saida.avisos);
+    let pdf = fontes::pasta_temporaria("fase1-pdf").join(format!("Relatório-{v}.pdf"));
+    std::fs::write(&pdf, &saida.pdf).unwrap();
+    // aberto por um leitor de fora (poppler), quando há; senão, o texto que o próprio modelo compôs
+    let texto = match texto_do_pdf(&pdf) {
+        Some(t) => t,
+        None => {
+            assert!(std::env::var_os("SICRO_EXIGE_FFMPEG").is_none(), "pdftotext ausente: o PDF não foi aberto por fora");
+            eprintln!("dispensado: sem pdftotext, o PDF é conferido pelo texto do modelo");
+            crate::relatorio_pdf::texto(&entrada).unwrap()
+        }
+    };
+    let liso: String = texto.split_whitespace().collect::<Vec<_>>().join(" ");
+    for secao in ["O que é este documento", "O vídeo entregue", "As gravações usadas", "O que aparece no vídeo, na ordem", "O que foi acrescentado e o que foi modificado",
+                  "Tempo, velocidade e câmeras alinhadas", "Limites deste vídeo", "Como conferir", "Identificação dos arquivos", "Propriedades das gravações",
+                  "Processamentos, na ordem de aplicação", "Diferenças entre origem e saída", "Ocultações de imagem e de som", "Codificação da saída", "Programas e versões", "Referências"] {
+        assert!(liso.contains(secao), "{v}: PDF sem a seção {secao:?}");
+    }
+    // os números do `feito`, como o PDF os escreve
+    let dur = f["saida"]["duracao_s"].as_f64().unwrap();
+    assert_eq!(dur, 7.5);
+    for (o_que, trecho) in [
+        ("duração do vídeo", "7,5 s".to_string()),
+        ("tamanho da saída", "640 × 360 pontos".to_string()),
+        ("tamanho da gravação", "320 × 180 pontos".to_string()),
+        ("legendas e o modo", "Legendas (2)".to_string()),
+        ("onde as legendas saíram", "na imagem e em arquivo que acompanha o vídeo".to_string()),
+        ("terço inferior", "Texto sobreposto: Rua das Flores, 120".to_string()),
+        ("marca", "Imagem sobreposta: Marca".to_string()),
+        ("média", "Média de imagens (3)".to_string()),
+        ("selo da média", "Média de 3 imagens".to_string()),
+        ("régua", "Régua de escala de 100,00 m".to_string()),
+        ("velocidade", "42 km/h".to_string()),
+        ("narração", "Narração".to_string()),
+        ("som ocultado", "Som ocultado".to_string()),
+        ("conferência", PERITO.to_string()),
+    ] {
+        assert!(liso.contains(&trecho), "{v}: PDF sem {o_que} ({trecho:?})");
+    }
+    // o SHA-256 do vídeo: o PDF é a raiz (o código pode quebrar de linha: os 16 primeiros dígitos)
+    let sem_espaco: String = texto.chars().filter(|c| !c.is_whitespace()).collect();
+    assert!(sem_espaco.contains(&s.sha256[..16]), "{v}: SHA-256 do vídeo fora do PDF");
+    // e nada do que o `feito` não prova: a frase da conferência das legendas automáticas vale (1 de 1)
+    assert!(liso.contains("Legendas escritas a partir de degravação automática") == f["legendas"]["origem"]["motor"].is_string(), "{v}");
+    // os acréscimos do PDF são os do `feito`: um por sobreposto, mais as legendas
+    let acrescimos: Vec<&str> = dados["acrescimos"].as_array().unwrap().iter().map(|l| l["o_que"].as_str().unwrap()).collect();
+    assert_eq!(acrescimos.iter().filter(|x| x.starts_with("Texto sobreposto") || x.starts_with("Imagem sobreposta")).count(), sob.len(), "{v}: {acrescimos:?}");
+
+    // ---- de novo, com o `.trf` gravado no projeto (o que a tela faz depois do intermediário): mesmos quadros
+    let zoom = 0.0;
+    let mut de_novo = projeto_da_fase_1(&c, &cap, &m1, Some((&trf_sha, zoom)));
+    de_novo["titulo"] = json!("Fase 1 de novo");
+    // a pasta do projeto anterior tem o `.trf`: o novo id recebe a cópia, como `duplicar` faz
+    let destino = armazem::pasta_projeto(&c.ws, de_novo["id"].as_str().unwrap()).join("vidstab");
+    std::fs::create_dir_all(&destino).unwrap();
+    std::fs::copy(&trfs[0], destino.join(trfs[0].file_name().unwrap())).unwrap();
+    let (doc2, _, fim2) = exportar(&c, &de_novo, "cpu");
+    let Estado::AConferir { saida_id: saida2 } = fim2 else { panic!("{v}: de novo: {fim2:?}") };
+    let s2 = cmd::conferir(&c.ws, &saida2, true).expect("edicao_conferir");
+    let plano2 = plano_de(&c, &doc2, "cpu");
+    assert!(plano2.previas.iter().all(|p| !matches!(p, crate::edicao::motor::plano::Previa::Vidstab { .. })), "{v}: com o .trf gravado não há análise de novo");
+    assert_eq!(s2.composto_sha256, s.composto_sha256, "{v}: o .trf gravado dá os mesmos quadros da análise feita na exportação");
+    let tec2 = ler_json(&c.ws.join(s2.tecnico_rel.as_ref().unwrap()));
+    assert_eq!(tec2["feito"]["estabilizacoes"][0]["trf_sha256"].as_str(), Some(trf_sha.as_str()), "{v}");
+    eprintln!("Fase 1 ({v}): {total_q} quadros, PDF de {} páginas, {medido:.2} LUFS medido, ganho {ganho:.2} dB, entregue {entregue:.2} LUFS", saida.paginas);
+}
+
+// ------------------------------------------------------------------ comandos do palco (fecho da Fase 1)
+
+/// Espera a tarefa de fundo dessa chave acabar e devolve o estado final.
+fn esperar_fundo(chave: &str) -> crate::edicao::fundo::EstadoFundo {
+    use crate::edicao::fundo::{self, EstadoFundo};
+    let t0 = Instant::now();
+    loop {
+        match fundo::estado(chave).map(|t| t.estado) {
+            Some(EstadoFundo::NaFila | EstadoFundo::Rodando) => {}
+            Some(fim) => return fim,
+            None => panic!("tarefa de fundo {chave} sumiu"),
+        }
+        assert!(t0.elapsed() < Duration::from_secs(180), "tarefa de fundo {chave} presa");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// `edicao_proxy_pedir` e `edicao_origem_estado`, pelas funções dos comandos, num caso de verdade: sem medição (ou com
+/// busca rápida) o palco recebe o que já toca e nada entra na fila; com busca lenta medida, ou clipe abaixo de 0,25×, o
+/// proxy é pedido e passa a ser a resposta quando fica pronto. O estado do intermediário não pede nada: só depois de
+/// `edicao_origem_pedir` ele diz "fazendo" e "pronto".
+#[test]
+fn comandos_do_palco_proxy_por_busca_e_estado_do_intermediario() {
+    use crate::edicao::fundo::{self, EstadoFundo, TipoFundo};
+    use crate::edicao::origem::{self, EstadoOrigem};
+    use crate::edicao::previa::TipoPrevia;
+    use crate::edicao::proxy;
+    let Some(cap) = fontes::cap() else { return };
+    let _ = sonda_do_app();
+    let v = cap.versao.clone();
+    let c = Caso::novo("palco");
+    // fonte só deste teste (a chave da fila de fundo é o SHA-256 da mídia)
+    let dir = fontes::pasta_temporaria("palco-fonte");
+    let video = dir.join(format!("palco-{}.mp4", if v.starts_with('7') { "a" } else { "b" }));
+    let st = crate::tools::command(&cap.binario)
+        .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i", "testsrc2=s=322x182:r=30:d=4", "-c:v", "libx264", "-preset", "ultrafast", "-g", "30", "-bf", "0", "-pix_fmt", "yuv420p", "-metadata", "comment=palco"])
+        .arg(&video)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let (vm, _, tab) = registrar_e_ler(&cap, &c.ws, &video).expect("vídeo do caso");
+    let m = json!({ "id": "m1", "tipo": "video", "origem": "caso", "media_id": vm.id.to_string(), "sha256": vm.sha256, "nome": vm.filename, "relativo": vm.relative_path,
+        "duracao_s": vm.duration_s, "inicio_s": null, "largura": vm.width, "altura": vm.height, "taxa": null, "vfr": false, "tem_audio": false, "cor": null, "derivacao": null,
+        "recebido": { "nativo": null, "obs": "" }, "relogio_desvio_s": null, "gravador": null, "decodificacao": null, "ocultacoes": [] });
+    let trecho = |id: &str, fator: f64, efeitos: Value| json!({ "tipo": "trecho", "id": id, "rotulo": id, "desligado": false, "transicao_entrada": null, "efeitos": efeitos, "midia": "m1",
+        "inicio_s": tab.tempo(10), "fim_s": tab.tempo(40), "inicio_pts": tab.pts[10], "fim_pts": tab.pts[40], "velocidade": { "tipo": "constante", "fator": fator },
+        "audio": { "volume": 1.0, "mudo": true, "manter_tom": true, "silencios": [] } });
+    let nitidez = json!([{ "tipo": "nitidez", "id": "e1", "ligado": true, "nome": "", "ativo": null, "quantidade": 1.0 }]);
+    let doc = json!({
+        "esquema": 2, "esquema_menor": 0, "id": uuid::Uuid::new_v4().to_string(), "titulo": "Palco", "created_at": "2026-11-15T00:00:00Z", "updated_at": "2026-11-15T00:00:00Z",
+        "saida": { "largura": 640, "altura": 360, "fps": { "num": 30, "den": 1 }, "auto": false, "cor_fundo": "#000000", "audio": false,
+                   "selos": { "velocidade": true, "ampliacao": true, "realce": true },
+                   "exportacao": { "predefinicao": "juri", "codificador": "cpu", "legendas": "nenhuma", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } },
+        "midias": [m],
+        "principal": [trecho("normal", 1.0, json!([])), trecho("lento", 0.2, json!([])), trecho("nitido", 1.0, nitidez),
+            { "tipo": "congelar", "id": "parado", "rotulo": "", "midia": "m1", "instante_s": tab.tempo(20), "instante_pts": tab.pts[20], "duracao_s": 1.0, "efeitos": [] }],
+    });
+    let cache = c.cache();
+    let chave_proxy = fundo::chave(TipoFundo::Proxy, &vm.sha256);
+
+    // ---- proxy por busca medida
+    assert!(proxy::clipe_pede(&serde_json::from_value(json!({ "tipo": "constante", "fator": 0.2 })).unwrap()));
+    assert!(!proxy::clipe_pede(&serde_json::from_value(json!({ "tipo": "constante", "fator": 0.25 })).unwrap()));
+    assert!(proxy::clipe_pede(&serde_json::from_value(json!({ "tipo": "constante", "fator": -1.0 })).unwrap()), "ré");
+    assert!(proxy::clipe_pede(&serde_json::from_value(json!({ "tipo": "rampa", "pontos": [{ "t": 0.0, "v": 1.0 }] })).unwrap()));
+    // sem medição e com busca rápida: o original, pronto, e nada na fila
+    for busca in [None, Some(119.0), Some(proxy::BUSCA_P50_MAX_MS)] {
+        let p = proxy::pedir_do_projeto(&c.ws, &cache, &doc, "normal", busca).unwrap_or_else(|e| panic!("{v}: {busca:?}: {e}"));
+        assert_eq!((p.tipo, p.pronta), (TipoPrevia::Original, true), "{v}: {busca:?}");
+        assert!(fundo::estado(&chave_proxy).is_none(), "{v}: proxy pedido sem busca lenta ({busca:?})");
+    }
+    for (clipe, busca, erro) in [("normal", Some(-1.0), "item_invalido"), ("normal", Some(f64::NAN), "item_invalido"), ("nao-existe", None, "item_invalido")] {
+        let e = proxy::pedir_do_projeto(&c.ws, &cache, &doc, clipe, busca).unwrap_err().to_string();
+        assert!(e.contains(erro), "{v}: {clipe} {busca:?}: {e}");
+    }
+    assert!(fundo::estado(&chave_proxy).is_none());
+    // busca lenta medida: o que toca agora (o original) e o proxy na fila; pronto, ele passa a ser a resposta
+    let p = proxy::pedir_do_projeto(&c.ws, &cache, &doc, "normal", Some(238.0)).unwrap();
+    assert_eq!((p.tipo, p.pronta), (TipoPrevia::Original, true), "{v}: enquanto o proxy não fica pronto");
+    assert!(fundo::estado(&chave_proxy).is_some(), "{v}: busca de 238 ms não pediu o proxy");
+    assert_eq!(esperar_fundo(&chave_proxy), EstadoFundo::Pronta, "{v}");
+    let p = proxy::pedir_do_projeto(&c.ws, &cache, &doc, "normal", Some(238.0)).unwrap();
+    assert_eq!((p.tipo, p.pronta), (TipoPrevia::Proxy, true), "{v}");
+    assert!(cache.join(&p.relativo).is_file(), "{v}: {}", p.relativo);
+    // o clipe lento pede por si, sem medição; o quadro congelado e o trecho a 1× sem medição seguem no original
+    let p = proxy::pedir_do_projeto(&c.ws, &cache, &doc, "lento", None).unwrap();
+    assert_eq!(p.tipo, TipoPrevia::Proxy, "{v}: clipe a 0,2×");
+    for clipe in ["normal", "parado"] {
+        assert_eq!(proxy::pedir_do_projeto(&c.ws, &cache, &doc, clipe, None).unwrap().tipo, TipoPrevia::Original, "{v}: {clipe}");
+    }
+
+    // ---- estado do intermediário de origem
+    let estado = |clipe: &str| origem::estado_do_projeto(&c.ws, &cache, &doc, clipe);
+    // perguntar não pede: nada na pasta do intermediário, nem depois de um tempo
+    assert_eq!(estado("nitido").unwrap(), None, "{v}");
+    std::thread::sleep(Duration::from_millis(400));
+    assert_eq!(estado("nitido").unwrap(), None, "{v}");
+    assert!(!cache.join("origem").exists(), "{v}: `edicao_origem_estado` pôs o intermediário na fila");
+    // clipe sem efeito de origem e quadro congelado: não há intermediário a esperar; clipe que não existe é erro
+    assert_eq!((estado("normal").unwrap(), estado("parado").unwrap()), (None, None), "{v}");
+    assert!(estado("nao-existe").unwrap_err().to_string().contains("item_invalido"));
+    // pedido (a tabela do decodificador pode ainda estar na fila de fundo): fazendo, depois pronto, e o estado acompanha
+    let t0 = Instant::now();
+    let pronto = loop {
+        match origem::pedir_do_projeto(&c.ws, &cache, &doc, "nitido") {
+            Ok(EstadoOrigem::Pronto { previa, .. }) => break previa,
+            Ok(EstadoOrigem::Fazendo { tarefa, .. }) => match estado("nitido").unwrap() {
+                Some(EstadoOrigem::Fazendo { tarefa: a_mesma, .. }) => assert_eq!(a_mesma, tarefa, "{v}"),
+                // acabou entre uma chamada e a outra
+                Some(EstadoOrigem::Pronto { .. }) | None => {}
+            },
+            Err(e) if e.to_string().contains("tabela_pendente") => {}
+            Err(e) => panic!("{v}: {e}"),
+        }
+        assert!(t0.elapsed() < Duration::from_secs(180), "{v}: intermediário preso");
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!((pronto.tipo, pronto.pronta), (TipoPrevia::Origem, true), "{v}");
+    match estado("nitido").unwrap() {
+        Some(EstadoOrigem::Pronto { previa, trf }) => assert_eq!((previa, trf), (pronto, None), "{v}"),
+        outro => panic!("{v}: estado depois de pronto: {outro:?}"),
+    }
 }

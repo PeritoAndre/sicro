@@ -7,7 +7,7 @@ import { EarOff, Upload } from "lucide-react";
 import type { Draft } from "immer";
 import type { Id, MidiaRef, ProjetoEdicao, TrilhaAudio } from "@domain/edicao";
 import { useEdicaoStore } from "../store/edicaoStore";
-import { clipeConhecido } from "../modelo/projeto";
+import { clipeConhecido, NORMALIZAR_PADRAO } from "../modelo/projeto";
 import { juntarNarracao, mudar } from "../inspetor/acoes";
 import { Deslizante, Grade, Marca, Mini, Secao } from "../inspetor/campos";
 import { novaTrilhaNarracao } from "../inspetor/novos";
@@ -18,7 +18,8 @@ import styles from "../inspetor/Inspetor.module.css";
 export const PAINEL_AUDIO_PRONTO = true;
 
 /** Alvo de projeto novo (§2.4; `receitas-audio-saida.md` §1). */
-export const NORMALIZAR_PADRAO = { lufs: -16, pico_db: -1.5 } as const;
+// o padrão é o do projeto novo (`modelo/projeto.ts`)
+export { NORMALIZAR_PADRAO };
 
 const PAPEIS: TrilhaAudio["papel"][] = ["narracao", "musica", "efeitos"];
 

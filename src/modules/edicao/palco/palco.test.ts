@@ -1,14 +1,15 @@
 /** Lógica do palco: vista, transporte (faixa e bordas), busca um-por-vez, quadro final e alças. */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { Caixa, EfEnquadramento, EfGirar, PreviaMidia, TabelaQuadros } from "@domain/edicao";
+import type { Caixa, EfEnquadramento, EfGirar, EfLupa, EfRegua, EfVelocidadeExibida, PreviaMidia, TabelaQuadros } from "@domain/edicao";
 import { VISTA_INICIAL, caixaMedida, contido, daTela, deslocar, limitar, mostrado, paraTela, zoomEm, zoomMaximo } from "./vista";
 import { aparar, bordaArrastada, entradaNoCursor, faixaDoClipe, fronteira, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor, tempoDaFronteira, tempoDoX, xDoTempo } from "./faixa";
 import { Buscador, ESPERA_MS, type Agenda } from "./motor/busca";
 import type { ElementoBusca } from "./motor/elemento";
 import { relogioMidia } from "./motor/relogioMidia";
 import { QuadroFiel, type Fiel } from "./quadroFiel";
-import { aDaGirada, aDaOrigem, alcaDeLugar, alcasDaRegiao, alcasDeCaixa, alcasDePonto, caixaArrastada, comRegiao, proporcaoDaSaida } from "./alcas";
+import { aDaGirada, aDaOrigem, alcaDaAncora, alcaDeLugar, alcaDoLugarFixo, alcaNaOrigem, alcasDaRegiao, alcasDeCaixa, alcasDePonto, caixaArrastada, comRegiao, proporcaoDaSaida } from "./alcas";
+import { _paraTeste } from "./Palco";
 import { caixaComProporcao } from "./camadaEdicao";
 import { aDe, ponto } from "../modelo/geometria";
 import { exibido, quadroEm, tempoDoQuadro } from "../modelo/tempo";
@@ -429,5 +430,60 @@ describe("alças", () => {
     perto((r.w * 1920) / (r.h * 1080), 16 / 9, 1e-9);
     expect(caixaComProporcao({ x: 0.5, y: 0.5 }, { x: 0.2, y: 0.4 }, undefined, { w: 1, h: 1 })).toEqual({ x: 0.2, y: 0.4, w: 0.3, h: 0.09999999999999998 });
     void exibido;
+  });
+});
+
+describe("alças da Fase 1: âncora da régua, centro da lupa fixa e lugar da velocidade fixa", () => {
+  // A: a fonte ocupa a metade direita do canvas
+  const A: [number, number, number, number, number, number] = [0.5, 0, 0, 1, 0.5, 0];
+  const mod = { shift: false, alt: false };
+
+  it("âncora da régua: mostrada no canvas por A; o arrasto volta ao espaço de origem pela inversa", () => {
+    const regua = { id: "rg", tipo: "regua", ancora: { x: 0.4, y: 0.6 } } as unknown as EfRegua;
+    const [a] = alcaDaAncora(regua, A);
+    expect(a!.id).toBe("ancora:rg");
+    perto(a!.em.x, 0.7);
+    perto(a!.em.y, 0.6);
+    // 0,1 do canvas para a direita = 0,2 da fonte (A dobra o x)
+    const m = a!.arrastar({ x: 0.7, y: 0.6 }, { x: 0.8, y: 0.5 }, mod) as { efeito: EfRegua };
+    perto(m.efeito.ancora.x, 0.6);
+    perto(m.efeito.ancora.y, 0.5);
+    expect(m.efeito.id).toBe("rg");
+    // limitada à fonte
+    expect((a!.arrastar({ x: 0.7, y: 0.6 }, { x: 5, y: -5 }, mod) as { efeito: EfRegua }).efeito.ancora).toEqual({ x: 1, y: 0 });
+    expect(alcaNaOrigem(a!)).toBe(true);
+    // A sem inversa: sem alça
+    expect(alcaDaAncora(regua, [0, 0, 0, 0, 0, 0])).toEqual([]);
+  });
+
+  it("lupa fixa e velocidade fixa: mover no canvas; as que acompanham não têm essa alça", () => {
+    const lupa = { id: "lp", tipo: "lupa", rastreio: "r", onde: { modo: "fixa", x: 0.8, y: 0.25 } } as unknown as EfLupa;
+    const [a] = alcaDoLugarFixo(lupa);
+    expect([a!.id, a!.em]).toEqual(["centro:lp", { x: 0.8, y: 0.25 }]);
+    const m = a!.arrastar({ x: 0.8, y: 0.25 }, { x: 0.5, y: 0.5 }, mod) as { efeito: EfLupa };
+    expect(m.efeito.onde.modo).toBe("fixa");
+    perto((m.efeito.onde as { x: number }).x, 0.5);
+    perto((m.efeito.onde as { y: number }).y, 0.5);
+    expect(alcaNaOrigem(a!)).toBe(false);
+    expect(alcaDoLugarFixo({ ...lupa, onde: { modo: "segue", dx: 0.1, dy: 0 } })).toEqual([]);
+    const vel = { id: "ve", tipo: "velocidade_exibida", onde: { modo: "fixa", lugar: { x: 0.1, y: 0.9, h: "esq", v: "base" } } } as unknown as EfVelocidadeExibida;
+    const [b] = alcaDoLugarFixo(vel);
+    const n = b!.arrastar({ x: 0.1, y: 0.9 }, { x: 0.3, y: 2 }, mod) as { efeito: EfVelocidadeExibida };
+    expect(n.efeito.onde).toEqual({ modo: "fixa", lugar: { x: expect.closeTo(0.3, 12), y: 1, h: "esq", v: "base" } });
+    expect(alcaDoLugarFixo({ ...vel, onde: { modo: "segue", rastreio: "r", dx: 0, dy: 0 } })).toEqual([]);
+    // a alça de `lugar` do texto também é do canvas
+    expect(alcaNaOrigem({ id: "lugar:t" })).toBe(false);
+    expect(alcaNaOrigem({ id: "caixa:r" })).toBe(true);
+  });
+
+  it("rastreio do efeito selecionado: destaque, lupa, ocultar, holofote e a velocidade que acompanha", () => {
+    const r = _paraTeste.rastreioDoEfeito;
+    expect(r({ tipo: "destaque", rastreio: "a" })).toBe("a");
+    expect(r({ tipo: "lupa", rastreio: "b" })).toBe("b");
+    expect(r({ tipo: "ocultar", alvo: { rastreio: "c" } })).toBe("c");
+    expect(r({ tipo: "holofote", alvo: { rastreio: "d" } })).toBe("d");
+    expect(r({ tipo: "velocidade_exibida", onde: { modo: "segue", rastreio: "e" } })).toBe("e");
+    expect(r({ tipo: "velocidade_exibida", onde: { modo: "fixa", lugar: {} } })).toBeNull();
+    expect(r({ tipo: "regua" })).toBeNull();
   });
 });

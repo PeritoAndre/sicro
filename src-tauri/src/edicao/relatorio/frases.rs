@@ -28,6 +28,11 @@ pub mod tipo {
     pub const VOLUME: &str = "volume";
     /// Enquadramento da imagem inteira em "Preencher": nada é ampliado por escolha de região, mas as bordas saem.
     pub const PREENCHER: &str = "preencher";
+    /// Título sobreposto (texto, terço inferior, marca): `feito.sobrepostos[]` de tipo `titulo`.
+    pub const TEXTO_SOBREPOSTO: &str = "texto_sobreposto";
+    // CONTRATO: acréscimo (revisão do fecho da Fase 1, contratos-fase1 (g) R2).
+    /// Selo: o aviso que o programa escreve na imagem (`feito.roteiro[].selos`).
+    pub const AVISO_NA_IMAGEM: &str = "aviso_na_imagem";
 }
 
 /// Condições que não são código de validação (seções 6 a 8 e anexos).
@@ -71,6 +76,8 @@ pub mod modelo {
     /// Anexo E: trechos em que o perito aceitou a falta do alvo (o rastreio não dá região e nada é coberto).
     pub const AUSENCIAS: &str = "trechos sem ocultação, aceitos pelo perito: {lista}";
     pub const IA_LEGENDAS: &str = "Legendas escritas a partir de degravação automática e conferidas pelo perito.";
+    /// Só quando o `feito` conta legenda automática que saiu sem a conferência registrada.
+    pub const IA_LEGENDAS_SEM_CONFERENCIA: &str = "Legendas escritas a partir de degravação automática; sem conferência registrada pelo perito: {n}.";
 }
 
 /// (chave, texto): rótulos de valores do modelo (`grupo.valor`) usados nas tabelas.
@@ -145,6 +152,10 @@ const ROTULOS: &[(&str, &str)] = &[
     ("onde.item", "item {n}"),
     ("onde.itens", "itens {n}"),
     ("onde.video", "ao longo do vídeo"),
+    ("onde.de_ate", "de {de} a {ate}"),
+    ("legendas.queimar", "na imagem, ao longo do vídeo"),
+    ("legendas.arquivo", "em arquivo que acompanha o vídeo"),
+    ("legendas.ambos", "na imagem e em arquivo que acompanha o vídeo"),
     ("codificacao.cpu", "esperada com os mesmos programas, na mesma classe de máquina (codificador de CPU)"),
     ("codificacao.gpu", "não esperada (codificador de GPU); a comparação é pelo SHA-256 dos quadros"),
     ("anexo.tecnico", "Relatório técnico completo, legível por programa (JSON)"),
@@ -211,6 +222,8 @@ const EFEITOS: &[(&str, Classe, &str, &str)] = &[
     (tipo::SILENCIO, Classe::Mudanca, "Som ocultado", "Um trecho do som foi trocado por um tom ou por silêncio para preservar dado sem relação com o fato."),
     (tipo::MUDO, Classe::Mudanca, "Som da gravação retirado", "O som desta parte da gravação não foi incluído no vídeo."),
     (tipo::PREENCHER, Classe::Mudanca, "Imagem ajustada para preencher a tela", "A imagem foi aumentada até ocupar a tela inteira. O que não cabe nas bordas fica de fora."),
+    (tipo::TEXTO_SOBREPOSTO, Classe::Acrescimo, "Texto sobreposto", "Escrito pelo perito e mostrado sobre a imagem. Não faz parte das gravações."),
+    (tipo::AVISO_NA_IMAGEM, Classe::Acrescimo, "Aviso escrito na imagem", "Escrito pelo programa no canto da imagem para avisar que ela é mostrada de outro jeito. Não faz parte das gravações."),
     (tipo::VOLUME, Classe::Mudanca, "Volume alterado", "O som da gravação foi deixado mais alto ou mais baixo. Nada foi acrescentado a ele."),
 ];
 
@@ -332,7 +345,7 @@ mod testes {
         // toda referência com versão e data
         assert!(REFERENCIAS.iter().all(|r| r.contains("versão") && r.contains('(')));
         let modelos = [modelo::IA_OCULTACOES, modelo::IA_MARCACOES, modelo::IA_ASSISTIDO, modelo::IA_IMAGENS, modelo::IA_MODELOS, modelo::MEDIDA_REGUA,
-                       modelo::MEDIDA_VELOCIDADE, modelo::MEDIDA_VELOCIDADE_SEM_FAIXA, modelo::DERIVADA, modelo::IA_LEGENDAS];
+                       modelo::MEDIDA_VELOCIDADE, modelo::MEDIDA_VELOCIDADE_SEM_FAIXA, modelo::DERIVADA, modelo::IA_LEGENDAS, modelo::IA_LEGENDAS_SEM_CONFERENCIA];
         let frases = EFEITOS.iter().map(|x| x.3).chain(CONDICOES.iter().map(|x| x.1)).chain(modelos);
         for f in frases {
             let baixo = f.to_lowercase();

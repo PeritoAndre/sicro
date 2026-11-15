@@ -26,6 +26,10 @@ const cmd = vi.hoisted(() => ({
 vi.mock("@core/commands", () => ({ commands: cmd }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: (p: string) => `asset://${p}`, invoke: vi.fn() }));
+vi.mock("@modules/video/editor/useGestoTransporte", async (original) => {
+  const m = await original<typeof import("@modules/video/editor/useGestoTransporte")>();
+  return { ...m, useGestoTransporte: vi.fn(m.useGestoTransporte) };
+});
 
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
@@ -39,6 +43,9 @@ import { selecionarClipe } from "../sequencia/acoes";
 import { meioDoQuadro } from "./faixa";
 import { botao, clicar, desmontarTudo, esperar, montar } from "../inspetor/testeTela";
 import { useInspetorUi } from "../inspetor/ui";
+import { SEGURAR_MS, useGestoTransporte } from "@modules/video/editor/useGestoTransporte";
+
+const gancho = vi.mocked(useGestoTransporte);
 
 const WS = "/casos/toca";
 const SHA = "d".repeat(64);
@@ -152,6 +159,108 @@ describe("trava de marcação do palco (livre())", () => {
     await ponteiro("pointerdown");
     await ponteiro("pointerup");
     expect(marcou).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("gesto das setas (§8.5): o mesmo gancho do reprodutor da análise", () => {
+  const seta = (tipo: "keydown" | "keyup", key: "ArrowRight" | "ArrowLeft", x: Partial<KeyboardEventInit> = {}) =>
+    act(async () => void window.dispatchEvent(new KeyboardEvent(tipo, { key, code: key, bubbles: true, cancelable: true, ...x })));
+  const chegar = async (v: HTMLVideoElement) => {
+    await act(async () => void v.dispatchEvent(new Event("seeked")));
+    await espera(50);
+  };
+  const quadro = (t: { raiz: HTMLElement }) => Number(/quadro (\d+)/.exec(t.raiz.querySelector("[data-tempo]")!.textContent ?? "")?.[1]);
+  const tocando = (t: { raiz: HTMLElement }) => t.raiz.querySelector('button[aria-label="Reproduzir"]')!.getAttribute("aria-pressed") === "true";
+
+  it("a Edição liga `useGestoTransporte` com os atalhos da tela (desligado com diálogo aberto)", async () => {
+    gancho.mockClear();
+    await noPalco();
+    expect(gancho.mock.calls.at(-1)?.[1]).toBe(true);
+    await act(async () => useDialogosAbertos.setState({ pilha: [1] }));
+    expect(gancho.mock.calls.at(-1)?.[1]).toBe(false);
+    await act(async () => useDialogosAbertos.setState({ pilha: [] }));
+  });
+
+  it("toque = um quadro (ao soltar); Shift = ±1 s; Ctrl não é do gesto", async () => {
+    const { t, v } = await noPalco();
+    expect(quadro(t)).toBe(0);
+    await seta("keydown", "ArrowRight");
+    // apertada: ainda nada (o passo sai ao soltar; segurar viraria movimento)
+    expect(v.currentTime).toBeCloseTo(meioDoQuadro(tab, 0), 9);
+    await seta("keyup", "ArrowRight");
+    await chegar(v);
+    expect(quadro(t)).toBe(1);
+    expect(v.paused).toBe(true);
+    await seta("keydown", "ArrowRight", { shiftKey: true });
+    await seta("keyup", "ArrowRight", { shiftKey: true });
+    await chegar(v);
+    expect(quadro(t)).toBe(31);
+    await seta("keydown", "ArrowLeft", { shiftKey: true });
+    await seta("keyup", "ArrowLeft", { shiftKey: true });
+    await chegar(v);
+    expect(quadro(t)).toBe(1);
+    await seta("keydown", "ArrowLeft");
+    await seta("keyup", "ArrowLeft");
+    await chegar(v);
+    expect(quadro(t)).toBe(0);
+    // Ctrl+→ é "Seguir" (catálogo), não o gesto
+    await seta("keydown", "ArrowRight", { ctrlKey: true });
+    await seta("keyup", "ArrowRight", { ctrlKey: true });
+    await espera(20);
+    expect(v.currentTime).toBeCloseTo(meioDoQuadro(tab, 0), 9);
+  });
+
+  it("segurar → toca até soltar; segurar ← dá ré guiada (elemento parado, quadro por busca) até soltar", async () => {
+    const { t, v } = await noPalco();
+    await seta("keydown", "ArrowRight");
+    await espera(SEGURAR_MS + 60);
+    expect(v.paused).toBe(false);
+    expect(tocando(t)).toBe(true);
+    v.currentTime = meioDoQuadro(tab, 90);
+    await espera(40);
+    await seta("keyup", "ArrowRight");
+    expect(v.paused).toBe(true);
+    expect(tocando(t)).toBe(false);
+    await chegar(v);
+    expect(quadro(t)).toBe(90);
+    // ré: o elemento continua parado e o palco pede quadros para trás
+    await seta("keydown", "ArrowLeft");
+    await espera(SEGURAR_MS + 60);
+    expect(tocando(t)).toBe(true);
+    expect(v.paused).toBe(true);
+    const vistos: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      await espera(40);
+      await chegar(v);
+      vistos.push(quadro(t));
+    }
+    await seta("keyup", "ArrowLeft");
+    expect(tocando(t)).toBe(false);
+    await chegar(v);
+    // andou para trás, sem voltar, perto do ritmo do relógio (30 qps: menos de 30 quadros em menos de 1 s)
+    expect(vistos[0]!).toBeLessThan(90);
+    for (let i = 1; i < vistos.length; i++) expect(vistos[i]!).toBeLessThanOrEqual(vistos[i - 1]!);
+    expect(vistos.at(-1)!).toBeLessThan(vistos[0]!);
+    expect(vistos.at(-1)!).toBeGreaterThan(90 - 30);
+    expect(quadro(t)).toBeLessThanOrEqual(vistos.at(-1)!);
+    expect(v.paused).toBe(true);
+  });
+
+  it("ré para no primeiro quadro do clipe", async () => {
+    const { t, v } = await noPalco();
+    await seta("keydown", "ArrowRight", { shiftKey: true });
+    await seta("keyup", "ArrowRight", { shiftKey: true });
+    await chegar(v);
+    // aparado: o clipe começa no quadro 28; a ré a partir do 30 para nele
+    await act(async () => st().alterar("Início", (d) => void Object.assign(d.principal[0]!, { inicio_s: tempoDoQuadro(tab, 28), inicio_pts: 28 * 512 })));
+    expect(quadro(t)).toBe(30);
+    await seta("keydown", "ArrowLeft");
+    await espera(SEGURAR_MS + 200);
+    await chegar(v);
+    await chegar(v);
+    expect(tocando(t)).toBe(false);
+    expect(quadro(t)).toBe(28);
+    await seta("keyup", "ArrowLeft");
   });
 });
 

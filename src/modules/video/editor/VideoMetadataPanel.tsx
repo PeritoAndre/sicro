@@ -210,7 +210,7 @@ function ProvenienciaCampos({ mediaId }: { mediaId: string }) {
   return (
     <div data-proveniencia={leitura.tipo}>
       {/* leitura que falhou: campos desligados também na aparência */}
-      <dl className={styles.grid} style={{ marginTop: "var(--space-2)", alignItems: "center", opacity: leitura.tipo === "erro" ? 0.5 : 1 }}>
+      <dl className={`${styles.grid} ${styles.comoEscrito}`} style={{ marginTop: "var(--space-2)", alignItems: "center", opacity: leitura.tipo === "erro" ? 0.5 : 1 }}>
         <dt>
           <label htmlFor={`${id}-f`}>Formato do gravador</label>
         </dt>

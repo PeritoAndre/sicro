@@ -1,10 +1,11 @@
 /**
- * Itens novos da Sequência: título, imagem, presos ao clipe (título, terço inferior, imagem, narração) e os
- * trechos de "Dos eventos…" (um por par de eventos, na ordem do tempo). Valores de partida; o inspetor ajusta.
+ * Itens novos da Sequência: título (nos 5 modelos do P1.7), imagem, presos ao clipe (imagem, narração) e os trechos de
+ * "Dos eventos…" (um por par de eventos, na ordem do tempo). Valores de partida; o inspetor ajusta.
  */
 
 import type { BlocoTexto, ClipeAudio, ClipeImagem, ClipeTitulo, EstiloTexto, Id, Lugar, ProjetoEdicao, Seg, SobImagem, SobTitulo, Titulo, TrilhaAudio, TrilhaSobreposicao } from "@domain/edicao";
 import { novoId } from "../modelo/projeto";
+import { blocoNoModelo, tituloNoModelo } from "../modelo/titulos";
 import { DURACAO_PADRAO } from "./contas";
 
 export type ModeloNovo = Exclude<Titulo["modelo"], "livre">;
@@ -31,8 +32,22 @@ const FAIXA = { cor: "#0000008c", margem: 0.013, raio: 0 };
 
 const bloco = (papel: BlocoTexto["papel"], conteudo: string, e: EstiloTexto, lugar: Lugar, largura_max = 0.9): BlocoTexto => ({ id: novoId(), papel, conteudo, estilo: e, lugar, largura_max });
 
-/** Título com os blocos que tiverem texto. Terço inferior: transparente, à esquerda, em faixa. */
-export function novoTitulo(modelo: ModeloNovo, titulo: string, subtitulo: string): Titulo {
+/** Título novo no modelo (`modelo/titulos.ts`), para o canvas da saída, com os blocos que tiverem texto; sem texto
+ *  nenhum fica o bloco de título vazio (não desenha). É o mesmo arranjo que "Modelo" grava no Inspetor. */
+// CONTRATO: 4º parâmetro `canvas`; cria pelos modelos do P1.7 (contratos-fase1 F7). O de antes é `tituloDaFase0`.
+export function novoTitulo(modelo: ModeloNovo, titulo: string, subtitulo: string, canvas: { w: number; h: number }): Titulo {
+  const t = tituloNoModelo(modelo, false, novoId(), canvas);
+  (t.blocos[0] as BlocoTexto).conteudo = titulo;
+  if (subtitulo) {
+    t.blocos.push(blocoNoModelo(t, "subtitulo", novoId(), subtitulo, canvas));
+    if (!titulo) t.blocos.shift();
+  }
+  return t;
+}
+
+/** Título da Fase 0 (dois arranjos: terço inferior e cartão centrado). Fora da tela desde o P1.7: fica para os testes
+ *  da Fase 0, que montam o projeto por ele. */
+export function tituloDaFase0(modelo: ModeloNovo, titulo: string, subtitulo: string): Titulo {
   const blocos: BlocoTexto[] = [];
   if (modelo === "terco_inferior") {
     if (titulo) blocos.push(bloco("titulo", titulo, estilo(0.052, true, "esq", FAIXA), { x: 0.06, y: 0.8, h: "esq", v: "base" }, 0.7));
@@ -64,7 +79,7 @@ function trilhaDeSobreposicao(d: ProjetoEdicao): TrilhaSobreposicao {
   return d.sobreposicoes[0] as TrilhaSobreposicao;
 }
 
-/** Título preso ao clipe: o terço inferior vai até o fim do clipe (duração nula). */
+/** Título preso ao clipe da Fase 0 (a tela usa `prenderTituloNoModelo`, de `Presos.tsx`): fica para os testes. */
 export function prenderTitulo(d: ProjetoEdicao, clipe: Id, modelo: "evento" | "terco_inferior", texto = ""): Id {
   const t = trilhaDeSobreposicao(d);
   const c: SobTitulo = {
@@ -77,7 +92,7 @@ export function prenderTitulo(d: ProjetoEdicao, clipe: Id, modelo: "evento" | "t
     entrada_s: 0,
     saida_s: 0,
     efeitos: [],
-    titulo: modelo === "terco_inferior" ? novoTitulo("terco_inferior", texto, "") : { ...novoTitulo("evento", texto, ""), fundo: { tipo: "transparente" } },
+    titulo: modelo === "terco_inferior" ? tituloDaFase0("terco_inferior", texto, "") : { ...tituloDaFase0("evento", texto, ""), fundo: { tipo: "transparente" } },
   };
   t.clipes.push(c);
   return c.id;

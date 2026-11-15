@@ -97,7 +97,9 @@ fn conferir_lidos(plano: &Plano, res: &Resultado, it: &ProvItem, o: &ProvOrigem)
         return Err(erro(&format!("{} lidos, {} previstos, primeiro diferente no {k}º", lidos.len(), previstos.len())));
     }
     let lidos: HashSet<i64> = lidos.into_iter().collect();
-    if let Some(p) = o.pts.iter().find(|p| !lidos.contains(p)) {
+    // por campo, só o primeiro campo de cada quadro (índice par) tem pts de quadro lido
+    let de_quadro = |i: usize| !o.campos || (o.j_in as usize + i) % 2 == 0;
+    if let Some((_, p)) = o.pts.iter().enumerate().find(|(i, p)| de_quadro(*i) && !lidos.contains(p)) {
         return Err(erro(&format!("pts {p} não lido")));
     }
     Ok(())

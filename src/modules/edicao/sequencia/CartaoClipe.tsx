@@ -1,20 +1,18 @@
 /**
  * Cartão de um item da trilha principal (§8.2, §8.6): número, tipo, nome, duração, selos, problema da validação
- * numa linha curta e os itens presos a ele. Item de versão futura ou inválido: cartão apagado com o `tipo`, sem
- * editor. Estado só por ícone; os rótulos são os do §8.6.
+ * numa linha curta e os itens presos a ele (`Presos`, que lê a store pelo `id`). Item de versão futura ou inválido:
+ * cartão apagado com o `tipo`, sem editor. Estado só por ícone; os rótulos são os do §8.6.
  */
 
-import { useEffect, useRef, useState, type PointerEvent as PE } from "react";
-import { Copy, Eye, GripVertical, Image as IconeImagem, Mic, Music, Plus, Trash2, Type, Video, Volume2 } from "lucide-react";
+import type { PointerEvent as PE } from "react";
+import { CircleAlert, Copy, Eye, GripVertical, Trash2 } from "lucide-react";
+import type { OrigemDoClipe } from "../store/origemStore";
 import type { Id, Problema, Seg } from "@domain/edicao";
-import { textoDuracao, type Preso, type RotuloTipo, type Selo } from "./contas";
-import { useMenuAberto } from "../menus";
+import { textoDuracao, type RotuloTipo, type Selo } from "./contas";
 import { Presos, PRESOS_PRONTOS } from "./Presos";
 import styles from "./Sequencia.module.css";
 
-export type TipoPreso = "Título" | "Terço inferior" | "Imagem" | "Narração";
-export const TIPOS_PRESO: readonly TipoPreso[] = ["Título", "Terço inferior", "Imagem", "Narração"];
-
+// CONTRATO: saem `presos`, `onAdicionar`, `onPreso` (os presos são do `Presos`); entra `origem?` (contratos-fase1 F8).
 export interface CartaoProps {
   /** Posição na trilha (0…). */
   indice: number;
@@ -27,45 +25,21 @@ export interface CartaoProps {
   duracao: Seg | null;
   selos: readonly Selo[];
   problemas: readonly Problema[];
-  presos: readonly Preso[];
   selecionado: boolean;
   desligado: boolean;
   arrastando: boolean;
   soltar: "antes" | "depois" | null;
   soLeitura: boolean;
+  /** Intermediário de origem do clipe (§7.5): em preparo mostra o progresso; falhou, o ícone. */
+  origem?: OrigemDoClipe;
   onSelecionar(): void;
   onVer(): void;
   onDuplicar(): void;
   onRemover(): void;
   onAlca(e: PE<HTMLElement>): void;
-  onAdicionar(t: TipoPreso): void;
-  onPreso(p: Preso): void;
 }
 
-const ICONE_PRESO = { titulo: Type, imagem: IconeImagem, video: Video, narracao: Mic, musica: Music, efeitos: Volume2 } as const;
-/** Nome do item preso sem rótulo próprio (só o ícone aparece): o do tipo. */
-const NOME_PRESO = { titulo: "Título", imagem: "Imagem", video: "Vídeo", narracao: "Narração", musica: "Música", efeitos: "Efeitos" } as const;
-
 export function CartaoClipe(p: CartaoProps) {
-  const [menu, setMenu] = useState(false);
-  const menuRef = useRef<HTMLSpanElement | null>(null);
-  useMenuAberto(menu);
-  // menu aberto: clique fora ou Esc fecha
-  useEffect(() => {
-    if (!menu) return;
-    const fora = (e: Event) => {
-      if (!menuRef.current?.contains(e.target as Node)) setMenu(false);
-    };
-    const tecla = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(false);
-    };
-    window.addEventListener("pointerdown", fora, true);
-    window.addEventListener("keydown", tecla);
-    return () => {
-      window.removeEventListener("pointerdown", fora, true);
-      window.removeEventListener("keydown", tecla);
-    };
-  }, [menu]);
   const conhecido = p.tipo !== null;
   // erro primeiro; senão o primeiro aviso
   const problema = p.problemas.find((x) => x.nivel === "erro") ?? p.problemas[0] ?? null;
@@ -92,7 +66,17 @@ export function CartaoClipe(p: CartaoProps) {
         <strong className={styles.tipo}>{p.tipo ?? p.tipoCru}</strong>
         {p.nome && <span className={styles.nome}>{p.nome}</span>}
         {p.duracao !== null && <span className={styles.dur}>{textoDuracao(p.duracao)}</span>}
+        {p.origem?.tipo === "falhou" && (
+          <span className={styles.origemFalhou} title={p.origem.erro.frase || p.origem.erro.codigo || undefined} data-origem="falhou">
+            <CircleAlert size={12} aria-hidden />
+          </span>
+        )}
       </div>
+      {p.origem?.tipo === "fazendo" && (
+        <span className={styles.origemTrilho} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p.origem.feito * 100)} data-origem="fazendo">
+          <span className={styles.origemBarra} style={{ width: `${Math.round(Math.min(Math.max(p.origem.feito, 0), 1) * 100)}%` }} />
+        </span>
+      )}
       {(p.selos.length > 0 || conhecido || !p.soLeitura) && (
         <div className={styles.linha2}>
           <span className={styles.selos}>
@@ -131,44 +115,6 @@ export function CartaoClipe(p: CartaoProps) {
         </p>
       )}
       {conhecido && PRESOS_PRONTOS && p.id && <Presos clipe={p.id} />}
-      {conhecido && !PRESOS_PRONTOS && (p.presos.length > 0 || p.selecionado) && (
-        <div className={styles.presos} onClick={parar}>
-          {p.presos.map((x) => {
-            const I = ICONE_PRESO[x.tipo];
-            return (
-              <button type="button" key={x.id} className={styles.preso} onClick={() => p.onPreso(x)} title={x.rotulo || NOME_PRESO[x.tipo]} aria-label={x.rotulo || NOME_PRESO[x.tipo]}>
-                <I size={12} aria-hidden />
-                {x.rotulo && <span>{x.rotulo}</span>}
-              </button>
-            );
-          })}
-          {!p.soLeitura && (
-            <span className={styles.adicionar} ref={menuRef}>
-              <button type="button" className={styles.mini} onClick={() => setMenu((m) => !m)} aria-expanded={menu}>
-                <Plus size={12} aria-hidden />
-                Adicionar
-              </button>
-              {menu && (
-                <span className={styles.menu} role="menu">
-                  {TIPOS_PRESO.map((t) => (
-                    <button
-                      type="button"
-                      role="menuitem"
-                      key={t}
-                      onClick={() => {
-                        setMenu(false);
-                        p.onAdicionar(t);
-                      }}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-      )}
     </li>
   );
 }

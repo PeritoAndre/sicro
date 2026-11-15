@@ -34,7 +34,8 @@ import {
   textoProblemas,
   textoVelocidade,
 } from "./contas";
-import { MODELOS, novoTitulo, paresDeEventos, prenderImagem, prenderNarracao, prenderTitulo } from "./novos";
+import { MODELOS, novoTitulo, paresDeEventos, prenderImagem, prenderNarracao, prenderTitulo, tituloDaFase0 } from "./novos";
+import { aplicarModelo, arranjo, noArranjo } from "../modelo/titulos";
 import { congelar, dividir, duplicar, mover, moverPara, podeCongelar, remover, selecionarClipe, vizinho } from "./acoes";
 
 const tab = (n: number): TabelaQuadros => ({ tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(n - 1).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem: "decodificador" });
@@ -153,12 +154,34 @@ describe("mudanças da lista", () => {
 
   it("títulos novos e pares de eventos", () => {
     expect(MODELOS.map((m) => m.rotulo)).toEqual(["Cartela", "Abertura", "Evento", "Terço inferior", "Encerramento"]);
-    const t1 = novoTitulo("cartela", "Ocorrência 123", "");
+    // os dois arranjos da Fase 0 (só para os testes dela)
+    const t1 = tituloDaFase0("cartela", "Ocorrência 123", "");
     expect(t1.blocos).toHaveLength(1);
     expect(t1.fundo).toEqual({ tipo: "cor", cor: "#000000" });
-    const t3 = novoTitulo("terco_inferior", "A", "B");
+    const t3 = tituloDaFase0("terco_inferior", "A", "B");
     expect(t3.fundo).toEqual({ tipo: "transparente" });
     expect(t3.blocos.map((b) => b.papel)).toEqual(["titulo", "subtitulo"]);
+    // o diálogo "Título…" cria pelos 5 modelos do P1.7: cada bloco no lugar que o modelo dá ao papel
+    const canvas = { w: 1920, h: 1080 };
+    const lugares = new Set<string>();
+    for (const { valor } of MODELOS) {
+      const t = novoTitulo(valor, "A", "B", canvas);
+      expect(t.modelo).toBe(valor);
+      expect(t.blocos.map((b) => [b.papel, b.conteudo])).toEqual([["titulo", "A"], ["subtitulo", "B"]]);
+      for (const b of t.blocos) expect([b.lugar, b.largura_max]).toEqual([arranjo(valor, b.papel).lugar, arranjo(valor, b.papel).largura_max]);
+      expect(noArranjo(t)).toBe(true);
+      // igual ao que "Modelo" grava no Inspetor (cartão na principal: fundo cheio)
+      expect(aplicarModelo(t, valor, false, canvas)).toEqual(t);
+      expect(t.fundo).toEqual({ tipo: "cor", cor: "#000000" });
+      lugares.add(JSON.stringify(t.blocos.map((b) => b.lugar)));
+    }
+    // cinco arranjos diferentes (na Fase 0 eram dois)
+    expect(lugares.size).toBe(5);
+    // só subtítulo: sem bloco de título; sem texto: o bloco de título vazio (não desenha)
+    expect(novoTitulo("abertura", "", "B", canvas).blocos.map((b) => b.papel)).toEqual(["subtitulo"]);
+    expect(novoTitulo("abertura", "", "", canvas).blocos.map((b) => [b.papel, b.conteudo])).toEqual([["titulo", ""]]);
+    // título da Fase 0 está fora do arranjo do modelo dele
+    expect(noArranjo(t1)).toBe(false);
     expect(paresDeEventos([30, 10, 20, 40, 50])).toEqual([
       [10, 20],
       [30, 40],

@@ -13,6 +13,7 @@ const cmd = vi.hoisted(() => ({
   edicaoAnalisar: vi.fn(),
   edicaoExcluir: vi.fn(),
   listVideoMedia: vi.fn(),
+  videoProveniencia: vi.fn(),
   edicaoMidiaInfo: vi.fn(),
   edicaoQuadroEm: vi.fn(),
 }));
@@ -114,6 +115,8 @@ beforeEach(() => {
   cmd.edicaoAnalisar.mockImplementation(async () => analiseVazia());
   cmd.edicaoMidiaInfo.mockRejectedValue({ kind: "validation", message: "validation error: tabela_pendente" });
   cmd.edicaoQuadroEm.mockImplementation(async (_w: string, _s: string, alvo: { t: number }) => ({ indice: 0, pts: Math.round(alvo.t * 1000), pts_s: alvo.t, dur_s: 0.04 }));
+  // proveniência da análise: nada gravado (a coleta e o "Trecho…" leem sempre)
+  cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: null, recebido_obs: "", relogio_desvio_s: null, gravador: null });
   cmd.listVideoMedia.mockResolvedValue([
     { id: "vm", sha256: sha, filename: "cam.mkv", relative_path: "Mídias/Vídeos/cam.mkv", duration_s: 100, width: 1280, height: 720, raw_probe_json: "{}", derived_from_hash: null, derivation_json: null },
   ]);

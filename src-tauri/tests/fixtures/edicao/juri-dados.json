@@ -5,6 +5,11 @@
     "saida": {
       "acrescimos": [
         {
+          "explicacao": "Escrito pelo programa no canto da imagem para avisar que ela é mostrada de outro jeito. Não faz parte das gravações.",
+          "o_que": "Aviso escrito na imagem: Média de 8 imagens",
+          "onde": "item 2"
+        },
+        {
           "explicacao": "Tela escrita pelo perito. Não faz parte das gravações.",
           "o_que": "Tela de texto",
           "onde": "item 1"
@@ -93,7 +98,7 @@
       "diferencas": [
         {
           "descartados": "0",
-          "imagem": "para 1280×720",
+          "imagem": "1280×720 para 1280×720",
           "item": "2",
           "obs": "—",
           "quadros": "60 → 60",
@@ -102,7 +107,7 @@
         },
         {
           "descartados": "0",
-          "imagem": "para 1280×720",
+          "imagem": "1280×720 para 1280×720",
           "item": "3",
           "obs": "mesmo quadro por 0,5 s",
           "quadros": "1 → 15",
@@ -214,13 +219,13 @@
           "formato": "MP4 (H.264)",
           "formato_nativo": false,
           "id": "A",
-          "imagem": null,
+          "imagem": "1280 × 720 pontos",
           "recebido": "já convertida, e não no formato próprio do aparelho gravador (veio por pendrive)",
           "relogio": "desvio informado pelo perito: −2,5 s · DVR 1",
           "ritmo": "30 imagens por segundo, constante",
           "rotulo": "cam 1.mp4",
           "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-          "tamanho": null,
+          "tamanho": "123 MB (123.456.789 bytes)",
           "taxa_variavel": false,
           "tecnico": {
             "codec": "h264",

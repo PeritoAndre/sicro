@@ -52,7 +52,7 @@ import { garantirMidia } from "../modelo/projeto";
 import { midiaDoCaso } from "./coleta";
 import { pontas } from "../sequencia/NovoClipe";
 import { congelar, inserir, inserirTrechos, moverPara, selecionarClipe } from "../sequencia/acoes";
-import { novoClipeImagem, novoClipeTitulo, novoTitulo, prenderImagem, prenderNarracao, prenderTitulo } from "../sequencia/novos";
+import { novoClipeImagem, novoClipeTitulo, tituloDaFase0 as novoTitulo, prenderImagem, prenderNarracao, prenderTitulo } from "../sequencia/novos";
 import {
   adicionarEfeito,
   adicionarImagem,
@@ -183,6 +183,8 @@ beforeAll(async () => {
   cmd.edicaoMidiaImportar.mockImplementation(async (_ws: string, _p: string, _o: string, tipo: string) => (tipo === "imagem" ? IMAGEM : NARRACAO));
 
   await st().novo(WS);
+  // a fixture (lida pelo Rust) é de projeto sem normalização: desligada como na tela (Áudio → "Normalizar")
+  st().alterar("Normalizar", (d) => void (d.mixagem.normalizar = null));
   // Saída manual 640×360 a 30 qps, fundo escuro, com áudio
   mudar("Largura", (d) => void ((d.saida.largura = 640), (d.saida.auto = false)));
   mudar("Altura", (d) => void ((d.saida.altura = 360), (d.saida.auto = false)));
@@ -313,6 +315,8 @@ beforeAll(async () => {
   // projeto à parte: a narração presa pela Sequência
   await st().fechar();
   await st().novo(WS);
+  // a fixture (lida pelo Rust) é de projeto sem normalização: desligada como na tela (Áudio → "Normalizar")
+  st().alterar("Normalizar", (d) => void (d.mixagem.normalizar = null));
   st().alterar("Narração", (d) => {
     const id = garantirMidia(d, { ...NARRACAO });
     prenderNarracao(d, "c", id, "narracao");

@@ -78,7 +78,8 @@ function formaSimples(p: Pintura, f: Caminho | Elipse) {
     ctx.fill(f.k === "caminho" && f.regra === "evenodd" ? "evenodd" : "nonzero");
   }
   const t = f.traco;
-  if (t) {
+  // largura ≤ 0 não desenha (como o rasterizador): o canvas ignora `lineWidth = 0` e traçaria com a largura anterior
+  if (t && t.largura > 0) {
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
     if (t.contorno) {

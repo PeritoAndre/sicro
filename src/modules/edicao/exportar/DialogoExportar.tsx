@@ -1,11 +1,11 @@
 /**
- * Diálogo Exportar (§8.6): predefinição, "Arquivo reprodutível", os problemas da análise atual. Erro bloqueia e
- * leva ao item; aviso pericial pede "Ciente"; o botão diz quantos avisos vão junto. Sem props: abre por
- * `abrirExportar()` e lê tudo da store.
+ * Diálogo Exportar (§8.6): predefinição, "Arquivo reprodutível", legendas, pacote do júri e revisão, e os problemas
+ * da análise atual. Erro bloqueia e leva ao item; aviso pericial pede "Ciente"; o botão diz quantos avisos vão junto.
+ * Sem props: abre por `abrirExportar()` e lê tudo da store.
  */
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ChevronRight, Cpu, Loader2, OctagonX, ShieldAlert, Zap } from "lucide-react";
+import { AlertTriangle, ChevronRight, Cpu, Loader2, OctagonX, RefreshCw, ShieldAlert, Zap } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { Dialog } from "@components/Dialog/Dialog";
 import { commands } from "@core/commands";
@@ -15,8 +15,27 @@ import { useRenderStore } from "../store/renderStore";
 import { classificar, contarAvisos, irParaProblema, podeExportar, rotuloExportar, useExportarUi } from "./avisos";
 import styles from "./Exportar.module.css";
 
-/** Fase 0: só a do júri (as outras chegam com o P1.8); a gravada no documento aparece mesmo assim. */
-const PREDEFINICOES: { v: Exportacao["predefinicao"]; r: string }[] = [{ v: "juri", r: "Júri" }];
+/** As que a tela oferece; a personalizada não tem campos no §8.6 e só aparece quando o documento já a traz. */
+const PREDEFINICOES: { v: Exportacao["predefinicao"]; r: string }[] = [
+  { v: "juri", r: "Júri" },
+  { v: "whatsapp", r: "WhatsApp" },
+  { v: "preservacao", r: "Preservação" },
+];
+const LEGENDAS: { v: Exportacao["legendas"]; r: string }[] = [
+  { v: "nenhuma", r: "Não" },
+  { v: "queimar", r: "Na imagem" },
+  { v: "arquivo", r: "Arquivo" },
+  { v: "ambos", r: "As duas" },
+];
+const CODEC: Record<NonNullable<Exportacao["personalizada"]>["codec"], string> = { h264: "libx264", hevc: "libx265", av1: "libaom-av1", ffv1: "ffv1" };
+
+/** Codificador que a exportação vai usar: só o júri sem "Arquivo reprodutível" usa a GPU aprovada (§5.7). */
+export function codificadorDe(e: Exportacao, cap: ResumoCapacidades): { nome: string; marca: string; gpu: boolean } {
+  if (e.predefinicao === "preservacao") return { nome: "ffv1", marca: "ffv1", gpu: false };
+  if (e.predefinicao === "personalizada") return { nome: e.personalizada ? CODEC[e.personalizada.codec] : "libx264", marca: "cpu", gpu: false };
+  if (e.predefinicao === "whatsapp" || e.codificador === "cpu") return { nome: "libx264", marca: "cpu", gpu: false };
+  return { nome: cap.codificador, marca: cap.codificador, gpu: !!cap.gpu };
+}
 const NOMES: Record<Exportacao["predefinicao"], string> = { juri: "Júri", whatsapp: "WhatsApp", preservacao: "Preservação", personalizada: "Personalizada" };
 
 export function DialogoExportar() {
@@ -37,6 +56,8 @@ function Conteudo({ fechar }: { fechar: () => void }) {
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState<ErroComando | null>(null);
   const [cap, setCap] = useState<ResumoCapacidades | null>(null);
+  const [testando, setTestando] = useState(false);
+  const [revisado, setRevisado] = useState<string | null>(null);
   // análise desta revisão que falhou (falha passageira): pedida de novo ao abrir
   useEffect(() => useEdicaoStore.getState().analisarDeNovo(), []);
   useEffect(() => {
@@ -73,8 +94,24 @@ function Conteudo({ fechar }: { fechar: () => void }) {
   const ir = (p: Problema) => {
     if (irParaProblema(p)) fechar();
   };
-  const reprodutivel = exp.codificador === "cpu";
-  const gpu = !reprodutivel && cap?.gpu ? cap.gpu : null;
+  // só o júri escolhe: as outras predefinições codificam sempre em CPU, com threads fixas
+  const escolhe = exp.predefinicao === "juri";
+  const reprodutivel = exp.codificador === "cpu" || !escolhe;
+  const cod = cap ? codificadorDe(exp, cap) : null;
+  const testarDeNovo = async () => {
+    setTestando(true);
+    try {
+      setCap(await commands.edicaoCapacidades(true));
+    } catch (x) {
+      setErro(separarErro(x));
+    } finally {
+      setTestando(false);
+    }
+  };
+  const gravarRevisado = () => {
+    if (revisado !== null && revisado.trim() !== exp.revisado_por) mudar("Revisado por", (x) => void (x.revisado_por = revisado.trim()));
+    setRevisado(null);
+  };
   return (
     <Dialog
       open
@@ -94,7 +131,7 @@ function Conteudo({ fechar }: { fechar: () => void }) {
       <div className={styles.campos}>
         <label className={styles.campo}>
           <span className={styles.rotulo}>Predefinição</span>
-          <select className={styles.entrada} value={exp.predefinicao} disabled={so} onChange={(e) => mudar("Predefinição", (x) => void (x.predefinicao = e.target.value as Exportacao["predefinicao"]))}>
+          <select className={styles.entrada} data-campo="predefinicao" value={exp.predefinicao} disabled={so} onChange={(e) => mudar("Predefinição", (x) => void (x.predefinicao = e.target.value as Exportacao["predefinicao"]))}>
             {opcoes.map((o) => (
               <option key={o.v} value={o.v}>
                 {o.r}
@@ -104,15 +141,67 @@ function Conteudo({ fechar }: { fechar: () => void }) {
         </label>
         <div className={styles.reprodutivel}>
           <label className={styles.check}>
-            <input type="checkbox" checked={reprodutivel} disabled={so} onChange={(e) => mudar("Arquivo reprodutível", (x) => void (x.codificador = e.target.checked ? "cpu" : "auto"))} />
+            <input type="checkbox" checked={reprodutivel} disabled={so || !escolhe} onChange={(e) => mudar("Arquivo reprodutível", (x) => void (x.codificador = e.target.checked ? "cpu" : "auto"))} />
             <span>Arquivo reprodutível</span>
           </label>
-          {cap && (
-            <span className={styles.codificador} data-codificador={reprodutivel ? "cpu" : cap.codificador}>
-              {gpu ? <Zap size={13} aria-hidden /> : <Cpu size={13} aria-hidden />}
-              <code>{reprodutivel ? "libx264" : cap.codificador}</code>
+          {cod && (
+            <span className={styles.codificador} data-codificador={cod.marca}>
+              {cod.gpu ? <Zap size={13} aria-hidden /> : <Cpu size={13} aria-hidden />}
+              <code>{cod.nome}</code>
+              <button type="button" className={styles.icone} title="Testar de novo" aria-label="Testar de novo" disabled={testando} onClick={() => void testarDeNovo()}>
+                <RefreshCw size={12} className={testando ? styles.gira : undefined} />
+              </button>
             </span>
           )}
+        </div>
+        <label className={styles.campo}>
+          <span className={styles.rotulo}>Legendas</span>
+          <select className={styles.entrada} data-campo="legendas" value={exp.legendas} disabled={so} onChange={(e) => mudar("Legendas", (x) => void (x.legendas = e.target.value as Exportacao["legendas"]))}>
+            {LEGENDAS.map((o) => (
+              <option key={o.v} value={o.v}>
+                {o.r}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className={styles.campo}>
+          <span className={styles.rotulo}>Revisado por</span>
+          <input
+            className={styles.entrada}
+            data-campo="revisado_por"
+            value={revisado ?? exp.revisado_por}
+            disabled={so}
+            maxLength={120}
+            onChange={(e) => setRevisado(e.target.value)}
+            onBlur={gravarRevisado}
+            onKeyDown={(e) => e.key === "Enter" && gravarRevisado()}
+          />
+        </label>
+        <div className={styles.pacote}>
+          <label className={styles.check}>
+            <input type="checkbox" data-campo="pacote" checked={exp.pacote !== null} disabled={so} onChange={(e) => mudar("Pacote do júri", (x) => void (x.pacote = e.target.checked ? { originais: false } : null))} />
+            <span>Pacote do júri</span>
+          </label>
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              data-campo="originais"
+              checked={exp.pacote?.originais ?? false}
+              disabled={so || exp.pacote === null}
+              onChange={(e) => mudar("Incluir originais", (x) => void (x.pacote = { originais: e.target.checked }))}
+            />
+            <span>Incluir originais</span>
+          </label>
+          <label className={styles.check}>
+            <input
+              type="checkbox"
+              data-campo="pdf"
+              checked={exp.pacote !== null && exp.pdf === "a2_sem_anexos"}
+              disabled={so || exp.pacote === null}
+              onChange={(e) => mudar("PDF sem anexos", (x) => void (x.pdf = e.target.checked ? "a2_sem_anexos" : "a3"))}
+            />
+            <span>PDF sem anexos</span>
+          </label>
         </div>
       </div>
       {(c.erros.length > 0 || n > 0) && (

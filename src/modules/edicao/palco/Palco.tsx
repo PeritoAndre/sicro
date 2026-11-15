@@ -4,10 +4,13 @@
  * marcação, transporte da mídia inteira, zoom de vista, "Quadro final" e "Prévia do render".
  * O tempo do elemento só passa pela porta (`motor/elemento.ts` + `relogioMidia`); busca no meio do quadro, uma por
  * vez, pintura no `seeked` mais um rAF. Toda mudança do documento passa por `alterar`/`iniciarGesto`.
+ * Fase 1 (§7.5, §7.6): clipe com efeito de origem toca o intermediário quando pronto (o original para marcar
+ * `ocultar` e fora da faixa do clipe); anotação só se marca sobre ele. A busca pausada é medida uma vez por mídia e,
+ * lenta (ou com o clipe abaixo de 0,25×), o palco pede o proxy. Ré = modo guiado (elemento parado, quadro por busca).
  */
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type WheelEvent as WE } from "react";
-import { Loader2, VideoOff } from "lucide-react";
+import { CircleAlert, Gauge, Loader2, VideoOff } from "lucide-react";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { commands } from "@core/commands";
 import { mediaSrc } from "@core/mediaSrc";
@@ -18,24 +21,36 @@ import { useRenderStore } from "../store/renderStore";
 import { useFundoStore, fundoPorChave, chaveFundo } from "../store/fundoStore";
 import { acharClipe, acharEfeito, acharMidia, acharRastreio, aplicarMudanca } from "../modelo/projeto";
 import { aDe, caixaNoCanvas, inversa, ponto as aplicar, type Afim } from "../modelo/geometria";
-import { exibido, mapaTrecho, nQuadros, ptsDaTabela, resolver, slotsDoQuadro, tempoDoQuadro, type MapaQuadros } from "../modelo/tempo";
+import { exibido, mapaTrecho, nQuadros, ptsDaTabela, resolver, tempoDoQuadro, type MapaQuadros } from "../modelo/tempo";
+import { tabelaDoClipe } from "../modelo/realce";
 import { avaliar as avaliarCurva } from "../modelo/curva";
 import { relogioMidia, type RelogioMidia } from "./motor/relogioMidia";
 import { elementoDe, type ElementoBusca } from "./motor/elemento";
 import { Buscador } from "./motor/busca";
 import { pintar } from "./desenho/pintar";
 import { cenaDoClipe, duracaoLocal, instanteDaAncora, instanteDaChave, midiaDoClipe, type FontesCena, type Instante } from "./cena";
-import { LADO_MINIMO, aDaGirada, aDaOrigem, alcaDeLugar, alcasDaRegiao, alcasDeCaixa, alcasDePonto, proporcaoDaSaida } from "./alcas";
+import { LADO_MINIMO, aDaGirada, aDaOrigem, alcaDaAncora, alcaDeLugar, alcaDoLugarFixo, alcaNaOrigem, alcasDaRegiao, alcasDeCaixa, alcasDePonto, proporcaoDaSaida } from "./alcas";
 import { bordaArrastada, entradaNoCursor, faixaDoClipe, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor } from "./faixa";
 import { QuadroFiel, type Fiel } from "./quadroFiel";
 import { CamadaEdicao, type Modificadores } from "./camadaEdicao";
 import { Transporte, type EstadoRender, type Fase } from "./Transporte";
-import { atlasDe, garantirMidia, imagemDe, recursoDe, spriteDe, urlDoCache, useRecursos } from "./recursos";
+import { alvosDaMedida, atlasDe, garantirMidia, imagemDe, p50, pedirProxy, precisaDeProxy, previaDaMidia, proxyPedido, recursoDe, registrarBusca, spriteDe, urlDoCache, useRecursos } from "./recursos";
+import { camposPorQuadro, marcaForaDaOrigem, mudaAImagem, previaDoPalco, relogioDaOrigem, slotsDoQuadroDaFonte } from "./origem";
+import { useOrigem } from "../inspetor/origemDoClipe";
+import { useOrigemStore } from "../store/origemStore";
 import { PASSO_ZOOM, VISTA_INICIAL, caixaMedida, contido, deslocar, limitar, mostrado, zoomEm, zoomMaximo, type Tamanho, type Vista } from "./vista";
 import styles from "./Palco.module.css";
 
+/** Tempo parado (ms) depois do último quadro pintado até o palco medir a busca da mídia (§7.6). */
+export const MEDIR_APOS_MS = 800;
+/** Tentativas de medida por mídia (cada busca do perito no meio cancela uma). */
+export const MEDIDAS_MAX = 3;
+
 export interface PalcoApi {
   tocarPausar(): void;
+  // CONTRATO: acréscimo (fecho da Fase 1, O3; contratos-fase1 F2).
+  /** Toca para a frente (1) ou dá ré (−1, modo guiado) até `pausar`; já tocando nesse sentido, nada muda. */
+  tocar(d: 1 | -1): void;
   /** Para de tocar (a Edição saiu da frente). */
   pausar(): void;
   passo(d: 1 | -1): void;
@@ -111,11 +126,12 @@ function primitivasProprias(c: ClipePrincipal, W: number, H: number, fontes: Fon
   return saida;
 }
 
-/** Rastreio que o efeito selecionado usa (destaque, ocultar, holofote). */
+/** Rastreio que o efeito selecionado usa (destaque, lupa, ocultar, holofote, velocidade que acompanha). */
 function rastreioDoEfeito(e: unknown): Id | null {
-  const x = e as { tipo?: string; rastreio?: Id; alvo?: { rastreio?: Id } };
-  if (x.tipo === "destaque") return x.rastreio ?? null;
+  const x = e as { tipo?: string; rastreio?: Id; alvo?: { rastreio?: Id }; onde?: { modo?: string; rastreio?: Id } };
+  if (x.tipo === "destaque" || x.tipo === "lupa") return x.rastreio ?? null;
   if (x.tipo === "ocultar" || x.tipo === "holofote") return x.alvo?.rastreio ?? null;
+  if (x.tipo === "velocidade_exibida" && x.onde?.modo === "segue") return x.onde.rastreio ?? null;
   return null;
 }
 
@@ -125,6 +141,17 @@ function tamanhoDoCanvas(mostradoW: number, mostradoH: number, saida: Tamanho): 
   const k = Math.min(1, saida.w / Math.max(1, mostradoW * dpr), saida.h / Math.max(1, mostradoH * dpr));
   return { w: Math.max(1, Math.round(mostradoW * dpr * k)), h: Math.max(1, Math.round(mostradoH * dpr * k)) };
 }
+
+/** Pede e acompanha o intermediário de origem do clipe do palco, mesmo com a aba Clipe fechada (§7.5). */
+function PedidoDeOrigem({ clipe }: { clipe: ClipePrincipal }) {
+  useOrigem(clipe);
+  return null;
+}
+
+/** Medidas de busca já tentadas por mídia nesta sessão. */
+const tentativas = new Map<string, number>();
+/** Só para testes. */
+export const esquecerMedidas = () => tentativas.clear();
 
 export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const { ferramenta, onMarcado } = props;
@@ -150,20 +177,37 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const rec = recursoDe(sha);
   const info = rec.info;
   const tabela: TabelaQuadros | null = rec.tabela;
-  const previa = info?.previa ?? null;
-  const relogio: RelogioMidia | null = useMemo(() => (previa && tabela && previa.pronta ? relogioMidia(previa, tabela) : null), [previa, tabela]);
+  // ---- o que o elemento toca: o intermediário de origem do clipe (§7.5) ou a prévia da mídia (o proxy pedido, §7.6)
+  const origem = useOrigemStore((s) => (clipe ? s.porClipe[clipe.id] : undefined));
+  const alvoDaMarca = ferramenta?.efeito ?? selecao.efeito;
+  /** A marca em curso mora no espaço ORIGINAL (ocultar): o palco mostra o original. */
+  const marcaNoOriginal = !!doc && !!alvoDaMarca && acharEfeito(doc, alvoDaMarca)?.efeito.tipo === "ocultar";
+  // instante mostrado (o cursor da store: vale já no primeiro desenho do clipe)
+  const tNoClipe = clipe?.tipo === "trecho" ? (cursor.modo === "clipe" && cursor.clipe === clipe.id ? cursor.t : clipe.inicio_s) : 0;
+  const escolhida = previaDoPalco({ origem: clipe?.tipo === "trecho" ? origem : undefined, daMidia: previaDaMidia(rec), t: tNoClipe, original: marcaNoOriginal });
+  const previa = escolhida.previa;
+  const daOrigem = escolhida.daOrigem;
+  const campos: 1 | 2 = clipe && tabela ? camposPorQuadro(tabela, clipe.efeitos) : 1;
+  const relogio: RelogioMidia | null = useMemo(
+    () => (previa && tabela && previa.pronta ? (daOrigem ? relogioDaOrigem(previa, tabela, campos) : relogioMidia(previa, tabela)) : null),
+    [previa?.relativo, previa?.tipo, previa?.pronta, previa?.desloc_s, previa?.de_s, previa?.ate_s, tabela, daOrigem, campos], // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const src = ws && previa ? srcDaPrevia(ws, raizCache, previa) : null;
+  /** Anotação só se marca sobre a imagem do intermediário: o clipe muda a imagem e o palco mostra outra. */
+  const semImagemDaOrigem = !!clipe && mudaAImagem(clipe) && !daOrigem;
   const saida: Tamanho = { w: doc?.saida.largura ?? 1920, h: doc?.saida.altura ?? 1080 };
   const fps = doc?.saida.fps ?? { num: 30, den: 1 };
 
   // ---- linha resolvida e mapa do clipe (slot do programa no cursor) ----
   const linha = useMemo(() => (doc ? resolver(doc, { tabela: (id) => recursoDe(acharMidia(doc, id)?.sha256).tabela }) : null), [doc, versao]); // eslint-disable-line react-hooks/exhaustive-deps
   const resolvido = linha?.clipes.find((x) => x.id === clipe?.id) ?? null;
+  // o mapa é feito na tabela do CLIPE (a de campos no desentrelace por campo), como o resolver e o motor
   const mapa: MapaQuadros | null = useMemo(() => {
     if (!clipe || clipe.tipo !== "trecho" || !tabela) return null;
     try {
-      const [a, b] = faixaDoClipe(clipe, tabela);
-      return mapaTrecho(tabela, a, b, clipe.velocidade, fps);
+      const tab = tabelaDoClipe(tabela, clipe.efeitos);
+      const [a, b] = faixaDoClipe(clipe, tab);
+      return mapaTrecho(tab, a, b, clipe.velocidade, fps);
     } catch {
       return null;
     }
@@ -178,6 +222,9 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const buscadorRef = useRef<Buscador | null>(null);
   /** Quadro mostrado (mídia) ou tempo local (clipe sem fonte). */
   const jRef = useRef<number | null>(null);
+  /** Quadro pedido que ainda não chegou: se o arquivo tocado muda antes (o passo cruzou a faixa do intermediário), o
+   *  elemento novo vai a ELE, não ao que estava na tela. */
+  const pedidoRef = useRef<number | null>(null);
   const tLocalRef = useRef(0);
   const [tocando, setTocando] = useState(false);
   const [mostra, setMostra] = useState<{ t: Seg; j: number | null }>({ t: 0, j: null });
@@ -207,8 +254,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const bloqueado = !clipe || clipe.tipo !== "trecho" || !ref_ || marcarBloqueado(info, tabela) || soLeitura;
 
   // ---- referências vivas para o laço e os eventos ----
-  const vivo = useRef({ doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps });
-  vivo.current = { doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps };
+  const vivo = useRef({ doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps, sha, previa, daOrigem, campos, semImagemDaOrigem });
+  vivo.current = { doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps, sha, previa, daOrigem, campos, semImagemDaOrigem };
 
   const fontes: FontesCena = useMemo(
     () => ({
@@ -233,8 +280,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     const slot = (q: number) => ({ q, programa_s: (q * v.fps.den) / v.fps.num });
     if (c.tipo === "trecho" && v.tabela) {
       const j = jRef.current ?? exibido(v.tabela, c.inicio_s);
-      const local = v.mapa ? slotsDoQuadro(v.mapa, j) : null;
-      const q = ini + (local ? local[0] : j < (v.mapa?.j_in ?? 0) ? 0 : Math.max(0, (v.resolvido?.n_q ?? 1) - 1));
+      const local = v.mapa ? slotsDoQuadroDaFonte(v.mapa, j, v.campos) : null;
+      const q = ini + (local ? local[0] : j * v.campos < (v.mapa?.j_in ?? 0) ? 0 : Math.max(0, (v.resolvido?.n_q ?? 1) - 1));
       return { t: tempoDoQuadro(v.tabela, j), pts: ptsDaTabela(v.tabela)[j] as number, indice: j, ...slot(q) };
     }
     const tl = tLocalRef.current;
@@ -246,9 +293,11 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     return { t: tl, pts: null, indice: null, ...slot(q) };
   }, []);
 
-  /** Marca no quadro mostrado só com a imagem dele na tela (h 17 e 27). */
-  const livre = useCallback((): boolean => {
+  /** Marca no quadro mostrado só com a imagem dele na tela (h 17 e 27). `naOrigem`: marca de anotação (espaço de
+   *  origem do clipe), que só vale sobre a imagem do intermediário (§7.5). */
+  const livre = useCallback((naOrigem = false): boolean => {
     const v = vivo.current;
+    if (naOrigem && v.semImagemDaOrigem) return false;
     return marcaLivre(v.clipe?.tipo ?? null, v.info, v.tabela, buscadorRef.current, jRef.current);
   }, []);
 
@@ -260,7 +309,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     if (c.tipo === "trecho") {
       const j = jRef.current;
       if (j === null || !v.mapa) return null;
-      const l = slotsDoQuadro(v.mapa, j);
+      const l = slotsDoQuadroDaFonte(v.mapa, j, v.campos);
       return l ? v.resolvido.inicio_q + l[0] : null;
     }
     return instante()?.q ?? null;
@@ -268,6 +317,17 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
 
   // ---- pintura ----
   const pintarAgora = useCallback(() => {
+    // medindo a busca o elemento está em outro quadro: o que pede pintura (edição, recurso que chegou) cancela a
+    // medida e volta ao quadro mostrado; a pintura sai quando ele chegar
+    const bus = buscadorRef.current;
+    if (bus?.medindo) {
+      bus.cancelarMedida();
+      if (jRef.current !== null) bus.ir(jRef.current);
+      return;
+    }
+    // a imagem do elemento ainda é a de uma busca da medida: a pintura sai quando ele chegar ao quadro pedido
+    // (trecho tocando para a frente: o laço pinta o quadro que o elemento diz)
+    if (bus?.imagemAlheia && !(tocandoRef.current && sentidoRef.current === 1 && vivo.current.clipe?.tipo === "trecho")) return;
     const cv = canvasRef.current;
     const ctx = cv?.getContext("2d", { alpha: false });
     const v = vivo.current;
@@ -322,7 +382,11 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         cont = caixaNoCanvas(g, regiao);
       } else if (e.tipo === "texto" || e.tipo === "carimbo" || e.tipo === "imagem") {
         novas.push(alcaDeLugar(e));
+      } else if (e.tipo === "regua") {
+        novas.push(...alcaDaAncora(e, A));
       } else {
+        // centro da lupa fixa e lugar da velocidade fixa (canvas); o alvo delas, pelo rastreio
+        if (e.tipo === "lupa" || e.tipo === "velocidade_exibida") novas.push(...alcaDoLugarFixo(e));
         const rid = rastreioDoEfeito(e);
         const r = rid ? acharRastreio(v.doc, rid) : null;
         const q = r ? cenaDoClipe(v.doc, c, inst, origem, fontes, A).quadro : null;
@@ -353,28 +417,82 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     }
     const el = elementoDe(v, relogio);
     elRef.current = el;
-    const b = new Buscador(el, (j) => {
+    const b = new Buscador(el, (j, final) => {
       jRef.current = j;
+      if (final && pedidoRef.current === j) pedidoRef.current = null;
       // o congelado mostra o tempo local dele; o trecho, o meio do quadro
       setMostra((m0) => (vivo.current.clipe?.tipo === "trecho" ? { t: relogio.meio(j), j } : { t: m0.t, j }));
       pintarAgora();
+      if (final) agendarMedida();
     });
     buscadorRef.current = b;
     const pronto = () => {
       const c = vivo.current.clipe;
       const tab = vivo.current.tabela;
       if (!c || !tab) return;
-      const alvo = c.tipo === "congelar" ? exibido(tab, c.instante_s) : jRef.current ?? exibido(tab, cursorT.current ?? (c.tipo === "trecho" ? c.inicio_s : 0));
+      const alvo = c.tipo === "congelar" ? exibido(tab, c.instante_s) : pedidoRef.current ?? jRef.current ?? exibido(tab, cursorT.current ?? (c.tipo === "trecho" ? c.inicio_s : 0));
       b.ir(alvo);
     };
     v.addEventListener("loadeddata", pronto);
     if (v.readyState >= 2) pronto();
     return () => {
       v.removeEventListener("loadeddata", pronto);
+      desmarcarMedida();
       b.fechar();
       if (buscadorRef.current === b) buscadorRef.current = null;
+      // o arquivo tocado mudou (proxy ou intermediário que ficou pronto) com o clipe tocando: para no quadro mostrado
+      if (tocandoRef.current && vivo.current.clipe?.tipo === "trecho") {
+        if (laco.current !== null) cancelAnimationFrame(laco.current);
+        laco.current = null;
+        tocandoRef.current = false;
+        setTocando(false);
+        el.pausar();
+      }
     };
-  }, [relogio, src, pintarAgora]);
+  }, [relogio, src, pintarAgora]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- busca medida (§7.6): 3 buscas pausadas com a mídia parada; p50 lento pede o proxy ----
+  const relogioDaMedida = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Ponteiro sobre o palco: quem vai marcar ou arrastar uma alça não pode achar o elemento em outro quadro. */
+  const sobreRef = useRef(false);
+  const desmarcarMedida = useCallback(() => {
+    if (relogioDaMedida.current !== null) clearTimeout(relogioDaMedida.current);
+    relogioDaMedida.current = null;
+  }, []);
+  const agendarMedida = useCallback(() => {
+    desmarcarMedida();
+    const v = vivo.current;
+    if (!v.ws || !v.sha || recursoDe(v.sha).busca_p50_ms !== undefined) return;
+    relogioDaMedida.current = setTimeout(() => {
+      relogioDaMedida.current = null;
+      const x = vivo.current;
+      const b = buscadorRef.current;
+      const [ws0, sha0] = [x.ws, x.sha];
+      if (!b || !ws0 || !sha0 || !x.tabela || tocandoRef.current || b.alvo !== null) return;
+      if (recursoDe(sha0).busca_p50_ms !== undefined) return;
+      // marcação em curso ou prestes (ferramenta ligada, ponteiro no palco): durante a medida ela seria recusada; a
+      // medida fica para depois
+      if (x.ferramenta || sobreRef.current) return agendarMedida();
+      // só o original e a cópia se medem; com o proxy já na fila de fundo não há o que decidir
+      const mede = !x.daOrigem && (x.previa?.tipo === "original" || x.previa?.tipo === "copia") && !fundoPorChave(useFundoStore.getState().tarefas, chaveFundo("proxy", sha0));
+      const alvos = mede ? alvosDaMedida(x.tabela, b.ultimo) : [];
+      const n = (tentativas.get(sha0) ?? 0) + 1;
+      if (alvos.length < 3 || n > MEDIDAS_MAX) return void (mede && registrarBusca(ws0, sha0, null));
+      tentativas.set(sha0, n);
+      void b.medir(alvos).then((tempos) => {
+        if (tempos && tempos.length > 0) registrarBusca(ws0, sha0, p50(tempos));
+      });
+    }, MEDIR_APOS_MS);
+  }, [desmarcarMedida]);
+  useEffect(() => desmarcarMedida, [desmarcarMedida]);
+
+  // o palco pede o proxy: busca medida lenta, ou clipe com rampa, ré ou abaixo de 0,25× (§7.6)
+  const buscaMs = rec.busca_p50_ms;
+  const pedeProxy = !!clipe && clipe.tipo === "trecho" && !!sha && !!tabela && precisaDeProxy(clipe, buscaMs);
+  useEffect(() => {
+    if (!ws || !clipe || !sha || !pedeProxy || proxyPedido(sha)) return;
+    void pedirProxy(ws, clipe.id, sha, buscaMs ?? null);
+  }, [ws, clipe?.id, sha, pedeProxy, buscaMs]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const cursorT = useRef<number | null>(null);
   cursorT.current = cursor.modo === "clipe" ? cursor.t : null;
@@ -407,6 +525,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       if (!v.tabela) return;
       const k = Math.min(Math.max(j, 0), nQuadros(v.tabela) - 1);
       const t = meioDoQuadro(v.tabela, k);
+      pedidoRef.current = k;
       postar(t);
       const b = buscadorRef.current;
       // o número do quadro acompanha a IMAGEM: com busca em curso só muda quando o quadro chega
@@ -418,7 +537,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       }
       const q = (() => {
         if (!v.mapa || !v.resolvido) return null;
-        const l = slotsDoQuadro(v.mapa, k);
+        const l = slotsDoQuadroDaFonte(v.mapa, k, v.campos);
         return l ? v.resolvido.inicio_q + l[0] : null;
       })();
       if (passo) fielRef.current?.passo(q);
@@ -445,6 +564,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   useEffect(() => {
     const c = clipe;
     jRef.current = null;
+    pedidoRef.current = null;
     tLocalRef.current = 0;
     setRender(null);
     setRenderFalhou(false);
@@ -504,19 +624,95 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     const el = elRef.current;
     if (el && v.tabela && v.clipe?.tipo === "trecho") {
       el.pausar();
-      // para no quadro exibido, no meio dele
+      // para no quadro exibido, no meio dele (na ré, o último pedido: o elemento já está parado nele)
       irQuadro(el.quadro());
     } else {
       irLocal(tLocalRef.current);
     }
   }, [irQuadro, irLocal]);
 
+  /** Sentido em que o palco anda agora (1 = tocando, −1 = ré guiada). */
+  const sentidoRef = useRef<1 | -1>(1);
+
+  /** Ré (modo guiado, §7.3): elemento parado; o palco pede por busca o quadro que o relógio de parede manda, um
+   *  pedido por vez (busca lenta pula quadros, nunca atrasa o relógio). Para no começo do clipe (ou da mídia). */
+  const darRe = useCallback(() => {
+    const v = vivo.current;
+    const c = v.clipe;
+    if (!c) return;
+    if (tocandoRef.current) parar();
+    desmarcarMedida();
+    fielRef.current?.tocou();
+    sentidoRef.current = -1;
+    tocandoRef.current = true;
+    setTocando(true);
+    const t0 = performance.now();
+    let ultimoPost = t0;
+    if (c.tipo === "trecho") {
+      const bus = buscadorRef.current;
+      const tab = v.tabela;
+      if (!bus || !tab) {
+        tocandoRef.current = false;
+        setTocando(false);
+        return;
+      }
+      const [a] = faixaDoClipe(c, tab);
+      const j0 = jRef.current ?? a;
+      // dentro do clipe: para no primeiro quadro dele; antes dele: no começo da mídia
+      const limite = j0 >= a ? a : 0;
+      const tDe = tempoDoQuadro(tab, j0);
+      let pedido = j0;
+      const passo = () => {
+        if (!tocandoRef.current) return;
+        const agora = performance.now();
+        const j = Math.max(limite, exibido(tab, tDe - (agora - t0) / 1000));
+        if (j !== pedido) {
+          pedido = j;
+          bus.ir(j);
+        }
+        if (agora - ultimoPost >= 250 && jRef.current !== null) {
+          ultimoPost = agora;
+          postar(meioDoQuadro(tab, jRef.current));
+        }
+        if (j <= limite) {
+          tocandoRef.current = false;
+          setTocando(false);
+          irQuadro(limite);
+          return;
+        }
+        laco.current = requestAnimationFrame(passo);
+      };
+      laco.current = requestAnimationFrame(passo);
+      return;
+    }
+    // sem fonte: relógio de parede, para trás
+    const de0 = tLocalRef.current;
+    const passo = () => {
+      if (!tocandoRef.current) return;
+      const t = de0 - (performance.now() - t0) / 1000;
+      tLocalRef.current = Math.max(t, 0);
+      pintarAgora();
+      if (performance.now() - ultimoPost >= 250) {
+        ultimoPost = performance.now();
+        setMostra({ t: tLocalRef.current, j: null });
+        postar(tLocalRef.current);
+      }
+      if (t <= 0) return parar();
+      laco.current = requestAnimationFrame(passo);
+    };
+    laco.current = requestAnimationFrame(passo);
+  }, [parar, pintarAgora, postar, irQuadro, desmarcarMedida]);
+
   const tocarPausar = useCallback(() => {
     if (tocandoRef.current) return parar();
     const v = vivo.current;
     const c = v.clipe;
     if (!c) return;
+    desmarcarMedida();
     fielRef.current?.tocou();
+    // andando, vale o quadro que o elemento mostra: o passo pedido antes fica para trás
+    pedidoRef.current = null;
+    sentidoRef.current = 1;
     tocandoRef.current = true;
     setTocando(true);
     let ultimoPost = performance.now();
@@ -527,6 +723,12 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         tocandoRef.current = false;
         setTocando(false);
         return;
+      }
+      // a medida da busca deixou o elemento em outro quadro: volta ao mostrado antes de tocar
+      const bus = buscadorRef.current;
+      if (bus?.medindo) {
+        bus.cancelarMedida();
+        if (jRef.current !== null) el.buscar(jRef.current);
       }
       const [a, b] = faixaDoClipe(c, tab);
       const j0 = jRef.current ?? a;
@@ -548,8 +750,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
           setMostra({ t, j });
           postar(t);
         }
-        // o elemento parou sozinho (fim do arquivo, falha de leitura): o transporte para junto
-        if (el.pausado()) return parar();
+        // fim do clipe (o arquivo intermediário acaba ali e para sozinho: vale o limite, não o quadro seguinte)
         if (j >= limite) {
           el.pausar();
           tocandoRef.current = false;
@@ -557,6 +758,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
           irQuadro(limite - 1);
           return;
         }
+        // o elemento parou sozinho (fim do arquivo, falha de leitura): o transporte para junto
+        if (el.pausado()) return parar();
         laco.current = requestAnimationFrame(passo);
       };
       laco.current = requestAnimationFrame(passo);
@@ -580,7 +783,18 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       laco.current = requestAnimationFrame(passo);
     };
     laco.current = requestAnimationFrame(passo);
-  }, [parar, pintarAgora, postar, irQuadro]);
+  }, [parar, pintarAgora, postar, irQuadro, desmarcarMedida]);
+
+  /** `PalcoApi.tocar`: anda no sentido pedido; já andando nele, nada muda; no outro, troca. */
+  const tocarNoSentido = useCallback(
+    (d: 1 | -1) => {
+      if (tocandoRef.current && sentidoRef.current === d) return;
+      if (tocandoRef.current) parar();
+      if (d === 1) tocarPausar();
+      else darRe();
+    },
+    [parar, tocarPausar, darRe],
+  );
 
   useEffect(() => () => {
     if (laco.current !== null) cancelAnimationFrame(laco.current);
@@ -593,8 +807,10 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   // ---- transporte ----
   const faixaT: [Seg, Seg] | null = clipe && clipe.tipo === "trecho" ? [clipe.inicio_s, clipe.fim_s] : null;
   // trecho: a mídia inteira; sem fonte (e congelado): o tempo local do clipe
-  const de = clipe?.tipo === "trecho" ? (previa?.de_s ?? info?.de_s ?? clipe.inicio_s) : 0;
-  const ate = clipe?.tipo === "trecho" ? (previa?.ate_s ?? info?.ate_s ?? clipe.fim_s) : clipe ? duracaoLocal(clipe) : 1;
+  // (a faixa do intermediário é só a do clipe: com ele no palco vale a da mídia)
+  const inteira = daOrigem ? info : (previa ?? info);
+  const de = clipe?.tipo === "trecho" ? (inteira?.de_s ?? clipe.inicio_s) : 0;
+  const ate = clipe?.tipo === "trecho" ? (inteira?.ate_s ?? clipe.fim_s) : clipe ? duracaoLocal(clipe) : 1;
 
   const buscarEm = useCallback(
     (t: Seg, fase: Fase) => {
@@ -656,7 +872,9 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   // ---- alças e ferramenta ----
   const onArrasto = useCallback((a: Alca, de0: Ponto, para: Ponto, mod: Modificadores, fase: Fase) => {
     if (fase === "inicio") {
-      if (!livre()) return;
+      // alça de lugar ou de centro mora no canvas e a do `ocultar`, no original: as outras, no espaço de origem
+      const naOrigem = alcaNaOrigem(a) && vivo.current.efeitoSel?.efeito.tipo !== "ocultar";
+      if (!livre(naOrigem)) return;
       gestoRef.current = { g: useEdicaoStore.getState().iniciarGesto("Marcar") };
     }
     const g = gestoRef.current;
@@ -678,7 +896,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       const f = vivo.current.ferramenta;
       const c = vivo.current.clipe;
       const inst = instante();
-      if (!f || !c || !inst || !livre()) return;
+      const doc0 = vivo.current.doc;
+      if (!f || !c || !inst || !doc0 || !livre(!marcaForaDaOrigem(doc0, f))) return;
       // o par (t, pts) é o da base de quem recebe a marca (âncora do rastreio ou chave do efeito)
       const r0 = f.rastreio && vivo.current.doc ? acharRastreio(vivo.current.doc, f.rastreio) : null;
       const em = r0 ? instanteDaAncora(c, r0.base, inst) : instanteDaChave(c, inst);
@@ -773,6 +992,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     ref,
     (): PalcoApi => ({
       tocarPausar,
+      tocar: tocarNoSentido,
       pausar: () => {
         if (tocandoRef.current) parar();
       },
@@ -814,7 +1034,9 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       instante: (rastreio) => {
         const i = instante();
         const v = vivo.current;
-        if (!i || !v.clipe || !livre()) return null;
+        // Enter com a ferramenta ligada: a mesma regra do clique (anotação só sobre o intermediário)
+        const naOrigem = !!v.ferramenta && !!v.doc && !marcaForaDaOrigem(v.doc, v.ferramenta);
+        if (!i || !v.clipe || !livre(naOrigem)) return null;
         const r = rastreio && v.doc ? acharRastreio(v.doc, rastreio) : null;
         return r ? instanteDaAncora(v.clipe, r.base, i) : instanteDaChave(v.clipe, i);
       },
@@ -824,11 +1046,15 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         else irLocal(t);
       },
     }),
-    [tocarPausar, parar, irQuadro, irLocal, marcarPonta, caixa, img, zMax, slotDoCursor, previaRender, render, instante, livre],
+    [tocarPausar, tocarNoSentido, parar, irQuadro, irLocal, marcarPonta, caixa, img, zMax, slotDoCursor, previaRender, render, instante, livre],
   );
 
   // ---- estado da mídia (ícones, sem texto) ----
   const fundoDaMidia = sha && previa && !previa.pronta ? fundoPorChave(fundo, chaveFundo(previa.tipo === "proxy" ? "proxy" : "copia_previa", sha)) : null;
+  // intermediário do clipe em preparo ou que falhou, e proxy em uso: ícone no canto, sem texto (contratos-fase1 (f))
+  const origemFazendo = !!clipe && mudaAImagem(clipe) && origem?.tipo === "fazendo" ? origem : null;
+  const origemFalhou = !!clipe && mudaAImagem(clipe) && origem?.tipo === "falhou" ? origem : null;
+  const proxyEmUso = !!src && previa?.tipo === "proxy";
   const falhouElemento = !!src && falhaSrc === src;
   // cópia ou proxy que falhou na fila de fundo: o ícone de vídeo ausente, não a espera sem fim
   const previaFalhou = fundoDaMidia?.estado.tipo === "falhou";
@@ -839,7 +1065,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
 
   return (
     <div className={styles.palco} data-palco="">
-      <div ref={caixaRef} className={styles.caixa} onWheel={onRoda} data-caixa="">
+      <div ref={caixaRef} className={styles.caixa} onWheel={onRoda} onPointerEnter={() => void (sobreRef.current = true)} onPointerLeave={() => void (sobreRef.current = false)} data-caixa="">
         <canvas
           ref={canvasRef}
           width={tamCanvas.w}
@@ -874,6 +1100,34 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
             <VideoOff size={22} aria-hidden />
           </span>
         )}
+        {(origemFazendo || origemFalhou || proxyEmUso || rec.erroDoProxy) && (
+          <span className={styles.cantos}>
+            {origemFazendo && (
+              <span className={styles.canto} data-estado="origem-fazendo">
+                <Loader2 size={14} className={styles.gira} aria-hidden />
+                <span className={styles.trilho}>
+                  <span className={styles.barraFundo} style={{ width: `${Math.round(origemFazendo.feito * 100)}%` }} />
+                </span>
+              </span>
+            )}
+            {origemFalhou && (
+              <span className={styles.canto} data-estado="origem-falhou" title={origemFalhou.erro.frase || origemFalhou.erro.codigo || undefined}>
+                <CircleAlert size={14} aria-hidden />
+              </span>
+            )}
+            {proxyEmUso && (
+              <span className={styles.canto} data-estado="proxy">
+                <Gauge size={14} aria-hidden />
+              </span>
+            )}
+            {rec.erroDoProxy && (
+              <span className={styles.canto} data-estado="proxy-falhou" title={rec.erroDoProxy.frase || rec.erroDoProxy.codigo || undefined}>
+                <CircleAlert size={14} aria-hidden />
+              </span>
+            )}
+          </span>
+        )}
+        {clipe && <PedidoDeOrigem key={clipe.id} clipe={clipe} />}
         {/* o elemento fica dentro do palco: o WebKit pode pausar vídeo fora da área visível */}
         {src && <video ref={videoRef} key={src} src={src} className={styles.elemento} preload="auto" playsInline muted={props.mudo ?? false} onError={() => setFalhaSrc(src)} data-elemento="" />}
       </div>
@@ -881,6 +1135,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
         de={de}
         ate={ate}
         faixa={faixaT}
+        sha256={sha}
         cursor={mostra.t}
         quadro={mostra.j}
         base={clipe?.tipo === "trecho" ? "fonte" : "programa"}

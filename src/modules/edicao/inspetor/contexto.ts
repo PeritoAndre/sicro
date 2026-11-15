@@ -12,6 +12,8 @@ import { chaveFundo, fundoPorChave, useFundoStore } from "../store/fundoStore";
 import { acharMidia } from "../modelo/projeto";
 import { aplicarMarcado, tempoNoClipe, type ClipeQualquer } from "./acoes";
 import { useInspetorUi, type Marcado } from "./ui";
+import { useOrigemStore } from "../store/origemStore";
+import { marcacaoParada } from "../palco/origem";
 
 type Lido<T> = { valor: T | null; promessa: Promise<T | null> | null };
 const tabelas = new Map<string, Lido<TabelaQuadros>>();
@@ -109,11 +111,14 @@ export function useContextoClipe(clipe: ClipeQualquer | null, info: MidiaInfo | 
   }, [clipe, doc, ws, linha, info]);
 }
 
-/** Liga a ferramenta do palco; o que for marcado chega em `aoMarcar`. */
+/** Liga a ferramenta do palco; o que for marcado chega em `aoMarcar`. Anotação de clipe com o intermediário de
+ *  origem ainda em preparo não liga (§7.5): o palco não tem a imagem do espaço marcado. */
 export function pedirMarcacao(p: PedidoMarcacao, aoMarcar: Marcado, chave?: string): void {
   const ui = useInspetorUi.getState();
   // o mesmo botão de novo desliga
   if (chave && ui.chave === chave) return ui.cancelarMarcacao();
+  const doc = useEdicaoStore.getState().doc;
+  if (doc && marcacaoParada(doc, p, useOrigemStore.getState().porClipe)) return;
   ui.pedir(p, aoMarcar, chave);
 }
 

@@ -19,6 +19,7 @@ const cmd = vi.hoisted(() => ({
   edicaoConferir: vi.fn(),
   edicaoSaidas: vi.fn(),
   edicaoSaidaExcluir: vi.fn(),
+  edicaoRefazer: vi.fn(),
   revealPathInExplorer: vi.fn(),
 }));
 vi.mock("@core/commands", () => ({ commands: cmd }));
@@ -29,12 +30,15 @@ vi.mock("@components/Dialog/ask", () => ask);
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
 import { useInspetorUi } from "../inspetor/ui";
-import { botao, clicar, desmontarTudo, esperar, lerFixture, montar, textosVisiveis } from "../inspetor/testeTela";
+import { botao, clicar, desmontarTudo, digitar, escolher, esperar, lerFixture, montar, sair, textosVisiveis } from "../inspetor/testeTela";
 import { textoPermitido } from "../inspetor/rotulos.teste";
 import { abrirExportar, classificar, contarAvisos, faltaCiencia, podeExportar, rotuloExportar, useExportarUi } from "./avisos";
-import { DialogoExportar } from "./DialogoExportar";
+import { codificadorDe, DialogoExportar } from "./DialogoExportar";
 import { Fila, rotuloEstado } from "./Fila";
-import { estadoDaSaida } from "./Saidas";
+import { conferenciaEmCurso, conferirSaida, estadoDaSaida, rotuloComparacao } from "./Saidas";
+import { useToastStore } from "@components/toast/toastStore";
+
+const toasts = () => useToastStore.getState().toasts;
 
 const WS = "/casos/c1";
 const st = () => useEdicaoStore.getState();
@@ -65,6 +69,7 @@ beforeEach(async () => {
   cmd.edicaoCancelar.mockResolvedValue(undefined);
   cmd.edicaoConferir.mockResolvedValue({});
   cmd.edicaoSaidaExcluir.mockResolvedValue(undefined);
+  cmd.edicaoRefazer.mockResolvedValue("t-refazer");
   const projeto = lerFixture<ProjetoEdicao>("projeto-do-store.json");
   const r: ProjetoAberto = { projeto, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "/cache/c1" };
   cmd.edicaoAbrir.mockResolvedValueOnce(r);
@@ -223,11 +228,104 @@ describe("Exportar", () => {
     expect(exportarBtn().disabled).toBe(true);
   });
 
-  it("Predefinição só Júri nesta fase; Arquivo reprodutível = um passo; erro da fila aparece", async () => {
+  it("Predefinição: Júri, WhatsApp e Preservação; só o júri escolhe o codificador", async () => {
     await montar(<DialogoExportar />);
     await esperar(() => abrirExportar());
     await comAnalise([]);
-    expect([...corpo().querySelectorAll("select option")].map((o) => o.textContent)).toEqual(["Júri"]);
+    const predef = campoDe<HTMLSelectElement>("predefinicao");
+    const reprodutivel = () => [...corpo().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((x) => x.parentElement?.textContent === "Arquivo reprodutível")!;
+    const marca = () => corpo().querySelector("[data-codificador]");
+    expect([...predef.options].map((o) => [o.value, o.textContent])).toEqual([
+      ["juri", "Júri"],
+      ["whatsapp", "WhatsApp"],
+      ["preservacao", "Preservação"],
+    ]);
+    expect([marca()?.getAttribute("data-codificador"), marca()?.querySelector("code")?.textContent, reprodutivel().disabled]).toEqual(["h264_nvenc", "h264_nvenc", false]);
+    const n = st().passado.length;
+    await escolher(predef, "whatsapp");
+    expect([st().doc!.saida.exportacao.predefinicao, st().passado.length, st().passado.at(-1)?.rotulo]).toEqual(["whatsapp", n + 1, "Predefinição"]);
+    // WhatsApp e Preservação codificam sempre em CPU: a marca não é escolha
+    expect([marca()?.getAttribute("data-codificador"), marca()?.querySelector("code")?.textContent]).toEqual(["cpu", "libx264"]);
+    expect([reprodutivel().checked, reprodutivel().disabled, st().doc!.saida.exportacao.codificador]).toEqual([true, true, "auto"]);
+    await escolher(predef, "preservacao");
+    expect([marca()?.getAttribute("data-codificador"), marca()?.querySelector("code")?.textContent, reprodutivel().disabled]).toEqual(["ffv1", "ffv1", true]);
+    semFrase();
+    await comAnalise([]);
+    await clicar(exportarBtn());
+    expect((cmd.edicaoEnfileirar.mock.calls[0]![2] as { exportacao: { predefinicao: string } }).exportacao.predefinicao).toBe("preservacao");
+    // a personalizada não é oferecida; a do documento aparece e mostra o codificador dela
+    const cap = await cmd.edicaoCapacidades.mock.results[0]!.value;
+    const e = st().doc!.saida.exportacao;
+    expect(codificadorDe({ ...e, predefinicao: "personalizada", personalizada: { codec: "hevc", conteiner: "mkv", qualidade: 20, altura_max: null, audio_kbps: 160 } }, cap)).toEqual({ nome: "libx265", marca: "cpu", gpu: false });
+    expect(codificadorDe({ ...e, predefinicao: "juri", codificador: "cpu" }, cap)).toEqual({ nome: "libx264", marca: "cpu", gpu: false });
+  });
+
+  it("Legendas, Pacote do júri, Incluir originais, PDF sem anexos e Revisado por gravam na exportação e vão para a fila", async () => {
+    await montar(<DialogoExportar />);
+    await esperar(() => abrirExportar());
+    await comAnalise([]);
+    const exp = () => st().doc!.saida.exportacao;
+    const [pacote, originais, pdf] = (["pacote", "originais", "pdf"] as const).map((c) => () => campoDe<HTMLInputElement>(c));
+    expect([...campoDe<HTMLSelectElement>("legendas").options].map((o) => [o.value, o.textContent])).toEqual([
+      ["nenhuma", "Não"],
+      ["queimar", "Na imagem"],
+      ["arquivo", "Arquivo"],
+      ["ambos", "As duas"],
+    ]);
+    // sem pacote, as opções dele não mexem
+    expect([exp().pacote, pacote!().checked, originais!().disabled, pdf!().disabled]).toEqual([null, false, true, true]);
+    const n = st().passado.length;
+    await escolher(campoDe<HTMLSelectElement>("legendas"), "ambos");
+    await clicar(pacote!());
+    expect([exp().pacote, originais!().disabled, originais!().checked, pdf!().checked]).toEqual([{ originais: false }, false, false, false]);
+    await clicar(originais!());
+    await clicar(pdf!());
+    const revisado = campoDe<HTMLInputElement>("revisado_por");
+    await digitar(revisado, "  Dra. Lia ");
+    // digitar não grava a cada tecla: um passo só, ao sair do campo
+    expect(exp().revisado_por).toBe("");
+    await sair(revisado);
+    expect(exp()).toMatchObject({ legendas: "ambos", pacote: { originais: true }, pdf: "a2_sem_anexos", revisado_por: "Dra. Lia" });
+    expect(st().passado.slice(n).map((x) => x.rotulo)).toEqual(["Legendas", "Pacote do júri", "Incluir originais", "PDF sem anexos", "Revisado por"]);
+    semFrase();
+    await comAnalise([]);
+    await clicar(exportarBtn());
+    expect(cmd.edicaoEnfileirar.mock.calls[0]![2]).toEqual({ tipo: "final", exportacao: exp() });
+    expect((cmd.edicaoEnfileirar.mock.calls[0]![2] as { exportacao: unknown }).exportacao).toMatchObject({ pacote: { originais: true }, pdf: "a2_sem_anexos", revisado_por: "Dra. Lia", legendas: "ambos" });
+  });
+
+  it("desligar o Pacote do júri tira os originais; o PDF sem anexos deixa de valer", async () => {
+    await montar(<DialogoExportar />);
+    await esperar(() => abrirExportar());
+    await comAnalise([]);
+    await clicar(campoDe<HTMLInputElement>("pacote"));
+    await clicar(campoDe<HTMLInputElement>("originais"));
+    await clicar(campoDe<HTMLInputElement>("pdf"));
+    await clicar(campoDe<HTMLInputElement>("pacote"));
+    expect(st().doc!.saida.exportacao.pacote).toBeNull();
+    expect([campoDe<HTMLInputElement>("originais").checked, campoDe<HTMLInputElement>("pdf").checked, campoDe<HTMLInputElement>("pdf").disabled]).toEqual([false, false, true]);
+  });
+
+  it("Testar de novo refaz a sonda e a marca do codificador muda", async () => {
+    await montar(<DialogoExportar />);
+    await esperar(() => abrirExportar());
+    await comAnalise([]);
+    expect(cmd.edicaoCapacidades).toHaveBeenLastCalledWith(false);
+    const cap = await cmd.edicaoCapacidades.mock.results[0]!.value;
+    cmd.edicaoCapacidades.mockResolvedValueOnce({ ...cap, codificador: "libx264", gpu: null });
+    await clicar(corpo().querySelector<HTMLButtonElement>('[aria-label="Testar de novo"]')!);
+    expect(cmd.edicaoCapacidades).toHaveBeenLastCalledWith(true);
+    expect(corpo().querySelector("[data-codificador]")?.getAttribute("data-codificador")).toBe("libx264");
+    // a sonda que falha mostra o erro pelo mecanismo do diálogo
+    cmd.edicaoCapacidades.mockRejectedValueOnce({ kind: "validation", message: "validation error: filtro_ausente: Filtro ausente no ffmpeg" });
+    await clicar(corpo().querySelector<HTMLButtonElement>('[aria-label="Testar de novo"]')!);
+    expect(corpo().textContent).toContain("Filtro ausente no ffmpeg");
+  });
+
+  it("Arquivo reprodutível = um passo; erro da fila aparece", async () => {
+    await montar(<DialogoExportar />);
+    await esperar(() => abrirExportar());
+    await comAnalise([]);
     expect(corpo().querySelector("[data-codificador]")?.getAttribute("data-codificador")).toBe("h264_nvenc");
     const n = st().passado.length;
     await clicar([...corpo().querySelectorAll<HTMLInputElement>('input[type="checkbox"]')].find((x) => x.parentElement?.textContent === "Arquivo reprodutível")!);
@@ -243,6 +341,12 @@ describe("Exportar", () => {
     expect(useExportarUi.getState().dialogo).toBe(false);
   });
 });
+
+function campoDe<T extends HTMLElement>(nome: string): T {
+  const el = corpo().querySelector<T>(`[data-campo="${nome}"]`);
+  if (!el) throw new Error(`campo ${nome}`);
+  return el;
+}
 
 const tarefa = (id: string, estado: Tarefa["estado"]): Tarefa => ({ id, tipo: "exportar", caso: "c1", projeto_id: "p", titulo: `Edição ${id}`, estado, criado_em: "2026-11-14T10:00:00Z" });
 const saida = (id: string, x: Partial<SaidaRegistrada>): SaidaRegistrada => ({
@@ -335,5 +439,80 @@ describe("Fila e Saídas", () => {
     await esperar(() => new Promise((r) => setTimeout(r, 0)));
     expect(cmd.edicaoSaidaExcluir).toHaveBeenCalledWith(WS, "s1");
     expect(estadoDaSaida(saida("x", { exige_conferencia: true }))).toBe("nao_conferida");
+  });
+
+  it("Refazer e comparar: pede a refeita, mostra a fila; a refeita traz o resultado com o rótulo do §8.6", async () => {
+    cmd.edicaoSaidas.mockResolvedValue([
+      saida("s1", { estado: "a_conferir", exige_conferencia: true }),
+      saida("r1", { refeita_de: "s0", comparacao: { tipo: "igual" } }),
+      saida("r2", { refeita_de: "s0", comparacao: { tipo: "conteudo_igual", diferencas: ["codificador"] } }),
+      saida("r3", { refeita_de: "s0", comparacao: { tipo: "diferente", primeiro_q: 2172, tempo: 72.4 } }),
+      saida("r4", { refeita_de: "s0", comparacao: { tipo: "nao_comparavel", motivo: "fonte_danificada" } }),
+      saida("s0", {}),
+    ]);
+    await montar(<Fila />);
+    await clicar(corpo().querySelector<HTMLButtonElement>('[data-acao="fila"]')!);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const linhas = [...corpo().querySelectorAll<HTMLElement>("[data-saidas] > li")];
+    const resultado = (l: HTMLElement) => l.querySelector<HTMLElement>("[data-comparacao]");
+    expect(linhas.map((l) => [resultado(l)?.dataset.comparacao ?? null, resultado(l)?.textContent ?? null])).toEqual([
+      [null, null],
+      ["igual", "Igual"],
+      ["conteudo_igual", "Conteúdo igual, arquivo diferente"],
+      ["diferente", "Diferente a partir de 00:01:12,400"],
+      ["nao_comparavel", "Não comparável"],
+      [null, null],
+    ]);
+    semFrase();
+    // saída a conferir ainda não tem relatório: não se refaz
+    expect(linhas.map((l) => l.querySelector('[data-acao="refazer"]') !== null)).toEqual([false, true, true, true, true, true]);
+    const mostrarFila = useExportarUi.getState().mostrarFila;
+    const mostrou = vi.fn(mostrarFila);
+    await esperar(() => useExportarUi.setState({ mostrarFila: mostrou }));
+    try {
+      await clicar(botao(linhas[5]!, "Refazer e comparar"));
+    } finally {
+      await esperar(() => useExportarUi.setState({ mostrarFila }));
+    }
+    expect(cmd.edicaoRefazer.mock.calls).toEqual([[WS, "s0"]]);
+    expect(mostrou.mock.calls).toEqual([[true]]);
+    // tarefa de refazer aparece na fila como as exportações
+    await esperar(() => useRenderStore.setState({ tarefas: [{ ...tarefa("t9", { tipo: "rodando", fase: { tipo: "pacote" }, feito_q: 9, total_q: 9, qps: 0, restante_s: 0 }), tipo: "refazer" }] }));
+    expect(corpo().querySelector('[data-estado="rodando"]')?.textContent).toContain("Pacote do júri");
+    expect([rotuloComparacao({ tipo: "diferente", primeiro_q: 0, tempo: 0 }), rotuloEstado({ tipo: "rodando", fase: { tipo: "relatorio" }, feito_q: 0, total_q: 0, qps: 0, restante_s: 0 })]).toEqual(["Diferente a partir de 00:00:00,000", "Relatório"]);
+  });
+
+  it("conferência em curso: os dois botões desligam e o segundo pedido não sai (o pacote é montado nela)", async () => {
+    cmd.edicaoSaidas.mockResolvedValue([saida("s1", { estado: "a_conferir", exige_conferencia: true })]);
+    let responder: (v: unknown) => void = () => {};
+    cmd.edicaoConferir.mockReturnValueOnce(new Promise((r) => (responder = r)));
+    await montar(<Fila />);
+    await clicar(corpo().querySelector<HTMLButtonElement>('[data-acao="fila"]')!);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const linha = () => corpo().querySelector<HTMLElement>("[data-saidas] > li")!;
+    const botoes = () => [botao(linha(), "Conferido"), botao(linha(), "Concluir sem conferir")].map((b) => (b as HTMLButtonElement).disabled);
+    expect(botoes()).toEqual([false, false]);
+    await clicar(botao(linha(), "Concluir sem conferir"));
+    expect([botoes(), conferenciaEmCurso("s1"), linha().querySelector("[data-conferindo]") !== null]).toEqual([[true, true], true, true]);
+    await esperar(() => conferirSaida(WS, "s1", true));
+    expect(cmd.edicaoConferir.mock.calls).toEqual([[WS, "s1", false]]);
+    await esperar(async () => {
+      responder({});
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect([botoes(), conferenciaEmCurso("s1")]).toEqual([[false, false], false]);
+    semFrase();
+  });
+
+  it("Refazer e comparar que o backend recusa (retrato alterado) não abre a fila", async () => {
+    cmd.edicaoSaidas.mockResolvedValue([saida("s0", {})]);
+    cmd.edicaoRefazer.mockRejectedValueOnce({ kind: "validation", message: "validation error: retrato_divergente: Retrato da exportação alterado" });
+    await montar(<Fila />);
+    await clicar(corpo().querySelector<HTMLButtonElement>('[data-acao="fila"]')!);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const antes = toasts().length;
+    await clicar(botao(corpo(), "Refazer e comparar"));
+    expect(cmd.edicaoRefazer).toHaveBeenCalledWith(WS, "s0");
+    expect(toasts().slice(antes).map((t) => [t.kind, t.message])).toEqual([["error", "Retrato da exportação alterado"]]);
   });
 });

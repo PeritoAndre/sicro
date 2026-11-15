@@ -651,6 +651,10 @@ impl Motor for MotorReal {
         cancelar: &AtomicBool,
         progresso: &mut dyn FnMut(Progresso),
     ) -> Result<Estado> {
+        // "Refazer e comparar" (P1.8): lê só do retrato
+        if tarefa.tipo == TipoTarefa::Refazer {
+            return super::refazer::rodar(fila, tarefa, pedido, trabalho, cancelar, progresso);
+        }
         let p = armazem::tipado(&pedido.projeto)?;
         let final_ = matches!(pedido.alvo, Alvo::Final { .. });
         if final_ {
@@ -685,22 +689,7 @@ impl Motor for MotorReal {
         }
         let rel = |a: &Path| a.strip_prefix(&pedido.cache).unwrap_or(a).to_string_lossy().replace('\\', "/");
         match &plano.alvo {
-            Alvo::Final { .. } => {
-                let s = publicar(&Publicar {
-                    ws: &pedido.ws,
-                    projeto: &pedido.projeto,
-                    plano: &plano,
-                    res: &res,
-                    amb: &amb,
-                    quando: chrono::Local::now(),
-                    tecnico: &TecnicoReal { plano: &plano, res: &res, amb: &amb },
-                })?;
-                limpar_depois_de_publicar(fila, tarefa, &pedido.cache, &plano);
-                Ok(match s.estado {
-                    EstadoSaida::AConferir => Estado::AConferir { saida_id: s.id },
-                    EstadoSaida::Concluida => Estado::Concluida { saida_id: s.id },
-                })
-            }
+            Alvo::Final { .. } => publicar_da_fila(fila, tarefa, pedido, &p, &prep, &amb, &plano, &res, cancelar, progresso, None),
             Alvo::Previa { .. } | Alvo::Quadro { .. } => {
                 // o som já está no arquivo tocado
                 apagar_pcm(trabalho, &plano);
@@ -712,16 +701,60 @@ impl Motor for MotorReal {
 
 /// Plano do alvo. `cpu` = queda de GPU (§5.7): o plano sai sem GPU em qualquer alvo (a prévia do render também
 /// codifica pela GPU aprovada, e não tem escolha de codificador para trocar) e a exportação grava a escolha `cpu`.
+/// Antes de usar a GPU, uma codificação de prova no tamanho e na taxa do alvo (§5.6); o canvas é o da predefinição
+/// (WhatsApp e altura máxima reduzem) e o teto de taxa do WhatsApp entra nos blocos.
 pub(crate) fn compilar_alvo(p: &ProjetoEdicao, prep: &Preparado, alvo: &Alvo, cpu: bool) -> Result<Plano> {
-    if !cpu {
-        return super::motor::compilar(p, &prep.contexto(), alvo);
+    compilar_alvo_com(p, prep, alvo, cpu, &gpu_serve)
+}
+
+/// A GPU aprovada codifica este tamanho? Só o "sim" fica guardado (o "não" pode ser passageiro: sessões, VRAM).
+fn gpu_serve(cap: &Capacidades, w: u32, h: u32, fps: super::modelo::Racional) -> bool {
+    static SERVE: Mutex<Vec<String>> = Mutex::new(Vec::new());
+    let Some(g) = &cap.gpu else { return false };
+    let chave = format!("{} {} {} {} {w}x{h} {}/{}", cap.sha256, g.nome, g.driver, g.degrau, fps.num, fps.den);
+    if SERVE.lock().unwrap_or_else(|e| e.into_inner()).contains(&chave) {
+        return true;
     }
+    let ok = super::ffmpeg::sonda::gpu_serve(cap, w, h, fps);
+    if ok {
+        SERVE.lock().unwrap_or_else(|e| e.into_inner()).push(chave);
+    }
+    ok
+}
+
+/// `compilar_alvo` com a prova da GPU dada (os testes usam uma falsa).
+pub(crate) fn compilar_alvo_com(
+    p: &ProjetoEdicao,
+    prep: &Preparado,
+    alvo: &Alvo,
+    cpu: bool,
+    serve: &dyn Fn(&Capacidades, u32, u32, super::modelo::Racional) -> bool,
+) -> Result<Plano> {
+    let ctx = prep.contexto();
+    let reduz = matches!(alvo, Alvo::Final { exportacao } if matches!(exportacao.predefinicao, Predefinicao::Whatsapp | Predefinicao::Personalizada));
+    let reduzido = if reduz { super::motor::saida::projeto_do_alvo(p, alvo, super::tempo::resolver(p, &ctx).total_q) } else { None };
+    let p = reduzido.as_ref().unwrap_or(p);
     let mut alvo = alvo.clone();
-    if let Alvo::Final { exportacao } = &mut alvo {
-        exportacao.codificador = EscolhaCodificador::Cpu;
+    if cpu {
+        if let Alvo::Final { exportacao } = &mut alvo {
+            exportacao.codificador = EscolhaCodificador::Cpu;
+        }
     }
-    let sem_gpu = Capacidades { gpu: None, ..(*prep.cap).clone() };
-    super::motor::compilar(p, &Contexto { cap: &sem_gpu, ..prep.contexto() }, &alvo)
+    let quer_gpu = match &alvo {
+        Alvo::Final { exportacao } => exportacao.predefinicao == Predefinicao::Juri && exportacao.codificador == EscolhaCodificador::Auto,
+        Alvo::Previa { .. } => true,
+        Alvo::Quadro { .. } => false,
+    };
+    let canvas = super::motor::canvas_do_alvo(p, &alvo);
+    let sem = prep.cap.gpu.is_some() && (cpu || (quer_gpu && !serve(&prep.cap, canvas.w, canvas.h, canvas.fps)));
+    let mut plano = if sem {
+        let sem_gpu = Capacidades { gpu: None, ..(*prep.cap).clone() };
+        super::motor::compilar(p, &Contexto { cap: &sem_gpu, ..ctx }, &alvo)?
+    } else {
+        super::motor::compilar(p, &ctx, &alvo)?
+    };
+    super::motor::saida::acabar(&mut plano);
+    Ok(plano)
 }
 
 /// Antes de renderizar a exportação final: a pasta das exportações do caso aceita gravação? Caso em pasta só de
@@ -736,11 +769,13 @@ pub(crate) fn exigir_gravacao(ws: &Path) -> Result<()> {
 
 /// Depois da exportação final (§4): com ocultação, a prévia e o quadro final do projeto (renderizados antes dela) param
 /// e o cache do projeto sai; sempre, o teto do cache (o mais antigo sai). `cache` = pasta da Edição do caso.
-fn limpar_depois_de_publicar(fila: &Fila, tarefa: &Tarefa, cache: &Path, plano: &Plano) {
+pub(crate) fn limpar_depois_de_publicar(fila: &Fila, tarefa: &Tarefa, cache: &Path, plano: &Plano) {
     let Some(raiz) = cache.parent() else { return };
     if !plano.proveniencia.ocultacoes.is_empty() {
         let novas = fila.parar_previas(&tarefa.caso, &tarefa.projeto_id, TETO_PARAR);
-        executar::limpar_do_plano(cache, plano);
+        // o que as tarefas que entraram depois já usam fica (menos o desta exportação, que é o que se limpa)
+        let depois: Vec<String> = novas.iter().filter(|t| **t != tarefa.id).cloned().collect();
+        executar::limpar_do_plano(cache, plano, &depois);
         executar::limpar_do_projeto(cache, &tarefa.projeto_id, &tarefa.id, &novas);
     }
     let vivas: Vec<String> = fila.listar().into_iter().map(|t| t.id).collect();
@@ -961,7 +996,7 @@ const EXPORTACOES: &str = "exportacoes";
 pub(crate) const COMPOSTOS: &str = "quadros.compostos.sha256";
 pub(crate) const PENDENTE: &str = "tecnico.pendente.json";
 
-fn pasta_retrato(ws: &Path, projeto_id: &str, saida_id: &str) -> Result<PathBuf> {
+pub(crate) fn pasta_retrato(ws: &Path, projeto_id: &str, saida_id: &str) -> Result<PathBuf> {
     if !armazem::id_valido(projeto_id) || !armazem::id_valido(saida_id) {
         return Err(erro(codigo::ESQUEMA));
     }
@@ -979,7 +1014,7 @@ fn ligar_ou_copiar(origem: &Path, destino: &Path) -> Result<(String, u64)> {
 
 /// Cópia (caso em outro disco ou em pasta de rede) para `<destino>.parcial`, que só ganha o nome no fim: processo
 /// morto ou erro no meio não deixa arquivo truncado com o nome da saída. Não sobrescreve.
-fn copiar_inteiro(de: &mut dyn std::io::Read, destino: &Path) -> std::io::Result<()> {
+pub(crate) fn copiar_inteiro(de: &mut dyn std::io::Read, destino: &Path) -> std::io::Result<()> {
     if fs::symlink_metadata(destino).is_ok() {
         return Err(std::io::ErrorKind::AlreadyExists.into());
     }
@@ -1138,7 +1173,7 @@ pub(crate) fn gravar_retrato_com(
 }
 
 /// Arquivos de `dir/sub`, em qualquer profundidade, relativos a `dir` com `/`, em ordem.
-fn arquivos_em(dir: &Path, sub: &str) -> Result<Vec<String>> {
+pub(crate) fn arquivos_em(dir: &Path, sub: &str) -> Result<Vec<String>> {
     fn andar(base: &Path, p: &Path, saida: &mut Vec<String>) -> Result<()> {
         for e in fs::read_dir(p)? {
             let e = e?;
@@ -1240,7 +1275,7 @@ fn previas_sem_caminho(plano: &Plano) -> Result<Value> {
     Ok(v)
 }
 
-fn gravar_grafos(dir: &Path, plano: &Plano) -> Result<()> {
+pub(crate) fn gravar_grafos(dir: &Path, plano: &Plano) -> Result<()> {
     use super::motor::plano::{Juncao, Papel};
     use super::ffmpeg::args::gravar_texto;
     for b in &plano.blocos {
@@ -1318,7 +1353,12 @@ pub fn saidas(ws: &Path, projeto_id: Option<&str>) -> Result<Vec<SaidaRegistrada
         Some(p) => video_edit_output_repo::listar_do_projeto(&conn, &occ, p)?,
         None => video_edit_output_repo::listar_do_caso(&conn, &occ)?,
     };
-    Ok(linhas.into_iter().map(SaidaRegistrada::from).collect())
+    let mut v: Vec<SaidaRegistrada> = linhas.into_iter().map(SaidaRegistrada::from).collect();
+    // o resultado do "refazer" mora no retrato da saída refeita (P1.8)
+    for s in v.iter_mut().filter(|s| s.refeita_de.is_some()) {
+        s.comparacao = super::refazer::ler_comparacao(ws, s);
+    }
+    Ok(v)
 }
 
 /// Fecha uma saída em "A conferir": grava `conferida_por`/`conferida_em` (ou "não conferida"), gera o `tecnico.json`
@@ -1381,6 +1421,142 @@ pub(crate) struct Publicar<'a> {
     pub tecnico: &'a dyn Tecnico,
 }
 
+/// O que a publicação recebe além do render: cancelamento, aviso de fase ("Relatório", "Pacote do júri"), as miniaturas
+/// do PDF (quadro final do slot, em JPEG) e, no "refazer", a saída de origem com o resultado da comparação.
+pub(crate) struct Extras<'a> {
+    pub cancelar: &'a AtomicBool,
+    pub fase: &'a dyn Fn(Fase),
+    pub miniatura: Option<&'a dyn Fn(u64) -> Result<Vec<u8>>>,
+    pub refeita_de: Option<(uuid::Uuid, &'a super::refazer::Comparacao)>,
+}
+
+/// Maior caminho que o Windows abre sem `LongPathsEnabled` (MAX_PATH menos o terminador), em unidades UTF-16.
+const CAMINHO_MAX: usize = 259;
+/// O que vem depois do título no nome da pasta (` AAAA-MM-DD HHhMMmSS (999)`) e no do arquivo.
+const SUFIXO_PASTA: usize = 26;
+/// ` (ocultado).mp4` mais o `.parcial` da cópia (caso em outro disco: o nome temporário também tem de caber).
+const SUFIXO_ARQUIVO: usize = 23;
+/// Maior caminho fixo dentro da pasta (`projeto/rastreios/<uuid>/<sha256>.json`, do pacote).
+const MAIOR_FIXO: usize = 124;
+/// Abaixo disso o título não é mais cortado (caso em pasta funda demais: o caminho passa de 260 de qualquer jeito).
+const TITULO_MIN: usize = 16;
+
+/// Unidades UTF-16 do título que cabem duas vezes no caminho da saída (pasta e arquivo, §10.1) sem passar de 260.
+fn titulo_max(ws: &Path) -> usize {
+    let raiz = paths::dir_edicao_saida(ws).to_string_lossy().encode_utf16().count();
+    let livre = CAMINHO_MAX.saturating_sub(raiz + 1 + SUFIXO_PASTA + 1);
+    (livre.saturating_sub(SUFIXO_ARQUIVO) / 2).min(livre.saturating_sub(MAIOR_FIXO)).max(TITULO_MIN)
+}
+
+/// `nome_base` cortado para o caminho da saída caber em 260 no Windows (o título entra na pasta e no arquivo).
+fn nome_base_em(ws: &Path, titulo: &str) -> String {
+    let base = nome_base(titulo);
+    let max = titulo_max(ws);
+    let (mut n, mut fim) = (0, base.len());
+    for (i, c) in base.char_indices() {
+        if n + c.len_utf16() > max {
+            fim = i;
+            break;
+        }
+        n += c.len_utf16();
+    }
+    let curto = base[..fim].trim_end_matches([' ', '.']);
+    if curto.is_empty() { "Edição".into() } else { curto.to_string() }
+}
+
+/// Nome-base de uma saída já publicada, pelo arquivo registrado (`<base>[ (ocultado)].<ext>`).
+fn base_da_saida(arquivo_rel: &str, titulo: &str) -> String {
+    let nome = arquivo_rel.rsplit('/').next().unwrap_or("");
+    let sem_ext = nome.rsplit_once('.').map_or(nome, |(a, _)| a);
+    let b = sem_ext.strip_suffix(" (ocultado)").unwrap_or(sem_ext);
+    if b.is_empty() || b.contains('\\') || b == ".." { nome_base(titulo) } else { b.to_string() }
+}
+
+/// Marca de publicação em andamento, na pasta da saída: fica presa (trava de arquivo) enquanto `publicar` roda.
+/// Processo morto no meio (kill, queda de energia) deixa a marca solta: é por ela que a sobra é achada.
+pub(crate) const PUBLICANDO: &str = ".publicando";
+/// Marca solta e sem texto mais nova que isto pode estar nascendo em outra instância (entre criar e prender): fica.
+const MARCA_NASCENDO: Duration = Duration::from_secs(120);
+
+/// Pastas de saída que ESTE processo está publicando: a limpeza não depende só da trava do sistema de arquivos
+/// (em NFS a trava é do processo, não do descritor: a segunda abertura a "prende" de novo e a marca viva parece solta).
+static PUBLICANDO_AQUI: Mutex<Vec<PathBuf>> = Mutex::new(Vec::new());
+
+struct Marca {
+    pasta: PathBuf,
+    caminho: PathBuf,
+    arq: Option<fs::File>,
+}
+
+impl Marca {
+    fn por(pasta: &Path, saida_id: &str, projeto_id: &str) -> Marca {
+        PUBLICANDO_AQUI.lock().unwrap_or_else(|e| e.into_inner()).push(pasta.to_path_buf());
+        let caminho = pasta.join(PUBLICANDO);
+        let arq = fs::OpenOptions::new().read(true).write(true).create_new(true).open(&caminho).ok().map(|mut a| {
+            use std::io::Write;
+            // presa antes de ter texto: quem a acha solta e com texto sabe que o dono morreu
+            let _ = a.try_lock();
+            let _ = a.write_all(serde_json::json!({ "saida_id": saida_id, "projeto_id": projeto_id }).to_string().as_bytes());
+            let _ = a.sync_all();
+            a
+        });
+        Marca { pasta: pasta.to_path_buf(), caminho, arq }
+    }
+
+    fn soltar(self) {
+        drop(self.arq);
+        let _ = fs::remove_file(&self.caminho);
+        let mut g = PUBLICANDO_AQUI.lock().unwrap_or_else(|e| e.into_inner());
+        if let Some(i) = g.iter().position(|p| *p == self.pasta) {
+            g.remove(i);
+        }
+    }
+}
+
+/// Sobras de `publicar` interrompido no caso: pasta de saída com a marca solta e sem linha no banco sai, com o
+/// retrato dela. Fica: a publicação viva (marca presa, ou pasta que este processo está publicando); a pasta que
+/// alguma linha do banco cita, diga a marca o que disser (só a marca sai); a marca sem texto recém-criada; e, na
+/// dúvida (sistema de arquivos sem trava, banco que não abre), tudo. Devolve quantas saíram.
+pub(crate) fn limpar_sobras_de_publicar(ws: &Path) -> u32 {
+    let mut n = 0;
+    for e in fs::read_dir(paths::dir_edicao_saida(ws)).into_iter().flatten().flatten() {
+        let pasta = e.path();
+        let marca = pasta.join(PUBLICANDO);
+        let Ok(mut arq) = fs::OpenOptions::new().read(true).write(true).open(&marca) else { continue };
+        if PUBLICANDO_AQUI.lock().unwrap_or_else(|e| e.into_inner()).contains(&pasta) {
+            continue;
+        }
+        if arq.try_lock().is_err() {
+            continue;
+        }
+        let mut t = String::new();
+        let _ = std::io::Read::read_to_string(&mut arq, &mut t);
+        let nova = arq.metadata().and_then(|m| m.modified()).ok().and_then(|d| std::time::SystemTime::now().duration_since(d).ok()).is_none_or(|i| i < MARCA_NASCENDO);
+        drop(arq);
+        let v: Value = serde_json::from_str(&t).unwrap_or(Value::Null);
+        let (sid, pid) = (v["saida_id"].as_str().unwrap_or(""), v["projeto_id"].as_str().unwrap_or(""));
+        // lido do banco depois de a marca se deixar prender: a publicação que acabou agora já está registrada
+        let Some(linhas) = abrir_banco(ws).ok().and_then(|(conn, occ)| video_edit_output_repo::listar_do_caso(&conn, &occ).ok()) else { continue };
+        let rel = format!("{}/{}", paths::REL_EDICAO_SAIDA, e.file_name().to_string_lossy());
+        if linhas.iter().any(|l| l.pasta == rel || l.id.to_string() == sid) {
+            // caiu entre o registro e a retirada da marca: a saída vale
+            let _ = fs::remove_file(&marca);
+            continue;
+        }
+        if sid.is_empty() && nova {
+            continue;
+        }
+        if apagar_pasta_da_saida(&pasta).is_ok() {
+            n += 1;
+            if let Ok(r) = pasta_retrato(ws, pid, sid) {
+                let _ = fs::remove_dir_all(r);
+            }
+            tracing::warn!("edição: sobra de exportação interrompida apagada: {}", pasta.display());
+        }
+    }
+    n
+}
+
 /// Nome dos arquivos da saída: o título saneado (`<Título>.mp4`, `<Título>.tecnico.json`).
 fn nome_base(titulo: &str) -> String {
     let t = titulo.trim().trim_matches('.');
@@ -1418,7 +1594,7 @@ fn criar_pasta_da_saida(ws: &Path, base: &str, quando: &chrono::DateTime<chrono:
     Err(erro(format!("pasta_existe: {nome}")))
 }
 
-fn somente_leitura(p: &Path) -> Result<()> {
+pub(crate) fn somente_leitura(p: &Path) -> Result<()> {
     let mut perm = fs::metadata(p)?.permissions();
     perm.set_readonly(true);
     fs::set_permissions(p, perm)?;
@@ -1436,7 +1612,7 @@ fn apagar_pasta_da_saida(p: &Path) -> Result<()> {
 }
 
 /// Tira o somente leitura de `p` e, se for pasta, do que há dentro (o pacote do júri tem subpastas).
-fn gravavel(p: &Path) {
+pub(crate) fn gravavel(p: &Path) {
     if let Ok(m) = fs::symlink_metadata(p) {
         if m.is_dir() {
             fs::read_dir(p).into_iter().flatten().flatten().for_each(|e| gravavel(&e.path()));
@@ -1452,7 +1628,7 @@ fn gravavel(p: &Path) {
 
 /// Pasta de uma saída pelo `pasta` do banco: só vale DENTRO de `Exportações/Vídeos/Edições/` (um valor vazio ou
 /// com `..` resolveria para o caso inteiro, e excluir a saída apagaria o caso).
-fn pasta_da_saida(ws: &Path, pasta_rel: &str) -> Result<PathBuf> {
+pub(crate) fn pasta_da_saida(ws: &Path, pasta_rel: &str) -> Result<PathBuf> {
     let dentro = pasta_rel.strip_prefix(paths::REL_EDICAO_SAIDA).and_then(|r| r.strip_prefix('/')).filter(|r| {
         !r.is_empty() && !r.contains(['/', '\\']) && *r != "." && *r != ".."
     });
@@ -1465,7 +1641,15 @@ fn pasta_da_saida(ws: &Path, pasta_rel: &str) -> Result<PathBuf> {
 /// Exportação final pronta: pasta nova da saída (`create_new`), retrato autossuficiente, `tecnico.json`
 /// (ou `tecnico.pendente.json` no retrato quando há ocultação ou silêncio a conferir), somente leitura depois do
 /// hash, linha em `video_edit_outputs`, log por mídia usada e auditoria.
+#[cfg(test)]
 pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
+    static NUNCA: AtomicBool = AtomicBool::new(false);
+    publicar_com(p, &Extras { cancelar: &NUNCA, fase: &|_| {}, miniatura: None, refeita_de: None })
+}
+
+/// `publicar` com o que a fila sabe (`Extras`): com "Pacote do júri", as peças do pacote ficam guardadas no retrato
+/// (a conferência conclui depois, até de outro dia) e o pacote sai junto com o `tecnico.json` final.
+pub(crate) fn publicar_com(p: &Publicar, x: &Extras) -> Result<SaidaRegistrada> {
     let projeto_id = p.projeto.get("id").and_then(Value::as_str).filter(|i| armazem::id_valido(i)).ok_or_else(|| erro(codigo::ESQUEMA))?;
     let titulo = p.projeto.get("titulo").and_then(Value::as_str).unwrap_or("").to_string();
     let Alvo::Final { exportacao } = &p.plano.alvo else { return Err(erro(format!("{}: alvo", codigo::ITEM_INVALIDO))) };
@@ -1474,9 +1658,11 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
     let (conn, occ) = abrir_banco(p.ws)?;
     let saida = uuid::Uuid::new_v4();
     let saida_id = saida.to_string();
-    let base = nome_base(&titulo);
+    limpar_sobras_de_publicar(p.ws);
+    let base = nome_base_em(p.ws, &titulo);
     let ext = p.res.arquivo.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
     let (pasta, pasta_rel) = criar_pasta_da_saida(p.ws, &base, &p.quando)?;
+    let marca = Marca::por(&pasta, &saida_id, projeto_id);
     let retrato = pasta_retrato(p.ws, projeto_id, &saida_id)?;
     let r = (|| -> Result<SaidaRegistrada> {
         let nome_video = if exige_conferencia { format!("{base} (ocultado).{ext}") } else { format!("{base}.{ext}") };
@@ -1501,6 +1687,10 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
         }
         let trf: Vec<String> = p.res.trf.iter().map(|t| t.sha256.clone()).collect();
         let m = gravar_retrato_com(p.ws, projeto_id, &saida_id, p.projeto, p.plano, &trf, p.res.compostos.as_deref())?;
+        if let Some((_, c)) = x.refeita_de {
+            fs::write(retrato.join(super::refazer::COMPARACAO), serde_json::to_vec_pretty(c)?)?;
+        }
+        (x.fase)(Fase::Relatorio);
         let arquivo_rel = format!("{pasta_rel}/{nome_video}");
         let fecho = Fecho {
             projeto_sha256: m.projeto_sha256.clone(),
@@ -1508,6 +1698,11 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
             ocultacoes: exige_conferencia.then(|| ConferenciaOcultacoes { conferida: false, por: String::new(), em: String::new() }),
         };
         let tecnico = p.tecnico.montar(&fecho)?;
+        // peças do pacote (mapa, quadros decodificados, som e miniaturas) enquanto o render ainda está à mão
+        if exportacao.pacote.is_some() {
+            (x.fase)(Fase::Pacote);
+            super::pacote::preparar(p.plano, p.res, p.amb, &retrato, x.miniatura, x.cancelar)?;
+        }
         let (estado, tecnico_rel) = if exige_conferencia {
             // sobrevive ao reinício: `edicao_conferir` completa a conferência e grava o final
             fs::write(retrato.join(PENDENTE), p.tecnico.bytes(&tecnico))?;
@@ -1518,6 +1713,12 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
             let arq = pasta.join(format!("{base}.tecnico.json"));
             if arq.is_file() {
                 somente_leitura(&arq)?;
+            }
+            if let Some(pacote) = exportacao.pacote {
+                super::pacote::montar(
+                    &super::pacote::PedidoPacote { ws: p.ws, pasta: &pasta, base: &base, pacote, pdf: exportacao.pdf, retrato: &retrato, tecnico: &tecnico },
+                    x.cancelar,
+                )?;
             }
             (EstadoSaida::Concluida, Some(format!("{pasta_rel}/{base}.tecnico.json")))
         };
@@ -1542,7 +1743,7 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
             retrato_rel: format!("{}/{projeto_id}/{EXPORTACOES}/{saida_id}", paths::REL_EDICAO),
             projeto_sha256: m.projeto_sha256.clone(),
             autor: serde_json::to_value(&p.amb.identidade.autor)?,
-            refeita_de: None,
+            refeita_de: x.refeita_de.map(|(id, _)| id),
             estado,
             exige_conferencia,
             conferida_por: None,
@@ -1562,10 +1763,21 @@ pub(crate) fn publicar(p: &Publicar) -> Result<SaidaRegistrada> {
             "codificador": p.res.codificador, "queda_para_cpu": p.res.queda_para_cpu, "exige_conferencia": exige_conferencia,
         });
         occurrence_repo::record_audit(&tx, Some(&occ), "video.edicao.render", Some("video"), Some("edicao_saida"), Some(&saida), Some(&d.to_string()))?;
+        if let Some((de, c)) = x.refeita_de {
+            let d = serde_json::json!({ "saida_id": saida_id, "refeita_de": de.to_string(), "comparacao": c });
+            video_repo::insert_log(&tx, &occ, Some(&sha), "edicao.refazer", &d.to_string())?;
+        }
         tx.commit()?;
+        if estado == EstadoSaida::Concluida {
+            // as peças do pacote só saem do retrato com a saída registrada
+            super::pacote::descartar_pecas(&retrato);
+        }
         apagar_pcm(&p.amb.trabalho, p.plano);
-        Ok(SaidaRegistrada::from(linha))
+        let mut s = SaidaRegistrada::from(linha);
+        s.comparacao = x.refeita_de.map(|(_, c)| c.clone());
+        Ok(s)
     })();
+    marca.soltar();
     if r.is_err() {
         let _ = apagar_pasta_da_saida(&pasta);
         let _ = fs::remove_dir_all(&retrato);
@@ -1606,12 +1818,17 @@ pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, p
             return Err(erro(format!("{}: {PENDENTE}", codigo::MIDIA_TROCADA)));
         }
     }
+    // peças guardadas = a exportação pediu o pacote; sem o manifesto (que diz qual) a saída não conclui sem ele, calada
+    if no_manifesto.is_none() && retrato.join(super::pacote::PECAS).is_dir() {
+        return Err(erro(format!("{}: manifesto.json", codigo::RETRATO_DIVERGENTE)));
+    }
     let mut tecnico: Value = serde_json::from_slice(&bytes)?;
     let em = chrono::Utc::now();
     let c = serde_json::json!({
         "ocultacoes": if conferida { "conferida" } else { "nao_conferida" },
-        "por": conferida.then_some(por),
-        "em": conferida.then(|| em.to_rfc3339()),
+        // texto vazio, não nulo, como o `tecnico.rs` grava: o relatório do júri lê texto
+        "por": if conferida { por } else { "" },
+        "em": if conferida { em.to_rfc3339() } else { String::new() },
     });
     let execucao = tecnico.as_object_mut().and_then(|o| o.get_mut("execucao")).and_then(Value::as_object_mut);
     let Some(execucao) = execucao else { return Err(erro(format!("{}: tecnico.pendente.json", codigo::ESQUEMA))) };
@@ -1623,7 +1840,7 @@ pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, p
         conf[k] = v.clone();
     }
     let pasta = pasta_da_saida(ws, &s.pasta)?;
-    let base = nome_base(&s.titulo);
+    let base = base_da_saida(&s.arquivo, &s.titulo);
     let arq = pasta.join(format!("{base}.tecnico.json"));
     // a saída ainda está "a conferir": relatório que já exista é sobra de tentativa que falhou depois de gravar
     // (somente leitura, impediria o `create_new` para sempre)
@@ -1631,14 +1848,41 @@ pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, p
         gravavel(&arq);
         fs::remove_file(&arq)?;
     }
-    g.gravar(&pasta, &base, &tecnico)?;
-    if arq.is_file() {
-        somente_leitura(&arq)?;
-    }
     let tecnico_rel = format!("{}/{base}.tecnico.json", s.pasta);
-    if !video_edit_output_repo::concluir(&conn, &occ, &id, conferida.then_some((por, em)), Some(&tecnico_rel))? {
-        return Err(erro(format!("saida_concluida: {saida_id}")));
+    // relatório, pacote e registro: Ok(false) = outra conferência concluiu antes (o que está na pasta é dela)
+    let fechar = || -> Result<bool> {
+        g.gravar(&pasta, &base, &tecnico)?;
+        if arq.is_file() {
+            somente_leitura(&arq)?;
+        }
+        // o pacote sai com o relatório final (o PDF diz conferida ou não); as peças ficaram no retrato
+        if let Some(Alvo::Final { exportacao }) = no_manifesto.as_ref().map(|m| &m.alvo) {
+            if let Some(pacote) = exportacao.pacote {
+                static NUNCA: AtomicBool = AtomicBool::new(false);
+                super::pacote::montar(
+                    &super::pacote::PedidoPacote { ws, pasta: &pasta, base: &base, pacote, pdf: exportacao.pdf, retrato: &retrato, tecnico: &tecnico },
+                    &NUNCA,
+                )?;
+            }
+        }
+        video_edit_output_repo::concluir(&conn, &occ, &id, conferida.then_some((por, em)), Some(&tecnico_rel))
+    };
+    match fechar() {
+        Ok(true) => {}
+        Ok(false) => return Err(erro(format!("saida_concluida: {saida_id}"))),
+        Err(e) => {
+            // a saída segue "a conferir": o relatório e o pacote desta tentativa não ficam na pasta dizendo "conferida"
+            if arq.is_file() {
+                gravavel(&arq);
+                let _ = fs::remove_file(&arq);
+            }
+            if matches!(no_manifesto.as_ref().map(|m| &m.alvo), Some(Alvo::Final { exportacao }) if exportacao.pacote.is_some()) {
+                super::pacote::desfazer(&pasta);
+            }
+            return Err(e);
+        }
     }
+    super::pacote::descartar_pecas(&retrato);
     // o manifesto deixa de citar o pendente antes de ele sair
     if retrato.join("manifesto.json").is_file() {
         manifesto_com_pendente(&retrato, false)?;
@@ -1647,7 +1891,42 @@ pub(crate) fn concluir_conferencia(ws: &Path, saida_id: &str, conferida: bool, p
     let d = serde_json::json!({ "conferida": conferida, "por": por });
     occurrence_repo::record_audit(&conn, Some(&occ), "video.edicao.conferida", Some("video"), Some("edicao_saida"), Some(&id), Some(&d.to_string()))?;
     let s = video_edit_output_repo::obter(&conn, &occ, &id)?.ok_or_else(|| erro(format!("saida_ausente: {saida_id}")))?;
-    Ok(s.into())
+    let mut s: SaidaRegistrada = s.into();
+    if s.refeita_de.is_some() {
+        s.comparacao = super::refazer::ler_comparacao(ws, &s);
+    }
+    Ok(s)
+}
+
+/// Publica o render de uma tarefa da fila (exportar e refazer): fases "Relatório" e "Pacote do júri", miniaturas pelo
+/// motor (quadro final do primeiro slot de cada item) e a limpeza do cache; devolve o estado final da tarefa.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn publicar_da_fila(
+    fila: &Fila,
+    tarefa: &Tarefa,
+    pedido: &PedidoRender,
+    p: &ProjetoEdicao,
+    prep: &Preparado,
+    amb: &Ambiente,
+    plano: &Plano,
+    res: &Resultado,
+    cancelar: &AtomicBool,
+    progresso: &mut dyn FnMut(Progresso),
+    refeita_de: Option<(uuid::Uuid, &super::refazer::Comparacao)>,
+) -> Result<Estado> {
+    let total = plano.total_q;
+    let prog = std::cell::RefCell::new(progresso);
+    let fase = |f: Fase| (prog.borrow_mut())(Progresso { fase: f, feito_q: total, total_q: total, qps: 0.0, restante_s: 0 });
+    let miniatura = |q: u64| super::pacote::miniatura(p, prep, amb, q, cancelar);
+    let s = publicar_com(
+        &Publicar { ws: &pedido.ws, projeto: &pedido.projeto, plano, res, amb, quando: chrono::Local::now(), tecnico: &TecnicoReal { plano, res, amb } },
+        &Extras { cancelar, fase: &fase, miniatura: Some(&miniatura), refeita_de },
+    )?;
+    limpar_depois_de_publicar(fila, tarefa, &pedido.cache, plano);
+    Ok(match s.estado {
+        EstadoSaida::AConferir => Estado::AConferir { saida_id: s.id },
+        EstadoSaida::Concluida => Estado::Concluida { saida_id: s.id },
+    })
 }
 
 /// `edicao_saida_excluir`: linha do banco, retrato e pasta da saída (somente leitura incluída), com auditoria.
@@ -2140,6 +2419,45 @@ mod testes {
         f.encerrar();
     }
 
+    /// A limpeza depois de publicar leva adiante as tarefas do projeto que seguem vivas: o bloco que uma delas já cita
+    /// no `chaves.json` fica no cache; o resto do plano da exportação sai.
+    #[test]
+    fn limpeza_depois_de_publicar_preserva_o_que_a_tarefa_viva_cita() {
+        let d = ap::pasta("fila-depois-viva");
+        let cache = d.path().join("cache-do-caso");
+        let m = Arc::new(Falso::default());
+        let f = Fila::nova(m.clone());
+        let (com, _, _) = render_falso(d.path(), "e1", true);
+        assert!(com.blocos.len() >= 2, "{} blocos", com.blocos.len());
+        let (b0, b1) = (com.blocos[0].chave.clone(), com.blocos[1].chave.clone());
+        let bloco = |ch: &str| cache.join("blocos").join(format!("{ch}.mp4"));
+        fs::create_dir_all(cache.join("blocos")).unwrap();
+        for b in [&b0, &b1] {
+            fs::write(bloco(b), b"x").unwrap();
+        }
+        // a faixa das exportações ocupada por outro projeto: a do projeto `pa` fica viva na fila (a parada das prévias
+        // não mexe em exportação) e já tem as chaves dela no disco
+        f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "pb", "ocupa")).unwrap();
+        comecou(&m, "ocupa");
+        let viva = f.enfileirar(pedido(d.path(), TipoTarefa::Exportar, "pa", "viva")).unwrap();
+        assert_eq!(estado(&f, &viva), Estado::NaFila);
+        fs::write(cache.join("render").join(&viva).join(executar::CHAVES), json!({ "dir": "blocos", "blocos": [b1], "camadas": [] }).to_string()).unwrap();
+        let exportacao = Tarefa {
+            id: "e1".into(),
+            tipo: TipoTarefa::Exportar,
+            caso: "cache-do-caso".into(),
+            projeto_id: "pa".into(),
+            titulo: "e".into(),
+            estado: Estado::Rodando { fase: Fase::Conferindo, feito_q: 0, total_q: 0, qps: 0.0, restante_s: 0 },
+            criado_em: agora(),
+        };
+        limpar_depois_de_publicar(&f, &exportacao, &cache, &com);
+        assert!(!bloco(&b0).exists(), "o bloco só do plano publicado sai");
+        assert!(bloco(&b1).is_file(), "o bloco que a tarefa viva cita fica");
+        assert!(cache.join("render").join(&viva).join(executar::CHAVES).is_file(), "a tarefa viva fica inteira");
+        f.encerrar();
+    }
+
     /// Quadro final a cada pausa: o terminado há mais que `manter` sai quando chega outro do mesmo projeto, e
     /// nenhuma tarefa terminada segura o documento na memória. Id de projeto que não serve de pasta é recusado.
     #[test]
@@ -2440,7 +2758,7 @@ mod testes {
         assert_eq!((b.estado, b.conferida_por.clone(), b.exige_conferencia), (EstadoSaida::Concluida, None, true));
         let t: Value = serde_json::from_slice(&fs::read(ws.join(b.tecnico_rel.as_ref().unwrap())).unwrap()).unwrap();
         assert_eq!(t["execucao"]["conferencia"]["ocultacoes"], "nao_conferida");
-        assert_eq!(t["execucao"]["conferencia"]["por"], Value::Null);
+        assert_eq!((&t["execucao"]["conferencia"]["por"], &t["execucao"]["conferencia"]["em"]), (&json!(""), &json!("")));
         assert_eq!(contar(&ws, "SELECT COUNT(*) FROM audit_logs WHERE action = 'video.edicao.conferida'"), 2);
     }
 
@@ -2498,6 +2816,134 @@ mod testes {
     }
 
     /// Falha depois de a linha entrar no banco (auditoria que não grava): nada fica, nem linha, nem log, nem pasta.
+    /// Pendência (e) do P1.8: processo morto no meio de `publicar` deixa pasta de saída e retrato sem linha no banco. A
+    /// marca solta os entrega: saem os dois. A publicação viva (marca presa, de outra instância), a já registrada com
+    /// a marca esquecida e a pasta que não é da Edição ficam.
+    #[test]
+    fn sobra_de_publicar_interrompido_sai_e_a_viva_fica() {
+        let (d, ws) = caso();
+        let pid = "6f1c2a52-0d5e-4c1b-9a43-2f7d0c1e9b10";
+        let projeto = json!({ "esquema": 2, "id": pid, "titulo": "Sobra", "midias": [] });
+        let (plano, res, amb) = render_falso(d.path(), "t1", false);
+        let s = publicar(&Publicar { ws: &ws, projeto: &projeto, plano: &plano, res: &res, amb: &amb, quando: quando(), tecnico: &TecFalso }).unwrap();
+        let publicada = pasta_da_saida(&ws, &s.pasta).unwrap();
+        assert!(!publicada.join(PUBLICANDO).exists(), "publicação inteira não deixa marca");
+        let marca = |pasta: &Path, sid: &str| fs::write(pasta.join(PUBLICANDO), json!({ "saida_id": sid, "projeto_id": pid }).to_string()).unwrap();
+        // caiu entre o registro e a retirada da marca
+        marca(&publicada, &s.id);
+        let raiz = paths::dir_edicao_saida(&ws);
+        // morta: vídeo somente leitura, marca solta, retrato, nenhuma linha
+        let morta = raiz.join("Sobra 2026-11-14 10h00m00");
+        fs::create_dir_all(&morta).unwrap();
+        fs::write(morta.join("Sobra.mp4"), b"pela metade").unwrap();
+        somente_leitura(&morta.join("Sobra.mp4")).unwrap();
+        let sid = uuid::Uuid::new_v4().to_string();
+        marca(&morta, &sid);
+        let retrato = pasta_retrato(&ws, pid, &sid).unwrap();
+        fs::create_dir_all(retrato.join("dados")).unwrap();
+        fs::write(retrato.join("projeto.json"), b"{}").unwrap();
+        // viva: a marca presa, como `publicar` a segura
+        let viva = raiz.join("Viva 2026-11-14 10h00m01");
+        fs::create_dir_all(&viva).unwrap();
+        fs::write(viva.join("Viva.mp4"), b"saindo").unwrap();
+        marca(&viva, &uuid::Uuid::new_v4().to_string());
+        let presa = fs::OpenOptions::new().read(true).write(true).open(viva.join(PUBLICANDO)).unwrap();
+        presa.try_lock().expect("trava de arquivo");
+        // pasta que o perito pôs ali
+        let alheia = raiz.join("Recortes");
+        fs::create_dir_all(&alheia).unwrap();
+        fs::write(alheia.join("nota.txt"), b"x").unwrap();
+
+        assert_eq!(limpar_sobras_de_publicar(&ws), 1);
+        assert!(!morta.exists() && !retrato.exists(), "a sobra e o retrato dela saem");
+        assert!(viva.join("Viva.mp4").is_file() && viva.join(PUBLICANDO).is_file(), "publicação viva fica");
+        assert!(paths::resolver_relativo(&ws, &s.arquivo).is_file() && !publicada.join(PUBLICANDO).exists(), "a registrada vale; só a marca sai");
+        assert!(alheia.join("nota.txt").is_file());
+        assert_eq!(contar(&ws, "SELECT COUNT(*) FROM video_edit_outputs"), 1);
+        // o processo da viva morre (o descritor fecha sem tirar a marca): na próxima vez ela sai
+        drop(presa);
+        assert_eq!(limpar_sobras_de_publicar(&ws), 1);
+        assert!(!viva.exists());
+        assert_eq!(limpar_sobras_de_publicar(&ws), 0);
+    }
+
+    /// Revisão do P1.8: a limpeza das sobras nunca apaga saída boa. A pasta que uma linha do banco cita fica, diga a
+    /// marca o que disser (vazia, lixo, id de outra saída); a publicação viva deste processo fica mesmo sem a trava
+    /// do sistema de arquivos (NFS: a trava é do processo); a marca sem texto recém-criada (nascendo em outra
+    /// instância) fica, e sai quando envelhece.
+    #[test]
+    fn limpeza_das_sobras_nao_apaga_saida_boa_nem_publicacao_viva() {
+        let (d, ws) = caso();
+        let pid = "6f1c2a52-0d5e-4c1b-9a43-2f7d0c1e9b10";
+        let projeto = json!({ "esquema": 2, "id": pid, "titulo": "Boa", "midias": [] });
+        let (plano, res, amb) = render_falso(d.path(), "t1", false);
+        let s = publicar(&Publicar { ws: &ws, projeto: &projeto, plano: &plano, res: &res, amb: &amb, quando: quando(), tecnico: &TecFalso }).unwrap();
+        let boa = pasta_da_saida(&ws, &s.pasta).unwrap();
+        let velha = std::time::SystemTime::now() - MARCA_NASCENDO - Duration::from_secs(60);
+        let envelhecer = |m: &Path| fs::OpenOptions::new().write(true).open(m).unwrap().set_modified(velha).unwrap();
+        for texto in ["", "lixo", &json!({ "saida_id": uuid::Uuid::new_v4().to_string(), "projeto_id": pid }).to_string()] {
+            fs::write(boa.join(PUBLICANDO), texto).unwrap();
+            envelhecer(&boa.join(PUBLICANDO));
+            assert_eq!(limpar_sobras_de_publicar(&ws), 0, "marca {texto:?}");
+            assert!(paths::resolver_relativo(&ws, &s.arquivo).is_file() && ws.join(&s.retrato_rel).join("manifesto.json").is_file(), "marca {texto:?}: saída registrada apagada");
+            assert!(!boa.join(PUBLICANDO).exists(), "só a marca sai");
+        }
+        assert_eq!(contar(&ws, "SELECT COUNT(*) FROM video_edit_outputs"), 1);
+        // publicação viva deste processo, com a trava perdida
+        let raiz = paths::dir_edicao_saida(&ws);
+        let viva = raiz.join("Viva 2026-11-14 10h00m01");
+        fs::create_dir_all(&viva).unwrap();
+        fs::write(viva.join("Viva.mp4"), b"saindo").unwrap();
+        let m = Marca::por(&viva, &uuid::Uuid::new_v4().to_string(), pid);
+        m.arq.as_ref().expect("marca").unlock().unwrap();
+        envelhecer(&viva.join(PUBLICANDO));
+        assert_eq!(limpar_sobras_de_publicar(&ws), 0);
+        assert!(viva.join("Viva.mp4").is_file(), "publicação viva deste processo apagada");
+        m.soltar();
+        assert!(!viva.join(PUBLICANDO).exists() && !PUBLICANDO_AQUI.lock().unwrap().contains(&viva));
+        // marca sem texto: recém-criada fica; velha é de processo que morreu antes de escrever
+        fs::write(viva.join(PUBLICANDO), b"").unwrap();
+        assert_eq!(limpar_sobras_de_publicar(&ws), 0);
+        assert!(viva.join("Viva.mp4").is_file(), "marca nascendo em outra instância");
+        envelhecer(&viva.join(PUBLICANDO));
+        assert_eq!(limpar_sobras_de_publicar(&ws), 1);
+        assert!(!viva.exists());
+    }
+
+    /// Pendência (e) do P1.8: o título entra na pasta e no arquivo (§10.1). Cortado pelo caminho do caso, o vídeo, o
+    /// relatório e o maior arquivo do pacote cabem em 260 no Windows; a conferência acha o relatório pelo nome cortado.
+    #[test]
+    fn titulo_longo_cabe_em_260_no_caminho_da_saida() {
+        let (d, ws) = caso();
+        let u16 = |s: &str| s.encode_utf16().count();
+        let pid = "6f1c2a52-0d5e-4c1b-9a43-2f7d0c1e9b10";
+        let titulo = format!("{}final", "Reconstituição da ação ".repeat(6));
+        let (inteiro, base) = (nome_base(&titulo), nome_base_em(&ws, &titulo));
+        let raiz = u16(&paths::dir_edicao_saida(&ws).to_string_lossy());
+        let pior = |b: &str| raiz + 1 + u16(b) + SUFIXO_PASTA + 1 + (u16(b) + SUFIXO_ARQUIVO).max(MAIOR_FIXO);
+        assert!(pior(&inteiro) > CAMINHO_MAX, "o teste precisa de um título que passe: {}", pior(&inteiro));
+        assert!(pior(&base) <= CAMINHO_MAX, "{} com {base:?}", pior(&base));
+        assert!(u16(&base) >= TITULO_MIN && inteiro.starts_with(&base) && !base.ends_with(' '), "{base:?}");
+        assert_eq!(nome_base_em(&ws, "Placa: a/b"), "Placa_ a_b", "título curto não muda");
+        // o maior caminho fixo do pacote é o do denso (`projeto/<de>`); o do vídeo conta o `.parcial` da cópia
+        assert!(MAIOR_FIXO >= u16(&format!("projeto/rastreios/{pid}/{}.json", "a".repeat(64))) && MAIOR_FIXO >= u16(&format!("projeto/silhuetas/{pid}/{}.sil", "a".repeat(64))));
+        assert_eq!(SUFIXO_ARQUIVO, u16(" (ocultado).mp4.parcial"));
+        // publicado de verdade, com ocultação (o nome mais comprido) e a conferência depois
+        let projeto = json!({ "esquema": 2, "id": pid, "titulo": titulo, "midias": [] });
+        let (plano, res, amb) = render_falso(d.path(), "t1", true);
+        let s = publicar(&Publicar { ws: &ws, projeto: &projeto, plano: &plano, res: &res, amb: &amb, quando: quando(), tecnico: &TecFalso }).unwrap();
+        assert_eq!(s.arquivo, format!("{}/{base} (ocultado).mp4", s.pasta));
+        let video = paths::resolver_relativo(&ws, &s.arquivo);
+        assert!(video.is_file() && u16(&video.to_string_lossy()) <= CAMINHO_MAX, "{}", u16(&video.to_string_lossy()));
+        let a = concluir_conferencia(&ws, &s.id, true, "Perito Teste", &TecFalso).unwrap();
+        assert_eq!(a.tecnico_rel.as_deref(), Some(format!("{}/{base}.tecnico.json", s.pasta).as_str()));
+        let tecnico = paths::resolver_relativo(&ws, a.tecnico_rel.as_deref().unwrap());
+        assert!(tecnico.is_file() && u16(&tecnico.to_string_lossy()) <= CAMINHO_MAX);
+        // caso em pasta funda: o título para de encolher no mínimo
+        let fundo = d.path().join("a".repeat(120)).join("b".repeat(120));
+        assert_eq!(u16(&nome_base_em(&fundo, &titulo)), TITULO_MIN);
+    }
+
     #[test]
     fn publicar_que_falha_no_registro_nao_deixa_nada() {
         let (d, ws) = caso();

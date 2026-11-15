@@ -21,6 +21,7 @@ const cmd = vi.hoisted(() => ({
   edicaoAnalisar: vi.fn(),
   edicaoExcluir: vi.fn(),
   listVideoMedia: vi.fn(),
+  videoProveniencia: vi.fn(),
   edicaoMidiaInfo: vi.fn(),
   edicaoQuadroEm: vi.fn(),
   edicaoMidiaImportar: vi.fn(),
@@ -142,6 +143,8 @@ beforeAll(async () => {
   cmd.edicaoSalvar.mockImplementation(async () => ({ updated_at: new Date().toISOString() }));
   cmd.edicaoAnalisar.mockImplementation(async () => ({ problemas: [], linha: { fps: { num: 30, den: 1 }, total_q: 0, clipes: [], livres: [] }, midias: [], prender: [], saida_auto: null }));
   cmd.edicaoAbrir.mockResolvedValue({ projeto: null, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "/cache/edicao/c-fixture" });
+  // proveniência da análise: nada gravado (a coleta e o "Trecho…" leem sempre)
+  cmd.videoProveniencia.mockResolvedValue({ recebido_nativo: null, recebido_obs: "", relogio_desvio_s: null, gravador: null });
   cmd.listVideoMedia.mockResolvedValue([video("vm-1", "1", "cam1.mp4", 60, 0), video("vm-2", "2", "cam2.mp4", 40, 0)]);
   cmd.edicaoMidiaInfo.mockImplementation(async (_ws: string, s: string) => (s === sha("1") ? info("vm-1", 0, 60) : info("vm-2", 0, 40)));
   cmd.edicaoQuadroEm.mockImplementation(async (ws: string, s: string, alvo: { t: number }) => quadroEm(ws, s, alvo));
@@ -149,6 +152,8 @@ beforeAll(async () => {
 
   // projeto novo (botão "Nova edição")
   await st().novo(WS);
+  // a fixture (lida pelo Rust) é de projeto sem normalização: desligada como na tela (Áudio → "Normalizar")
+  st().alterar("Normalizar", (d) => void (d.mixagem.normalizar = null));
   // dois trechos de mídias diferentes pela coleta (Ctrl+3), com a tela aberta na corrente
   fila.push("m1", "m2");
   const r = await receber(WS, [

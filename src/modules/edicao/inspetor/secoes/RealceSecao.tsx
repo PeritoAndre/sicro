@@ -6,14 +6,14 @@
  *  no topo da seção, sem texto. */
 
 import { useEffect, useState } from "react";
-import { create } from "zustand";
 import { AlignJustify, Anchor, Aperture, CircleAlert, Eye, EyeOff, Focus, Layers, LoaderCircle, RotateCw, SlidersHorizontal, Trash2, type LucideIcon } from "lucide-react";
 import type { Draft } from "immer";
-import type { Desconhecido, EfAjustes, EfDesentrelacar, EfEstabilizar, Efeito, EfLente, EfMediaTemporal, EfNitidez, EstadoOrigem, Id, ProjetoEdicao, TabelaQuadros, TrfNovo } from "@domain/edicao";
+import type { Desconhecido, EfAjustes, EfDesentrelacar, EfEstabilizar, Efeito, EfLente, EfMediaTemporal, EfNitidez, ProjetoEdicao, TabelaQuadros } from "@domain/edicao";
 import { commands } from "@core/commands";
 import { askConfirm } from "@components/Dialog/ask";
-import { separarErro, useEdicaoStore, type ErroComando } from "../../store/edicaoStore";
-import { useFundoStore } from "../../store/fundoStore";
+import { useEdicaoStore } from "../../store/edicaoStore";
+import { useOrigemStore, type OrigemDoClipe } from "../../store/origemStore";
+import { ESPERA, esquecerOrigens, pedirDeNovo, useOrigem } from "../origemDoClipe";
 import { efeitoConhecido, novoId } from "../../modelo/projeto";
 import { campoCabe } from "../../modelo/realce";
 import { faixaDoTrecho, ptsDaTabela } from "../../modelo/tempo";
@@ -45,120 +45,9 @@ const SUAVIZAR = { min: 0, max: 100, novo: 15 };
 
 // ---- intermediário de origem ----
 
-/** Situação do intermediário de um clipe; o palco lê daqui o que mostrar e quando soltar "Marcar" e "Seguir". */
-export type OrigemDoClipe = EstadoOrigem | { tipo: "falhou"; erro: ErroComando };
-
-interface OrigemState {
-  porClipe: Record<Id, OrigemDoClipe | undefined>;
-  guardar(clipe: Id, e: OrigemDoClipe | undefined): void;
-}
-
-export const useOrigemStore = create<OrigemState>((set) => ({
-  porClipe: {},
-  guardar: (clipe, e) => set((s) => ({ porClipe: { ...s.porClipe, [clipe]: e } })),
-}));
-
-/** `.trf` já gravados nesta sessão: desfeito pelo perito, não volta sozinho (o Desfazer ficaria preso). */
-const gravados = new Set<string>();
-const chaveDoTrf = (t: TrfNovo) => `${t.efeito}:${t.sha256}:${t.zoom_pct}`;
-/** O perito pediu análise ou zoom novos para o efeito: o que voltar é gravado, mesmo igual ao de antes. */
-function pedirDeNovo(efeito: Id): void {
-  for (const k of [...gravados]) if (k.startsWith(`${efeito}:`)) gravados.delete(k);
-}
-
-/** Só para testes: esquece o que foi gravado e o estado dos intermediários. */
-export function esquecerOrigens(): void {
-  gravados.clear();
-  useOrigemStore.setState({ porClipe: {} });
-}
-
-/** Grava no efeito o `.trf` e o zoom que o intermediário devolveu (um passo, um escritor só: D2). */
-function gravarTrf(t: TrfNovo): void {
-  const st = useEdicaoStore.getState();
-  const k = chaveDoTrf(t);
-  if (!st.doc || st.soLeitura || gravados.has(k)) return;
-  gravados.add(k);
-  st.alterar(
-    "Estabilizar",
-    noEfeito<EfEstabilizar>(t.efeito, (e) => {
-      if (e.tipo !== "estabilizar") return;
-      e.trf_sha256 = t.sha256;
-      e.zoom_pct = t.zoom_pct;
-    }),
-  );
-}
-
-/** Esperas (ms): depois da última mudança; consulta de reserva enquanto faz (quem avisa é a fila de fundo);
- *  enquanto a tabela do decodificador não chega. */
-export const ESPERA = { mudanca: 400, fazendo: 5000, tabela: 1500 };
-
-/** Ponteiro apertado (arrasto de um controle em curso): o intermediário só é refeito ao soltar (§7.5). */
-let apertado = false;
-if (typeof window !== "undefined") {
-  window.addEventListener("pointerdown", () => void (apertado = true), true);
-  // `blur`: soltou fora da janela
-  for (const fim of ["pointerup", "pointercancel", "blur"]) window.addEventListener(fim, () => void (apertado = false), true);
-}
-
-/** Pede o intermediário do trecho sempre que o que muda a imagem dele muda, e acompanha até ficar pronto.
- *  O estado fica em `useOrigemStore` (o palco lê de lá); quem monta este gancho é quem faz o pedido. */
-export function useOrigem(c: ClipeQualquer): OrigemDoClipe | undefined {
-  const ws = useEdicaoStore((s) => s.ws);
-  const ligados = c.efeitos.filter((e) => ehRealce(e) && e.ligado);
-  const assinatura = c.tipo === "trecho" && ligados.length > 0 ? JSON.stringify([c.midia, c.inicio_s, c.inicio_pts, c.fim_s, c.fim_pts, ligados]) : null;
-  const id = c.id;
-  useEffect(() => {
-    const guardar = useOrigemStore.getState().guardar;
-    if (!assinatura || !ws) {
-      guardar(id, undefined);
-      return;
-    }
-    let vivo = true;
-    let relogio: ReturnType<typeof setTimeout> | undefined;
-    let tarefa: string | null = null;
-    const pedir = async () => {
-      const doc = useEdicaoStore.getState().doc;
-      if (!vivo || !doc) return;
-      if (apertado) {
-        relogio = setTimeout(() => void pedir(), ESPERA.mudanca);
-        return;
-      }
-      tarefa = null;
-      try {
-        const e = await commands.edicaoOrigemPedir(ws, doc, id);
-        if (!vivo) return;
-        guardar(id, e);
-        if (e.tipo === "fazendo") {
-          tarefa = e.tarefa;
-          relogio = setTimeout(() => void pedir(), ESPERA.fazendo);
-        } else if (e.trf) gravarTrf(e.trf);
-      } catch (x) {
-        if (!vivo) return;
-        const erro = separarErro(x);
-        // a tabela do decodificador ainda está na fila de fundo
-        if (erro.codigo === "tabela_pendente") relogio = setTimeout(() => void pedir(), ESPERA.tabela);
-        else guardar(id, { tipo: "falhou", erro });
-      }
-    };
-    relogio = setTimeout(() => void pedir(), ESPERA.mudanca);
-    // a fila de fundo avisa: progresso enquanto roda, nova consulta assim que a tarefa termina
-    const largar = useFundoStore.subscribe((f) => {
-      const t = tarefa ? f.tarefas.find((x) => x.id === tarefa) : undefined;
-      if (!t || !tarefa) return;
-      if (t.estado.tipo === "na_fila" || t.estado.tipo === "rodando") guardar(id, { tipo: "fazendo", tarefa, feito: t.feito });
-      else {
-        clearTimeout(relogio);
-        void pedir();
-      }
-    });
-    return () => {
-      vivo = false;
-      clearTimeout(relogio);
-      largar();
-    };
-  }, [assinatura, ws, id]);
-  return useOrigemStore((s) => s.porClipe[id]);
-}
+// O pedido, o acompanhamento e a gravação do `.trf` moram em `inspetor/origemDoClipe.ts` (o palco e os cartões usam
+// sem importar esta seção, que o registro importa). Daqui saem os mesmos nomes de antes.
+export { ESPERA, esquecerOrigens, useOrigem, useOrigemStore, type OrigemDoClipe };
 
 // ---- efeitos novos ----
 

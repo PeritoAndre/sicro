@@ -20,7 +20,7 @@ use super::modelo::{
     Prender, Problema, ProjetoEdicao, Racional, Rastreio, RefLegenda, SituacaoMidia, TamanhoPx, TipoDerivacao, TipoMidia, TipoRastreio,
     Titulo, Fundo, Tolerante, Velocidade, ESQUEMA as ESQUEMA_DOC, ESQUEMA_MENOR as ESQUEMA_MENOR_DOC,
 };
-use super::modelo::{ClipeTrecho, EfBase, EfRegua, Ponto};
+use super::modelo::{ClipeTrecho, EfBase};
 use super::medidas;
 use super::motor::efeitos;
 use super::motor::efeitos::{enquadramento, lupa, realce};
@@ -44,7 +44,7 @@ const DURACAO_MAX_S: f64 = 3600.0;
 /// Enquadramento: menor largura da região (0..1).
 const REGIAO_MIN_W: f64 = 0.02;
 /// Área segura do texto: 2 %, o canto da grade de posição de cada lado.
-const AREA_SEGURA: f64 = 0.02;
+const AREA_SEGURA: f64 = camada::titulo::AREA_SEGURA;
 /// Ampliação acima disso é aviso.
 const AMPLIACAO_MAX: f64 = 4.0;
 /// Desfoque abaixo disso é fraco (medido em texto, §2.3).
@@ -215,6 +215,9 @@ struct Uso<'a> {
     /// Slots do clipe (0 quando a duração já é inválida: nada a percorrer).
     n_q: u32,
     fps: Racional,
+    /// Tamanho da origem do clipe em px (a fonte exibida, a foto em lados pares, o canvas no título); None =
+    /// desconhecido (mídia ausente, sobreposto).
+    origem: Option<TamanhoPx>,
 }
 
 impl Uso<'_> {
@@ -543,6 +546,10 @@ impl<'a> Validacao<'a> {
         if !(0.0..=2.0).contains(&m.volume_original) {
             self.por(AUDIO, &Onde::default().campo("volume_original"));
         }
+        // o que o motor de áudio recusa ou ajustaria calado (a regra é dele)
+        if let Some(campo) = motor_audio::mixagem_invalida(m) {
+            self.por(AUDIO, &Onde::default().campo(campo));
+        }
     }
 
     // ---- principal
@@ -635,7 +642,8 @@ impl<'a> Validacao<'a> {
                     }
                 };
                 let quadros = lido.as_ref().map(|l| l.fonte);
-                let uso = Uso { onde, midia: Some(&t.midia), base: Base::Fonte, efeitos: &t.base.efeitos, tab, quadros, n_q: self.n_q_de(&t.base.id), fps };
+                let origem = self.ctx.fontes.get(t.midia.as_str()).map(|f| TamanhoPx { w: f.exibido.0, h: f.exibido.1 });
+                let uso = Uso { onde, midia: Some(&t.midia), base: Base::Fonte, efeitos: &t.base.efeitos, tab, quadros, n_q: self.n_q_de(&t.base.id), fps, origem };
                 self.efeitos(&uso);
                 self.da_fonte(&uso);
                 if let (Some(tab), Some((a, b))) = (tab, quadros) {
@@ -664,7 +672,8 @@ impl<'a> Validacao<'a> {
                     Some((j, j + 1))
                 });
                 let n_q = self.slots_locais(Some(g.duracao_s), self.n_q_de(&g.base.id));
-                let uso = Uso { onde, midia: Some(&g.midia), base: Base::Congelado, efeitos: &g.base.efeitos, tab, quadros, n_q, fps };
+                let origem = self.ctx.fontes.get(g.midia.as_str()).map(|f| TamanhoPx { w: f.exibido.0, h: f.exibido.1 });
+                let uso = Uso { onde, midia: Some(&g.midia), base: Base::Congelado, efeitos: &g.base.efeitos, tab, quadros, n_q, fps, origem };
                 self.efeitos(&uso);
                 self.da_fonte(&uso);
                 if let Some(f) = self.ctx.fontes.get(g.midia.as_str()).filter(|_| enquadramento::animado(&g.base.efeitos)) {
@@ -675,24 +684,25 @@ impl<'a> Validacao<'a> {
             ClipePrincipal::Imagem(i) => {
                 self.imagem_existe(&i.midia, &onde);
                 self.duracao(i.duracao_s, &onde);
-                let uso = self.uso_local(onde, &i.base.efeitos, Some(i.duracao_s), self.n_q_de(&i.base.id));
+                let mut uso = self.uso_local(onde, &i.base.efeitos, Some(i.duracao_s), self.n_q_de(&i.base.id));
+                // a origem do clipe de imagem é a foto em lados pares (a do motor)
+                uso.origem = motor_clipe::tamanho_da_imagem(self.p, self.ctx, &i.midia).map(|t| TamanhoPx { w: (t.w / 2 * 2).max(2), h: (t.h / 2 * 2).max(2) });
                 self.efeitos(&uso);
                 self.sem_fonte(&uso);
                 self.ampliacao(&uso, &i.midia);
-                // a origem do clipe de imagem é a foto em lados pares (a do motor)
-                if let Some(t) = motor_clipe::tamanho_da_imagem(self.p, self.ctx, &i.midia).filter(|_| enquadramento::animado(&i.base.efeitos)) {
-                    let origem = TamanhoPx { w: (t.w / 2 * 2).max(2), h: (t.h / 2 * 2).max(2) };
+                if let Some(origem) = uso.origem.filter(|_| enquadramento::animado(&i.base.efeitos)) {
                     self.destino_do_enquadramento(&uso, origem, &self.tempos_locais(uso.n_q));
                 }
             }
             ClipePrincipal::Titulo(t) => {
                 self.duracao(t.duracao_s, &onde);
                 self.titulo(&t.titulo, &onde);
-                let uso = self.uso_local(onde, &t.base.efeitos, Some(t.duracao_s), self.n_q_de(&t.base.id));
+                let mut uso = self.uso_local(onde, &t.base.efeitos, Some(t.duracao_s), self.n_q_de(&t.base.id));
+                let canvas = TamanhoPx { w: self.p.saida.largura, h: self.p.saida.altura };
+                uso.origem = Some(canvas);
                 self.efeitos(&uso);
                 self.sem_fonte(&uso);
                 if enquadramento::animado(&t.base.efeitos) {
-                    let canvas = TamanhoPx { w: self.p.saida.largura, h: self.p.saida.altura };
                     self.destino_do_enquadramento(&uso, canvas, &self.tempos_locais(uso.n_q));
                 }
             }
@@ -713,7 +723,7 @@ impl<'a> Validacao<'a> {
 
     /// `dur_s` = duração declarada; None = até o fim da âncora ou do programa (sobreposto).
     fn uso_local(&self, onde: Onde, efeitos: &'a [Tolerante<Efeito>], dur_s: Option<f64>, n_q: u32) -> Uso<'a> {
-        Uso { onde, midia: None, base: Base::Local, efeitos, tab: None, quadros: None, n_q: self.slots_locais(dur_s, n_q), fps: self.fps }
+        Uso { onde, midia: None, base: Base::Local, efeitos, tab: None, quadros: None, n_q: self.slots_locais(dur_s, n_q), fps: self.fps, origem: None }
     }
 
     /// Slots a percorrer num clipe de base local: duração fora de faixa já é `duracao` e não percorre bilhões de slots.
@@ -953,6 +963,20 @@ impl<'a> Validacao<'a> {
 
     fn efeitos(&mut self, uso: &Uso<'a>) {
         let mut enquadramentos = 0;
+        // o que a cadeia de origem recusa com `item_invalido` (a regra é do `realce`), só onde ela roda
+        if uso.base != Base::Local {
+            let exibido = uso.origem.map_or((0, 0), |o| (o.w, o.h));
+            for (id, campo) in realce::invalidos(uso.efeitos, exibido) {
+                // sem a fonte, a conversão da lente não tem tamanho: a mídia ausente já é acusada
+                if campo == Some("k1") && uso.origem.is_none() {
+                    continue;
+                }
+                let onde = uso.onde.efeito(&id);
+                self.por(ITEM_INVALIDO, &campo.map_or(onde.clone(), |c| onde.campo(c)));
+            }
+        }
+        // SHA-256 da mídia que o clipe mostra (medidas das análises só valem nela)
+        let sha_do_clipe = uso.midia.and_then(|m| self.midias.get(m)).map(|m| m.sha256.as_str());
         for e in uso.efeitos {
             let e = match e {
                 Tolerante::Desconhecido(v) => {
@@ -982,6 +1006,12 @@ impl<'a> Validacao<'a> {
             // efeitos de origem que o motor ainda não aplica (P1.4); o rótulo é o tipo
             if let Some(d) = realce::recusa(e, uso.base != Base::Local) {
                 self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
+            }
+            // por campo num trecho de fonte sem meio entre os quadros (o motor recusa em `realce::leitura`)
+            if let (Base::Fonte, Some(tab)) = (uso.base, uso.tab) {
+                if let Some(d) = realce::recusa_na_fonte(e, tab) {
+                    self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
+                }
             }
             match e {
                 Efeito::Enquadramento(q) => {
@@ -1043,6 +1073,14 @@ impl<'a> Validacao<'a> {
                         self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
                     }
                     self.cor(&l.moldura.cor, &onde.campo("moldura"));
+                    // o que o motor recusa com `item_invalido` (a regra é da lupa); sem o tamanho da origem, só os campos
+                    let campo = match uso.origem {
+                        Some(o) => lupa::campo_invalido(l, o),
+                        None => camada::lupa::campo_invalido(l),
+                    };
+                    if let Some(c) = campo {
+                        self.por(ITEM_INVALIDO, &onde.campo(c));
+                    }
                     if let Some(r) = self.rastreio_do_uso(&l.rastreio, uso, &onde, false) {
                         self.confirmado(r, uso, base, &onde);
                     }
@@ -1059,16 +1097,13 @@ impl<'a> Validacao<'a> {
                     if geometrico {
                         self.por(REGUA_ESPACO, &onde);
                     }
-                    let poligono = &rg.calibracao.regiao;
-                    if poligono.len() >= 3 && !dentro_do_poligono(rg.ancora.x, rg.ancora.y, poligono) {
-                        self.por(REGUA_FORA_DA_CALIBRACAO, &onde.campo("ancora"));
+                    // a calibração é de uma mídia: fora dela (outra mídia, foto, título) a régua não mede nada
+                    if medidas::de_outra_midia(rg.calibracao.midia_sha256.as_deref(), sha_do_clipe) {
+                        self.por(REGUA_FORA_DA_CALIBRACAO, &onde.campo("calibracao"));
                     } else if medidas::recusa(e).is_none() {
-                        // as pontas pela homografia: a conta é do P1.3 e só existe quando a régua renderiza
-                        match pontas_fora(rg, medidas::pontas_da_regua) {
-                            Ok(true) => self.por(REGUA_FORA_DA_CALIBRACAO, &onde.campo("comprimento_m")),
-                            Ok(false) => {}
-                            // retrato que não dá ponta nenhuma: o desenho falharia no render
-                            Err(_) => self.por(ITEM_INVALIDO, &onde.campo("calibracao")),
+                        // tudo o que o desenho recusa (âncora, ponta, modelos 1D, horizonte, campos): a regra é do P1.3
+                        if let Some((cod, campo)) = medidas::problema_da_regua(rg) {
+                            self.por(cod, &onde.campo(campo));
                         }
                     }
                 }
@@ -1079,6 +1114,10 @@ impl<'a> Validacao<'a> {
                     // só dentro do intervalo medido (O5; a regra é do P1.3), no tempo de fonte do quadro mostrado
                     if self.em_algum_quadro_mostrado(uso, base, &|t_fonte| medidas::fora_do_intervalo(v, t_fonte)) {
                         self.por(VELOCIDADE_FORA_DO_INTERVALO, &onde);
+                    }
+                    // medida em outra mídia: o intervalo medido não é desta gravação
+                    if sha_do_clipe.is_some() && medidas::de_outra_midia(v.calculo.midia_sha256.as_deref(), sha_do_clipe) {
+                        self.por(VELOCIDADE_FORA_DO_INTERVALO, &onde.campo("calculo"));
                     }
                     self.estilo(&v.estilo, &onde);
                     if let OndeVelocidade::Segue { rastreio, .. } = &v.onde {
@@ -1499,6 +1538,9 @@ impl<'a> Validacao<'a> {
                 } else if self.com_som && p.saida.audio && tempo::transicao_sobrepoe(&t.tipo) && motor_audio::recusa("transicao") {
                     // o som da transição com sobreposição é do P1.5 (O3)
                     de_outra_fase = true;
+                } else if juncao::longa_demais(t, self.fps) {
+                    // acima do que o `xfade` aceita: o motor recusa (a regra é da junção)
+                    ok = false;
                 }
             }
             if !ok {
@@ -1697,8 +1739,8 @@ impl<'a> Validacao<'a> {
         if !l.itens.is_empty() {
             self.estilo(&l.estilo, &Onde::default().campo("legendas"));
         }
-        // silêncios: (mídia, de, ate em tempo de fonte; de, ate no programa)
-        let silencios = self.silencios_no_programa();
+        // as que mostrariam o que um silêncio cala: a regra do motor (a mesma conta do som)
+        let sob_silencio: HashSet<String> = if saem { motor_legendas::sob_silencio(p, self.linha).into_iter().collect() } else { HashSet::new() };
         for g in &l.itens {
             let onde = Onde::clipe(&g.id).campo("legendas");
             let (de, ate) = match &g.alvo {
@@ -1719,41 +1761,10 @@ impl<'a> Validacao<'a> {
             if g.origem == OrigemLegenda::Ia && !g.conferida {
                 self.por(LEGENDA_NAO_CONFERIDA, &onde);
             }
-            let cruza = silencios.iter().any(|s| match &g.alvo {
-                RefLegenda::Fonte { midia, .. } => midia == s.0 && de < s.2 && s.1 < ate,
-                RefLegenda::Programa { .. } => de < s.4 && s.3 < ate,
-            });
-            if cruza {
+            if sob_silencio.contains(&g.id) {
                 self.por(LEGENDA_SOB_SILENCIO, &onde);
             }
         }
-    }
-
-    /// Silêncios dos trechos ligados: (mídia, de, ate na fonte, de, ate no programa).
-    fn silencios_no_programa(&self) -> Vec<(&'a str, f64, f64, f64, f64)> {
-        let mut v = Vec::new();
-        if !self.fps_ok() {
-            return v;
-        }
-        let p = self.p;
-        for c in &p.principal {
-            let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = c else { continue };
-            if t.base.desligado || t.audio.silencios.is_empty() {
-                continue;
-            }
-            let Some(r) = self.linha.clipes.iter().find(|r| r.id == t.base.id) else { continue };
-            let fator = match t.velocidade {
-                Velocidade::Constante { fator } if fator > 0.0 => fator,
-                _ => 1.0,
-            };
-            let t0 = tempo::instante_do_slot(r.inicio_q, self.fps);
-            let ini = r.fonte.as_ref().and_then(|f| self.tabela(&f.midia).map(|tab| tab.tempo(f.j_in as usize))).unwrap_or(t.inicio_s);
-            for s in &t.audio.silencios {
-                let prog = |x: f64| t0 + (x - ini) / fator;
-                v.push((t.midia.as_str(), s.de, s.ate, prog(s.de), prog(s.ate)));
-            }
-        }
-        v
     }
 
     // ---- marcadores e sincronias
@@ -2008,31 +2019,6 @@ fn primeiro_enquadramento(efeitos: &[Tolerante<Efeito>]) -> Option<&super::model
 /// O enquadramento que vale pode ser avaliado?
 fn estrutura_do_enquadre_ok(efeitos: &[Tolerante<Efeito>]) -> bool {
     primeiro_enquadramento(efeitos).is_none_or(|q| animavel_ok(&q.regiao))
-}
-
-/// Ponto dentro (ou na borda) do polígono, por paridade de cruzamentos.
-fn dentro_do_poligono(x: f64, y: f64, pol: &[super::modelo::Ponto]) -> bool {
-    let n = pol.len();
-    let mut dentro = false;
-    for i in 0..n {
-        let (a, b) = (pol[i], pol[(i + n - 1) % n]);
-        // na aresta
-        let cruz = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
-        if cruz.abs() <= EPS && x >= a.x.min(b.x) - EPS && x <= a.x.max(b.x) + EPS && y >= a.y.min(b.y) - EPS && y <= a.y.max(b.y) + EPS {
-            return true;
-        }
-        if (a.y > y) != (b.y > y) && x < (b.x - a.x) * (y - a.y) / (b.y - a.y) + a.x {
-            dentro = !dentro;
-        }
-    }
-    dentro
-}
-
-/// Alguma ponta ou divisão da régua cai fora da área calibrada? `pontas` = a conta da homografia (`medidas::pontas_da_regua`).
-fn pontas_fora(rg: &EfRegua, pontas: impl Fn(&EfRegua) -> crate::error::Result<Vec<Ponto>>) -> crate::error::Result<bool> {
-    let poligono = &rg.calibracao.regiao;
-    let pontos = pontas(rg)?;
-    Ok(poligono.len() >= 3 && pontos.iter().any(|p| !(p.x.is_finite() && p.y.is_finite()) || !dentro_do_poligono(p.x, p.y, poligono)))
 }
 
 /// O canto do bloco `i` do título cabe no limite do rasterizador? A resposta é a dele: `camada::titulo::primitivas`
@@ -2816,7 +2802,6 @@ mod testes {
         let fora = json!([{ "x": 0.6, "y": 0.6 }, { "x": 0.9, "y": 0.6 }, { "x": 0.9, "y": 0.9 }]);
         efeito(&mut c, regua(fora.clone()));
         c.so(&mais(&[REGUA_FORA_DA_CALIBRACAO], &[ns_efeito(&regua(fora))]));
-        assert!(dentro_do_poligono(0.2, 0.5, &serde_json::from_value::<Vec<_>>(quadrado).unwrap()), "na borda conta");
     }
 
     #[test]
@@ -3839,14 +3824,14 @@ mod testes {
             lista.into_inner()
         };
         // trecho dos quadros 30..90, ativo de t(40) a t(50), intervalo fechado: os 11 quadros lidos, no tempo de fonte
-        let trecho_uso = Uso { onde: Onde::clipe("c1"), midia: Some("m1"), base: Base::Fonte, efeitos: &[], tab: Some(&tab), quadros: Some((30, 90)), n_q: 60, fps };
+        let trecho_uso = Uso { onde: Onde::clipe("c1"), midia: Some("m1"), base: Base::Fonte, efeitos: &[], tab: Some(&tab), quadros: Some((30, 90)), n_q: 60, fps, origem: None };
         assert_eq!(vistos(&trecho_uso, &ef_base(Some((t(40), t(50))))), (40..=50).map(|k| Some(t(k))).collect::<Vec<_>>());
         assert_eq!(vistos(&trecho_uso, &ef_base(None)).len(), 60);
         // congelado no quadro 45 por 1 s, ativo local de 0,2 a 0,5 s: 10 slots, todos com o tempo do quadro 45
-        let congelado = Uso { onde: Onde::clipe("c1"), midia: Some("m1"), base: Base::Congelado, efeitos: &[], tab: Some(&tab), quadros: Some((45, 46)), n_q: 30, fps };
+        let congelado = Uso { onde: Onde::clipe("c1"), midia: Some("m1"), base: Base::Congelado, efeitos: &[], tab: Some(&tab), quadros: Some((45, 46)), n_q: 30, fps, origem: None };
         assert_eq!(vistos(&congelado, &ef_base(Some((0.2, 0.5)))), vec![Some(t(45)); 10]);
         // título: sem fonte
-        let titulo_uso = Uso { onde: Onde::clipe("c1"), midia: None, base: Base::Local, efeitos: &[], tab: None, quadros: None, n_q: 30, fps };
+        let titulo_uso = Uso { onde: Onde::clipe("c1"), midia: None, base: Base::Local, efeitos: &[], tab: None, quadros: None, n_q: 30, fps, origem: None };
         assert_eq!(vistos(&titulo_uso, &ef_base(None)), vec![None; 30]);
         // a regra que acusa num quadro só basta
         assert!(v.em_algum_quadro_mostrado(&trecho_uso, &ef_base(None), &|x| x == Some(t(89))));
@@ -3968,28 +3953,258 @@ mod testes {
         assert!(!validacao_aceita(&torto));
     }
 
-    /// §2.3 `regua_fora_da_calibracao`: "âncora ou ponta fora do polígono". As pontas vêm da homografia do P1.3
-    /// (`medidas::pontas_da_regua`), perguntada só quando a régua renderiza.
+    /// Problemas do efeito `id`: (código, campo).
+    fn do_efeito(c: &Cena, id: &str) -> Vec<(&'static str, Option<String>)> {
+        c.problemas().into_iter().filter(|p| p.efeito.as_deref() == Some(id)).map(|p| (p.codigo, p.campo)).collect()
+    }
+
+    /// (h) 1 na régua: tudo o que o desenho recusa (`medidas::pontas_conferidas`, a regra do render) a validação acusa
+    /// antes, com o mesmo código e o campo: ponta fora, âncora fora do segmento dos modelos 1D, campos inválidos.
     #[test]
-    fn regua_com_ponta_fora_da_calibracao() {
+    fn regua_validacao_acusa_o_que_o_desenho_recusa() {
         let quadrado = json!([{ "x": 0.2, "y": 0.2 }, { "x": 0.8, "y": 0.2 }, { "x": 0.8, "y": 0.8 }, { "x": 0.2, "y": 0.8 }]);
-        let Efeito::Regua(rg) = serde_json::from_value::<Efeito>(regua(quadrado)).unwrap() else { panic!() };
-        let p = |x: f64, y: f64| Ponto { x, y };
-        let com_pontas = |pontos: Vec<Ponto>| pontas_fora(&rg, |_| Ok(pontos.clone())).unwrap();
-        assert!(!com_pontas(vec![p(0.5, 0.5), p(0.6, 0.5), p(0.7, 0.5)]));
-        assert!(!com_pontas(vec![p(0.5, 0.5), p(0.8, 0.5)]), "na borda conta como dentro");
-        assert!(com_pontas(vec![p(0.5, 0.5), p(0.9, 0.5)]), "ponta fora");
-        assert!(com_pontas(vec![p(0.5, 0.5), p(0.85, 0.5), p(0.7, 0.5)]), "divisão fora");
-        assert!(com_pontas(vec![p(0.5, 0.5), p(f64::NAN, 0.5)]), "ponta que a homografia não dá");
-        assert!(pontas_fora(&rg, |_| Err(crate::error::SicroError::Validation("calibracao".into()))).is_err());
-        // sem região calibrada (menos de 3 vértices) não há fora
-        let Efeito::Regua(livre) = serde_json::from_value::<Efeito>(regua(json!([]))).unwrap() else { panic!() };
-        assert!(!pontas_fora(&livre, |_| Ok(vec![p(5.0, 5.0)])).unwrap());
-        // enquanto a régua é recusada, a validação não chama a conta do P1.3 (que ainda não existe)
+        let muda = |f: &dyn Fn(&mut Value)| {
+            let mut r = regua(quadrado.clone());
+            f(&mut r);
+            r
+        };
+        // H = identidade em 1280×720: 1 m = 1 px; a âncora fica em (640, 360) e a região vai de 256 a 1024 px em x
+        let casos: Vec<(&str, Value, Option<(&'static str, &'static str)>)> = vec![
+            ("limpa", muda(&|_| {}), None),
+            ("ponta na borda", muda(&|r| r["comprimento_m"] = json!(384.0)), None),
+            ("ponta fora", muda(&|r| r["comprimento_m"] = json!(400.0)), Some((REGUA_FORA_DA_CALIBRACAO, "comprimento_m"))),
+            ("âncora fora", muda(&|r| r["ancora"] = json!({ "x": 0.9, "y": 0.9 })), Some((REGUA_FORA_DA_CALIBRACAO, "ancora"))),
+            // região de 2 pontos = segmento do modelo 1D: a âncora projeta fora dele
+            ("âncora fora do segmento", muda(&|r| r["calibracao"]["regiao"] = json!([{ "x": 0.2, "y": 0.5 }, { "x": 0.4, "y": 0.5 }])), Some((REGUA_FORA_DA_CALIBRACAO, "ancora"))),
+            ("divisões demais", muda(&|r| r["divisoes"] = json!(101)), Some((ITEM_INVALIDO, "divisoes"))),
+            ("comprimento zero", muda(&|r| r["comprimento_m"] = json!(0.0)), Some((ITEM_INVALIDO, "comprimento_m"))),
+            ("comprimento acima do teto", muda(&|r| r["comprimento_m"] = json!(1000.5)), Some((ITEM_INVALIDO, "comprimento_m"))),
+            ("homografia com 8 números", muda(&|r| r["calibracao"]["h"] = json!([1, 0, 0, 0, 1, 0, 0, 0])), Some((ITEM_INVALIDO, "calibracao"))),
+            ("espaço zerado", muda(&|r| r["calibracao"]["espaco"] = json!({ "w": 0, "h": 720 })), Some((ITEM_INVALIDO, "calibracao"))),
+        ];
+        for (nome, r, esperado) in casos {
+            let Efeito::Regua(rg) = serde_json::from_value::<Efeito>(r.clone()).unwrap() else { panic!() };
+            // o render: o desenho só sai com a régua conferida
+            let render = medidas::pontas_conferidas(&rg).err().map(|e| e.to_string());
+            let mut c = cena();
+            efeito(&mut c, r);
+            let achados = do_efeito(&c, "e6");
+            match esperado {
+                None => {
+                    assert!(render.is_none(), "{nome}: o desenho recusa ({render:?})");
+                    assert_eq!(achados, vec![], "{nome}");
+                }
+                Some((cod, campo)) => {
+                    let render = render.unwrap_or_else(|| panic!("{nome}: o desenho aceita"));
+                    assert!(render.contains(&format!("{cod}: {campo}")), "{nome}: {render}");
+                    assert_eq!(achados, vec![(cod, Some(campo.to_string()))], "{nome}");
+                }
+            }
+        }
+    }
+
+    /// A medida da análise vale só na mídia em que foi feita: régua e velocidade em clipe de OUTRA mídia, em foto e
+    /// em título são erro; na própria mídia, e com retrato gravado antes do campo, não.
+    #[test]
+    fn regua_e_velocidade_so_na_midia_da_medida() {
+        let quadrado = json!([{ "x": 0.2, "y": 0.2 }, { "x": 0.8, "y": 0.2 }, { "x": 0.8, "y": 0.8 }, { "x": 0.2, "y": 0.8 }]);
+        let regua_de = |sha: Option<&str>| {
+            let mut r = regua(quadrado.clone());
+            if let Some(s) = sha {
+                r["calibracao"]["midia_sha256"] = json!(s);
+            }
+            r
+        };
+        let vel_de = |sha: Option<&str>| {
+            let mut v = velocidade_exibida(t(30), t(89), json!(null));
+            v["id"] = json!("e7");
+            if let Some(s) = sha {
+                v["calculo"]["midia_sha256"] = json!(s);
+            }
+            v
+        };
+        let fora_regua = vec![(REGUA_FORA_DA_CALIBRACAO, Some("calibracao".to_string()))];
+        let fora_vel = vec![(VELOCIDADE_FORA_DO_INTERVALO, Some("calculo".to_string()))];
+        // a mídia do clipe é a m1 (SHA): a medida dela e o retrato antigo (sem o campo) passam; a de outra, não
+        for (sha, regua_esp, vel_esp) in [(Some(SHA), vec![], vec![]), (None, vec![], vec![]), (Some(SHA2), fora_regua.clone(), fora_vel.clone())] {
+            let mut c = cena();
+            efeito(&mut c, regua_de(sha));
+            efeito(&mut c, vel_de(sha));
+            assert_eq!(do_efeito(&c, "e6"), regua_esp, "régua, mídia {sha:?}");
+            assert_eq!(do_efeito(&c, "e7"), vel_esp, "velocidade, mídia {sha:?}");
+        }
+        // o campo novo vai e volta e não aparece em retrato antigo regravado
+        let Efeito::Regua(rg) = serde_json::from_value::<Efeito>(regua_de(Some(SHA))).unwrap() else { panic!() };
+        assert_eq!(serde_json::to_value(&rg.calibracao).unwrap()["midia_sha256"], SHA);
+        let Efeito::Regua(antiga) = serde_json::from_value::<Efeito>(regua_de(None)).unwrap() else { panic!() };
+        assert!(serde_json::to_value(&antiga.calibracao).unwrap().get("midia_sha256").is_none());
+        // quadro congelado da mesma mídia: vale como no trecho
+        let congelar = |efeitos: Value| json!({ "tipo": "congelar", "id": "c1", "rotulo": "", "desligado": false, "transicao_entrada": null,
+            "efeitos": efeitos, "midia": "m1", "instante_s": t(45), "instante_pts": 512 * 45, "duracao_s": 1.0 });
         let mut c = cena();
-        efeito(&mut c, regua(json!([{ "x": 0.2, "y": 0.2 }, { "x": 0.8, "y": 0.2 }, { "x": 0.8, "y": 0.8 }, { "x": 0.2, "y": 0.8 }])));
-        if medidas::recusa(&Efeito::Regua(rg.clone())).is_some() {
-            c.so(&[NAO_SUPORTADO]);
+        c.p["principal"] = json!([congelar(json!([regua_de(Some(SHA))]))]);
+        assert_eq!(do_efeito(&c, "e6"), vec![]);
+        c.p["principal"] = json!([congelar(json!([regua_de(Some(SHA2))]))]);
+        assert_eq!(do_efeito(&c, "e6"), fora_regua);
+        // foto e título não têm calibração nenhuma, nem com a mídia "certa" no retrato nem com retrato antigo
+        for sha in [Some(SHA2), None] {
+            let mut c = cena();
+            c.p["midias"].as_array_mut().unwrap().push(midia("m2", "imagem", SHA2));
+            c.fontes.insert("m2".into(), imagem());
+            c.midias.push(estado("m2", SituacaoMidia::Ok));
+            c.p["principal"] = json!([{ "tipo": "imagem", "id": "c1", "rotulo": "", "desligado": false, "transicao_entrada": null,
+                "efeitos": [regua_de(sha)], "midia": "m2", "duracao_s": 2.0 }]);
+            assert_eq!(do_efeito(&c, "e6"), fora_regua, "foto, {sha:?}");
+            let mut tit = titulo("c1", 2.0);
+            tit["efeitos"] = json!([regua_de(sha), vel_de(sha)]);
+            c.p["principal"] = json!([tit]);
+            assert_eq!(do_efeito(&c, "e6"), fora_regua, "título, {sha:?}");
+            // a velocidade em clipe sem fonte já é fora do intervalo (não há quadro medido)
+            assert_eq!(do_efeito(&c, "e7"), vec![(VELOCIDADE_FORA_DO_INTERVALO, None)], "título, {sha:?}");
+        }
+        assert!(medidas::de_outra_midia(Some(SHA2), Some(SHA)) && !medidas::de_outra_midia(Some(SHA), Some(SHA)) && !medidas::de_outra_midia(None, Some(SHA)) && medidas::de_outra_midia(Some(SHA), None));
+    }
+
+    /// O limite do `xfade` (60 s) é acusado antes: a regra é a da junção (`juncao::longa_demais`), só nas que sobrepõem.
+    #[test]
+    fn transicao_acima_do_limite_do_xfade() {
+        let dois = |tipo: &str, d: f64, dur: f64| {
+            let mut c = cena();
+            let mut a = titulo("c1", dur);
+            a["efeitos"] = json!([]);
+            let mut b = titulo("c2", dur);
+            b["transicao_entrada"] = json!({ "tipo": tipo, "duracao_s": d, "audio": "acompanhar" });
+            c.p["principal"] = json!([a, b]);
+            c
+        };
+        // clipes de 200 s: a transição cabe nos dois, só o limite do filtro pesa
+        let transicao = |c: &Cena| c.problemas().into_iter().filter(|p| p.codigo == TRANSICAO).map(|p| (p.clipe, p.campo)).collect::<Vec<_>>();
+        assert_eq!(transicao(&dois("fundir", 60.0, 200.0)), vec![], "60 s cabem");
+        assert_eq!(transicao(&dois("fundir", 60.1, 200.0)), vec![(Some("c2".to_string()), Some("transicao_entrada".to_string()))]);
+        assert_eq!(transicao(&dois("circulo", 90.0, 200.0)).len(), 1);
+        assert_eq!(transicao(&dois("escurecer", 90.0, 200.0)), vec![], "o `fade` não tem o limite");
+        // a mesma regra do motor: `juncao::montar` recusa exatamente o que a validação acusa
+        let fps = Racional { num: 30, den: 1 };
+        for (tipo, d, longa) in [("fundir", 60.0, false), ("fundir", 60.1, true), ("escurecer", 90.0, false)] {
+            let t = super::super::modelo::Transicao { tipo: tipo.into(), duracao_s: d, audio: super::super::modelo::AudioTransicao::Acompanhar };
+            assert_eq!(juncao::longa_demais(&t, fps), longa, "{tipo} {d}");
+            let slots = tempo::slots(d, fps) as u32;
+            let canvas = super::super::motor::plano::Canvas { w: 320, h: 180, fps, cor_fundo: "#000000".into() };
+            let pecas = [
+                juncao::Peca { rotulo: "a".into(), clipe: "a".into(), n_q: 6000, de: 0, ate: 6000, sobrepoe: 0, entrada: None, saida: Some((t.clone(), slots)) },
+                juncao::Peca { rotulo: "b".into(), clipe: "b".into(), n_q: 6000, de: 0, ate: 6000, sobrepoe: if tempo::transicao_sobrepoe(tipo) { slots } else { 0 }, entrada: Some((t.clone(), slots)), saida: None },
+            ];
+            let r = juncao::montar(&mut super::super::motor::grafo::Grafo::novo(), &pecas, &canvas);
+            assert_eq!(r.is_err(), longa, "{tipo} {d}: {:?}", r.err());
+        }
+    }
+
+    /// O que o motor de áudio recusa (`item_invalido: abaixar`) ou ajustaria calado na mixagem: acusado antes, pela
+    /// regra dele (`audio::mixagem_invalida`).
+    #[test]
+    fn mixagem_invalida_e_acusada() {
+        let com_mix = |m: Value| {
+            let mut c = cena();
+            c.p["mixagem"] = m;
+            c.problemas().into_iter().filter(|p| p.codigo == AUDIO).map(|p| p.campo).collect::<Vec<_>>()
+        };
+        let mix = |abaixar: Value, normalizar: Value| json!({ "volume_original": 1.0, "abaixar": abaixar, "normalizar": normalizar, "limitador": false });
+        let ab = |db: f64, a: f64, s: f64| json!({ "db": db, "ataque_s": a, "soltura_s": s });
+        assert_eq!(com_mix(mix(ab(-12.0, 0.3, 0.5), json!({ "lufs": -16.0, "pico_db": -1.5 }))), vec![]);
+        assert_eq!(com_mix(mix(ab(0.0, 0.0, 0.0), json!(null))), vec![]);
+        for ruim in [ab(-12.0, -0.1, 0.5), ab(-12.0, 0.3, -0.5), ab(3.0, 0.3, 0.5)] {
+            assert_eq!(com_mix(mix(ruim.clone(), json!(null))), vec![Some("abaixar".to_string())], "{ruim}");
+        }
+        for ruim in [json!({ "lufs": -80.0, "pico_db": -1.5 }), json!({ "lufs": 0.0, "pico_db": -1.5 }), json!({ "lufs": -16.0, "pico_db": 1.0 }), json!({ "lufs": -16.0, "pico_db": -30.0 })] {
+            assert_eq!(com_mix(mix(ab(-12.0, 0.3, 0.5), ruim.clone())), vec![Some("normalizar".to_string())], "{ruim}");
+        }
+    }
+
+    /// Efeitos de origem: o que a cadeia recusa com `item_invalido` (`ativo` parcial, dois do mesmo tipo, valor fora da
+    /// faixa do filtro) e o desentrelace por campo em fonte sem meio entre os quadros são acusados antes, no efeito.
+    #[test]
+    fn efeitos_de_origem_invalidos_sao_acusados_antes() {
+        let nitidez = |id: &str, q: f64| com(base("nitidez", id), json!({ "quantidade": q }));
+        let ajustes = |campo: &str, v: f64| {
+            let mut a = com(base("ajustes", "e2"), json!({ "brilho": 0.0, "contraste": 1.0, "gama": 1.0, "saturacao": 1.0 }));
+            a[campo] = json!(v);
+            a
+        };
+        let lente = |cx: f64| com(base("lente", "e2"), json!({ "k1": -0.2, "k2": 0.0, "cx": cx, "cy": 0.5, "perfil": "" }));
+        let trf = |nome: &str| {
+            let mut e = estabilizar(0, 89);
+            e["id"] = json!("e2");
+            e["trf_sha256"] = json!(nome);
+            e
+        };
+        let mut parcial = nitidez("e2", 0.5);
+        parcial["ativo"] = json!({ "de": t(40), "ate": t(50) });
+        let casos: Vec<(&str, Vec<Value>, Vec<(&'static str, Option<String>)>)> = vec![
+            ("limpos", vec![nitidez("e2", 0.5)], vec![]),
+            ("nitidez fora", vec![nitidez("e2", 5.5)], vec![(ITEM_INVALIDO, Some("quantidade".into()))]),
+            ("brilho fora", vec![ajustes("brilho", 1.5)], vec![(ITEM_INVALIDO, Some("brilho".into()))]),
+            ("gama fora", vec![ajustes("gama", 0.0)], vec![(ITEM_INVALIDO, Some("gama".into()))]),
+            ("saturação fora", vec![ajustes("saturacao", 3.5)], vec![(ITEM_INVALIDO, Some("saturacao".into()))]),
+            ("centro da lente fora", vec![lente(1.2)], vec![(ITEM_INVALIDO, Some("cx".into()))]),
+            ("ativo parcial", vec![parcial], vec![(ITEM_INVALIDO, Some("ativo".into()))]),
+            // o nome do `.trf` vira arquivo e texto do grafo: fora da forma do SHA-256, o motor recusa
+            ("trf com nome de caminho", vec![trf("../../x")], vec![(ITEM_INVALIDO, Some("trf_sha256".into()))]),
+            ("trf com texto de filtro", vec![trf("a.trf:optzoom=1")], vec![(ITEM_INVALIDO, Some("trf_sha256".into()))]),
+            ("trf certo", vec![trf(SHA2)], vec![]),
+        ];
+        for (nome, efeitos, esperado) in casos {
+            let mut c = cena();
+            for e in &efeitos {
+                efeito(&mut c, e.clone());
+            }
+            assert_eq!(do_efeito(&c, "e2"), esperado, "{nome}");
+            // a regra é a do motor: `realce::aplicar` recusa exatamente esses
+            let tipados: Vec<Tolerante<Efeito>> = serde_json::from_value(json!(efeitos)).unwrap();
+            assert_eq!(realce::invalidos(&tipados, (1280, 720)).is_empty(), esperado.is_empty(), "{nome}");
+        }
+        // dois do mesmo tipo: o segundo
+        let mut c = cena();
+        efeito(&mut c, nitidez("e2", 0.5));
+        efeito(&mut c, nitidez("e3", 0.7));
+        assert_eq!((do_efeito(&c, "e2"), do_efeito(&c, "e3")), (vec![], vec![(ITEM_INVALIDO, None)]));
+        // foto: a cadeia de origem não roda (é `nao_suportado`), sem `item_invalido` por cima
+        // por campo em fonte de um tique por quadro (AVI): o motor recusa em `realce::leitura`
+        let campo = com(base("desentrelacar", "e2"), json!({ "modo": "campo", "ordem": "auto" }));
+        let mut c = cena();
+        efeito(&mut c, campo.clone());
+        assert!(!do_efeito(&c, "e2").iter().any(|(cod, _)| *cod == NAO_SUPORTADO), "passo de 512 tiques tem meio");
+        let um_tique = apoio::tabela((1, 30), (0..300).collect());
+        c.fontes.insert("m1".into(), fonte(um_tique));
+        c.p["principal"][0]["inicio_pts"] = json!(30);
+        c.p["principal"][0]["fim_pts"] = json!(90);
+        assert_eq!(do_efeito(&c, "e2"), vec![(NAO_SUPORTADO, None)]);
+        assert!(c.problemas().iter().any(|p| p.mensagem.contains(mensagens::frase(NAO_SUPORTADO, None, None).as_str())));
+        // por quadro, na mesma fonte: aceito
+        c.p["principal"][0]["efeitos"] = json!([com(base("desentrelacar", "e2"), json!({ "modo": "quadro", "ordem": "auto" }))]);
+        assert_eq!(do_efeito(&c, "e2"), vec![]);
+    }
+
+    /// Lupa: o que o motor recusa com `item_invalido` (`lupa::campo_invalido`: ampliação fora de 1,5..8, janela fora de
+    /// (0, 1] ou com menos de 8 px da fonte) é acusado antes, no campo.
+    #[test]
+    fn lupa_invalida_e_acusada_antes() {
+        let lupa_com = |campo: &str, v: f64| {
+            let mut l = ef_do_tipo("lupa");
+            l["id"] = json!("e2");
+            l["ativo"] = json!(null);
+            l["rastreio"] = json!("r1");
+            l[campo] = json!(v);
+            l
+        };
+        for (campo, v, esperado) in [("fator", 3.0, None), ("fator", 9.0, Some("fator")), ("fator", 1.0, Some("fator")), ("janela", 1.5, Some("janela")), ("janela", 0.005, Some("janela"))] {
+            let mut c = cena();
+            c.p["rastreios"] = json!([rastreio(&[30])]);
+            let l = lupa_com(campo, v);
+            efeito(&mut c, l.clone());
+            let invalidos: Vec<_> = do_efeito(&c, "e2").into_iter().filter(|(cod, _)| *cod == ITEM_INVALIDO).collect();
+            assert_eq!(invalidos, esperado.map(|x| (ITEM_INVALIDO, Some(x.to_string()))).into_iter().collect::<Vec<_>>(), "{campo} = {v}");
+            let Efeito::Lupa(tipada) = serde_json::from_value::<Efeito>(l).unwrap() else { panic!() };
+            assert_eq!(lupa::campo_invalido(&tipada, TamanhoPx { w: 1280, h: 720 }), esperado, "{campo} = {v}");
         }
     }
 }

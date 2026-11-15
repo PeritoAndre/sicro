@@ -117,6 +117,8 @@ const FILTROS_OBRIGATORIOS: &[&str] = &[
     "lutyuv", "extractplanes", "mergeplanes", "eq", "showinfo", "atrim", "asplit", "atempo", "amix", "afade", "apad",
     "aresample", "loudnorm", "alimiter", "format", "split", "setsar", "setparams", "asetpts", "asetnsamples", "volume", "pan",
     "aevalsrc", "aformat", "asetrate", "adelay", "anullsrc", "transpose", "hflip", "vflip", "fade", "color",
+    // a janela sem slot de lupa ativo termina a cópia nele (P1.2)
+    "nullsink",
 ];
 const FILTROS_OPCIONAIS: &[&str] = &["vidstabdetect", "vidstabtransform", "lenscorrection", "bwdif", "tmix", "perspective"];
 const CODIFICADORES_OBRIGATORIOS: &[&str] = &["libx264", "aac", "pcm_s16le"];
@@ -374,9 +376,11 @@ fn lancar_gpu(cap: Arc<Capacidades>, cache: Option<PathBuf>) {
     });
 }
 
-/// Grava a sonda de GPU (salvo passageiro) e troca a entrada da memória pela nova.
+/// Grava a sonda de GPU (salvo passageiro) e troca a entrada da memória pela nova. Sonda cortada pela saída do app
+/// (os filhos mortos por `matar_todos` saem como falha do codificador) não vai para o disco: gravada, a placa ficava
+/// reprovada, ou num degrau pior, até o perito mandar testar de novo.
 fn guardar_gpu(cap: &Capacidades, r: ResultadoGpu, cache: Option<&Path>) -> Arc<Capacidades> {
-    if let (Some(d), false) = (cache, r.passageiro) {
+    if let (Some(d), false) = (cache, r.passageiro || exec::encerrando()) {
         let mut todas: BTreeMap<String, EntradaGpu> = ler_json(&d.join("sonda-gpu.json")).unwrap_or_default();
         todas.insert(
             cap.sha256.clone(),
@@ -1406,6 +1410,46 @@ fi"#
         estado().por_binario.remove(&f);
         // (os extras do NVENC rodam no ffmpeg de verdade e não entram na conta)
         assert_eq!(r.gpu.as_ref().map(|g| g.degrau.as_str()), Some("completo"), "{:?} ({})", r.reprovados, cap.versao);
+    }
+
+    /// A sonda cortada pela saída do app, num processo auxiliar (o `matar_todos` mataria o ffmpeg dos vizinhos): antes
+    /// dele a reprovação vai para o cache (controle); depois, não.
+    #[test]
+    #[ignore]
+    fn auxiliar_sonda_cortada_na_saida() {
+        let Ok(pasta) = std::env::var("SICRO_TESTE_SONDA_SAIDA") else { return };
+        let Some(cap) = fontes::cap() else { return };
+        let cache = PathBuf::from(pasta);
+        let reprovada = || ResultadoGpu {
+            gpu: None,
+            reprovados: vec![Reprovado { codificador: "h264_nvenc".into(), classe: ClasseReprovacao::Outra, dica: String::new(), driver_minimo: None, api_exigida: None, api_do_driver: None }],
+            passageiro: false,
+        };
+        let arquivo = cache.join("sonda-gpu.json");
+        guardar_gpu(&cap, reprovada(), Some(&cache));
+        assert!(arquivo.exists(), "controle: fora da saída a sonda grava");
+        std::fs::remove_file(&arquivo).unwrap();
+        assert!(!exec::encerrando());
+        exec::matar_todos();
+        assert!(exec::encerrando());
+        guardar_gpu(&cap, reprovada(), Some(&cache));
+        assert!(!arquivo.exists(), "sonda cortada pela saída gravou no cache");
+        std::fs::write(cache.join("ok"), "ok").unwrap();
+    }
+
+    #[test]
+    fn sonda_cortada_pela_saida_do_app_nao_vai_para_o_cache() {
+        let Some(_cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("sonda-saida");
+        let st = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", "edicao::ffmpeg::sonda::testes::auxiliar_sonda_cortada_na_saida", "--ignored", "--nocapture"])
+            .env("SICRO_TESTE_SONDA_SAIDA", &d)
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap();
+        assert!(st.success());
+        assert!(d.join("ok").exists());
     }
 
     /// Sessão tomada entre os 8 quadros e os 30: classe do stderr, passageiro, nada no cache.

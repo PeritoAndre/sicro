@@ -29,7 +29,8 @@ import { esquecerLeituras } from "../inspetor/contexto";
 import { useInspetorUi } from "../inspetor/ui";
 import { EDITOR_TITULO_PRONTO, EditorTitulo } from "./EditorTitulo";
 import { prenderTituloNoModelo } from "../sequencia/Presos";
-import { aplicarModelo, blocoNoModelo, escalaDoCanvas, pedido, tituloNoModelo, type ModeloTitulo } from "../modelo/titulos";
+import { aplicarModelo, blocoNoModelo, escalaDoCanvas, noArranjo, pedido, tituloNoModelo, type ModeloTitulo } from "../modelo/titulos";
+import { tituloDaFase0 } from "../sequencia/novos";
 import { textoPermitido } from "../inspetor/rotulos.teste";
 import { campo, clicar, desmontarTudo, digitar, entradaDe, escolher, esperar, lerFixture, montar, sair, textosVisiveis } from "../inspetor/testeTela";
 
@@ -113,6 +114,29 @@ describe("Editor do título", () => {
       expect(titulo()).toEqual(aplicarModelo(antes, m, false, { w: 1920, h: 1080 }));
       expect([st().passado.length, st().passado.at(-1)?.rotulo]).toEqual([k + 1, "Modelo"]);
     }
+  });
+
+  it("título fora do arranjo (o da Fase 0): 'Modelo' fica em branco e escolher o MESMO modelo rearranja; no arranjo, mostra o modelo", async () => {
+    const fase0 = tituloDaFase0("cartela", "Ocorrência", "");
+    await abrir((p) => void ((p.principal[0] as ClipeTitulo).titulo = fase0));
+    const tela = await montar(<Inspetor />);
+    await esperar(() => selecionar("clipe", T));
+    const lista = () => entradaDe(tela.raiz, "Modelo") as HTMLSelectElement;
+    expect(noArranjo(fase0)).toBe(false);
+    expect(lista().value).toBe("");
+    const k = st().passado.length;
+    await escolher(lista(), "cartela");
+    expect(titulo()).toEqual(aplicarModelo(fase0, "cartela", false, { w: 1920, h: 1080 }));
+    expect(titulo().blocos[0]!.lugar).not.toEqual(fase0.blocos[0]!.lugar);
+    expect([st().passado.length, st().passado.at(-1)?.rotulo]).toEqual([k + 1, "Modelo"]);
+    expect(lista().value).toBe("cartela");
+    // tamanho e cor trocados pelo perito não tiram o título do modelo
+    await esperar(() => st().alterar("Cor", (d) => void ((d.principal[0] as ClipeTitulo).titulo.blocos[0]!.estilo.cor = "#ff0000")));
+    expect(lista().value).toBe("cartela");
+    // a opção em branco não é escolha
+    const antes = titulo();
+    await escolher(lista(), "");
+    expect(titulo()).toBe(antes);
   });
 
   it("prévia: os pedidos de sprite do render (fixture do Rust), um por bloco, e cada sprite na caixa do Rust", async () => {
