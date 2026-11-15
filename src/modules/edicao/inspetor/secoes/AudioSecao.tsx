@@ -2,6 +2,7 @@
  * Áudio: volume do original e as trilhas de narração (importar, gravar, volume). Cada clipe de narração: "Preso a"
  * (clipe da principal, ou o programa), "Posição", recorte "De"/"Até" no arquivo, "Entrada (s)"/"Saída (s)".
  * A gravação vai inteira num comando só (`edicao_gravacao_salvar`, bytes crus).
+ * É a aba da Fase 0; o `PainelAudio` (P1.5) monta a dele com as mesmas peças (`Trilha`, `Gravador`).
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -17,7 +18,7 @@ import { Deslizante, Grade, Icone, Mini, Numero, Secao, Tempo } from "../campos"
 import { escolherMidia } from "./importar";
 import styles from "../Inspetor.module.css";
 
-const PAPEL: Record<TrilhaAudio["papel"], string> = { narracao: "Narração", musica: "Música", efeitos: "Efeitos" };
+export const PAPEL: Record<TrilhaAudio["papel"], string> = { narracao: "Narração", musica: "Música", efeitos: "Efeitos" };
 const ROTULO_CLIPE: Record<ClipePrincipal["tipo"], string> = { trecho: "Trecho", titulo: "Título", congelar: "Quadro congelado", imagem: "Imagem", tela: "Tela dividida" };
 
 const noClipeAudio = (id: Id, f: (c: ClipeAudio) => void) => (d: { audios: TrilhaAudio[] }) => {
@@ -70,7 +71,7 @@ export function AudioSecao() {
   );
 }
 
-function Trilha({ t, principal, focoAudio }: { t: TrilhaAudio; principal: ProjetoEdicao["principal"]; focoAudio: Id | null }) {
+export function Trilha({ t, principal, focoAudio }: { t: TrilhaAudio; principal: ProjetoEdicao["principal"]; focoAudio: Id | null }) {
   const so = useEdicaoStore((s) => s.soLeitura);
   return (
     <Secao
@@ -207,7 +208,7 @@ function ClipeNarracao({ c, principal, foco }: { c: ClipeAudio; principal: unkno
 }
 
 /** "Gravar" / "Parar": microfone pelo `MediaRecorder`; o arquivo inteiro vai ao backend ao parar. */
-function Gravador({ presoA, trilha }: { presoA: Id | null; trilha?: Id }) {
+export function Gravador({ presoA, trilha }: { presoA: Id | null; trilha?: Id }) {
   const [gravando, setGravando] = useState<{ mr: MediaRecorder; inicio: number } | null>(null);
   const [agora, setAgora] = useState(0);
   const partes = useRef<Blob[]>([]);

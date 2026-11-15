@@ -34,9 +34,13 @@ import {
   StepBack,
   StepForward,
   AlertTriangle,
+  Loader2,
 } from "lucide-react";
 import styles from "./VideoPlayerPanel.module.css";
 import { caminhoDoCaso } from "@core/caminhoDoCaso";
+import { useGestoTransporte } from "./useGestoTransporte";
+import { receber } from "@modules/edicao/store/coleta";
+import { separarErro } from "@modules/edicao/store/edicaoStore";
 
 interface Props {
   workspacePath: string;
@@ -57,6 +61,8 @@ interface Props {
   startTime?: number;
   /** Trecho a repetir (já ordenado), ou null. */
   loop?: { a: number; b: number } | null;
+  /** Entrada e saída marcadas (já ordenadas): Ctrl+3 leva à edição corrente. Sem ela, vale o `loop`. */
+  trecho?: { a: number; b: number } | null;
   /** Itens do menu de botão direito que vêm de fora (coletar, evento, trecho…). */
   menuItems?: () => MenuItem[];
   /** O vídeo tem trilha de áudio? (sem áudio o controle de volume fica inativo) */
@@ -103,8 +109,6 @@ function loadLegendOpen(): boolean {
     return false;
   }
 }
-/** Seta segurada além disto (ms) deixa de ser passo de quadro e vira play. */
-const HOLD_MS = 300;
 const DEFAULT_FPS = 30;
 
 export function VideoPlayerPanel({
@@ -119,6 +123,7 @@ export function VideoPlayerPanel({
   mediaKey,
   startTime = 0,
   loop = null,
+  trecho,
   menuItems,
   hasAudio = true,
   fullscreen = false,
@@ -130,7 +135,9 @@ export function VideoPlayerPanel({
   const [isReversing, setIsReversing] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [error, setError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<ReactNode>(null);
+  // coletas (Ctrl+3) em curso: a primeira de um vídeo espera a tabela de quadros
+  const [coletando, setColetando] = useState(0);
   const [adjust, setAdjust] = useState<Adjust>(ADJUST_DEFAULT);
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [audio, setAudio] = useState(loadAudioPrefs);
@@ -145,6 +152,10 @@ export function VideoPlayerPanel({
   onTimeUpdateRef.current = onTimeUpdate;
   const loopRef = useRef(loop);
   loopRef.current = loop;
+  const trechoRef = useRef(trecho);
+  trechoRef.current = trecho;
+  const workspaceRef = useRef(workspacePath);
+  workspaceRef.current = workspacePath;
   const startTimeRef = useRef(startTime);
   startTimeRef.current = startTime;
   const mediaKeyRef = useRef(mediaKey);
@@ -158,10 +169,6 @@ export function VideoPlayerPanel({
   const revActiveRef = useRef(false);
   const revRafRef = useRef<number | null>(null);
   const revLastWallRef = useRef(0);
-  // toque-vs-segurar das setas
-  const pressedDirRef = useRef<null | 1 | -1>(null);
-  const holdTimerRef = useRef<number | null>(null);
-  const holdActiveRef = useRef<null | 1 | -1>(null);
 
   useEffect(() => {
     fpsRef.current = fps ?? null;
@@ -482,10 +489,38 @@ export function VideoPlayerPanel({
     { enabled: active },
   );
 
-  // Ctrl+1 vale mesmo com foco em campo de texto.
+  // Ctrl+3: entrada e saída para a edição corrente do caso (§8.1), com a Edição fechada ou aberta.
+  const coletarTrecho = async () => {
+    const t = trechoRef.current ?? loopRef.current;
+    if (!t || !(t.b > t.a)) {
+      setNotice(<AlertTriangle size={14} aria-label="Trecho" />);
+      return;
+    }
+    setNotice(null);
+    setColetando((c) => c + 1);
+    try {
+      const { n } = await receber(workspaceRef.current, [{ sha256: mediaKeyRef.current, inicio_s: t.a, fim_s: t.b }]);
+      setNotice(`Trecho ${n}`);
+    } catch (e) {
+      const { codigo, frase: f } = separarErro(e);
+      // a frase vai escrita: o aviso não recebe o ponteiro (`pointer-events: none`), uma dica nunca abriria
+      setNotice(
+        <span data-estado="erro" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+          <AlertTriangle size={14} />
+          {f || codigo || ""}
+        </span>,
+      );
+    } finally {
+      setColetando((c) => c - 1);
+    }
+  };
+
+  // Ctrl+1 e Ctrl+3 valem mesmo com foco em campo de texto.
   useShortcuts(
     {
       "video.collectFrame": () => onCollectFrameRef.current(),
+      // tecla segurada: a repetição do sistema não acrescenta o mesmo trecho de novo
+      "video.collectClip": (e) => void (e.repeat || coletarTrecho()),
     },
     { enabled: active, allowInInputs: true },
   );
@@ -642,88 +677,32 @@ export function VideoPlayerPanel({
     };
   }, [onTimeUpdate, onDurationLoaded]);
 
-  // saiu da aba do reprodutor: para qualquer movimento
+  // saiu da aba do reprodutor: para qualquer movimento (o gesto das setas se solta sozinho)
   useEffect(() => {
     activeRef.current = active;
-    if (!active) {
-      if (holdTimerRef.current != null) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
-      }
-      pressedDirRef.current = null;
-      holdActiveRef.current = null;
-      stopReverse();
-    }
+    if (!active) stopReverse();
   }, [active]);
 
-  useEffect(() => {
-    const isTypingTarget = () => {
-      const el = document.activeElement as HTMLElement | null;
-      if (!el) return false;
-      const tag = el.tagName;
-      return (
-        tag === "INPUT" ||
-        tag === "TEXTAREA" ||
-        tag === "SELECT" ||
-        el.isContentEditable
-      );
-    };
+  // ←/→ e Shift+←/→: o mesmo gesto do transporte da Edição (§8.5)
+  useGestoTransporte(
+    {
+      passo: frameStep,
+      mover: (d) => (d === 1 ? void playForward() : startReverse()),
+      parar: () => {
+        videoRef.current?.pause();
+        stopReverse();
+      },
+      saltar: (s) => seekBy(s),
+    },
+    active,
+  );
 
-    // Só as setas ←/→ ficam aqui: toque-vs-segurar precisa de keyup +
-    // temporizador, e `useShortcuts` só trata keydown.
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!activeRef.current) return;
-      if (isTypingTarget()) return;
-      if (e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-
-      e.preventDefault();
-      const dir: 1 | -1 = e.key === "ArrowRight" ? 1 : -1;
-      if (e.shiftKey) {
-        seekBy(dir * 1); // ±1 s
-        return;
-      }
-      if (e.repeat) return; // segurar é o nosso timer, não o auto-repeat do SO
-      if (pressedDirRef.current !== null) return; // uma direção por vez
-      pressedDirRef.current = dir;
-      holdTimerRef.current = window.setTimeout(() => {
-        holdActiveRef.current = dir;
-        if (dir === 1) void playForward();
-        else startReverse();
-      }, HOLD_MS);
-    };
-
-    const onKeyUp = (e: KeyboardEvent) => {
-      if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-      const dir: 1 | -1 = e.key === "ArrowRight" ? 1 : -1;
-      if (pressedDirRef.current !== dir) return;
-      pressedDirRef.current = null;
-      if (holdTimerRef.current != null) {
-        clearTimeout(holdTimerRef.current);
-        holdTimerRef.current = null;
-      }
-      if (holdActiveRef.current === dir) {
-        // foi segurar: para o movimento
-        if (dir === 1) videoRef.current?.pause();
-        else stopReverse();
-        holdActiveRef.current = null;
-      } else {
-        // foi toque: um quadro
-        frameStep(dir);
-      }
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    window.addEventListener("keyup", onKeyUp);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown);
-      window.removeEventListener("keyup", onKeyUp);
-      if (holdTimerRef.current != null) clearTimeout(holdTimerRef.current);
+  useEffect(
+    () => () => {
       if (revRafRef.current != null) cancelAnimationFrame(revRafRef.current);
-    };
-    // Ligado uma vez: os handlers só leem refs e setters estáveis.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    },
+    [],
+  );
 
   const showPause = isPlaying || isReversing;
 
@@ -767,7 +746,7 @@ export function VideoPlayerPanel({
         }}
       >
         {menu.element}
-        {notice && <div className={styles.notice}>{notice}</div>}
+        {(notice || coletando > 0) && <div className={styles.notice}>{notice || <Loader2 size={14} data-estado="coletando" aria-label="Trecho" />}</div>}
         {(magnifier.scale > 1 || (adjust.on && isAdjusted(adjust))) && (
           <div className={styles.viewChips}>
             {magnifier.scale > 1 && (
@@ -988,7 +967,7 @@ export function VideoPlayerPanel({
           <kbd>Ctrl</kbd>+<kbd>M</kbd> mudo · <kbd>Ctrl</kbd>+<kbd>↑</kbd>/<kbd>↓</kbd> volume
         </span>
         <span className={styles.shortcutStrong}>
-          <kbd>Ctrl</kbd>+<kbd>1</kbd> coletar frame · <kbd>Ctrl</kbd>+<kbd>2</kbd> sequência
+          <kbd>Ctrl</kbd>+<kbd>1</kbd> coletar frame · <kbd>Ctrl</kbd>+<kbd>2</kbd> sequência · <kbd>Ctrl</kbd>+<kbd>3</kbd> trecho
         </span>
       </div>
       )}

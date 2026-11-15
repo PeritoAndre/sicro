@@ -1,0 +1,511 @@
+{
+  "esquema": "sicro.relatorio_juri/2",
+  "exemplo": true,
+  "caso": {
+    "numero": "Ocorrência nº 0000/2026 (exemplo)",
+    "referencia": "Laudo nº 00000/2026",
+    "orgao": "Polícia Científica — Seção de Perícias em Audiovisual",
+    "requisitante": "1ª Vara do Tribunal do Júri (exemplo)"
+  },
+  "perito": {
+    "nome": "Fulano de Tal (exemplo)",
+    "cargo": "Perito Criminal",
+    "matricula": "000000-0"
+  },
+  "gerado_em": "13 de novembro de 2026, às 20h40 (horário de Brasília)",
+  "saida": {
+    "arquivo": "ocorrencia-0000-juri.mp4",
+    "sha256": "6cc62c6d4f66c917f5c0a36daf7963f23ee6e65458816c855237027e18aa41e2",
+    "tamanho": "5,1 MB (5.129.295 bytes)",
+    "duracao": "37,5 segundos",
+    "imagem": "1920 × 1080 pontos (Full HD)",
+    "ritmo": "30 imagens por segundo, constante",
+    "formato": "MP4 (vídeo H.264, som AAC)",
+    "perfil": "Júri",
+    "com_perdas": true
+  },
+  "originais": [
+    {
+      "id": "A",
+      "rotulo": "Câmera 1 — portaria",
+      "arquivo": "cam01.mp4",
+      "sha256": "57372b4c3ee2b8b67a4e7470fee4659cb7b965e2c3cc1b69b1724c0b27fa652b",
+      "tamanho": "7,9 MB (7.949.265 bytes)",
+      "duracao": "20,0 segundos",
+      "imagem": "1280 × 720 pontos",
+      "ritmo": "30 imagens por segundo, constante",
+      "formato": "MP4 (H.264), sem som",
+      "taxa_variavel": false,
+      "formato_nativo": true,
+      "tecnico": {
+        "conteiner": "mov,mp4",
+        "codec": "h264 (High)",
+        "pix_fmt": "yuv420p",
+        "par": "1:1",
+        "quadros": "600",
+        "fps_nominal": "30/1",
+        "intervalo_quadros": "33,333 ms (mín. = máx.)",
+        "cor": "BT.709, faixa limitada",
+        "observacoes": "sem divergência entre o declarado e o medido"
+      },
+      "especie": "Gravação",
+      "recebido": "no formato próprio do aparelho gravador",
+      "derivacao": null,
+      "relogio": "sem informação",
+      "cobertura": {
+        "usado": "19,0 s",
+        "total": "20,0 s",
+        "intervalos": [
+          "0:02,000 a 0:07,500",
+          "0:05,000 a 0:10,500",
+          "0:10,000 a 0:18,000"
+        ]
+      }
+    },
+    {
+      "id": "B",
+      "rotulo": "Câmera 2 — estacionamento",
+      "arquivo": "cam02.mp4",
+      "sha256": "ec8ea655f2b5a4b125fc9bcea58e38f867b76ad33864c0f6e7c22667eac57bbb",
+      "tamanho": "117 kB (117.085 bytes)",
+      "duracao": "20,0 segundos",
+      "imagem": "1280 × 720 pontos",
+      "ritmo": "entre 12 e 25 imagens por segundo (variável)",
+      "formato": "MP4 (H.264), sem som",
+      "taxa_variavel": true,
+      "formato_nativo": false,
+      "tecnico": {
+        "conteiner": "mov,mp4",
+        "codec": "h264 (High)",
+        "pix_fmt": "yuv420p",
+        "par": "1:1",
+        "quadros": "500",
+        "fps_nominal": "25/1",
+        "intervalo_quadros": "40,000 a 83,333 ms",
+        "cor": "BT.709, faixa limitada",
+        "observacoes": "sem divergência entre o declarado e o medido"
+      },
+      "especie": "Gravação",
+      "recebido": "já convertida, e não no formato próprio do aparelho gravador",
+      "derivacao": {
+        "texto": "Este arquivo foi feito pela perícia a partir de outra gravação do caso (cópia convertida do formato do gravador, sem recompressão).",
+        "origem_sha256": "1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014"
+      },
+      "relogio": "relógio do gravador adiantado 2 min 14 s (informado na coleta)",
+      "cobertura": {
+        "usado": "14,0 s",
+        "total": "20,0 s",
+        "intervalos": [
+          "0:03,000 a 0:09,000",
+          "0:07,760 a 0:15,760"
+        ]
+      }
+    }
+  ],
+  "roteiro": [
+    {
+      "n": 1,
+      "tipo": "Texto de abertura",
+      "descricao": "Tela de texto com o número do caso e o aviso de que o vídeo é uma montagem.",
+      "na_saida": "0:00,0 a 0:03,0",
+      "miniatura": null,
+      "velocidade": null,
+      "efeitos": [],
+      "origem": null,
+      "selos": []
+    },
+    {
+      "n": 2,
+      "tipo": "Trecho de gravação",
+      "descricao": "Chegada do veículo à portaria.",
+      "na_saida": "0:03,0 a 0:08,5",
+      "miniatura": "img/1.jpg",
+      "velocidade": "normal (1×)",
+      "efeitos": [
+        "Relógio da gravação no canto",
+        "Legenda: “Portaria, entrada principal”"
+      ],
+      "origem": "gravação A, de 0:02,000 a 0:07,500",
+      "selos": []
+    },
+    {
+      "n": 3,
+      "tipo": "Trecho de gravação",
+      "descricao": "O mesmo momento, em câmera lenta e com ampliação.",
+      "na_saida": "0:08,5 a 0:19,5",
+      "miniatura": "img/2.jpg",
+      "velocidade": "câmera lenta (metade da velocidade, 0,5×)",
+      "efeitos": [
+        "Ampliação de parte da imagem (2×)",
+        "Marcação em círculo que acompanha o veículo",
+        "Estabilização da imagem"
+      ],
+      "origem": "gravação A, de 0:05,000 a 0:10,500",
+      "selos": [
+        "Velocidade 0,5×",
+        "Imagem ampliada",
+        "Imagem tratada"
+      ]
+    },
+    {
+      "n": 4,
+      "tipo": "Imagem parada",
+      "descricao": "Imagem congelada por 4 segundos para leitura da cena.",
+      "na_saida": "0:19,5 a 0:23,5",
+      "miniatura": "img/4.jpg",
+      "velocidade": "parada",
+      "efeitos": [
+        "Lupa fixa sobre a placa",
+        "Régua de escala (2 m)"
+      ],
+      "origem": "gravação A, no instante 0:12,000",
+      "selos": [
+        "Imagem parada"
+      ]
+    },
+    {
+      "n": 5,
+      "tipo": "Trecho de gravação",
+      "descricao": "Saída pelo estacionamento.",
+      "na_saida": "0:23,5 a 0:29,5",
+      "miniatura": "img/5.jpg",
+      "velocidade": "normal (1×)",
+      "efeitos": [
+        "Rosto de terceiro ocultado (mosaico)",
+        "Relógio da gravação no canto"
+      ],
+      "origem": "gravação B, de 0:03,000 a 0:09,000",
+      "selos": []
+    },
+    {
+      "n": 6,
+      "tipo": "Duas câmeras lado a lado",
+      "descricao": "Câmeras 1 e 2 exibidas ao mesmo tempo, alinhadas pelo mesmo instante.",
+      "na_saida": "0:29,5 a 0:37,5",
+      "miniatura": "img/6.png",
+      "velocidade": "normal (1×)",
+      "efeitos": [
+        "Tela dividida",
+        "Narração do perito"
+      ],
+      "origem": "gravações A e B (A: 0:10,000 a 0:18,000 · B: 0:07,760 a 0:15,760)",
+      "selos": []
+    }
+  ],
+  "acrescimos": [
+    {
+      "o_que": "Textos e legendas",
+      "onde": "itens 1, 2",
+      "explicacao": "Escritos pelo perito para identificar o local e o momento."
+    },
+    {
+      "o_que": "Marcação em círculo",
+      "onde": "item 3",
+      "explicacao": "Desenho sobreposto que acompanha o veículo; serve só para guiar o olhar."
+    },
+    {
+      "o_que": "Lupa e régua de escala",
+      "onde": "item 4",
+      "explicacao": "A lupa repete, ampliada, uma parte da própria imagem. A régua vem da medição feita no local (2,00 m entre os alvos)."
+    },
+    {
+      "o_que": "Relógio no canto",
+      "onde": "itens 2, 5",
+      "explicacao": "Mostra o tempo contado desde o início da gravação original, não a hora do dia."
+    },
+    {
+      "o_que": "Narração",
+      "onde": "item 6",
+      "explicacao": "Voz do perito gravada depois; não é som do local."
+    }
+  ],
+  "mudancas": [
+    {
+      "o_que": "Câmera lenta",
+      "onde": "item 3",
+      "explicacao": "Cada imagem fica o dobro do tempo na tela. Nenhuma imagem foi criada ou retirada."
+    },
+    {
+      "o_que": "Ampliação (zoom)",
+      "onde": "item 3",
+      "explicacao": "Mostra uma parte da imagem em tamanho maior. Ampliar não cria detalhes que a câmera não registrou."
+    },
+    {
+      "o_que": "Estabilização",
+      "onde": "item 3",
+      "explicacao": "Compensa a tremida da câmera para o objeto ficar parado na tela; as bordas podem aparecer cortadas."
+    },
+    {
+      "o_que": "Ocultação de rosto",
+      "onde": "item 5",
+      "explicacao": "Mosaico aplicado para preservar pessoa sem relação com o fato. No vídeo entregue não é possível desfazer; a gravação original continua íntegra."
+    },
+    {
+      "o_que": "Ajuste de tamanho",
+      "onde": "todos",
+      "explicacao": "As gravações (1280 × 720) foram ampliadas para o tamanho do vídeo final (1920 × 1080), mantendo a proporção."
+    }
+  ],
+  "sincronizacao": [
+    {
+      "par": "Câmera 1 e Câmera 2",
+      "metodo": "evento visível nas duas câmeras (acendimento do farol), marcado pelo perito",
+      "deslocamento": "a Câmera 2 está 2,240 s atrás da Câmera 1",
+      "deriva": "0,03 s a cada minuto",
+      "incerteza": "± 1 imagem (0,04 s)",
+      "explicacao": "Os relógios das duas câmeras não marcam a mesma hora. Para mostrá-las juntas, o perito alinhou as duas por um acontecimento que aparece em ambas.",
+      "tecnico": {
+        "metodo": "evento marcado em A (q 300, pts 10,000 s) e em B (q 194, pts 7,760 s); 2º ponto a 60 s para a deriva",
+        "deslocamento": "−2,240 s",
+        "deriva": "+500 ppm",
+        "incerteza": "± 0,040 s"
+      },
+      "conferencia": "conferido em um segundo acontecimento, 60 s depois (fechamento do portão)"
+    }
+  ],
+  "processamentos": [
+    {
+      "item": "2",
+      "ordem": "1",
+      "nome": "Recorte no tempo",
+      "parametros": "início 2,000 s; fim 7,500 s (tempo de apresentação do original)"
+    },
+    {
+      "item": "2",
+      "ordem": "2",
+      "nome": "Redimensionamento",
+      "parametros": "1280×720 → 1920×1080, bicúbico, SAR 1:1"
+    },
+    {
+      "item": "2",
+      "ordem": "3",
+      "nome": "Carimbo de tempo",
+      "parametros": "pts do original, canto inferior direito"
+    },
+    {
+      "item": "3",
+      "ordem": "1",
+      "nome": "Recorte no tempo",
+      "parametros": "início 5,000 s; fim 10,500 s"
+    },
+    {
+      "item": "3",
+      "ordem": "2",
+      "nome": "Estabilização",
+      "parametros": "vidstab: shakiness=5, smoothing=15, zoom=0, interpol=bicubic"
+    },
+    {
+      "item": "3",
+      "ordem": "3",
+      "nome": "Velocidade",
+      "parametros": "0,5× (setpts=2.0*PTS); sem interpolação de quadros"
+    },
+    {
+      "item": "3",
+      "ordem": "4",
+      "nome": "Zoom e pan",
+      "parametros": "região inicial x=0,30 y=0,25 l=0,50 a=0,50; final x=0,35 y=0,30 l=0,50 a=0,50"
+    },
+    {
+      "item": "3",
+      "ordem": "5",
+      "nome": "Destaque (círculo)",
+      "parametros": "rastreio assistido, 166 quadros, 3 correções manuais; cor #FFD400"
+    },
+    {
+      "item": "5",
+      "ordem": "3",
+      "nome": "Mosaico",
+      "parametros": "caixa rastreada, células de 24 px"
+    },
+    {
+      "item": "6",
+      "ordem": "1",
+      "nome": "Sincronização",
+      "parametros": "B = A − 2,240 s; deriva 500 ppm compensada por setpts"
+    }
+  ],
+  "codificacao": [
+    [
+      "Codificador de vídeo",
+      "libx264 (CPU), CRF 18, preset medium, yuv420p, BT.709"
+    ],
+    [
+      "Codificador de som",
+      "AAC 192 kb/s, 48 kHz, estéreo; normalização EBU R128 (−16 LUFS)"
+    ],
+    [
+      "Formato com perdas",
+      "sim; escolhido para tocar em qualquer aparelho do plenário"
+    ],
+    [
+      "Cópia sem perdas",
+      "não gerada nesta exportação"
+    ]
+  ],
+  "software": [
+    [
+      "SICRO",
+      "6.0.0",
+      "edição, cálculo dos códigos de verificação, este relatório"
+    ],
+    [
+      "FFmpeg",
+      "9.0.1",
+      "leitura das gravações e produção do vídeo"
+    ],
+    [
+      "Sistema",
+      "Linux x86_64",
+      "—"
+    ]
+  ],
+  "limitacoes": [
+    "O vídeo entregue foi gravado em formato com compressão. Para análise técnica, devem ser usadas as gravações originais, e não este vídeo.",
+    "A Câmera 2 não registra as imagens em ritmo constante. Movimentos vistos nessa câmera podem parecer mais rápidos ou mais lentos do que foram.",
+    "A gravação da Câmera 2 foi recebida já convertida, e não no formato próprio do gravador. Parte das informações de tempo pode ter se perdido nessa conversão.",
+    "A distância e o ângulo da câmera, a lente e a iluminação mudam a aparência de tamanho e de velocidade dos objetos."
+  ],
+  "reproducao": {
+    "projeto": "ocorrencia-0000-juri.projeto.json",
+    "projeto_sha256": "0f4c6e2d9b7a48f1c3e5a7092b1d4f6e8a0c2e4f6b8d0a1c3e5f7092b4d6f8a0",
+    "observacao": "Refeito com as mesmas versões de programa e o mesmo codificador (CPU), o vídeo resulta idêntico, com o mesmo código de verificação."
+  },
+  "anexos": [
+    {
+      "arquivo": "tecnico.json",
+      "descricao": "Relatório técnico completo, legível por programa (JSON)",
+      "sha256": "611d65eb222352844b64cee9c0ef10a98178282934e26c86b4dfac146a6be4ac"
+    }
+  ],
+  "diferencas": [
+    {
+      "item": "2",
+      "imagem": "1280×720 → 1920×1080",
+      "taxa": "30 → 30",
+      "quadros": "165 → 165",
+      "repetidos": "0",
+      "descartados": "0",
+      "obs": "—"
+    },
+    {
+      "item": "3",
+      "imagem": "região de 640×360 → 1920×1080",
+      "taxa": "30 → 30, a 0,5×",
+      "quadros": "165 → 330",
+      "repetidos": "165",
+      "descartados": "0",
+      "obs": "cada quadro exibido duas vezes"
+    },
+    {
+      "item": "4",
+      "imagem": "1280×720 → 1920×1080",
+      "taxa": "quadro único",
+      "quadros": "1 → 120",
+      "repetidos": "1",
+      "descartados": "0",
+      "obs": "mesmo quadro por 4 s"
+    },
+    {
+      "item": "5",
+      "imagem": "1280×720 → 1920×1080",
+      "taxa": "12 a 25 (variável) → 30",
+      "quadros": "118 → 180",
+      "repetidos": "62",
+      "descartados": "0",
+      "obs": "cada quadro mantido até o instante do seguinte"
+    },
+    {
+      "item": "6",
+      "imagem": "2 × 1280×720 → 2 × 960×540",
+      "taxa": "30 e variável → 30",
+      "quadros": "A 240, B 151 → 240",
+      "repetidos": "B 89",
+      "descartados": "0",
+      "obs": "B alinhada a A (ver Sincronização)"
+    }
+  ],
+  "ocultacoes": [
+    {
+      "item": "5",
+      "gravacao": "B",
+      "intervalo": "0:04,120 · 0:08,360",
+      "conteudo": "rosto de pedestre (terceiro)",
+      "filtro": "mosaico, células de 24 px, caixa rastreada com 2 correções manuais",
+      "motivo": "pessoa sem relação com o fato",
+      "quadros": "quadros: 2 marcados, 104 medidos, 0 interpolados, 0 incertos"
+    },
+    {
+      "item": "6",
+      "gravacao": "B",
+      "intervalo": "0:09,000 · 0:11,500",
+      "conteudo": "som: nome de testemunha",
+      "filtro": "tom de 1 kHz no lugar do som",
+      "motivo": "sigilo de testemunha",
+      "quadros": null
+    }
+  ],
+  "revisado_por": null,
+  "ia_resumo": [
+    "Ocultações propostas por detecção automática e confirmadas pelo perito: 1."
+  ],
+  "relogios": [
+    "O relógio marcado \"Original\" conta o tempo desde o início da gravação original. Ele não mostra a hora do dia. Em câmera lenta ele anda mais devagar, na mesma proporção."
+  ],
+  "medidas": [
+    "Régua de escala de 2,00 m (item 4): erro médio da calibração de 0,02 m."
+  ],
+  "selos_desligados": [],
+  "conferir": {
+    "arquivo": "ocorrencia-0000-juri.mp4",
+    "windows": "certutil -hashfile \"ocorrencia-0000-juri.mp4\" SHA256",
+    "linux": "sha256sum \"ocorrencia-0000-juri.mp4\"",
+    "quadros": "ffmpeg -i \"ocorrencia-0000-juri.mp4\" -map 0:v:0 -f framehash -hash sha256 -",
+    "lista": "quadros.decodificados.sha256",
+    "prova_arquivo": "Se o código calculado for igual ao impresso neste relatório, o arquivo é exatamente o que a perícia produziu, sem nenhuma alteração.",
+    "prova_quadros": "Esta conferência calcula um código para cada imagem do vídeo. Se a lista for igual à do pacote, as imagens são as mesmas, ainda que o arquivo tenha sido copiado para outro formato de embalagem sem recompressão."
+  },
+  "conferencia_ocultacoes": "As ocultações foram conferidas pelo perito no arquivo final. Fulano de Tal (exemplo), em 13 de novembro de 2026, às 20h52 (horário de Brasília).",
+  "modelos_ia": [
+    {
+      "modelo": "YuNet",
+      "arquivos": [
+        {
+          "nome": "face_detection_yunet_2023mar.onnx",
+          "sha256": "8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4"
+        }
+      ],
+      "origem": "github.com/opencv/opencv_zoo · onnxruntime 1.31.1 · CPU",
+      "uso": "detecção de rosto (ocultação do item 5)"
+    }
+  ],
+  "pacote": [
+    {
+      "arquivo": "ocorrencia-0000-juri.mp4",
+      "sha256": "6cc62c6d4f66c917f5c0a36daf7963f23ee6e65458816c855237027e18aa41e2"
+    },
+    {
+      "arquivo": "ocorrencia-0000-juri.tecnico.json",
+      "sha256": "611d65eb222352844b64cee9c0ef10a98178282934e26c86b4dfac146a6be4ac"
+    },
+    {
+      "arquivo": "mapa.csv",
+      "sha256": "3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855e"
+    },
+    {
+      "arquivo": "quadros.decodificados.sha256",
+      "sha256": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
+    },
+    {
+      "arquivo": "SHA256SUMS.txt",
+      "sha256": "2c26b46b68ffc68ff99b453c1d30413413422d706483bfa0f98a5e886266e7ae"
+    }
+  ],
+  "referencias": [
+    "SWGDE Best Practices for Digital Forensic Video Analysis, 18-V-001, versão 2.0 (10/12/2025)",
+    "SWGDE Considerations for the Use of Time-Based Analysis of Digital Video for Court, 19-V-003, versão 1.0 (17/09/2020)",
+    "SWGDE Video and Audio Redaction Guidelines, 18-M-001, versão 2.3 (19/12/2025)",
+    "SWGDE Considerations for Release of Synopsis Videos for Public Review, 21-V-002, versão 1.2 (02/12/2024)",
+    "OSAC 2022-S-0031, Standard Guide for Forensic Digital Video Examination Workflow, versão 2.0 (janeiro de 2024)"
+  ]
+}

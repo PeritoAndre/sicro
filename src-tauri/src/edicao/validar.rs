@@ -9,6 +9,7 @@ use std::collections::{HashMap, HashSet};
 use serde_json::Value;
 
 use super::armazem::id_valido;
+use super::camada;
 use super::cor;
 use super::geometria;
 use super::mensagens::{self, codigo::*};
@@ -19,7 +20,7 @@ use super::modelo::{
     Prender, Problema, ProjetoEdicao, Racional, Rastreio, RefLegenda, SituacaoMidia, TamanhoPx, TipoDerivacao, TipoMidia, TipoRastreio,
     Titulo, Fundo, Tolerante, Velocidade, ESQUEMA as ESQUEMA_DOC, ESQUEMA_MENOR as ESQUEMA_MENOR_DOC,
 };
-use super::modelo::EfBase;
+use super::modelo::{ClipeTrecho, EfBase, EfRegua, Ponto};
 use super::medidas;
 use super::motor::efeitos;
 use super::motor::efeitos::{enquadramento, lupa, realce};
@@ -61,6 +62,9 @@ const VFR_LACUNA: f64 = 1.5;
 const EPS: f64 = 1e-9;
 /// Ponto de apoio de texto, carimbo, imagem ou bloco de título mais longe que isto do canvas (px, 2^30): `item_invalido`.
 const MAX_LUGAR_PX: f64 = 1_073_741_824.0;
+/// Maior lado de um sprite de texto (px): o teto de `camada::texto` (2^26 px no total). O canto do bloco de título
+/// fica no máximo a isto do ponto de apoio.
+const MAX_SPRITE_PX: f64 = 67_108_864.0;
 /// Faixas dos parâmetros (§2.3): fora delas, `item_invalido` com o campo.
 const BORDA_SUAVE_MAX: f64 = 0.5;
 const MEDIA_QUADROS: std::ops::RangeInclusive<u32> = 2..=15;
@@ -247,6 +251,12 @@ impl Uso<'_> {
             _ => {}
         }
     }
+}
+
+/// Um trecho medido: quadros da FONTE que ele mostra `[a, b)` e o tempo de fonte do quadro de cada slot.
+struct Lido {
+    fonte: (usize, usize),
+    tempos: Vec<f64>,
 }
 
 /// O efeito vale na amostra? A regra do motor (`efeitos::base_ativa`: intervalo fechado no instante do quadro).
@@ -614,7 +624,8 @@ impl<'a> Validacao<'a> {
                 self.audio_do_clipe(&t.audio, &onde);
                 let tab = if existe { self.tabela(&t.midia) } else { None };
                 let lido = match tab {
-                    Some(tab) => self.trecho_na_tabela(tab, t.inicio_s, t.inicio_pts, t.fim_s, t.fim_pts, &t.velocidade, &onde.com_midia(&t.midia)),
+                    // a tabela do mapa do clipe (a de campos no desentrelace por campo): a de `tempo::medir` e da proveniência
+                    Some(tab) => self.lido_do_trecho(t, tab, &realce::tabela(&t.base.efeitos, tab), &onde.com_midia(&t.midia)),
                     None => {
                         let fonte_sem_quadros = existe && self.ctx.fontes.contains_key(t.midia.as_str());
                         if fonte_sem_quadros || !(t.inicio_s.is_finite() && t.fim_s.is_finite() && t.fim_s > t.inicio_s) {
@@ -623,7 +634,7 @@ impl<'a> Validacao<'a> {
                         None
                     }
                 };
-                let quadros = lido.as_ref().map(|(ab, _)| *ab);
+                let quadros = lido.as_ref().map(|l| l.fonte);
                 let uso = Uso { onde, midia: Some(&t.midia), base: Base::Fonte, efeitos: &t.base.efeitos, tab, quadros, n_q: self.n_q_de(&t.base.id), fps };
                 self.efeitos(&uso);
                 self.da_fonte(&uso);
@@ -632,9 +643,8 @@ impl<'a> Validacao<'a> {
                 }
                 // enquadramento animado: o destino em cada slot, pelo quadro que o slot mostra
                 let animado = enquadramento::animado(&t.base.efeitos);
-                if let (true, Some(tab), Some((_, mapa)), Some(f)) = (animado, tab, &lido, self.ctx.fontes.get(t.midia.as_str())) {
-                    let tempos: Vec<f64> = mapa.iter().map(|&j| tab.tempo(j as usize)).collect();
-                    self.destino_do_enquadramento(&uso, TamanhoPx { w: f.exibido.0, h: f.exibido.1 }, &tempos);
+                if let (true, Some(l), Some(f)) = (animado, &lido, self.ctx.fontes.get(t.midia.as_str())) {
+                    self.destino_do_enquadramento(&uso, TamanhoPx { w: f.exibido.0, h: f.exibido.1 }, &l.tempos);
                 }
                 self.ocultacoes_da_midia(&uso);
             }
@@ -795,6 +805,20 @@ impl<'a> Validacao<'a> {
         if ruim {
             self.por(AUDIO, onde);
         }
+    }
+
+    /// O trecho medido na tabela do CLIPE (`realce::tabela`: a da fonte, ou uma entrada por campo no desentrelace por
+    /// campo), a mesma do mapa do motor: slots, repetidos, descartados e passos saem dela. O que vale por quadro LIDO
+    /// (ocultação, rastreio, faixa da estabilização) fica nos quadros da fonte de onde as entradas do clipe saem.
+    fn lido_do_trecho(&mut self, t: &ClipeTrecho, tab: &TabelaQuadros, tab_clipe: &TabelaQuadros, onde: &Onde) -> Option<Lido> {
+        let ((a, b), mapa) = self.trecho_na_tabela(tab_clipe, t.inicio_s, t.inicio_pts, t.fim_s, t.fim_pts, &t.velocidade, onde)?;
+        let fonte = if std::ptr::eq(tab, tab_clipe) || (tab.pts.len() == tab_clipe.pts.len() && tab.tb == tab_clipe.tb) {
+            (a, b)
+        } else {
+            // quadro da fonte exibido no instante da primeira e da última entrada do clipe
+            (tab.do_par(tab_clipe.tempo(a), None), tab.do_par(tab_clipe.tempo(b - 1), None) + 1)
+        };
+        Some(Lido { fonte, tempos: mapa.iter().map(|&j| tab_clipe.tempo(j as usize)).collect() })
     }
 
     /// Faixa e mapa do trecho na tabela de quadros; devolve os quadros lidos e o quadro de cada slot quando o mapa fecha.
@@ -975,7 +999,8 @@ impl<'a> Validacao<'a> {
                     }
                 }
                 Efeito::MediaTemporal(m) => {
-                    if uso.base == Base::Fonte {
+                    // trecho e quadro congelado (média centrada nele): a imagem mostrada é média de várias da gravação
+                    if uso.base != Base::Local {
                         self.por(MEDIA_DE_QUADROS, &onde);
                     }
                     if !MEDIA_QUADROS.contains(&m.quadros) {
@@ -1037,6 +1062,14 @@ impl<'a> Validacao<'a> {
                     let poligono = &rg.calibracao.regiao;
                     if poligono.len() >= 3 && !dentro_do_poligono(rg.ancora.x, rg.ancora.y, poligono) {
                         self.por(REGUA_FORA_DA_CALIBRACAO, &onde.campo("ancora"));
+                    } else if medidas::recusa(e).is_none() {
+                        // as pontas pela homografia: a conta é do P1.3 e só existe quando a régua renderiza
+                        match pontas_fora(rg, medidas::pontas_da_regua) {
+                            Ok(true) => self.por(REGUA_FORA_DA_CALIBRACAO, &onde.campo("comprimento_m")),
+                            Ok(false) => {}
+                            // retrato que não dá ponta nenhuma: o desenho falharia no render
+                            Err(_) => self.por(ITEM_INVALIDO, &onde.campo("calibracao")),
+                        }
                     }
                 }
                 Efeito::VelocidadeExibida(v) => {
@@ -1044,9 +1077,7 @@ impl<'a> Validacao<'a> {
                         self.add(NAO_SUPORTADO, &onde, None, Some(d), None);
                     }
                     // só dentro do intervalo medido (O5; a regra é do P1.3), no tempo de fonte do quadro mostrado
-                    let mut fora = false;
-                    self.cada_ativo(uso, base, |a| fora |= medidas::fora_do_intervalo(v, a.pts.map(|_| a.t)));
-                    if fora {
+                    if self.em_algum_quadro_mostrado(uso, base, &|t_fonte| medidas::fora_do_intervalo(v, t_fonte)) {
                         self.por(VELOCIDADE_FORA_DO_INTERVALO, &onde);
                     }
                     self.estilo(&v.estilo, &onde);
@@ -1160,16 +1191,41 @@ impl<'a> Validacao<'a> {
             }
             Fundo::Transparente => {}
         }
-        for b in &t.blocos {
+        for (i, b) in t.blocos.iter().enumerate() {
             self.estilo(&b.estilo, onde);
             self.texto_longo(&b.conteudo, onde);
             if !(b.largura_max.is_finite() && b.largura_max > 0.0) {
                 self.por(ITEM_INVALIDO, &onde.campo("largura_max"));
             }
-            if self.lugar_valido(&b.lugar, onde) {
+            if self.lugar_do_bloco(t, i, onde) {
                 self.lugar(&b.lugar, b.estilo.tamanho, onde);
             }
         }
+    }
+
+    /// Lugar de um bloco de título. O rasterizador (`camada::titulo`) recusa pelo CANTO do sprite, a até um sprite
+    /// do ponto de apoio: longe do limite a conta sai do apoio; na faixa de dúvida (só valor absurdo, de arquivo
+    /// editado à mão) pergunta-se ao próprio rasterizador, e a exportação não descobre o erro no meio.
+    fn lugar_do_bloco(&mut self, t: &Titulo, i: usize, onde: &Onde) -> bool {
+        let b = &t.blocos[i];
+        let s = &self.p.saida;
+        let canvas = TamanhoPx { w: s.largura.max(1), h: s.altura.max(1) };
+        let (x, y) = (b.lugar.x * canvas.w as f64, b.lugar.y * canvas.h as f64);
+        let longe = x.abs().max(y.abs());
+        let ok = if !(x.is_finite() && y.is_finite()) || longe > MAX_LUGAR_PX + MAX_SPRITE_PX {
+            false
+        } else if longe <= MAX_LUGAR_PX - MAX_SPRITE_PX {
+            true
+        } else if b.conteudo.is_empty() {
+            // bloco vazio não é desenhado: vale o ponto de apoio
+            longe <= MAX_LUGAR_PX
+        } else {
+            canto_do_bloco_cabe(t, i, canvas)
+        };
+        if !ok {
+            self.por(ITEM_INVALIDO, &onde.campo("lugar"));
+        }
+        ok
     }
 
     /// Alvo de região: margem não negativa no `ocultar`, polígono com 3 vértices finitos.
@@ -1376,6 +1432,14 @@ impl<'a> Validacao<'a> {
                 f(a)
             }
         });
+    }
+
+    /// `regra` vale em algum instante em que o efeito está ativo? Ela recebe o tempo de FONTE do quadro mostrado
+    /// (trecho: o quadro lido; congelado: o quadro congelado, em todo slot ativo) ou None em clipe sem fonte (B17).
+    fn em_algum_quadro_mostrado(&self, uso: &Uso<'a>, base: &EfBase, regra: &dyn Fn(Option<f64>) -> bool) -> bool {
+        let mut achou = false;
+        self.cada_ativo(uso, base, |a| achou |= regra(a.pts.map(|_| a.t)));
+        achou
     }
 
     /// Detecção automática (ou Pessoas em `auto`) só vale com confirmação do mesmo conteúdo cobrindo o uso.
@@ -1962,6 +2026,45 @@ fn dentro_do_poligono(x: f64, y: f64, pol: &[super::modelo::Ponto]) -> bool {
         }
     }
     dentro
+}
+
+/// Alguma ponta ou divisão da régua cai fora da área calibrada? `pontas` = a conta da homografia (`medidas::pontas_da_regua`).
+fn pontas_fora(rg: &EfRegua, pontas: impl Fn(&EfRegua) -> crate::error::Result<Vec<Ponto>>) -> crate::error::Result<bool> {
+    let poligono = &rg.calibracao.regiao;
+    let pontos = pontas(rg)?;
+    Ok(poligono.len() >= 3 && pontos.iter().any(|p| !(p.x.is_finite() && p.y.is_finite()) || !dentro_do_poligono(p.x, p.y, poligono)))
+}
+
+/// O canto do bloco `i` do título cabe no limite do rasterizador? A resposta é a dele: `camada::titulo::primitivas`
+/// com o bloco sozinho e o sprite medido em memória (sem cache em disco).
+fn canto_do_bloco_cabe(t: &Titulo, i: usize, canvas: TamanhoPx) -> bool {
+    use camada::texto::{self, Atlas, FonteSprites, PedidoSprite, Sprite};
+    struct Medidor;
+    impl FonteSprites for Medidor {
+        fn sprite(&self, pedido: &PedidoSprite) -> crate::error::Result<Sprite> {
+            let (b, _) = texto::bitmap_sprite(pedido)?;
+            Ok(Sprite { relativo: String::new(), w: b.w, h: b.h })
+        }
+        fn atlas(&self, _: &EstiloTexto, _: u32) -> crate::error::Result<Atlas> {
+            Err(crate::error::SicroError::Validation("atlas: título não usa".into()))
+        }
+        fn imagem(&self, _: &str) -> Option<TamanhoPx> {
+            None
+        }
+    }
+    let so = Titulo { fundo: Fundo::Transparente, blocos: vec![t.blocos[i].clone()], ..t.clone() };
+    let quadro = camada::formas::QuadroCamada {
+        q: 0,
+        t: 0.0,
+        pts: None,
+        a: geometria::Afim::IDENTIDADE,
+        canvas,
+        rastreios: std::collections::BTreeMap::new(),
+        indice: None,
+        programa_s: 0.0,
+    };
+    // só a recusa de lugar interessa aqui: cor, largura e texto longo têm regra própria
+    !matches!(camada::titulo::primitivas(&so, &quadro, &Medidor), Err(crate::error::SicroError::Validation(m)) if m.starts_with(ITEM_INVALIDO) && m.contains("lugar"))
 }
 
 /// Formato com mais de 8 bits ou croma 4:2:2/4:4:4 (convertido para 8 bits 4:2:0 antes dos realces).
@@ -2926,9 +3029,32 @@ mod testes {
 
     #[test]
     fn media_de_quadros() {
+        let media = || com(base("media_temporal", "e2"), json!({ "quadros": 4 }));
         let mut c = cena();
-        efeito(&mut c, com(base("media_temporal", "e2"), json!({ "quadros": 4 })));
+        efeito(&mut c, media());
         c.so(&mais(&[MEDIA_DE_QUADROS], &[ns_tipo("media_temporal")]));
+        let p = c.problemas().into_iter().find(|p| p.codigo == MEDIA_DE_QUADROS).unwrap();
+        assert_eq!((p.nivel, p.clipe.as_deref(), p.efeito.as_deref()), (Nivel::Pericial, Some("c1"), Some("e2")));
+        // quadro congelado: a imagem parada também é média (centrada no quadro); pede ciência do mesmo jeito
+        let mut c = cena();
+        c.p["principal"] = json!([{ "tipo": "congelar", "id": "c1", "rotulo": "", "desligado": false, "transicao_entrada": null, "efeitos": [media()],
+            "midia": "m1", "instante_s": t(40), "instante_pts": 512 * 40, "duracao_s": 1.0 }]);
+        c.so(&mais(&[MEDIA_DE_QUADROS], &[ns_tipo("media_temporal")]));
+        assert_eq!(sem_ciencia(&c.problemas(), &[]), vec![MEDIA_DE_QUADROS]);
+        // título não tem gravação: nenhuma média a declarar (o efeito é recusado ali)
+        let mut c = cena();
+        let mut tit = titulo("c2", 2.0);
+        tit["efeitos"] = json!([media()]);
+        c.p["principal"].as_array_mut().unwrap().push(tit);
+        let p = c.problemas();
+        assert!(!p.iter().any(|p| p.codigo == MEDIA_DE_QUADROS), "{p:#?}");
+        assert!(p.iter().any(|p| p.codigo == NAO_SUPORTADO && p.clipe.as_deref() == Some("c2")), "{p:#?}");
+        // desligada não acusa
+        let mut c = cena();
+        let mut e = media();
+        e["ligado"] = json!(false);
+        efeito(&mut c, e);
+        c.so(&[]);
     }
 
     #[test]
@@ -3541,5 +3667,329 @@ mod testes {
         c.so(&[]);
         c.p["principal"][0]["efeitos"][0]["ativo"] = json!({ "de": 2.0, "ate": 3.0 });
         c.so(&[]);
+    }
+
+    // ---- Fase 1 (P1.R): aceites do §11 e pendências de contratos-fase1 (e)
+
+    use crate::edicao::camada::texto::SpritesEmCache;
+    use crate::edicao::modelo::Intervalo;
+    use crate::edicao::testes::aceite::{alvo_final, midia as midia_do_aceite, projeto as projeto_do_aceite, trecho as trecho_do_aceite, Mundo};
+    use crate::edicao::testes::fontes::{self, Fonte as FonteDeTeste};
+    use crate::edicao::testes::{executor, medir};
+    use std::cell::RefCell;
+    use std::sync::atomic::AtomicBool;
+    use std::sync::Arc;
+
+    /// ffmpeg dos testes; sem ele o teste se dispensa, salvo com `SICRO_EXIGE_FFMPEG=1` (aí falha).
+    fn cap_real() -> Option<Arc<Capacidades>> {
+        let cap = fontes::cap();
+        if cap.is_none() && std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1") {
+            panic!("SICRO_EXIGE_FFMPEG=1 e nenhum ffmpeg achado");
+        }
+        cap
+    }
+
+    /// `FonteInfo` de um arquivo, com a tabela do decodificador.
+    fn fonte_real(cap: &Capacidades, video: &Path) -> FonteInfo {
+        let tab = TabelaQuadros::do_decodificador(cap, video, &AtomicBool::new(false), &mut |_| {}).expect("tabela do decodificador");
+        crate::edicao::quadros::fonte_info(cap, video, SHA, Arc::new(tab), None).expect("fonte_info")
+    }
+
+    /// Análise de um trecho a 1× dos quadros `[j_in, j_out)` do arquivo, na saída do tamanho dele e na taxa `fps`.
+    fn analise_do_arquivo(cap: &Arc<Capacidades>, info: &FonteInfo, j_in: usize, j_out: usize, fps: (i64, i64)) -> (ProjetoEdicao, Analise) {
+        let p = projeto_do_aceite(info.exibido.0, info.exibido.1, fps, vec![midia_do_aceite("m1", "video", json!([]))], vec![trecho_do_aceite("c1", "m1", &info.quadros, j_in, j_out, 1.0, json!([]))], json!({}));
+        let fontes = HashMap::from([("m1".to_string(), info.clone())]);
+        let midias = [estado("m1", SituacaoMidia::Ok)];
+        let ctx = Contexto { fontes: &fontes, cap, rastreios: &SemRastreios, pasta_projeto: Path::new(""), midias: &midias };
+        let a = analisar(&p, &ctx, None);
+        a.problemas.iter().for_each(frase_do_catalogo);
+        (p, a)
+    }
+
+    /// Passos de pts fora de ±25 % do mediano, contados dos pts que o decodificador entrega (`showinfo`), sem a tabela.
+    fn passos_irregulares(cap: &Capacidades, video: &Path) -> u64 {
+        let pts = medir::pts(cap, video).unwrap();
+        let mut passos: Vec<i64> = pts.windows(2).map(|w| w[1] - w[0]).collect();
+        let fora = |med: i64| passos.iter().filter(|d| ((**d - med) as f64).abs() > 0.25 * med as f64).count() as u64;
+        let mut em_ordem = passos.clone();
+        em_ordem.sort_unstable();
+        let n = fora(em_ordem[em_ordem.len() / 2]);
+        passos.clear();
+        n
+    }
+
+    /// Aceite do §11: `p1a/src/vfr.mp4` acusa "Taxa variável". O arquivo do dossiê (quando presente) e a fonte de taxa
+    /// variável da matriz, pela tabela do decodificador: aviso pericial na mídia do clipe, com a contagem dos
+    /// intervalos irregulares medida à parte nos pts do arquivo; pede ciência; fonte constante não acusa.
+    #[test]
+    fn vfr_mp4_acusa_taxa_variavel() {
+        let Some(cap) = cap_real() else { return };
+        let do_dossie = fontes::dossie().map(|d| d.join("p1a/src/vfr.mp4")).filter(|p| p.is_file());
+        if do_dossie.is_none() {
+            eprintln!("p1a/src/vfr.mp4 ausente (SICRO_DOSSIE): só a fonte de taxa variável da matriz");
+        }
+        let da_matriz = fontes::gerar(FonteDeTeste::TaxaVariavel).unwrap();
+        for (video, esperado) in [(do_dossie, Some(56u64)), (Some(da_matriz), None)] {
+            let Some(video) = video else { continue };
+            let info = fonte_real(&cap, &video);
+            let n = info.quadros.pts.len();
+            let (_, a) = analise_do_arquivo(&cap, &info, 0, n, (30, 1));
+            let vfr: Vec<&Problema> = a.problemas.iter().filter(|p| p.codigo == TAXA_VARIAVEL).collect();
+            assert_eq!(vfr.len(), 1, "{}: {:#?} ({})", video.display(), a.problemas, cap.versao);
+            let p = vfr[0];
+            let irregulares = passos_irregulares(&cap, &video);
+            assert!(irregulares > 0, "{}: a fonte não é de taxa variável", video.display());
+            assert_eq!((p.nivel, p.clipe.as_deref(), p.midia.as_deref(), p.n), (Nivel::Pericial, Some("c1"), Some("m1"), Some(irregulares)), "{} ({})", video.display(), cap.versao);
+            assert_eq!(p.mensagem, format!("Taxa variável: {irregulares} intervalos irregulares"));
+            if let Some(e) = esperado {
+                // 300 quadros a 30 qps menos os de `mod(n,7)=3`, `mod(n,11)=5` e 100..112 (`p1a/scripts/00-fontes.sh`)
+                assert_eq!((n, irregulares), (224, e), "{}", video.display());
+            }
+            // pericial: a exportação pede ciência
+            assert!(!tem_erro(&a.problemas), "{:#?}", a.problemas);
+            assert_eq!(sem_ciencia(&a.problemas, &[]), vec![TAXA_VARIAVEL]);
+            assert_eq!(sem_ciencia(&a.problemas, &[TAXA_VARIAVEL.to_string()]), Vec::<&str>::new());
+            // dois quadros vizinhos de passo igual e o passo seguinte também: trecho regular não acusa
+            let regular = (0..n - 3).find(|&j| (1..=3).all(|k| info.quadros.pts[j + k] - info.quadros.pts[j + k - 1] == info.quadros.passo_mediano)).expect("três passos regulares seguidos");
+            let (_, a) = analise_do_arquivo(&cap, &info, regular, regular + 2, (30, 1));
+            assert!(!a.problemas.iter().any(|p| p.codigo == TAXA_VARIAVEL), "{:#?}", a.problemas);
+        }
+        // fonte de taxa constante: nada
+        let info = fonte_real(&cap, &fontes::gerar(FonteDeTeste::Mp4).unwrap());
+        let (_, a) = analise_do_arquivo(&cap, &info, 0, info.quadros.pts.len(), (30, 1));
+        assert_eq!(a.problemas, vec![], "{:#?}", a.problemas);
+    }
+
+    /// Aceite do §11: 25 em 30 acusa repetição com a contagem. Pela conta (tabela sintética) e medido no vídeo
+    /// renderizado pelo compilador: os quadros repetidos na saída são os que o aviso conta.
+    #[test]
+    fn vinte_e_cinco_em_trinta_acusa_repeticao() {
+        // 2 s de uma gravação de 25 qps (50 quadros) num programa de 30: 60 slots, 10 repetidos, nenhum descartado
+        let mut c = cena();
+        let tb = (1, 12800);
+        c.fontes.insert("m1".into(), fonte(apoio::tabela(tb, apoio::pts_regulares(250, (1, 25), tb, 0))));
+        for (k, v) in [("inicio_s", json!(1.0)), ("inicio_pts", json!(512 * 25)), ("fim_s", json!(3.0)), ("fim_pts", json!(512 * 75))] {
+            c.p["principal"][0][k] = v;
+        }
+        c.so(&[FPS_DIFERENTE]);
+        let p = &c.problemas()[0];
+        assert_eq!((p.nivel, p.n, p.mensagem.as_str(), p.clipe.as_deref(), p.midia.as_deref()), (Nivel::Aviso, Some(10), "Taxa diferente da saída: 10 quadros repetidos ou descartados", Some("c1"), Some("m1")));
+        let f = c.analise().linha.clipes[0].fonte.clone().unwrap();
+        assert_eq!((c.analise().linha.total_q, f.lidos, f.repetidos, f.descartados), (60, 50, 10, 0));
+        // na própria taxa não há aviso; a 0,5× a repetição é a câmera lenta e o aviso sai sem contagem
+        c.p["saida"]["fps"] = json!({ "num": 25, "den": 1 });
+        c.so(&[]);
+        c.p["saida"]["fps"] = json!({ "num": 30, "den": 1 });
+        c.p["principal"][0]["velocidade"]["fator"] = json!(0.5);
+        c.so(&[FPS_DIFERENTE]);
+        assert_eq!((c.problemas()[0].n, c.problemas()[0].mensagem.as_str()), (None, "Taxa da gravação diferente da saída"));
+
+        // medido: AVI de 25 qps pelo compilador, quadro de origem de cada slot
+        let Some(cap) = cap_real() else { return };
+        let info = fonte_real(&cap, &fontes::gerar(FonteDeTeste::Avi25).unwrap());
+        assert_eq!(info.quadros.taxa_nominal(), Racional { num: 25, den: 1 }, "{}", cap.versao);
+        let (p, a) = analise_do_arquivo(&cap, &info, 25, 75, (30, 1));
+        let aviso: Vec<&Problema> = a.problemas.iter().filter(|p| p.codigo == FPS_DIFERENTE).collect();
+        assert_eq!(aviso.len(), 1, "{:#?}", a.problemas);
+        assert!(!a.problemas.iter().any(|p| p.codigo == QUADROS_DESCARTADOS || p.nivel == Nivel::Erro), "{:#?}", a.problemas);
+        let n = aviso[0].n.expect("contagem");
+        let plano = Mundo::novo(&cap).com("m1", &info).compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{}: {e}", cap.versao));
+        let pasta = fontes::pasta_temporaria("p1r-25-em-30");
+        let r = executor::rodar(&cap, &plano, &pasta, &executor::Opcoes { sem_perdas: true, ..Default::default() }).unwrap_or_else(|e| panic!("{}: {e}", cap.versao));
+        let mut origem = Vec::new();
+        for b in &r.blocos {
+            origem.extend(medir::quadros_de_origem(&cap, b).unwrap());
+        }
+        let _ = std::fs::remove_dir_all(&pasta);
+        assert_eq!(origem.len(), 60, "{}", cap.versao);
+        let repetidos = origem.windows(2).filter(|w| w[0] == w[1]).count() as u64;
+        let distintos: BTreeSet<u32> = origem.iter().copied().collect();
+        assert_eq!(distintos, (25..75).collect::<BTreeSet<u32>>(), "todo quadro do trecho aparece ({})", cap.versao);
+        assert!(origem.windows(2).all(|w| w[0] <= w[1]), "{origem:?}");
+        assert_eq!((repetidos, n), (10, 10), "repetidos medidos no vídeo × contagem do aviso ({})", cap.versao);
+    }
+
+    fn velocidade_exibida(de_s: f64, ate_s: f64, ativo: Value) -> Value {
+        let mut e = com(base("velocidade_exibida", "v1"), json!({ "calculo": { "id": "k1", "kmh": 42.0, "faixa": [39.0, 45.0], "de_s": de_s, "ate_s": ate_s, "metodo": "dois pontos" },
+            "onde": { "modo": "fixa", "lugar": { "x": 0.5, "y": 0.9, "h": "centro", "v": "base" } }, "estilo": estilo() }));
+        e["ativo"] = ativo;
+        e
+    }
+
+    /// O5/B17: `velocidade_fora_do_intervalo` é erro e a regra (do P1.3) recebe o tempo de FONTE do quadro mostrado
+    /// em cada instante em que o efeito está ativo: o quadro lido no trecho, o quadro congelado no congelado (o
+    /// `ativo` dele é local), nada em clipe sem fonte.
+    #[test]
+    fn velocidade_fora_do_intervalo() {
+        assert_eq!((mensagens::nivel(VELOCIDADE_FORA_DO_INTERVALO), mensagens::frase(VELOCIDADE_FORA_DO_INTERVALO, None, None).as_str()), (Some(Nivel::Erro), "Velocidade fora do intervalo medido"));
+        let c = cena();
+        let p = c.projeto();
+        let ctx = Contexto { fontes: &c.fontes, cap: &c.cap, rastreios: &SemRastreios, pasta_projeto: Path::new(""), midias: &c.midias };
+        let linha = tempo::resolver(&p, &ctx);
+        let v = Validacao::nova(&p, &linha, &ctx, None);
+        let tab = tabela();
+        let fps = Racional { num: 30, den: 1 };
+        let ef_base = |ativo: Option<(f64, f64)>| EfBase { id: "v1".into(), ligado: true, nome: String::new(), ativo: ativo.map(|(de, ate)| Intervalo { de: Some(de), ate: Some(ate) }) };
+        let vistos = |uso: &Uso, b: &EfBase| {
+            let lista = RefCell::new(Vec::new());
+            assert!(!v.em_algum_quadro_mostrado(uso, b, &|t| {
+                lista.borrow_mut().push(t);
+                false
+            }));
+            lista.into_inner()
+        };
+        // trecho dos quadros 30..90, ativo de t(40) a t(50), intervalo fechado: os 11 quadros lidos, no tempo de fonte
+        let trecho_uso = Uso { onde: Onde::clipe("c1"), midia: Some("m1"), base: Base::Fonte, efeitos: &[], tab: Some(&tab), quadros: Some((30, 90)), n_q: 60, fps };
+        assert_eq!(vistos(&trecho_uso, &ef_base(Some((t(40), t(50))))), (40..=50).map(|k| Some(t(k))).collect::<Vec<_>>());
+        assert_eq!(vistos(&trecho_uso, &ef_base(None)).len(), 60);
+        // congelado no quadro 45 por 1 s, ativo local de 0,2 a 0,5 s: 10 slots, todos com o tempo do quadro 45
+        let congelado = Uso { onde: Onde::clipe("c1"), midia: Some("m1"), base: Base::Congelado, efeitos: &[], tab: Some(&tab), quadros: Some((45, 46)), n_q: 30, fps };
+        assert_eq!(vistos(&congelado, &ef_base(Some((0.2, 0.5)))), vec![Some(t(45)); 10]);
+        // título: sem fonte
+        let titulo_uso = Uso { onde: Onde::clipe("c1"), midia: None, base: Base::Local, efeitos: &[], tab: None, quadros: None, n_q: 30, fps };
+        assert_eq!(vistos(&titulo_uso, &ef_base(None)), vec![None; 30]);
+        // a regra que acusa num quadro só basta
+        assert!(v.em_algum_quadro_mostrado(&trecho_uso, &ef_base(None), &|x| x == Some(t(89))));
+        assert!(!v.em_algum_quadro_mostrado(&trecho_uso, &ef_base(None), &|x| x == Some(t(90))), "o quadro 90 não é lido");
+
+        // ligado à regra do P1.3: o erro sai quando ela acusa algum quadro mostrado (e some quando o `ativo` fica
+        // dentro do intervalo medido). Enquanto o P1.3 não entrega, a regra não acusa e o efeito é recusado.
+        for (ativo, quadros) in [(json!(null), 30..90), (json!({ "de": t(40), "ate": t(50) }), 40..51)] {
+            let e = velocidade_exibida(t(40), t(50), ativo);
+            let tipado: Efeito = serde_json::from_value(e.clone()).unwrap();
+            let Efeito::VelocidadeExibida(ve) = &tipado else { panic!() };
+            let regra_acusa = quadros.clone().any(|k| medidas::fora_do_intervalo(ve, Some(t(k))));
+            let mut c = cena();
+            efeito(&mut c, e.clone());
+            let esperado: &[&str] = if regra_acusa { &[VELOCIDADE_FORA_DO_INTERVALO] } else { &[] };
+            c.so(&mais(esperado, &[ns_efeito(&e)]));
+            if regra_acusa {
+                let p = c.problemas().into_iter().find(|p| p.codigo == VELOCIDADE_FORA_DO_INTERVALO).unwrap();
+                assert_eq!((p.nivel, p.clipe.as_deref(), p.efeito.as_deref()), (Nivel::Erro, Some("c1"), Some("v1")));
+            }
+        }
+    }
+
+    /// Desentrelace por campo (contratos-fase1 (c) P1.4): o mapa do trecho é contado na tabela do CLIPE (uma entrada
+    /// por campo), como no motor; o que vale por quadro lido fica nos quadros da fonte.
+    #[test]
+    fn trecho_contado_na_tabela_do_clipe() {
+        let c = cena();
+        let p = c.projeto();
+        let ctx = Contexto { fontes: &c.fontes, cap: &c.cap, rastreios: &SemRastreios, pasta_projeto: Path::new(""), midias: &c.midias };
+        let linha = tempo::resolver(&p, &ctx);
+        let Tolerante::Conhecido(ClipePrincipal::Trecho(tr)) = &p.principal[0] else { panic!() };
+        let mut tr = tr.clone();
+        // os pts gravados são da base da fonte: na tabela de campos vale o tempo
+        (tr.inicio_pts, tr.fim_pts) = (None, None);
+        let fonte_tab = tabela();
+        // um campo a cada 1/60 s, na base dobrada
+        let tb2 = (1, 30720);
+        let campos = apoio::tabela(tb2, apoio::pts_regulares(600, (1, 60), tb2, 0));
+        let onde = Onde::clipe("c1").com_midia("m1");
+        // a própria tabela da fonte: 60 quadros em 60 slots, nada a dizer
+        let mut v = Validacao::nova(&p, &linha, &ctx, None);
+        let l = v.lido_do_trecho(&tr, &fonte_tab, &fonte_tab, &onde).unwrap();
+        assert_eq!((l.fonte, l.tempos.len(), v.saida.len()), ((30, 90), 60, 0), "{:#?}", v.saida);
+        assert_eq!((l.tempos[0], l.tempos[59]), (t(30), t(89)));
+        // por campo: 120 entradas em 60 slots (60 descartadas, taxa de 60 ≠ 30), dos mesmos quadros 30..90 da fonte
+        let mut v = Validacao::nova(&p, &linha, &ctx, None);
+        let l = v.lido_do_trecho(&tr, &fonte_tab, &campos, &onde).unwrap();
+        assert_eq!(l.fonte, (30, 90), "quadros da fonte de onde os campos saem");
+        assert_eq!(l.tempos.len(), 60);
+        assert_eq!((l.tempos[0], l.tempos[1]), (1.0, 1.0 + 1.0 / 30.0), "um slot a cada dois campos");
+        let cods: Vec<(&str, Option<u64>)> = v.saida.iter().map(|p| (p.codigo, p.n)).collect();
+        assert_eq!(cods, [(QUADROS_DESCARTADOS, Some(60)), (FPS_DIFERENTE, Some(60))], "{:#?}", v.saida);
+        // tabela de campos na BASE DA FONTE (a que o P1.4 monta): o primeiro campo guarda o pts do quadro, o segundo
+        // cai no meio do passo; os pts gravados no trecho continuam valendo como identidade
+        let Tolerante::Conhecido(ClipePrincipal::Trecho(com_pts)) = &p.principal[0] else { panic!() };
+        assert_eq!((com_pts.inicio_pts, com_pts.fim_pts), (Some(512 * 30), Some(512 * 90)));
+        let campos_na_base = apoio::tabela((1, 15360), fonte_tab.pts.iter().flat_map(|&x| [x, x + 256]).collect());
+        assert_eq!(campos_na_base.pts.len(), 2 * fonte_tab.pts.len());
+        let mut v = Validacao::nova(&p, &linha, &ctx, None);
+        let l = v.lido_do_trecho(com_pts, &fonte_tab, &campos_na_base, &onde).unwrap();
+        assert_eq!((l.fonte, l.tempos.len()), ((30, 90), 60), "campos 60..180 = quadros 30..90 da fonte");
+        assert_eq!((l.tempos[0], l.tempos[1], l.tempos[59]), (t(30), t(31), t(89)));
+        let cods: Vec<(&str, Option<u64>)> = v.saida.iter().map(|p| (p.codigo, p.n)).collect();
+        assert_eq!(cods, [(QUADROS_DESCARTADOS, Some(60)), (FPS_DIFERENTE, Some(60))], "{:#?}", v.saida);
+        // e a regra do pacote dono decide a tabela: enquanto ela devolve a da fonte, o projeto limpo segue limpo
+        assert!(matches!(realce::tabela(&tr.base.efeitos, &fonte_tab), std::borrow::Cow::Borrowed(_)));
+        c.so(&[]);
+    }
+
+    /// contratos-fase1 (e): `lugar` de bloco de título conferido no ponto que o rasterizador usa (o canto do
+    /// sprite). A resposta da validação é a de `camada::titulo::primitivas` em cada caso da faixa de dúvida.
+    #[test]
+    fn lugar_do_bloco_de_titulo_pelo_canto_do_sprite() {
+        let tmp = tempfile::Builder::new().prefix("p1r-lugar-").tempdir().unwrap();
+        let bloco = |x_px: f64, h: &str, conteudo: &str| json!({ "id": "b1", "papel": "titulo", "conteudo": conteudo, "largura_max": 0.8, "estilo": estilo(),
+            "lugar": { "x": x_px / 1280.0, "y": 0.5, "h": h, "v": "meio" } });
+        let rasterizador_aceita = |b: &Value| {
+            let tit: Titulo = serde_json::from_value(json!({ "modelo": "cartela", "fundo": { "tipo": "transparente" }, "blocos": [b] })).unwrap();
+            let quadro = camada::formas::QuadroCamada { q: 0, t: 0.0, pts: None, a: geometria::Afim::IDENTIDADE, canvas: TamanhoPx { w: 1280, h: 720 },
+                rastreios: std::collections::BTreeMap::new(), indice: None, programa_s: 0.0 };
+            camada::titulo::primitivas(&tit, &quadro, &SpritesEmCache { cache: tmp.path(), imagens: &[] }).is_ok()
+        };
+        let validacao_aceita = |b: &Value| {
+            let mut c = cena();
+            let mut tit = titulo("c2", 2.0);
+            tit["titulo"]["blocos"] = json!([b]);
+            c.p["principal"].as_array_mut().unwrap().push(tit);
+            let p = c.problemas();
+            let invalido: Vec<_> = p.iter().filter(|p| p.codigo == ITEM_INVALIDO).collect();
+            assert!(invalido.iter().all(|p| p.campo.as_deref() == Some("lugar") && p.clipe.as_deref() == Some("c2")), "{p:#?}");
+            assert!(!p.iter().any(|p| p.nivel == Nivel::Erro && p.codigo != ITEM_INVALIDO), "{p:#?}");
+            invalido.is_empty()
+        };
+        let limite = MAX_LUGAR_PX;
+        // (apoio em px, alinhamento, o que o rasterizador faz)
+        let casos = [
+            // apoio dentro do limite, canto fora: passava na validação e falhava no meio da exportação
+            (-limite + 10.0, "dir", false),
+            (-limite + 10.0, "centro", false),
+            (-limite + 10.0, "esq", true),
+            // apoio fora do limite, canto dentro: a validação recusava o que o rasterizador desenha
+            (limite + 10.0, "dir", true),
+            (limite + 10.0, "esq", false),
+            // longe da dúvida
+            (0.5 * 1280.0, "centro", true),
+            (-limite * 2.0, "dir", false),
+            (limite * 2.0, "dir", false),
+        ];
+        for (x, h, esperado) in casos {
+            let b = bloco(x, h, "Fim");
+            assert_eq!(rasterizador_aceita(&b), esperado, "rasterizador: x = {x} px, {h}");
+            assert_eq!(validacao_aceita(&b), esperado, "validação: x = {x} px, {h}");
+        }
+        // bloco vazio não é desenhado: vale o ponto de apoio; não finito é sempre inválido
+        assert!(validacao_aceita(&bloco(limite - 10.0, "dir", "")) && !validacao_aceita(&bloco(limite + 10.0, "dir", "")));
+        let mut torto = bloco(0.0, "esq", "Fim");
+        torto["lugar"]["y"] = json!(1e300);
+        assert!(!validacao_aceita(&torto));
+    }
+
+    /// §2.3 `regua_fora_da_calibracao`: "âncora ou ponta fora do polígono". As pontas vêm da homografia do P1.3
+    /// (`medidas::pontas_da_regua`), perguntada só quando a régua renderiza.
+    #[test]
+    fn regua_com_ponta_fora_da_calibracao() {
+        let quadrado = json!([{ "x": 0.2, "y": 0.2 }, { "x": 0.8, "y": 0.2 }, { "x": 0.8, "y": 0.8 }, { "x": 0.2, "y": 0.8 }]);
+        let Efeito::Regua(rg) = serde_json::from_value::<Efeito>(regua(quadrado)).unwrap() else { panic!() };
+        let p = |x: f64, y: f64| Ponto { x, y };
+        let com_pontas = |pontos: Vec<Ponto>| pontas_fora(&rg, |_| Ok(pontos.clone())).unwrap();
+        assert!(!com_pontas(vec![p(0.5, 0.5), p(0.6, 0.5), p(0.7, 0.5)]));
+        assert!(!com_pontas(vec![p(0.5, 0.5), p(0.8, 0.5)]), "na borda conta como dentro");
+        assert!(com_pontas(vec![p(0.5, 0.5), p(0.9, 0.5)]), "ponta fora");
+        assert!(com_pontas(vec![p(0.5, 0.5), p(0.85, 0.5), p(0.7, 0.5)]), "divisão fora");
+        assert!(com_pontas(vec![p(0.5, 0.5), p(f64::NAN, 0.5)]), "ponta que a homografia não dá");
+        assert!(pontas_fora(&rg, |_| Err(crate::error::SicroError::Validation("calibracao".into()))).is_err());
+        // sem região calibrada (menos de 3 vértices) não há fora
+        let Efeito::Regua(livre) = serde_json::from_value::<Efeito>(regua(json!([]))).unwrap() else { panic!() };
+        assert!(!pontas_fora(&livre, |_| Ok(vec![p(5.0, 5.0)])).unwrap());
+        // enquanto a régua é recusada, a validação não chama a conta do P1.3 (que ainda não existe)
+        let mut c = cena();
+        efeito(&mut c, regua(json!([{ "x": 0.2, "y": 0.2 }, { "x": 0.8, "y": 0.2 }, { "x": 0.8, "y": 0.8 }, { "x": 0.2, "y": 0.8 }])));
+        if medidas::recusa(&Efeito::Regua(rg.clone())).is_some() {
+            c.so(&[NAO_SUPORTADO]);
+        }
     }
 }

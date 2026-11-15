@@ -1,0 +1,584 @@
+[
+  {
+    "entrada": "relatorio::juri::testes::tecnico_completo",
+    "nome": "completo",
+    "saida": {
+      "acrescimos": [
+        {
+          "explicacao": "Tela escrita pelo perito. Não faz parte das gravações.",
+          "o_que": "Tela de texto",
+          "onde": "item 1"
+        },
+        {
+          "explicacao": "Desenho posto sobre a imagem para guiar o olhar. Não faz parte da gravação.",
+          "o_que": "Marcação",
+          "onde": "item 2"
+        },
+        {
+          "explicacao": "Posto pela perícia. O que ele conta está explicado na seção sobre tempo.",
+          "o_que": "Relógio na imagem",
+          "onde": "item 2"
+        },
+        {
+          "explicacao": "Resultado de cálculo da perícia, mostrado com a faixa de erro. Não é leitura de aparelho.",
+          "o_que": "Velocidade calculada",
+          "onde": "item 2"
+        },
+        {
+          "explicacao": "Desenhada a partir de medidas tomadas pela perícia. Vale só no plano do chão em que foi calibrada.",
+          "o_que": "Régua de escala",
+          "onde": "item 3"
+        },
+        {
+          "explicacao": "Voz gravada depois pela perícia. Não é som do local.",
+          "o_que": "Narração",
+          "onde": "itens 2, 3"
+        }
+      ],
+      "anexos": [],
+      "caso": {
+        "numero": "Ocorrência 0000/2026",
+        "orgao": "PCI",
+        "referencia": "Laudo 1",
+        "requisitante": "Vara 1"
+      },
+      "codificacao": [
+        [
+          "Predefinição",
+          "Júri"
+        ],
+        [
+          "Codificador de vídeo",
+          "libx264; argumentos: -c:v libx264 -crf 18"
+        ],
+        [
+          "Formato com perdas",
+          "sim"
+        ],
+        [
+          "Repetição bit a bit do arquivo",
+          "esperada com os mesmos programas, na mesma classe de máquina (codificador de CPU)"
+        ],
+        [
+          "Conferência da saída",
+          "105 quadros decodificados, 0 erros"
+        ],
+        [
+          "SHA-256 dos quadros antes da compressão",
+          "2222222222222222222222222222222222222222222222222222222222222222"
+        ],
+        [
+          "SHA-256 dos quadros do arquivo entregue",
+          "6666666666666666666666666666666666666666666666666666666666666666"
+        ],
+        [
+          "SHA-256 do som (PCM)",
+          "3333333333333333333333333333333333333333333333333333333333333333"
+        ],
+        [
+          "Fecho",
+          "escurecer, 0,500 s"
+        ]
+      ],
+      "conferencia_ocultacoes": "A conferência das ocultações no arquivo final ainda não foi registrada.",
+      "conferir": {
+        "arquivo": "Caso.mp4",
+        "linux": "sha256sum \"Caso.mp4\"",
+        "lista": "quadros.decodificados.sha256",
+        "prova_arquivo": "Se o código calculado for igual ao impresso neste relatório, o arquivo é exatamente o que a perícia produziu, sem nenhuma alteração.",
+        "prova_quadros": "Esta conferência calcula um código para cada imagem do vídeo. Se a lista for igual à do pacote, as imagens são as mesmas, ainda que o arquivo tenha sido copiado para outro formato de embalagem sem recompressão.",
+        "quadros": "ffmpeg -i \"Caso.mp4\" -map 0:v:0 -f framehash -hash sha256 -",
+        "windows": "certutil -hashfile \"Caso.mp4\" SHA256"
+      },
+      "diferencas": [
+        {
+          "descartados": "0",
+          "imagem": "para 1280×720",
+          "item": "2",
+          "obs": "—",
+          "quadros": "60 → 60",
+          "repetidos": "0",
+          "taxa": "30 → 30"
+        },
+        {
+          "descartados": "0",
+          "imagem": "para 1280×720",
+          "item": "3",
+          "obs": "mesmo quadro por 0,5 s",
+          "quadros": "1 → 15",
+          "repetidos": "14",
+          "taxa": "quadro único"
+        }
+      ],
+      "esquema": "sicro.relatorio_juri/2",
+      "gerado_em": "14 de novembro de 2026, às 7h00 (horário de Brasília)",
+      "ia_resumo": [
+        "Ocultações propostas por detecção automática e confirmadas pelo perito: 1.",
+        "Marcações que acompanham alvo achado por detecção automática e confirmado pelo perito: 1.",
+        "Os programas de inteligência artificial usados estão identificados no anexo técnico, item H."
+      ],
+      "limitacoes": [
+        "O vídeo entregue foi gravado em formato com compressão. Para exame técnico valem as gravações originais, e não este vídeo.",
+        "Há gravação que não registra as imagens em intervalos iguais. Movimentos vistos nela podem parecer mais rápidos ou mais lentos do que foram. O perito registrou ciência deste aviso antes de exportar.",
+        "Há gravação com defeito de leitura. Partes da imagem podem ter sido reconstruídas pelo programa de leitura e não devem servir a exame de detalhe.",
+        "Há gravação recebida já convertida, e não no formato próprio do aparelho gravador. Parte das informações de tempo pode ter se perdido na conversão.",
+        "A conferência das ocultações no arquivo final ainda não foi registrada.",
+        "O perito desligou o aviso que o programa escreve na imagem quando ela é mostrada de outro jeito. As mudanças continuam listadas neste relatório.",
+        "A distância e o ângulo da câmera, a lente, a iluminação e a proporção da imagem mudam a aparência de tamanho e de velocidade do que se vê."
+      ],
+      "medidas": [
+        "Velocidade calculada (item 2): 42 km/h, na faixa de 39 a 45,5 km/h.",
+        "Régua de escala de 2,00 m (item 3): erro médio da calibração de 0,02 m."
+      ],
+      "modelos_ia": [
+        {
+          "arquivos": [
+            {
+              "nome": "vision_encoder.onnx",
+              "sha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+            }
+          ],
+          "modelo": "EdgeTAM",
+          "origem": "https://huggingface.co/x/y · 8ca3d3e4 · onnxruntime 1.31.1 · CPU",
+          "uso": "rastreio"
+        }
+      ],
+      "mudancas": [
+        {
+          "explicacao": "",
+          "o_que": "recorte",
+          "onde": "item 1"
+        },
+        {
+          "explicacao": "Parte da imagem foi coberta para preservar pessoa ou dado sem relação com o fato. No vídeo entregue não é possível desfazer; a gravação original continua íntegra.",
+          "o_que": "Ocultação (rosto)",
+          "onde": "item 2"
+        },
+        {
+          "explicacao": "Cada imagem mostrada é a média de várias imagens seguidas da gravação. Acontecimentos rápidos podem sumir ou parecer durar mais do que duraram.",
+          "o_que": "Média de imagens (8)",
+          "onde": "item 2"
+        },
+        {
+          "explicacao": "O som desta parte da gravação não foi incluído no vídeo.",
+          "o_que": "Som da gravação retirado",
+          "onde": "item 2"
+        },
+        {
+          "explicacao": "Uma única imagem da gravação fica na tela pelo tempo indicado.",
+          "o_que": "Imagem parada",
+          "onde": "item 3"
+        },
+        {
+          "explicacao": "Um trecho do som foi trocado por um tom ou por silêncio para preservar dado sem relação com o fato.",
+          "o_que": "Som ocultado",
+          "onde": "item 2"
+        }
+      ],
+      "ocultacoes": [
+        {
+          "conteudo": "rosto",
+          "filtro": "sólido opaco, cor #000000ff, retângulo, invertida (cobre tudo o que está fora da forma), margem 5 %",
+          "gravacao": "A",
+          "intervalo": "0:01,000 · 0:02,000",
+          "item": "2",
+          "motivo": "terceiro sem relação",
+          "quadros": "quadros: 2 marcados, 0 medidos, 0 interpolados, 0 incertos; trechos sem ocultação, aceitos pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)"
+        },
+        {
+          "conteudo": "som",
+          "filtro": "tom no lugar do som",
+          "gravacao": "A",
+          "intervalo": "0:01,500 · 0:02,000",
+          "item": "2",
+          "motivo": "nome",
+          "quadros": null
+        }
+      ],
+      "originais": [
+        {
+          "arquivo": "cam 1.mp4",
+          "cobertura": {
+            "intervalos": [
+              "0:01,000 a 0:03,000"
+            ],
+            "total": "10 s",
+            "usado": "2 s"
+          },
+          "derivacao": {
+            "origem_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "texto": "Este arquivo foi feito pela perícia a partir de outra gravação do caso (cópia convertida do formato do gravador, sem recompressão)."
+          },
+          "duracao": "10 s",
+          "especie": "Gravação",
+          "formato": "MP4 (H.264)",
+          "formato_nativo": false,
+          "id": "A",
+          "imagem": null,
+          "recebido": "já convertida, e não no formato próprio do aparelho gravador (veio por pendrive)",
+          "relogio": "desvio informado pelo perito: −2,5 s · DVR 1",
+          "ritmo": "30 imagens por segundo, constante",
+          "rotulo": "cam 1.mp4",
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "tamanho": null,
+          "taxa_variavel": false,
+          "tecnico": {
+            "codec": "h264",
+            "conteiner": "mov,mp4,m4a,3gp,3g2,mj2",
+            "cor": "BT.709, faixa limitada",
+            "fps_nominal": "30/1",
+            "intervalo_quadros": "33,333 ms (mín. = máx.)",
+            "observacoes": "—",
+            "par": "1:1",
+            "pix_fmt": "yuv420p",
+            "quadros": "300"
+          }
+        }
+      ],
+      "pacote": [
+        {
+          "arquivo": "Caso.mp4",
+          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+        },
+        {
+          "arquivo": "Caso.tecnico.json",
+          "sha256": "1111111111111111111111111111111111111111111111111111111111111111"
+        },
+        {
+          "arquivo": "mapa.csv",
+          "sha256": "2222222222222222222222222222222222222222222222222222222222222222"
+        },
+        {
+          "arquivo": "quadros.compostos.sha256",
+          "sha256": "3333333333333333333333333333333333333333333333333333333333333333"
+        },
+        {
+          "arquivo": "quadros.decodificados.sha256",
+          "sha256": "4444444444444444444444444444444444444444444444444444444444444444"
+        },
+        {
+          "arquivo": "projeto/projeto.json",
+          "sha256": "5555555555555555555555555555555555555555555555555555555555555555"
+        },
+        {
+          "arquivo": "SHA256SUMS.txt",
+          "sha256": "6666666666666666666666666666666666666666666666666666666666666666"
+        }
+      ],
+      "perito": {
+        "cargo": "Perito Criminal",
+        "matricula": "000",
+        "nome": "Perito Teste"
+      },
+      "processamentos": [
+        {
+          "item": "1",
+          "nome": "recorte",
+          "ordem": "1",
+          "parametros": "de_pts: 15360"
+        },
+        {
+          "item": "2",
+          "nome": "Corte no tempo",
+          "ordem": "0",
+          "parametros": "gravação A: de 1,000000 s a 3,000000 s (pts 15360 a 45568), 60 quadros lidos; velocidade 1×; mapa c=15360 kn=1 kd=512 e=256"
+        },
+        {
+          "item": "2",
+          "nome": "Ocultação",
+          "ordem": "1",
+          "parametros": "alvo: {\"rastreio\":\"r1\"}; conteudo: rosto; motivo: terceiro /sem relação"
+        },
+        {
+          "item": "2",
+          "nome": "Média de imagens",
+          "ordem": "2",
+          "parametros": "quadros: 8"
+        },
+        {
+          "item": "2",
+          "nome": "Marcação",
+          "ordem": "3",
+          "parametros": "forma: elipse; rastreio: r1"
+        },
+        {
+          "item": "2",
+          "nome": "Relógio na imagem",
+          "ordem": "4",
+          "parametros": "mostra: tempo_fonte"
+        },
+        {
+          "item": "2",
+          "nome": "Velocidade calculada",
+          "ordem": "5",
+          "parametros": "calculo: {\"faixa\":[39.0,45.5],\"kmh\":42.0}"
+        },
+        {
+          "item": "3",
+          "nome": "Corte no tempo",
+          "ordem": "0",
+          "parametros": "gravação A: de 3,333333 s a 3,366667 s (pts 51200 a 51200), 1 quadro lido; mapa c=15360 kn=1 kd=512 e=256"
+        },
+        {
+          "item": "3",
+          "nome": "Régua de escala",
+          "ordem": "1",
+          "parametros": "calibracao: {\"residuo_m\":0.02}; comprimento_m: 2.0"
+        }
+      ],
+      "referencias": [
+        "SWGDE Best Practices for Digital Forensic Video Analysis, 18-V-001, versão 2.0 (10/12/2025)",
+        "SWGDE Considerations for the Use of Time-Based Analysis of Digital Video for Court, 19-V-003, versão 1.0 (17/09/2020)",
+        "SWGDE Video and Audio Redaction Guidelines, 18-M-001, versão 2.3 (19/12/2025)",
+        "SWGDE Considerations for Release of Synopsis Videos for Public Review, 21-V-002, versão 1.2 (02/12/2024)",
+        "OSAC 2022-S-0031, Standard Guide for Forensic Digital Video Examination Workflow, versão 2.0 (janeiro de 2024)"
+      ],
+      "relogios": [
+        "O relógio marcado \"Original\" conta o tempo desde o início da gravação original. Ele não mostra a hora do dia. Em câmera lenta ele anda mais devagar, na mesma proporção."
+      ],
+      "reproducao": {
+        "observacao": "Refeita com as mesmas versões dos programas e na mesma classe de computador, a montagem resulta em arquivo idêntico, com o mesmo código de verificação. Em outro computador, as imagens antes da compressão resultam iguais e o arquivo pode diferir.",
+        "projeto": "projeto/projeto.json",
+        "projeto_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "revisado_por": null,
+      "roteiro": [
+        {
+          "descricao": "item 1",
+          "efeitos": [
+            "recorte"
+          ],
+          "miniatura": null,
+          "n": 1,
+          "na_saida": "0:00,000 a 0:01,000",
+          "origem": null,
+          "selos": [],
+          "tipo": "Tela de texto",
+          "velocidade": null
+        },
+        {
+          "descricao": "item 2",
+          "efeitos": [
+            "Ocultação (rosto)",
+            "Média de imagens (8)",
+            "Marcação",
+            "Relógio na imagem",
+            "Velocidade calculada",
+            "Som da gravação retirado"
+          ],
+          "miniatura": "img/2.jpg",
+          "n": 2,
+          "na_saida": "0:01,000 a 0:03,000",
+          "origem": "gravação A, de 0:01,000 a 0:03,000",
+          "selos": [
+            "Média de 8 imagens"
+          ],
+          "tipo": "Trecho de gravação",
+          "velocidade": "normal (1×)"
+        },
+        {
+          "descricao": "item 3",
+          "efeitos": [
+            "Régua de escala"
+          ],
+          "miniatura": null,
+          "n": 3,
+          "na_saida": "0:03,000 a 0:03,500",
+          "origem": "gravação A, no instante 0:03,333",
+          "selos": [],
+          "tipo": "Imagem parada",
+          "velocidade": "parada"
+        }
+      ],
+      "saida": {
+        "arquivo": "Caso.mp4",
+        "com_perdas": true,
+        "duracao": "3,5 s",
+        "formato": "MP4 (H.264), com som",
+        "imagem": "1280 × 720 pontos",
+        "perfil": "Júri",
+        "ritmo": "30 imagens por segundo",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "tamanho": "123 kB (123.456 bytes)"
+      },
+      "selos_desligados": [
+        "Selo de realce"
+      ],
+      "sincronizacao": [
+        {
+          "conferencia": "sem conferência por acontecimento visível",
+          "deriva": "0,0300 s a cada minuto",
+          "deslocamento": "−2,240 s",
+          "explicacao": "Os relógios das câmeras não marcam a mesma hora. Para mostrá-las juntas, a perícia alinhou uma à outra.",
+          "incerteza": "não determinada",
+          "metodo": "pelo som",
+          "par": "A e A",
+          "tecnico": {
+            "deriva": "+500 ppm (± 20)",
+            "deslocamento": "−2,240 s",
+            "incerteza": "não determinada",
+            "metodo": "audio"
+          }
+        }
+      ],
+      "software": [
+        [
+          "SICRO",
+          "6.0.0 (abc)",
+          "edição, cálculo dos códigos de verificação, este relatório"
+        ],
+        [
+          "FFmpeg",
+          "n9.0.1",
+          "leitura das gravações e produção do vídeo · origem: path · SHA-256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        ],
+        [
+          "Typst",
+          "0.15.1",
+          "textos da imagem e composição deste relatório"
+        ],
+        [
+          "Sistema",
+          "Linux",
+          "CPU"
+        ]
+      ]
+    }
+  },
+  {
+    "entrada": "o completo sem mídias, roteiro, ocultações, rastreios, IA, avisos e sincronias",
+    "nome": "minimo",
+    "saida": {
+      "acrescimos": [],
+      "anexos": [],
+      "caso": {
+        "numero": "Ocorrência 0000/2026",
+        "orgao": "PCI",
+        "referencia": "Laudo 1",
+        "requisitante": "Vara 1"
+      },
+      "codificacao": [
+        [
+          "Predefinição",
+          "Júri"
+        ],
+        [
+          "Codificador de vídeo",
+          "libx264; argumentos: -c:v libx264 -crf 18"
+        ],
+        [
+          "Formato com perdas",
+          "sim"
+        ],
+        [
+          "Repetição bit a bit do arquivo",
+          "esperada com os mesmos programas, na mesma classe de máquina (codificador de CPU)"
+        ],
+        [
+          "Conferência da saída",
+          "105 quadros decodificados, 0 erros"
+        ],
+        [
+          "SHA-256 dos quadros antes da compressão",
+          "2222222222222222222222222222222222222222222222222222222222222222"
+        ],
+        [
+          "SHA-256 dos quadros do arquivo entregue",
+          "6666666666666666666666666666666666666666666666666666666666666666"
+        ],
+        [
+          "SHA-256 do som (PCM)",
+          "3333333333333333333333333333333333333333333333333333333333333333"
+        ],
+        [
+          "Fecho",
+          "escurecer, 0,500 s"
+        ]
+      ],
+      "conferencia_ocultacoes": null,
+      "conferir": {
+        "arquivo": "Caso.mp4",
+        "linux": "sha256sum \"Caso.mp4\"",
+        "lista": null,
+        "prova_arquivo": "Se o código calculado for igual ao impresso neste relatório, o arquivo é exatamente o que a perícia produziu, sem nenhuma alteração.",
+        "prova_quadros": "Esta conferência calcula um código para cada imagem do vídeo. Se a lista for igual à do pacote, as imagens são as mesmas, ainda que o arquivo tenha sido copiado para outro formato de embalagem sem recompressão.",
+        "quadros": "ffmpeg -i \"Caso.mp4\" -map 0:v:0 -f framehash -hash sha256 -",
+        "windows": "certutil -hashfile \"Caso.mp4\" SHA256"
+      },
+      "diferencas": [],
+      "esquema": "sicro.relatorio_juri/2",
+      "gerado_em": "14 de novembro de 2026, às 7h00 (horário de Brasília)",
+      "ia_resumo": [
+        "Nenhuma etapa deste vídeo foi feita por programa de inteligência artificial."
+      ],
+      "limitacoes": [
+        "O vídeo entregue foi gravado em formato com compressão. Para exame técnico valem as gravações originais, e não este vídeo.",
+        "A distância e o ângulo da câmera, a lente, a iluminação e a proporção da imagem mudam a aparência de tamanho e de velocidade do que se vê."
+      ],
+      "medidas": [],
+      "modelos_ia": [],
+      "mudancas": [],
+      "ocultacoes": [],
+      "originais": [],
+      "pacote": [],
+      "perito": {
+        "cargo": "Perito Criminal",
+        "matricula": "000",
+        "nome": "Perito Teste"
+      },
+      "processamentos": [],
+      "referencias": [
+        "SWGDE Best Practices for Digital Forensic Video Analysis, 18-V-001, versão 2.0 (10/12/2025)",
+        "SWGDE Considerations for the Use of Time-Based Analysis of Digital Video for Court, 19-V-003, versão 1.0 (17/09/2020)",
+        "SWGDE Video and Audio Redaction Guidelines, 18-M-001, versão 2.3 (19/12/2025)",
+        "SWGDE Considerations for Release of Synopsis Videos for Public Review, 21-V-002, versão 1.2 (02/12/2024)",
+        "OSAC 2022-S-0031, Standard Guide for Forensic Digital Video Examination Workflow, versão 2.0 (janeiro de 2024)"
+      ],
+      "relogios": [
+        "O vídeo não mostra relógio na imagem."
+      ],
+      "reproducao": {
+        "observacao": "Refeita com as mesmas versões dos programas e na mesma classe de computador, a montagem resulta em arquivo idêntico, com o mesmo código de verificação. Em outro computador, as imagens antes da compressão resultam iguais e o arquivo pode diferir.",
+        "projeto": "projeto.json",
+        "projeto_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+      },
+      "revisado_por": null,
+      "roteiro": [],
+      "saida": {
+        "arquivo": "Caso.mp4",
+        "com_perdas": true,
+        "duracao": "3,5 s",
+        "formato": "MP4 (H.264), com som",
+        "imagem": "1280 × 720 pontos",
+        "perfil": "Júri",
+        "ritmo": "30 imagens por segundo",
+        "sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+        "tamanho": "123 kB (123.456 bytes)"
+      },
+      "selos_desligados": [],
+      "sincronizacao": [],
+      "software": [
+        [
+          "SICRO",
+          "6.0.0 (abc)",
+          "edição, cálculo dos códigos de verificação, este relatório"
+        ],
+        [
+          "FFmpeg",
+          "n9.0.1",
+          "leitura das gravações e produção do vídeo · origem: path · SHA-256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+        ],
+        [
+          "Typst",
+          "0.15.1",
+          "textos da imagem e composição deste relatório"
+        ],
+        [
+          "Sistema",
+          "Linux",
+          "CPU"
+        ]
+      ]
+    }
+  }
+]

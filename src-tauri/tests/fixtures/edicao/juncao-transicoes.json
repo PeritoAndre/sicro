@@ -1,0 +1,58 @@
+[
+  {
+    "entrada": "escurecer",
+    "nome": "escurecer",
+    "saida": {
+      "sobrepoe": false,
+      "xfade": null
+    }
+  },
+  {
+    "entrada": "fundir",
+    "nome": "fundir",
+    "saida": {
+      "sobrepoe": true,
+      "xfade": "fade"
+    }
+  },
+  {
+    "entrada": "cortina_esq",
+    "nome": "cortina_esq",
+    "saida": {
+      "sobrepoe": true,
+      "xfade": "wipeleft"
+    }
+  },
+  {
+    "entrada": "cortina_dir",
+    "nome": "cortina_dir",
+    "saida": {
+      "sobrepoe": true,
+      "xfade": "wiperight"
+    }
+  },
+  {
+    "entrada": "deslizar_esq",
+    "nome": "deslizar_esq",
+    "saida": {
+      "sobrepoe": true,
+      "xfade": "coverleft"
+    }
+  },
+  {
+    "entrada": "deslizar_dir",
+    "nome": "deslizar_dir",
+    "saida": {
+      "sobrepoe": true,
+      "xfade": "coverright"
+    }
+  },
+  {
+    "entrada": "circulo",
+    "nome": "circulo",
+    "saida": {
+      "sobrepoe": true,
+      "xfade": "circleopen"
+    }
+  }
+]

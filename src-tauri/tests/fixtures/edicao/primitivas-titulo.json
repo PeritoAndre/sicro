@@ -6726,5 +6726,3427 @@
         }
       ]
     }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b0",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.44
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-834x105.png",
+            "w": 834
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.052
+                },
+                "id": "b1",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.5
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-772x70.png",
+            "w": 772
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.042
+                },
+                "id": "b2",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.62
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 57,
+            "relativo": "sprites/falso-798x57.png",
+            "w": 798
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b3",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.93
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-529x45.png",
+            "w": 529
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b0",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.44
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.052
+            },
+            "id": "b1",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.5
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.042
+            },
+            "id": "b2",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.62
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b3",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.93
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "cartela"
+      }
+    },
+    "nome": "arranjo cartela",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b0",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.44
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.042
+              },
+              "id": "b2",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.62
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b3",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.93
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.434375,
+            "x": 0.2828125,
+            "y": 0.3425925925925926
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-834x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.40208333333333335,
+            "x": 0.2989583333333333,
+            "y": 0.5
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-772x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.05277777777777778,
+            "w": 0.415625,
+            "x": 0.2921875,
+            "y": 0.6203703703703703
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-798x57.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2755208333333333,
+            "x": 0.3625,
+            "y": 0.887962962962963
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-529x45.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b0",
+                "largura_max": 0.84,
+                "lugar": {
+                  "h": "esq",
+                  "v": "base",
+                  "x": 0.08,
+                  "y": 0.34
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4933333333333334
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-834x105.png",
+            "w": 834
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.046
+                },
+                "id": "b1",
+                "largura_max": 0.84,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.08,
+                  "y": 0.38
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4933333333333334
+          },
+          "sprite": {
+            "h": 62,
+            "relativo": "sprites/falso-683x62.png",
+            "w": 683
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.036
+                },
+                "id": "b2",
+                "largura_max": 0.84,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.08,
+                  "y": 0.52
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4933333333333334
+          },
+          "sprite": {
+            "h": 49,
+            "relativo": "sprites/falso-684x49.png",
+            "w": 684
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#c8c8c8",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.03
+                },
+                "id": "b3",
+                "largura_max": 0.84,
+                "lugar": {
+                  "h": "esq",
+                  "v": "base",
+                  "x": 0.08,
+                  "y": 0.93
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.4933333333333334
+          },
+          "sprite": {
+            "h": 41,
+            "relativo": "sprites/falso-481x41.png",
+            "w": 481
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b0",
+            "largura_max": 0.84,
+            "lugar": {
+              "h": "esq",
+              "v": "base",
+              "x": 0.08,
+              "y": 0.34
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.046
+            },
+            "id": "b1",
+            "largura_max": 0.84,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.08,
+              "y": 0.38
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.036
+            },
+            "id": "b2",
+            "largura_max": 0.84,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.08,
+              "y": 0.52
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#c8c8c8",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.03
+            },
+            "id": "b3",
+            "largura_max": 0.84,
+            "lugar": {
+              "h": "esq",
+              "v": "base",
+              "x": 0.08,
+              "y": 0.93
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "abertura"
+      }
+    },
+    "nome": "arranjo abertura",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b0",
+              "largura_max": 0.84,
+              "lugar": {
+                "h": "esq",
+                "v": "base",
+                "x": 0.08,
+                "y": 0.34
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4933333333333334
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.046
+              },
+              "id": "b1",
+              "largura_max": 0.84,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.08,
+                "y": 0.38
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4933333333333334
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.036
+              },
+              "id": "b2",
+              "largura_max": 0.84,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.08,
+                "y": 0.52
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4933333333333334
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#c8c8c8",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.03
+              },
+              "id": "b3",
+              "largura_max": 0.84,
+              "lugar": {
+                "h": "esq",
+                "v": "base",
+                "x": 0.08,
+                "y": 0.93
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.4933333333333334
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.434375,
+            "x": 0.08020833333333334,
+            "y": 0.24259259259259258
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-834x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.05740740740740741,
+            "w": 0.35572916666666665,
+            "x": 0.08020833333333334,
+            "y": 0.37962962962962965
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-683x62.png"
+        },
+        {
+          "caixa": {
+            "h": 0.04537037037037037,
+            "w": 0.35625,
+            "x": 0.08020833333333334,
+            "y": 0.5203703703703704
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-684x49.png"
+        },
+        {
+          "caixa": {
+            "h": 0.03796296296296296,
+            "w": 0.25052083333333336,
+            "x": 0.08020833333333334,
+            "y": 0.8916666666666667
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-481x41.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.052
+                },
+                "id": "b0",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.05
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-556x70.png",
+            "w": 556
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.036
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.15
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 49,
+            "relativo": "sprites/falso-535x49.png",
+            "w": 535
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b2",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.225
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-627x45.png",
+            "w": 627
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.028
+                },
+                "id": "b3",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.95
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 38,
+            "relativo": "sprites/falso-449x38.png",
+            "w": 449
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.052
+            },
+            "id": "b0",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.05
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.036
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.15
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b2",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.225
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.028
+            },
+            "id": "b3",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.95
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "evento"
+      }
+    },
+    "nome": "arranjo evento",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.052
+              },
+              "id": "b0",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.05
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.036
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.15
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b2",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.225
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.028
+              },
+              "id": "b3",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.95
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.28958333333333336,
+            "x": 0.35520833333333335,
+            "y": 0.05
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-556x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.04537037037037037,
+            "w": 0.2786458333333333,
+            "x": 0.3609375,
+            "y": 0.15
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-535x49.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.3265625,
+            "x": 0.33697916666666666,
+            "y": 0.225
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-627x45.png"
+        },
+        {
+          "caixa": {
+            "h": 0.03518518518518519,
+            "w": 0.23385416666666667,
+            "x": 0.38333333333333336,
+            "y": 0.9148148148148149
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-449x38.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 720,
+          "w": 1280
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.052
+                },
+                "id": "b0",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.05
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 47,
+            "relativo": "sprites/falso-371x47.png",
+            "w": 371
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.036
+                },
+                "id": "b1",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.15
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 32,
+            "relativo": "sprites/falso-356x32.png",
+            "w": 356
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b2",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.225
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 30,
+            "relativo": "sprites/falso-418x30.png",
+            "w": 418
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.012,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.028
+                },
+                "id": "b3",
+                "largura_max": 0.9,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.95
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.6
+          },
+          "sprite": {
+            "h": 25,
+            "relativo": "sprites/falso-299x25.png",
+            "w": 299
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.052
+            },
+            "id": "b0",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.05
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.036
+            },
+            "id": "b1",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.15
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b2",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.225
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.012,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.028
+            },
+            "id": "b3",
+            "largura_max": 0.9,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.95
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "evento"
+      }
+    },
+    "nome": "arranjo evento preso 720p",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.052
+              },
+              "id": "b0",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.05
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.036
+              },
+              "id": "b1",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.15
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b2",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.225
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.028
+              },
+              "id": "b3",
+              "largura_max": 0.9,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.95
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.6
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.06527777777777778,
+            "w": 0.28984375,
+            "x": 0.35546875,
+            "y": 0.05
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-371x47.png"
+        },
+        {
+          "caixa": {
+            "h": 0.044444444444444446,
+            "w": 0.278125,
+            "x": 0.3609375,
+            "y": 0.15
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-356x32.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.3265625,
+            "x": 0.33671875,
+            "y": 0.225
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-418x30.png"
+        },
+        {
+          "caixa": {
+            "h": 0.034722222222222224,
+            "w": 0.23359375,
+            "x": 0.38359375,
+            "y": 0.9152777777777777
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-299x25.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.052
+                },
+                "id": "b0",
+                "largura_max": 0.7,
+                "lugar": {
+                  "h": "esq",
+                  "v": "base",
+                  "x": 0.06,
+                  "y": 0.76
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.2444444444444445
+          },
+          "sprite": {
+            "h": 70,
+            "relativo": "sprites/falso-556x70.png",
+            "w": 556
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b1",
+                "largura_max": 0.7,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.06,
+                  "y": 0.775
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.2444444444444445
+          },
+          "sprite": {
+            "h": 45,
+            "relativo": "sprites/falso-490x45.png",
+            "w": 490
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.028
+                },
+                "id": "b2",
+                "largura_max": 0.7,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.06,
+                  "y": 0.855
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.2444444444444445
+          },
+          "sprite": {
+            "h": 38,
+            "relativo": "sprites/falso-532x38.png",
+            "w": 532
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "dir",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.024
+                },
+                "id": "b3",
+                "largura_max": 0.4,
+                "lugar": {
+                  "h": "dir",
+                  "v": "topo",
+                  "x": 0.94,
+                  "y": 0.06
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.7111111111111111
+          },
+          "sprite": {
+            "h": 32,
+            "relativo": "sprites/falso-385x32.png",
+            "w": 385
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.052
+            },
+            "id": "b0",
+            "largura_max": 0.7,
+            "lugar": {
+              "h": "esq",
+              "v": "base",
+              "x": 0.06,
+              "y": 0.76
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b1",
+            "largura_max": 0.7,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.06,
+              "y": 0.775
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.028
+            },
+            "id": "b2",
+            "largura_max": 0.7,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.06,
+              "y": 0.855
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "dir",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.01,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.024
+            },
+            "id": "b3",
+            "largura_max": 0.4,
+            "lugar": {
+              "h": "dir",
+              "v": "topo",
+              "x": 0.94,
+              "y": 0.06
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "terco_inferior"
+      }
+    },
+    "nome": "arranjo terco_inferior",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.013,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.052
+              },
+              "id": "b0",
+              "largura_max": 0.7,
+              "lugar": {
+                "h": "esq",
+                "v": "base",
+                "x": 0.06,
+                "y": 0.76
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.2444444444444445
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.013,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b1",
+              "largura_max": 0.7,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.06,
+                "y": 0.775
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.2444444444444445
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.013,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.028
+              },
+              "id": "b2",
+              "largura_max": 0.7,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.06,
+                "y": 0.855
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.2444444444444445
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "dir",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.01,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.024
+              },
+              "id": "b3",
+              "largura_max": 0.4,
+              "lugar": {
+                "h": "dir",
+                "v": "topo",
+                "x": 0.94,
+                "y": 0.06
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.7111111111111111
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.06481481481481481,
+            "w": 0.28958333333333336,
+            "x": 0.059895833333333336,
+            "y": 0.6953703703703704
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-556x70.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.2552083333333333,
+            "x": 0.059895833333333336,
+            "y": 0.775
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-490x45.png"
+        },
+        {
+          "caixa": {
+            "h": 0.03518518518518519,
+            "w": 0.27708333333333335,
+            "x": 0.059895833333333336,
+            "y": 0.8546296296296296
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-532x38.png"
+        },
+        {
+          "caixa": {
+            "h": 0.02962962962962963,
+            "w": 0.20052083333333334,
+            "x": 0.7395833333333334,
+            "y": 0.06018518518518518
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-385x32.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 720,
+          "w": 1280
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.052
+                },
+                "id": "b0",
+                "largura_max": 0.7,
+                "lugar": {
+                  "h": "esq",
+                  "v": "base",
+                  "x": 0.06,
+                  "y": 0.76
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.2444444444444445
+          },
+          "sprite": {
+            "h": 47,
+            "relativo": "sprites/falso-371x47.png",
+            "w": 371
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.033
+                },
+                "id": "b1",
+                "largura_max": 0.7,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.06,
+                  "y": 0.775
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.2444444444444445
+          },
+          "sprite": {
+            "h": 30,
+            "relativo": "sprites/falso-327x30.png",
+            "w": 327
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "esq",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.013,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.028
+                },
+                "id": "b2",
+                "largura_max": 0.7,
+                "lugar": {
+                  "h": "esq",
+                  "v": "topo",
+                  "x": 0.06,
+                  "y": 0.855
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.2444444444444445
+          },
+          "sprite": {
+            "h": 25,
+            "relativo": "sprites/falso-355x25.png",
+            "w": 355
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 720,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "dir",
+                  "caixa": {
+                    "cor": "#0000008c",
+                    "margem": 0.01,
+                    "raio": 0.0
+                  },
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.024
+                },
+                "id": "b3",
+                "largura_max": 0.4,
+                "lugar": {
+                  "h": "dir",
+                  "v": "topo",
+                  "x": 0.94,
+                  "y": 0.06
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 0.7111111111111111
+          },
+          "sprite": {
+            "h": 22,
+            "relativo": "sprites/falso-257x22.png",
+            "w": 257
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.052
+            },
+            "id": "b0",
+            "largura_max": 0.7,
+            "lugar": {
+              "h": "esq",
+              "v": "base",
+              "x": 0.06,
+              "y": 0.76
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.033
+            },
+            "id": "b1",
+            "largura_max": 0.7,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.06,
+              "y": 0.775
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "esq",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.013,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.028
+            },
+            "id": "b2",
+            "largura_max": 0.7,
+            "lugar": {
+              "h": "esq",
+              "v": "topo",
+              "x": 0.06,
+              "y": 0.855
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "dir",
+              "caixa": {
+                "cor": "#0000008c",
+                "margem": 0.01,
+                "raio": 0.0
+              },
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.024
+            },
+            "id": "b3",
+            "largura_max": 0.4,
+            "lugar": {
+              "h": "dir",
+              "v": "topo",
+              "x": 0.94,
+              "y": 0.06
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "tipo": "transparente"
+        },
+        "modelo": "terco_inferior"
+      }
+    },
+    "nome": "arranjo terco_inferior preso 720p",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.013,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.052
+              },
+              "id": "b0",
+              "largura_max": 0.7,
+              "lugar": {
+                "h": "esq",
+                "v": "base",
+                "x": 0.06,
+                "y": 0.76
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.2444444444444445
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.013,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.033
+              },
+              "id": "b1",
+              "largura_max": 0.7,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.06,
+                "y": 0.775
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.2444444444444445
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "esq",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.013,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.028
+              },
+              "id": "b2",
+              "largura_max": 0.7,
+              "lugar": {
+                "h": "esq",
+                "v": "topo",
+                "x": 0.06,
+                "y": 0.855
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.2444444444444445
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "dir",
+                "caixa": {
+                  "cor": "#0000008c",
+                  "margem": 0.01,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.024
+              },
+              "id": "b3",
+              "largura_max": 0.4,
+              "lugar": {
+                "h": "dir",
+                "v": "topo",
+                "x": 0.94,
+                "y": 0.06
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 0.7111111111111111
+        },
+        {
+          "altura_canvas": 720,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "caixa": {
+            "h": 0.06527777777777778,
+            "w": 0.28984375,
+            "x": 0.06015625,
+            "y": 0.6944444444444444
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-371x47.png"
+        },
+        {
+          "caixa": {
+            "h": 0.041666666666666664,
+            "w": 0.25546875,
+            "x": 0.06015625,
+            "y": 0.775
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-327x30.png"
+        },
+        {
+          "caixa": {
+            "h": 0.034722222222222224,
+            "w": 0.27734375,
+            "x": 0.06015625,
+            "y": 0.8555555555555555
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-355x25.png"
+        },
+        {
+          "caixa": {
+            "h": 0.030555555555555555,
+            "w": 0.20078125,
+            "x": 0.7390625,
+            "y": 0.059722222222222225
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-257x22.png"
+        }
+      ]
+    }
+  },
+  {
+    "entrada": {
+      "imagens": {},
+      "quadro": {
+        "a": [
+          1.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0,
+          0.0
+        ],
+        "canvas": {
+          "h": 1080,
+          "w": 1920
+        },
+        "indice": null,
+        "programa_s": 0.0,
+        "pts": null,
+        "q": 0,
+        "rastreios": {},
+        "t": 0.0
+      },
+      "sprites": [
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Laudo nº 1234/2026",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": true,
+                  "tamanho": 0.078
+                },
+                "id": "b0",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.42
+                },
+                "papel": "titulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 105,
+            "relativo": "sprites/falso-834x105.png",
+            "w": 834
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Câmera 2 — Rua das Flores",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.042
+                },
+                "id": "b1",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.46
+                },
+                "papel": "subtitulo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 57,
+            "relativo": "sprites/falso-624x57.png",
+            "w": 624
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Gravação de 14/03/2026, 12:03:15",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#ffffff",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.036
+                },
+                "id": "b2",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "topo",
+                  "x": 0.5,
+                  "y": 0.58
+                },
+                "papel": "corpo"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 49,
+            "relativo": "sprites/falso-684x49.png",
+            "w": 684
+          }
+        },
+        {
+          "pedido": {
+            "altura_canvas": 1080,
+            "blocos": [
+              {
+                "conteudo": "Instituto de Criminalística",
+                "estilo": {
+                  "alinhamento": "centro",
+                  "caixa": null,
+                  "contorno": null,
+                  "cor": "#c8c8c8",
+                  "fonte": "sans",
+                  "italico": false,
+                  "negrito": false,
+                  "tamanho": 0.028
+                },
+                "id": "b3",
+                "largura_max": 0.86,
+                "lugar": {
+                  "h": "centro",
+                  "v": "base",
+                  "x": 0.5,
+                  "y": 0.94
+                },
+                "papel": "rodape"
+              }
+            ],
+            "fundo": true,
+            "largura_max": 1.528888888888889
+          },
+          "sprite": {
+            "h": 38,
+            "relativo": "sprites/falso-449x38.png",
+            "w": 449
+          }
+        }
+      ],
+      "titulo": {
+        "blocos": [
+          {
+            "conteudo": "Laudo nº 1234/2026",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": true,
+              "tamanho": 0.078
+            },
+            "id": "b0",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.42
+            },
+            "papel": "titulo"
+          },
+          {
+            "conteudo": "Câmera 2 — Rua das Flores",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.042
+            },
+            "id": "b1",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.46
+            },
+            "papel": "subtitulo"
+          },
+          {
+            "conteudo": "Gravação de 14/03/2026, 12:03:15",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#ffffff",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.036
+            },
+            "id": "b2",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "topo",
+              "x": 0.5,
+              "y": 0.58
+            },
+            "papel": "corpo"
+          },
+          {
+            "conteudo": "Instituto de Criminalística",
+            "estilo": {
+              "alinhamento": "centro",
+              "caixa": null,
+              "contorno": null,
+              "cor": "#c8c8c8",
+              "fonte": "sans",
+              "italico": false,
+              "negrito": false,
+              "tamanho": 0.028
+            },
+            "id": "b3",
+            "largura_max": 0.86,
+            "lugar": {
+              "h": "centro",
+              "v": "base",
+              "x": 0.5,
+              "y": 0.94
+            },
+            "papel": "rodape"
+          }
+        ],
+        "fundo": {
+          "cor": "#000000",
+          "tipo": "cor"
+        },
+        "modelo": "encerramento"
+      }
+    },
+    "nome": "arranjo encerramento",
+    "saida": {
+      "pedidos": [
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Laudo nº 1234/2026",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": true,
+                "tamanho": 0.078
+              },
+              "id": "b0",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.42
+              },
+              "papel": "titulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Câmera 2 — Rua das Flores",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.042
+              },
+              "id": "b1",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.46
+              },
+              "papel": "subtitulo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Gravação de 14/03/2026, 12:03:15",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#ffffff",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.036
+              },
+              "id": "b2",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "topo",
+                "x": 0.5,
+                "y": 0.58
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [
+            {
+              "conteudo": "Instituto de Criminalística",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": null,
+                "contorno": null,
+                "cor": "#c8c8c8",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.028
+              },
+              "id": "b3",
+              "largura_max": 0.86,
+              "lugar": {
+                "h": "centro",
+                "v": "base",
+                "x": 0.5,
+                "y": 0.94
+              },
+              "papel": "rodape"
+            }
+          ],
+          "fundo": true,
+          "largura_max": 1.528888888888889
+        },
+        {
+          "altura_canvas": 1080,
+          "blocos": [],
+          "fundo": true,
+          "largura_max": 0.0
+        }
+      ],
+      "primitivas": [
+        {
+          "d": [
+            [
+              "M",
+              0.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              0.0
+            ],
+            [
+              "L",
+              1.0,
+              1.0
+            ],
+            [
+              "L",
+              0.0,
+              1.0
+            ],
+            [
+              "Z"
+            ]
+          ],
+          "k": "caminho",
+          "preenche": "#000000"
+        },
+        {
+          "caixa": {
+            "h": 0.09722222222222222,
+            "w": 0.434375,
+            "x": 0.2828125,
+            "y": 0.32314814814814813
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-834x105.png"
+        },
+        {
+          "caixa": {
+            "h": 0.05277777777777778,
+            "w": 0.325,
+            "x": 0.3375,
+            "y": 0.4601851851851852
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-624x57.png"
+        },
+        {
+          "caixa": {
+            "h": 0.04537037037037037,
+            "w": 0.35625,
+            "x": 0.321875,
+            "y": 0.5796296296296296
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-684x49.png"
+        },
+        {
+          "caixa": {
+            "h": 0.03518518518518519,
+            "w": 0.23385416666666667,
+            "x": 0.38333333333333336,
+            "y": 0.9046296296296297
+          },
+          "k": "sprite",
+          "opacidade": 1.0,
+          "src": "sprites/falso-449x38.png"
+        }
+      ]
+    }
   }
 ]

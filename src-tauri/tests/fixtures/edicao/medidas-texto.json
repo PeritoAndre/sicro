@@ -1,0 +1,289 @@
+[
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          39.0,
+          45.0
+        ],
+        "id": "c",
+        "kmh": 42.0,
+        "metodo": "x"
+      }
+    },
+    "nome": "42 Some((39.0, 45.0))",
+    "saida": {
+      "texto": "42 km/h (39 a 45)"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          45.2,
+          38.7
+        ],
+        "id": "c",
+        "kmh": 41.6,
+        "metodo": "x"
+      }
+    },
+    "nome": "41.6 Some((45.2, 38.7))",
+    "saida": {
+      "texto": "42 km/h (38 a 46)"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": null,
+        "id": "c",
+        "kmh": 42.0,
+        "metodo": "x"
+      }
+    },
+    "nome": "42 None",
+    "saida": {
+      "texto": "≈ 42 km/h"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": null,
+        "id": "c",
+        "kmh": 30.5,
+        "metodo": "x"
+      }
+    },
+    "nome": "30.5 None",
+    "saida": {
+      "texto": "≈ 31 km/h"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          6.04,
+          8.51
+        ],
+        "id": "c",
+        "kmh": 7.25,
+        "metodo": "x"
+      }
+    },
+    "nome": "7.25 Some((6.04, 8.51))",
+    "saida": {
+      "texto": "7,3 km/h (6 a 8,6)"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": null,
+        "id": "c",
+        "kmh": 9.99,
+        "metodo": "x"
+      }
+    },
+    "nome": "9.99 None",
+    "saida": {
+      "texto": "≈ 10 km/h"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          9.91,
+          10.04
+        ],
+        "id": "c",
+        "kmh": 9.96,
+        "metodo": "x"
+      }
+    },
+    "nome": "9.96 Some((9.91, 10.04))",
+    "saida": {
+      "texto": "10 km/h (9,9 a 10,1)"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          -1.2,
+          7.0
+        ],
+        "id": "c",
+        "kmh": 3.0,
+        "metodo": "x"
+      }
+    },
+    "nome": "3 Some((-1.2, 7.0))",
+    "saida": {
+      "texto": "3 km/h (0 a 7)"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": null,
+        "id": "c",
+        "kmh": 0.04,
+        "metodo": "x"
+      }
+    },
+    "nome": "0.04 None",
+    "saida": {
+      "texto": "≈ 0 km/h"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          1.0,
+          3000000000000.0
+        ],
+        "id": "c",
+        "kmh": 2000000000000.0,
+        "metodo": "x"
+      }
+    },
+    "nome": "2000000000000 Some((1.0, 3000000000000.0))",
+    "saida": {
+      "texto": "1000000000 km/h (1 a 1000000000)"
+    }
+  },
+  {
+    "entrada": {
+      "calculo": {
+        "ate_s": 5.0,
+        "de_s": 3.0,
+        "faixa": [
+          100.49999999999999,
+          120.00000000000001
+        ],
+        "id": "c",
+        "kmh": 110.5,
+        "metodo": "x"
+      }
+    },
+    "nome": "110.5 Some((100.49999999999999, 120.00000000000001))",
+    "saida": {
+      "texto": "111 km/h (100 a 121)"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 1.0
+    },
+    "nome": "1 m",
+    "saida": {
+      "texto": "1 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 0.5
+    },
+    "nome": "0.5 m",
+    "saida": {
+      "texto": "0,5 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 2.25
+    },
+    "nome": "2.25 m",
+    "saida": {
+      "texto": "2,25 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 2.05
+    },
+    "nome": "2.05 m",
+    "saida": {
+      "texto": "2,05 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 0.125
+    },
+    "nome": "0.125 m",
+    "saida": {
+      "texto": "0,13 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 0.135
+    },
+    "nome": "0.135 m",
+    "saida": {
+      "texto": "0,14 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 10.0
+    },
+    "nome": "10 m",
+    "saida": {
+      "texto": "10 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 0.004
+    },
+    "nome": "0.004 m",
+    "saida": {
+      "texto": "0 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 999.999
+    },
+    "nome": "999.999 m",
+    "saida": {
+      "texto": "1000 m"
+    }
+  },
+  {
+    "entrada": {
+      "comprimento_m": 1000000.0
+    },
+    "nome": "1000000 m",
+    "saida": {
+      "texto": "1000 m"
+    }
+  }
+]

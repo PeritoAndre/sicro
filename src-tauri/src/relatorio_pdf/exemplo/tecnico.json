@@ -1,0 +1,6 @@
+{
+  "esquema": "sicro.edicao.relatorio_tecnico/2 (exemplo)",
+  "saida": { "arquivo": "ocorrencia-0000-juri.mp4", "sha256": "6cc62c6d4f66c917f5c0a36daf7963f23ee6e65458816c855237027e18aa41e2" },
+  "ffmpeg_args": ["-filter_complex_script", "grafo.txt", "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-crf", "18"],
+  "nota": "Exemplo do protótipo P4: conteúdo fictício."
+}

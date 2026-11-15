@@ -1,0 +1,43 @@
+.previa {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  background: #000;
+  margin-bottom: var(--space-2);
+}
+
+/* sem fundo (faixa presa ao clipe) ou fundo de imagem: o xadrez de transparência */
+.xadrez {
+  background: repeating-conic-gradient(#9aa6b6 0 25%, #ffffff 0 50%) 0 0 / 12px 12px;
+}
+
+.bloco {
+  position: absolute;
+  pointer-events: none;
+  user-select: none;
+}
+
+.fora {
+  outline: 1px solid var(--sicro-danger);
+}
+
+/* área segura: borda tracejada que se vê em fundo claro e escuro */
+.area {
+  position: absolute;
+  border: 1px dashed rgba(255, 255, 255, 0.7);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+
+.estado {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  display: flex;
+  padding: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--sicro-surface-1);
+  color: var(--sicro-danger);
+}

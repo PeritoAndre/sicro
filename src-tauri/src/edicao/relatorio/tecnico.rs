@@ -70,10 +70,17 @@ pub fn feito(plano: &Plano, amb: &Ambiente, fecho: &Fecho) -> Result<Value> {
     // buraco de som aceito ao lado do desvio do `atempo` (contratos (h) 7)
     let mut audio = serde_json::to_value(&pv.audio)?;
     audio["tolerancia_buraco_ms"] = json!(crate::edicao::motor::audio::tolerancia_buraco_ms(plano.audio.as_ref()));
+    // comando de derivação sem pasta nenhuma, antes das raízes: o `feito` não muda com o lugar em que o caso estava
+    let mut midias = serde_json::to_value(&pv.midias)?;
+    for m in midias.as_array_mut().into_iter().flatten() {
+        if let Some(Value::String(c)) = m.pointer_mut("/derivacao/comando") {
+            *c = comando_sem_caminhos(c);
+        }
+    }
     let mut f = json!({
         "projeto": { "id": p.id, "titulo": p.titulo, "esquema": p.esquema, "esquema_menor": p.esquema_menor, "sha256": fecho.projeto_sha256 },
         "saida": pv.saida,
-        "midias": pv.midias,
+        "midias": midias,
         "roteiro": roteiro,
         "ocultacoes": pv.ocultacoes,
         "audio": audio,
@@ -85,6 +92,7 @@ pub fn feito(plano: &Plano, amb: &Ambiente, fecho: &Fecho) -> Result<Value> {
         "avisos": avisos,
         "selos_desligados": pv.selos_desligados,
         "revisado_por": pv.revisado_por,
+        "fecho": pv.fecho,
     });
     // raízes conhecidas primeiro (o caminho pode ter espaço); depois o que sobrou no texto gerado pela máquina.
     // `processamentos` fica de fora: os parâmetros não têm caminho e o texto do perito sai como foi desenhado
@@ -349,6 +357,71 @@ fn limpar(v: &mut Value, argv: bool) {
     }
 }
 
+/// Onde começa um caminho absoluto dentro da palavra (no início, depois de um separador ou de opção curta colada).
+fn inicio_na_palavra(w: &str) -> Option<usize> {
+    let mut candidatos = vec![0];
+    candidatos.extend(w.char_indices().filter(|(_, c)| SEPARADORES.contains(c)).map(|(i, c)| i + c.len_utf8()));
+    candidatos.into_iter().find_map(|c| inicio_do_caminho(&w[c..]).map(|i| c + i))
+}
+
+/// Linha de comando gravada em texto corrido e sem aspas (`derivacao.comando`: os argumentos do ffmpeg juntados
+/// com espaço). O caminho absoluto vai do começo dele até a próxima opção (` -x`), o próximo caminho absoluto ou o
+/// fim, com os espaços que tiver (entre aspas, até a aspa que fecha); fica só o que vem depois da última barra.
+/// Assim nenhuma pasta sobra, esteja o caso onde estiver.
+fn comando_sem_caminhos(s: &str) -> String {
+    let palavras: Vec<&str> = s.split(' ').collect();
+    let mut saida: Vec<String> = Vec::with_capacity(palavras.len());
+    let mut i = 0;
+    while i < palavras.len() {
+        let w = palavras[i];
+        let Some(k) = inicio_na_palavra(w) else {
+            saida.push(w.to_string());
+            i += 1;
+            continue;
+        };
+        let aspa = w[..k].chars().last().filter(|c| *c == '"' || *c == '\'');
+        let fecha = |t: &str| aspa.is_some_and(|q| t.contains(q));
+        let mut corrida = w[k..].to_string();
+        let mut j = i + 1;
+        if !fecha(&corrida) {
+            while j < palavras.len() {
+                let p = palavras[j];
+                if aspa.is_none() && (inicio_na_palavra(p).is_some() || opcao(p) || (p.starts_with('-') && !segue_o_caminho(&palavras[j..]))) {
+                    break;
+                }
+                corrida.push(' ');
+                corrida.push_str(p);
+                j += 1;
+                if fecha(p) {
+                    break;
+                }
+            }
+        }
+        // o que vem depois da aspa que fecha não é caminho
+        let (caminho, resto) = match aspa.and_then(|q| corrida.find(q)) {
+            Some(fim) => corrida.split_at(fim),
+            None => (corrida.as_str(), ""),
+        };
+        saida.push(format!("{}{}{}", &w[..k], nome_do_arquivo(caminho), resto));
+        i = j;
+    }
+    saida.join(" ")
+}
+
+/// Palavra que é opção (`-i`, `-c:v`, `-1`, `-/filter_complex`): hífen e nome, sem barra de pasta no meio.
+fn opcao(p: &str) -> bool {
+    let Some(nome) = p.strip_prefix('-') else { return false };
+    let nome = nome.strip_prefix('/').unwrap_or(nome);
+    !nome.is_empty() && !nome.contains(['/', '\\'])
+}
+
+/// Hífen que não é opção, no meio de um caminho sem aspas (pasta "Laudos - 2026", "-novos/cam"): o caminho segue
+/// quando, antes da próxima opção ou do próximo caminho absoluto, ainda vem barra de pasta. Pasta com cara de opção
+/// (" -x ") continua ambígua e corta o caminho ali.
+fn segue_o_caminho(daqui: &[&str]) -> bool {
+    daqui.iter().enumerate().take_while(|(i, p)| *i == 0 || !(opcao(p) || inicio_na_palavra(p).is_some())).any(|(_, p)| p.contains(['/', '\\']))
+}
+
 /// Um argumento que começa por caminho absoluto É o caminho, com os espaços que tiver: fica o nome do arquivo.
 fn tirar_do_argumento(s: &str) -> String {
     match inicio_do_caminho(s) {
@@ -485,7 +558,7 @@ mod testes {
         // relativos no lugar
         let passo = &t["execucao"]["passos"][0]["argumentos"];
         assert_eq!(passo, &json!(["-i", "Mídias/Vídeos/cam 1.mp4", "-/filter_complex", "b000.txt", "-i", "cache/camadas/abc/lista.ffconcat", "b000.mp4"]));
-        assert_eq!(t["feito"]["midias"][0]["derivacao"]["comando"], json!("ffmpeg -i Mídias/orig.dav -c copy dvr 1/out.mp4"));
+        assert_eq!(t["feito"]["midias"][0]["derivacao"]["comando"], json!("ffmpeg -i orig.dav -c copy out.mp4"));
         assert_eq!(t["execucao"]["ffmpeg"]["configuracao"], json!("--prefix=usr --enable-gpl --extra-cflags=-Iinclude"));
         assert_eq!(t["execucao"]["saida"]["arquivo"], json!(fecho(None).arquivo_rel));
         // o texto do perito não é mexido
@@ -638,6 +711,74 @@ mod testes {
         let fa = bytes(&feito(&pa, &a.ambiente("t1"), &fecho(None)).unwrap());
         let fb = bytes(&feito(&pb, &b.ambiente("t9"), &fecho(None)).unwrap());
         assert_eq!(String::from_utf8(fa).unwrap(), String::from_utf8(fb).unwrap());
+    }
+
+    /// `derivacao.comando` (contratos-fase1 (e)): a linha gravada no banco tem caminhos absolutos sem aspas. Com o caso
+    /// movido para outra pasta (raiz que a execução não conhece) e nomes com espaço, nenhuma pasta sobra, e o texto
+    /// é o mesmo que sai com o caso no lugar.
+    #[test]
+    fn comando_de_derivacao_sem_pasta_onde_quer_que_o_caso_esteja() {
+        let c = Cena::nova("x");
+        let (mut plano, _) = apoio::plano_e_resultado(&c);
+        let amb = c.ambiente("t1");
+        let comando = |raiz: &str| format!("{raiz}/bin/ffmpeg -i {raiz}/Caso 1/Mídias/cam 2.dav -map 0:v:0 -vf vidstabdetect=result=movimento.trf -f null - ffmpeg -i {raiz}/Caso 1/Mídias/cam 2.dav -c copy -y {raiz}/Caso 1/Mídias/dvr 1/out 2.mp4");
+        let esperado = "ffmpeg -i cam 2.dav -map 0:v:0 -vf vidstabdetect=result=movimento.trf -f null - ffmpeg -i cam 2.dav -c copy -y out 2.mp4";
+        // raiz com hífen solto e com pasta começada por hífen: o caminho não acaba neles
+        for raiz in ["/mnt/hd antigo", "C:\\Users\\André Barroso\\Casos", "/mnt/Laudos - 2026/Barroso -pc", "D:\\Barroso - PC\\hd antigo", &c.caso.to_string_lossy()] {
+            plano.proveniencia.midias[0].derivacao.as_mut().unwrap().comando = comando(raiz);
+            let f = feito(&plano, &amb, &fecho(None)).unwrap();
+            assert_eq!(f["midias"][0]["derivacao"]["comando"], json!(esperado), "{raiz}");
+            let texto = String::from_utf8(bytes(&f)).unwrap();
+            assert_eq!(absolutos_no_texto(&texto, &c.raizes(), &["hd antigo", "Barroso", "Caso 1", "dvr 1"]), Vec::<String>::new(), "{raiz}");
+        }
+        // entre aspas o caminho acaba na aspa; fração, filtro e opção ficam como estão
+        assert_eq!(comando_sem_caminhos("ffmpeg -i \"/mnt/dvr 1/in a.mp4\" -r 30000/1001 -vf scale=iw/2:-2 '/x y/out.mp4' fim"), "ffmpeg -i \"in a.mp4\" -r 30000/1001 -vf scale=iw/2:-2 'out.mp4' fim");
+        assert_eq!(comando_sem_caminhos("movie=/a/b c.png:x=1 -i /v/x.mp4"), "movie=b c.png:x=1 -i x.mp4");
+        assert_eq!(comando_sem_caminhos("-I/opt/inc ~/z w.txt \\\\srv\\d e\\f.mp4"), "-Iinc z w.txt f.mp4");
+        assert_eq!(comando_sem_caminhos(""), "");
+        // hífen que é saída padrão ou opção fecha o caminho; `-/opção` (grafo em arquivo) é opção
+        assert_eq!(comando_sem_caminhos("ffmpeg -i /a b/in.mp4 - /c d/x.txt"), "ffmpeg -i in.mp4 - x.txt");
+        assert_eq!(comando_sem_caminhos("ffmpeg -i /a b/in 1.mp4 -/filter_complex /t/g.txt -ss -1 /o/s.mp4"), "ffmpeg -i in 1.mp4 -/filter_complex g.txt -ss -1 s.mp4");
+        assert!(opcao("-i") && opcao("-c:v") && opcao("-1") && opcao("-/filter_complex") && !opcao("-") && !opcao("-novos/cam") && !opcao("x"));
+    }
+
+    /// O `fecho` do projeto (transição de saída do último clipe) sai no `feito`; sem ele, nulo.
+    #[test]
+    fn fecho_no_feito() {
+        use crate::edicao::modelo::Transicao;
+        let c = Cena::nova("x");
+        let (mut plano, _) = apoio::plano_e_resultado(&c);
+        let amb = c.ambiente("t1");
+        let sem = feito(&plano, &amb, &fecho(None)).unwrap();
+        assert_eq!(sem["fecho"], Value::Null);
+        let t: Transicao = serde_json::from_value(json!({ "tipo": "escurecer", "duracao_s": 0.5, "audio": "acompanhar" })).unwrap();
+        plano.proveniencia.fecho = Some(t);
+        let com = feito(&plano, &amb, &fecho(None)).unwrap();
+        assert_eq!(com["fecho"], json!({ "tipo": "escurecer", "duracao_s": 0.5, "audio": "acompanhar" }));
+        assert_ne!(bytes(&sem), bytes(&com), "o fecho muda o feito");
+    }
+
+    /// Campos da abertura da Fase 1 (contratos-fase1 (b) B22) chegam ao `feito` como o motor os pôs.
+    #[test]
+    fn campos_novos_da_proveniencia_no_feito() {
+        use crate::edicao::modelo::{AudioClipe, Ausencia, Mixagem, MotivoAusencia};
+        let c = Cena::nova("x");
+        let (mut plano, _) = apoio::plano_e_resultado(&c);
+        let pv = &mut plano.proveniencia;
+        pv.ocultacoes[0].inverter = true;
+        pv.ocultacoes[0].margem = 0.1;
+        pv.ocultacoes[0].borda_suave = 0.2;
+        pv.roteiro[1].audio = Some(serde_json::from_value::<AudioClipe>(json!({ "volume": 0.5, "mudo": false, "manter_tom": true, "silencios": [] })).unwrap());
+        pv.audio.mixagem = Some(Mixagem::default());
+        pv.rastreios[0].ausencias = vec![Ausencia { de_s: 1.0, ate_s: 1.5, motivo: MotivoAusencia::ForaDeCena, aceita_em: "2026-11-14T09:00:00Z".into(), por: "Perito Teste".into() }];
+        let f = feito(&plano, &c.ambiente("t1"), &fecho(None)).unwrap();
+        assert_eq!(f["ocultacoes"][0]["inverter"], json!(true));
+        assert_eq!((f["ocultacoes"][0]["margem"].as_f64(), f["ocultacoes"][0]["borda_suave"].as_f64()), (Some(0.1), Some(0.2)));
+        assert_eq!((&f["ocultacoes"][0]["cor"], &f["ocultacoes"][0]["rastreio"]), (&json!("#000000ff"), &json!("r1")));
+        assert_eq!(f["roteiro"][1]["audio"]["volume"], json!(0.5));
+        assert_eq!(f["roteiro"][0]["audio"], Value::Null);
+        assert!(f["audio"]["mixagem"].is_object() && f["audio"]["trilhas"].is_array());
+        assert_eq!(f["rastreios"][0]["ausencias"][0]["de_s"], json!(1.0));
     }
 
     /// Título longo com acento: o nome é cortado em limite de caractere, sem pânico; erro de escrita não deixa arquivo pela metade.

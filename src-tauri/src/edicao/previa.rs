@@ -1,4 +1,5 @@
-//! Mídia de prévia (§7.1, decisão O8): o `<video>` toca o original, a cópia por remux ou o proxy de CPU. Dono: P0.4.
+//! Mídia de prévia (§7.1, §7.6, decisão O8): o `<video>` toca o original, a cópia por remux ou o proxy (GPU com queda
+//! para a CPU, `proxy.rs`). Dono: P0.4; P1.9 desde a Fase 1.
 //! Cache (§4): `previa/<sha256>.mp4 + .json` e `proxies/<sha256>.720.mp4 + .json`. O `.json` só aparece depois do
 //! arquivo conferido: sem ele (ou com tamanho diferente) a prévia não está pronta.
 
@@ -7,11 +8,15 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde::{Deserialize, Serialize};
 
+use std::sync::Arc;
+
 use super::executar::{ERRO_CANCELADO, ERRO_LEITURA_DIVERGENTE};
 use super::ffmpeg::exec::{self, Comando};
 use super::ffmpeg::sonda::Capacidades;
+use super::fundo::{self, TipoFundo};
 use super::modelo::{CorMidia, Racional, TamanhoPx};
 use super::motor::FonteInfo;
+use super::proxy;
 use super::quadros::{OrigemTabela, TabelaQuadros};
 use crate::error::{Result, SicroError};
 
@@ -91,19 +96,37 @@ const AUDIO_COPIA: &[&str] = &["aac", "mp3"];
 /// Fração do progresso que vai para o ffmpeg; o resto é a conferência.
 const PARTE_FFMPEG: f32 = 0.95;
 
-/// Tipo que serve a essa fonte: `Original` (MP4/MOV que começa em zero, H.264 8 bits 4:2:0), senão `Copia`;
-/// `Proxy` quando o codec não é H.264 8 bits 4:2:0.
+/// Tipo que serve a essa fonte: `Proxy` quando `proxy::precisa` (codec, tamanho, taxa; §7.6); senão `Original`
+/// (MP4/MOV que começa em zero) ou `Copia`.
 pub fn decidir(fonte: &FonteInfo) -> TipoPrevia {
-    if !codec_serve(fonte) {
+    decidir_com(fonte, false)
+}
+
+/// `decidir` com o proxy pedido pelo palco (`pedido`: busca medida lenta, `proxy::precisa(fonte, Some(p50))`, ou
+/// clipe com rampa, ré ou abaixo de 0,25×, §7.6).
+fn decidir_com(fonte: &FonteInfo, pedido: bool) -> TipoPrevia {
+    if pedido || proxy::precisa(fonte, None) {
         TipoPrevia::Proxy
-    } else if conteiner_mp4(&fonte.conteiner) && comeca_em_zero(fonte) {
+    } else {
+        tocavel(fonte)
+    }
+}
+
+/// O que o `<video>` toca sem proxy: o original (MP4/MOV que começa em zero) ou a cópia.
+fn tocavel(fonte: &FonteInfo) -> TipoPrevia {
+    if conteiner_mp4(&fonte.conteiner) && comeca_em_zero(fonte) {
         TipoPrevia::Original
     } else {
         TipoPrevia::Copia
     }
 }
 
-fn codec_serve(f: &FonteInfo) -> bool {
+/// Proxy pedido só por desempenho: o codec serve ao `<video>`, que toca o original ou a cópia enquanto ele não fica pronto.
+fn por_desempenho(fonte: &FonteInfo, pedido: bool) -> bool {
+    decidir_com(fonte, pedido) == TipoPrevia::Proxy && codec_serve(fonte)
+}
+
+pub(crate) fn codec_serve(f: &FonteInfo) -> bool {
     f.codec == "h264" && matches!(f.pix_fmt.as_str(), "yuv420p" | "yuvj420p")
 }
 
@@ -135,10 +158,17 @@ fn sem_video(f: &FonteInfo) -> Result<()> {
 }
 
 /// A prévia que existe agora, sem fazer nada: `pronta` false quando a cópia ou o proxy ainda não está no cache.
+/// Proxy por desempenho que falta: o original ou a cópia, que já tocam (`pedir_falta` pede o proxy).
 /// `ws` = raiz do caso; `cache` = pasta da Edição do caso. Fonte sem vídeo: `Err` (`nao_suportado`).
 pub fn consultar(ws: &Path, cache: &Path, fonte: &FonteInfo) -> Result<PreviaMidia> {
+    consultar_com(ws, cache, fonte, false)
+}
+
+// CONTRATO: acréscimo (P1.9; ligação do fecho para o proxy que o palco pede, §7.6).
+/// `consultar` com o proxy pedido pelo palco (`pedido`, ver `decidir_com`): o proxy pronto, senão o que já toca.
+pub fn consultar_com(ws: &Path, cache: &Path, fonte: &FonteInfo, pedido: bool) -> Result<PreviaMidia> {
     sem_video(fonte)?;
-    match decidir(fonte) {
+    match decidir_com(fonte, pedido) {
         TipoPrevia::Original => original(ws, fonte),
         TipoPrevia::Copia => {
             // o proxy feito quando o remux falhou também serve
@@ -147,8 +177,46 @@ pub fn consultar(ws: &Path, cache: &Path, fonte: &FonteInfo) -> Result<PreviaMid
             }
             Ok(pronta(cache, TipoPrevia::Proxy, fonte)?.unwrap_or(pendente(TipoPrevia::Copia, fonte)?))
         }
-        _ => Ok(pronta(cache, TipoPrevia::Proxy, fonte)?.unwrap_or(pendente(TipoPrevia::Proxy, fonte)?)),
+        _ => {
+            if let Some(p) = pronta(cache, TipoPrevia::Proxy, fonte)? {
+                return Ok(p);
+            }
+            if !codec_serve(fonte) {
+                return pendente(TipoPrevia::Proxy, fonte);
+            }
+            match tocavel(fonte) {
+                TipoPrevia::Original => original(ws, fonte),
+                _ => Ok(pronta(cache, TipoPrevia::Copia, fonte)?.unwrap_or(pendente(TipoPrevia::Copia, fonte)?)),
+            }
+        }
     }
+}
+
+/// O que falta pedir à fila de fundo para a resposta `p` de `consultar`: a cópia ou o proxy pendentes e, com a prévia
+/// tocável já pronta, o proxy por desempenho. None = nada (o original nunca entra na fila).
+pub(crate) fn falta(fonte: &FonteInfo, p: &PreviaMidia, pedido: bool) -> Option<TipoFundo> {
+    match (p.pronta, p.tipo) {
+        (false, TipoPrevia::Copia) => Some(TipoFundo::CopiaPrevia),
+        (false, TipoPrevia::Proxy) => Some(TipoFundo::Proxy),
+        (true, TipoPrevia::Original | TipoPrevia::Copia) if por_desempenho(fonte, pedido) => Some(TipoFundo::Proxy),
+        _ => None,
+    }
+}
+
+// CONTRATO: acréscimo (P1.9). Ponto de ligação de `edicao_midia_info` e `edicao_midia_previa`, no lugar do
+// `if !p.pronta { pedir_previa(…) }`: sem ele o proxy por desempenho nunca é pedido (a tela segue no original/cópia).
+/// Pede à fila de fundo o que `falta` (chave `<tipo>:<sha256>`, trabalho = `produzir`). Devolve o id da tarefa.
+pub fn pedir_falta(cap: &Arc<Capacidades>, cache: &Path, fonte: &FonteInfo, p: &PreviaMidia) -> Option<String> {
+    pedir_falta_com(cap, cache, fonte, p, false)
+}
+
+// CONTRATO: acréscimo (P1.9; ligação do fecho, junto de `consultar_com`).
+/// `pedir_falta` com o proxy pedido pelo palco.
+pub fn pedir_falta_com(cap: &Arc<Capacidades>, cache: &Path, fonte: &FonteInfo, p: &PreviaMidia, pedido: bool) -> Option<String> {
+    let tipo = falta(fonte, p, pedido)?;
+    let (cap, cache, f) = (cap.clone(), cache.to_path_buf(), fonte.clone());
+    let chave = fundo::chave(tipo, &fonte.sha256);
+    Some(fundo::pedir(tipo, &chave, Box::new(move |c, prog| produzir_pedido(&cap, &cache, &f, pedido, c, prog).map(|_| ()))))
 }
 
 /// Cópia por remux em `previa/<sha256>.mp4` + `.json`, com o deslocamento medido. `progresso` recebe 0..1.
@@ -156,32 +224,79 @@ pub fn copiar(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, cancelar: &Ato
     if !codec_serve(fonte) {
         return Err(SicroError::Validation(format!("nao_suportado: cópia de {} {}", fonte.codec, fonte.pix_fmt)));
     }
-    fazer(cap, cache, fonte, TipoPrevia::Copia, None, cancelar, progresso)
+    fazer(cap, cache, fonte, Receita::Copia, None, cancelar, progresso)
 }
 
 /// Proxy de CPU em `proxies/<sha256>.720.mp4` + `.json`. `progresso` recebe 0..1.
 pub fn proxy_cpu(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<PreviaMidia> {
-    let motivo = (!codec_serve(fonte)).then(|| format!("codec: {} {}", fonte.codec, fonte.pix_fmt));
-    fazer(cap, cache, fonte, TipoPrevia::Proxy, motivo, cancelar, progresso)
+    fazer(cap, cache, fonte, Receita::ProxyCpu, proxy::motivo(fonte, None), cancelar, progresso)
 }
 
-/// Faz o que `decidir` manda; se o remux falhar, vai o proxy. Trabalho da fila de fundo.
+/// Receita do arquivo tocado: remux (§7.1) ou proxy de CPU (O8) ou de GPU (§7.6).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Receita {
+    Copia,
+    ProxyCpu,
+    ProxyGpu,
+}
+
+/// Proxy pela receita dada, com o motivo gravado no `.json` (`proxy.rs` escolhe a GPU e faz a queda).
+pub(crate) fn fazer_proxy(
+    cap: &Capacidades,
+    cache: &Path,
+    fonte: &FonteInfo,
+    gpu: bool,
+    motivo: Option<String>,
+    cancelar: &AtomicBool,
+    progresso: &mut dyn FnMut(f32),
+) -> Result<PreviaMidia> {
+    fazer(cap, cache, fonte, if gpu { Receita::ProxyGpu } else { Receita::ProxyCpu }, motivo, cancelar, progresso)
+}
+
+/// Faz o que falta para tocar (trabalho da fila de fundo): a cópia (se o remux falhar, vai o proxy) ou o proxy. Proxy
+/// por desempenho sem prévia tocável: a cópia primeiro (a tela toca já; `pedir_falta` pede o proxy depois).
 /// `Original` não tem o que fazer (a resposta, relativa ao caso, sai de `consultar`): `Err`.
 pub fn produzir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<PreviaMidia> {
-    let tipo = decidir(fonte);
-    if tipo == TipoPrevia::Copia && pronta(cache, TipoPrevia::Copia, fonte)?.is_none() {
-        if let Some(p) = pronta(cache, TipoPrevia::Proxy, fonte)? {
-            progresso(1.0);
-            return Ok(p);
+    produzir_pedido(cap, cache, fonte, false, cancelar, progresso)
+}
+
+fn produzir_pedido(
+    cap: &Capacidades,
+    cache: &Path,
+    fonte: &FonteInfo,
+    pedido: bool,
+    cancelar: &AtomicBool,
+    progresso: &mut dyn FnMut(f32),
+) -> Result<PreviaMidia> {
+    let ja = |t| pronta(cache, t, fonte);
+    let pronto = |p: PreviaMidia, progresso: &mut dyn FnMut(f32)| {
+        progresso(1.0);
+        Ok(p)
+    };
+    let fazer = match decidir_com(fonte, pedido) {
+        TipoPrevia::Copia => {
+            // o proxy feito quando o remux falhou também serve
+            if let (None, Some(p)) = (ja(TipoPrevia::Copia)?, ja(TipoPrevia::Proxy)?) {
+                return pronto(p, progresso);
+            }
+            TipoPrevia::Copia
         }
-    }
+        TipoPrevia::Proxy => {
+            if let Some(p) = ja(TipoPrevia::Proxy)? {
+                return pronto(p, progresso);
+            }
+            let sem_tocavel = por_desempenho(fonte, pedido) && tocavel(fonte) == TipoPrevia::Copia && ja(TipoPrevia::Copia)?.is_none();
+            if sem_tocavel { TipoPrevia::Copia } else { TipoPrevia::Proxy }
+        }
+        t => t,
+    };
     produzir_com(
-        tipo,
+        fazer,
         cancelar,
         |p| copiar(cap, cache, fonte, cancelar, p),
-        |motivo, p| match motivo {
-            Some(m) => fazer(cap, cache, fonte, TipoPrevia::Proxy, Some(m), cancelar, p),
-            None => proxy_cpu(cap, cache, fonte, cancelar, p),
+        |motivo, p| {
+            let motivo = motivo.or_else(|| proxy::motivo(fonte, None)).or_else(|| pedido.then(|| "pedido do palco".into()));
+            proxy::produzir_por(cap, cache, fonte, motivo, cancelar, p)
         },
         progresso,
     )
@@ -206,7 +321,7 @@ fn produzir_com(
     }
 }
 
-fn cancelado(e: &SicroError) -> bool {
+pub(crate) fn cancelado(e: &SicroError) -> bool {
     matches!(e, SicroError::Validation(m) if m.starts_with(ERRO_CANCELADO))
 }
 
@@ -360,13 +475,14 @@ fn fazer(
     cap: &Capacidades,
     cache: &Path,
     fonte: &FonteInfo,
-    tipo: TipoPrevia,
+    receita: Receita,
     motivo: Option<String>,
     cancelar: &AtomicBool,
     progresso: &mut dyn FnMut(f32),
 ) -> Result<PreviaMidia> {
     sem_video(fonte)?;
     let tab = &fonte.quadros;
+    let tipo = if receita == Receita::Copia { TipoPrevia::Copia } else { TipoPrevia::Proxy };
     let d = destino(cache, tipo, &fonte.sha256)?;
     if let Some(p) = pronta(cache, tipo, fonte)? {
         progresso(1.0);
@@ -391,9 +507,16 @@ fn fazer(
         }
     }
     let audio = codec_do_audio(cap, &fonte.caminho, &tmp.0, cancelar)?;
-    let args = match tipo {
-        TipoPrevia::Proxy => args_proxy(&fonte.caminho, audio.as_deref(), tab.tb, (largura, altura)),
-        _ => args_copia(&fonte.caminho, audio.as_deref()),
+    // antes do ffmpeg: o tamanho decodificado diz se a escala da GPU serve
+    let pf = primeiro_quadro(cap, &fonte.caminho, &tmp.0, "primeiro-fonte", cancelar)?;
+    if receita == Receita::ProxyGpu && !pf.tamanho.is_some_and(|t| proxy::escala_serve(t, (largura, altura))) {
+        let de = pf.tamanho.map_or("?".to_string(), |(w, h)| format!("{w}x{h}"));
+        return Err(SicroError::Validation(format!("nao_suportado: scale_cuda de {de} para {largura}x{altura}")));
+    }
+    let args = match receita {
+        Receita::ProxyCpu => args_proxy(&fonte.caminho, audio.as_deref(), tab.tb, (largura, altura)),
+        Receita::ProxyGpu => proxy::args_gpu(&fonte.caminho, &args_audio(audio.as_deref()), tab.tb, (largura, altura)),
+        Receita::Copia => args_copia(&fonte.caminho, audio.as_deref()),
     };
     let cmd = comando(&cap.binario, &tmp.0, "previa", args);
     let (de_s, ate_s) = faixa(tab);
@@ -406,7 +529,11 @@ fn fazer(
     exec::exigir_sucesso(&cmd, &t)?;
 
     let saida = tmp.0.join(SAIDA);
-    let desloc_s = deslocamento(cap, &fonte.caminho, &saida, &tmp.0, tipo == TipoPrevia::Copia, cancelar)?;
+    let pt = primeiro_quadro(cap, &saida, &tmp.0, "primeiro-tocado", cancelar)?;
+    let desloc_s = deslocamento(&pf, &pt, tipo == TipoPrevia::Copia)?;
+    if receita == Receita::ProxyGpu {
+        mesma_imagem(&pf, &pt)?;
+    }
     let (tb, pts) = pacotes(cap, &saida, &tmp.0, cancelar)?;
     conferir(tipo, tab, desloc_s, tb, &pts)?;
 
@@ -445,7 +572,7 @@ fn fazer(
 }
 
 /// Nome do arquivo de saída dentro da pasta de trabalho.
-const SAIDA: &str = "saida.mp4";
+pub(crate) const SAIDA: &str = "saida.mp4";
 
 /// No disco antes do `rename`: queda de energia não deixa registro valendo para arquivo com tamanho certo e
 /// conteúdo faltando (NTFS). Escrita: o `FlushFileBuffers` do Windows recusa arquivo aberto só para leitura.
@@ -454,11 +581,11 @@ fn duravel(p: &Path) -> Result<()> {
     Ok(())
 }
 
-fn s(v: &[&str]) -> Vec<String> {
+pub(crate) fn s(v: &[&str]) -> Vec<String> {
     v.iter().map(|x| x.to_string()).collect()
 }
 
-fn args_audio(audio: Option<&str>) -> Vec<String> {
+pub(crate) fn args_audio(audio: Option<&str>) -> Vec<String> {
     match audio {
         None => s(&["-an"]),
         Some(c) if AUDIO_COPIA.contains(&c) => s(&["-map", "0:a:0", "-c:a", "copy"]),
@@ -540,21 +667,55 @@ fn escondidos(cap: &Capacidades, fonte: &Path, pasta: &Path, cancelar: &AtomicBo
     Ok(String::from_utf8_lossy(&out).lines().filter(|l| l.contains('D')).count())
 }
 
-/// pts0 da fonte − pts0 do arquivo tocado (s), pelo primeiro quadro que o decodificador entrega em cada um.
-/// `mesmo_quadro` (cópia): o primeiro quadro tem de ser o mesmo nos dois; sem isso a conta mede o par errado.
-fn deslocamento(cap: &Capacidades, fonte: &Path, tocado: &Path, pasta: &Path, mesmo_quadro: bool, cancelar: &AtomicBool) -> Result<f64> {
-    let (pf, tf, cf) = primeiro_quadro(cap, fonte, pasta, "primeiro-fonte", cancelar)?;
-    let (pt, tt, ct) = primeiro_quadro(cap, tocado, pasta, "primeiro-tocado", cancelar)?;
-    if mesmo_quadro && cf != ct {
-        return Err(SicroError::Validation(format!("{ERRO_LEITURA_DIVERGENTE}: primeiro quadro da cópia ({ct}) ≠ da fonte ({cf})")));
-    }
-    // diferença exata em racional antes de virar f64 (fonte de 12 h: 43 200 s)
-    let num = pf as i128 * tf.num as i128 * tt.den as i128 - pt as i128 * tt.num as i128 * tf.den as i128;
-    Ok(num as f64 / (tf.den as i128 * tt.den as i128) as f64)
+/// Primeiro quadro que o decodificador entrega (`showinfo`): pts, base de tempo, checksum, formato, tamanho
+/// decodificado e média de cada plano.
+#[derive(Debug, Clone, PartialEq)]
+struct Primeiro {
+    pts: i64,
+    tb: Racional,
+    soma: String,
+    fmt: String,
+    tamanho: Option<(u32, u32)>,
+    media: Vec<f64>,
 }
 
-/// pts, base de tempo e checksum (`showinfo`) do primeiro quadro decodificado (`-copyts`).
-fn primeiro_quadro(cap: &Capacidades, video: &Path, pasta: &Path, nome: &str, cancelar: &AtomicBool) -> Result<(i64, Racional, String)> {
+/// pts0 da fonte − pts0 do arquivo tocado (s), pelo primeiro quadro que o decodificador entrega em cada um.
+/// `mesmo_quadro` (cópia): o primeiro quadro tem de ser o mesmo nos dois; sem isso a conta mede o par errado.
+fn deslocamento(f: &Primeiro, t: &Primeiro, mesmo_quadro: bool) -> Result<f64> {
+    if mesmo_quadro && f.soma != t.soma {
+        return Err(SicroError::Validation(format!("{ERRO_LEITURA_DIVERGENTE}: primeiro quadro da cópia ({}) ≠ da fonte ({})", t.soma, f.soma)));
+    }
+    // diferença exata em racional antes de virar f64 (fonte de 12 h: 43 200 s)
+    let num = f.pts as i128 * f.tb.num as i128 * t.tb.den as i128 - t.pts as i128 * t.tb.num as i128 * f.tb.den as i128;
+    Ok(num as f64 / (f.tb.den as i128 * t.tb.den as i128) as f64)
+}
+
+/// Diferença aceita na média de cada plano (0..255) entre o primeiro quadro da fonte e o do proxy de GPU
+/// (medido: até 1 com `-cq 24`; o quadro zerado do `scale_cuda` passa de 100 no croma).
+const MEDIA_GPU_MAX: f64 = 8.0;
+
+/// Bits por amostra de um formato YUV planar (`yuv420p10le` → 10; sem número → 8).
+fn bits_do_formato(fmt: &str) -> u32 {
+    let f = fmt.trim_end_matches("le").trim_end_matches("be");
+    f.rsplit_once('p').and_then(|(_, n)| n.parse().ok()).filter(|b| (9..=16).contains(b)).unwrap_or(8)
+}
+
+/// O proxy de GPU mostra a imagem da fonte? Compara a média de cada plano do primeiro quadro (em 8 bits): a placa
+/// pode entregar quadro zerado sem erro nenhum. Fonte que não é YUV de três planos não tem como comparar: passa.
+fn mesma_imagem(f: &Primeiro, t: &Primeiro) -> Result<()> {
+    if !(f.fmt.starts_with("yuv") && t.fmt.starts_with("yuv") && f.media.len() == 3 && t.media.len() == 3) {
+        return Ok(());
+    }
+    let em8 = |p: &Primeiro| -> Vec<f64> { p.media.iter().map(|m| m / (1u32 << (bits_do_formato(&p.fmt) - 8)) as f64).collect() };
+    let (a, b) = (em8(f), em8(t));
+    if a.iter().zip(&b).any(|(x, y)| (x - y).abs() > MEDIA_GPU_MAX) {
+        return Err(SicroError::Validation(format!("{ERRO_LEITURA_DIVERGENTE}: imagem do proxy {b:?} ≠ da fonte {a:?}")));
+    }
+    Ok(())
+}
+
+/// Primeiro quadro decodificado (`-copyts`), pelo `showinfo`.
+fn primeiro_quadro(cap: &Capacidades, video: &Path, pasta: &Path, nome: &str, cancelar: &AtomicBool) -> Result<Primeiro> {
     let mut a = s(&["-hide_banner", "-nostdin", "-nostats", "-loglevel", "verbose", "-copyts", "-i"]);
     a.push(video.to_string_lossy().into_owned());
     a.extend(s(&["-map", "0:v:0", "-frames:v", "1", "-vf", "showinfo@p", "-f", "null", "-"]));
@@ -566,13 +727,17 @@ fn primeiro_quadro(cap: &Capacidades, video: &Path, pasta: &Path, nome: &str, ca
     let texto = String::from_utf8_lossy(&std::fs::read(&cmd.stderr)?).into_owned();
     let linhas = || texto.lines().filter(|l| l.contains("[showinfo@p "));
     let tb = linhas().find_map(|l| l.split("config in time_base: ").nth(1)).and_then(|r| racional(r.split(',').next()?.trim())).ok_or_else(sem)?;
-    let soma = linhas()
-        .find(|l| l.contains("] n:"))
-        .and_then(|l| l.split(" checksum:").nth(1))
-        .and_then(|r| r.split_whitespace().next())
-        .map(String::from)
-        .ok_or_else(sem)?;
-    Ok((pts, tb, soma))
+    let quadro = linhas().find(|l| l.contains("] n:")).ok_or_else(sem)?;
+    let campo = |chave: &str| quadro.split(chave).nth(1).and_then(|r| r.split_whitespace().next());
+    let soma = campo(" checksum:").map(String::from).ok_or_else(sem)?;
+    let tamanho = campo(" s:").and_then(|t| t.split_once('x')).and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?)));
+    let media = quadro
+        .split(" mean:[")
+        .nth(1)
+        .and_then(|r| r.split(']').next())
+        .map(|r| r.split_whitespace().filter_map(|v| v.parse().ok()).collect())
+        .unwrap_or_default();
+    Ok(Primeiro { pts, tb, soma, fmt: campo(" fmt:").unwrap_or("").to_string(), tamanho, media })
 }
 
 /// Base de tempo e pts (dts quando falta) de cada pacote de vídeo do arquivo tocado, em ordem crescente.
@@ -667,7 +832,7 @@ fn faixa(t: &TabelaQuadros) -> (f64, f64) {
 }
 
 #[cfg(test)]
-mod testes {
+pub(crate) mod testes {
     use super::*;
     use std::collections::HashMap;
     use std::sync::{Arc, Mutex, OnceLock};
@@ -685,21 +850,21 @@ mod testes {
 
     // ------------------------------------------------------------ ajudantes só de teste
 
-    fn rodar(cap: &Capacidades, programa: &Path, pasta: &Path, nome: &str, args: Vec<String>) -> Vec<u8> {
+    pub(crate) fn rodar(cap: &Capacidades, programa: &Path, pasta: &Path, nome: &str, args: Vec<String>) -> Vec<u8> {
         let cmd = comando(programa, pasta, nome, args);
         let (t, out) = exec::rodar_com_saida(&cmd, &AtomicBool::new(false)).unwrap();
         exec::exigir_sucesso(&cmd, &t).unwrap_or_else(|e| panic!("{e} ({})", cap.versao));
         out
     }
 
-    fn sonda_json(cap: &Capacidades, video: &Path) -> Value {
+    pub(crate) fn sonda_json(cap: &Capacidades, video: &Path) -> Value {
         let p = fontes::pasta_temporaria("previa-sonda");
         let mut a = s(&["-v", "error", "-show_format", "-show_streams", "-of", "json"]);
         a.push(video.to_string_lossy().into_owned());
         serde_json::from_slice(&rodar(cap, &cap.ffprobe, &p, "sonda", a)).unwrap()
     }
 
-    fn fluxo<'a>(j: &'a Value, tipo: &str) -> Option<&'a Value> {
+    pub(crate) fn fluxo<'a>(j: &'a Value, tipo: &str) -> Option<&'a Value> {
         j["streams"].as_array()?.iter().find(|s| s["codec_type"] == tipo)
     }
 
@@ -715,30 +880,17 @@ mod testes {
             let p = fontes::pasta_temporaria("previa-pacotes");
             pacotes(cap, video, &p, &AtomicBool::new(false)).unwrap().1
         };
-        let passos: Vec<i64> = pts.windows(2).map(|w| w[1] - w[0]).collect();
-        let mut ord = passos.clone();
-        ord.sort_unstable();
-        let mediano = ord.get(ord.len() / 2).copied().unwrap_or(1);
-        let passo = (ord.first().copied().unwrap_or(mediano), ord.last().copied().unwrap_or(mediano));
-        TabelaQuadros {
-            tb,
-            chave: (0..pts.len()).map(|i| i == 0).collect(),
-            passo_mediano: mediano,
-            passo,
-            vfr: passo.0 != passo.1,
-            origem: if decodificar { OrigemTabela::Decodificador } else { OrigemTabela::Pacotes },
-            ffmpeg_sha256: cap.sha256.clone(),
-            erros_decodificacao: 0,
-            busca: Busca::Confiavel,
-            declarado: Declarado { r_frame_rate: String::new(), avg_frame_rate: String::new(), nb_frames: None, duracao: None },
-            pacotes: pts.len() as u64,
-            lacunas: Vec::new(),
-            pts,
-        }
+        // passos, taxa variável e lacunas pela regra da tabela de verdade (`quadros::medir_passos`)
+        let mut t = crate::edicao::quadros::apoio::tabela((tb.num, tb.den), pts);
+        t.chave = (0..t.pts.len()).map(|i| i == 0).collect();
+        t.origem = if decodificar { OrigemTabela::Decodificador } else { OrigemTabela::Pacotes };
+        t.ffmpeg_sha256 = cap.sha256.clone();
+        t.pacotes = t.pts.len() as u64;
+        t
     }
 
     /// `FonteInfo` montado do ffprobe (`quadros::fonte_info` é do P0.3b; giro horário = −rotation).
-    fn fonte_de_teste(cap: &Capacidades, video: &Path, decodificar: bool) -> FonteInfo {
+    pub(crate) fn fonte_de_teste(cap: &Capacidades, video: &Path, decodificar: bool) -> FonteInfo {
         let j = sonda_json(cap, video);
         let v = fluxo(&j, "video").expect("sem vídeo");
         let tb = racional(v["time_base"].as_str().unwrap()).unwrap();
@@ -786,7 +938,7 @@ mod testes {
     }
 
     /// Fontes que a matriz não tem, feitas uma vez por processo (o binário é um só por processo).
-    fn extra(cap: &Capacidades, nome: &str, args: &[&str]) -> PathBuf {
+    pub(crate) fn extra(cap: &Capacidades, nome: &str, args: &[&str]) -> PathBuf {
         static PASTA: OnceLock<PathBuf> = OnceLock::new();
         static TRAVA: Mutex<()> = Mutex::new(());
         let pasta = PASTA.get_or_init(|| fontes::pasta_temporaria("previa-fontes"));
@@ -842,18 +994,18 @@ mod testes {
         )
     }
 
-    fn sem_progresso() -> impl FnMut(f32) {
+    pub(crate) fn sem_progresso() -> impl FnMut(f32) {
         |_| {}
     }
 
     /// Base de tempo do vídeo do arquivo (a dos pts que `medir::pts` lê).
-    fn tb_do_video(cap: &Capacidades, video: &Path) -> Racional {
+    pub(crate) fn tb_do_video(cap: &Capacidades, video: &Path) -> Racional {
         racional(fluxo(&sonda_json(cap, video), "video").unwrap()["time_base"].as_str().unwrap()).unwrap()
     }
 
     /// Mede o arquivo tocado contra a fonte pelo decodificador: mesmo número de quadros; deslocamento = `desloc_s`
     /// no primeiro, no do meio e no último a até 1 µs; nos demais, a até 1 µs salvo pts repetido na fonte.
-    fn conferir_pts(cap: &Capacidades, fonte: &FonteInfo, tocado: &Path, p: &PreviaMidia) {
+    pub(crate) fn conferir_pts(cap: &Capacidades, fonte: &FonteInfo, tocado: &Path, p: &PreviaMidia) {
         let (pf, pt) = (medir::pts(cap, &fonte.caminho).unwrap(), medir::pts(cap, tocado).unwrap());
         let (tf, tt) = (tb_do_video(cap, &fonte.caminho), tb_do_video(cap, tocado));
         let nome = fonte.caminho.file_name().unwrap().to_string_lossy().into_owned();
@@ -882,7 +1034,7 @@ mod testes {
 
     /// SHA-256 de cada quadro decodificado com UMA thread: com várias, o último quadro de arquivo truncado
     /// (`test.lvf`, amostra cortada em 5 MiB) sai diferente em 1 de 10 decodificações do mesmo arquivo, nos dois binários.
-    fn hashes_por_quadro(cap: &Capacidades, video: &Path) -> Vec<String> {
+    pub(crate) fn hashes_por_quadro(cap: &Capacidades, video: &Path) -> Vec<String> {
         let p = fontes::pasta_temporaria("previa-framehash");
         let mut a = s(&["-hide_banner", "-nostdin", "-loglevel", "error", "-threads", "1", "-i"]);
         a.push(video.to_string_lossy().into_owned());
@@ -895,7 +1047,8 @@ mod testes {
     /// Cópia de uma fonte: tipo, arquivo, pts, quadro a quadro (hash), áudio e a segunda chamada.
     fn conferir_copia(cap: &Capacidades, fonte: &FonteInfo) -> PreviaMidia {
         let nome = fonte.caminho.file_name().unwrap().to_string_lossy().into_owned();
-        assert_eq!(decidir(fonte), TipoPrevia::Copia, "{nome}");
+        assert_eq!(tocavel(fonte), TipoPrevia::Copia, "{nome}");
+        assert!(decidir(fonte) == TipoPrevia::Copia || por_desempenho(fonte, false), "{nome}");
         let cache = fontes::pasta_temporaria("previa-cache");
         let ws = fonte.caminho.parent().unwrap();
         assert!(!consultar(ws, &cache, fonte).unwrap().pronta);
@@ -924,7 +1077,7 @@ mod testes {
         p
     }
 
-    fn fonte_falsa(conteiner: &str, codec: &str, pix_fmt: &str, inicio_s: f64, pts0: i64) -> FonteInfo {
+    pub(crate) fn fonte_falsa(conteiner: &str, codec: &str, pix_fmt: &str, inicio_s: f64, pts0: i64) -> FonteInfo {
         FonteInfo {
             caminho: PathBuf::from("/caso/Mídias/v.mp4"),
             sha256: "ab".repeat(32),
@@ -957,7 +1110,153 @@ mod testes {
         }
     }
 
-    const MP4: &str = "mov,mp4,m4a,3gp,3g2,mj2";
+    pub(crate) const MP4: &str = "mov,mp4,m4a,3gp,3g2,mj2";
+
+    /// Argumentos e motivo gravados no `.json` do proxy.
+    pub(crate) fn registro_do_proxy(cache: &Path, sha: &str) -> (Vec<String>, Option<String>) {
+        let r: Registro = serde_json::from_slice(&std::fs::read(cache.join(format!("proxies/{sha}.720.json"))).unwrap()).unwrap();
+        (r.argumentos, r.motivo)
+    }
+
+    /// Grava uma prévia pronta falsa (arquivo e `.json` que confere) no cache.
+    fn pronta_falsa(cache: &Path, tipo: TipoPrevia, f: &FonteInfo) {
+        let d = destino(cache, tipo, &f.sha256).unwrap();
+        std::fs::create_dir_all(&d.pasta).unwrap();
+        std::fs::write(&d.midia, b"x").unwrap();
+        let r = Registro {
+            versao: VERSAO_REGISTRO,
+            tipo,
+            relativo: d.relativo.clone(),
+            desloc_s: 0.0,
+            de_s: 0.0,
+            ate_s: 0.1,
+            largura: 2,
+            altura: 2,
+            tamanho: 1,
+            quadros: 3,
+            fonte_sha256: f.sha256.clone(),
+            ffmpeg_sha256: String::new(),
+            ffmpeg_versao: String::new(),
+            argumentos: Vec::new(),
+            motivo: None,
+            feito_em: String::new(),
+        };
+        std::fs::write(&d.registro, serde_json::to_vec(&r).unwrap()).unwrap();
+    }
+
+    /// Proxy por desempenho (§7.6): o original ou a cópia tocam enquanto ele falta; `falta` pede a cópia primeiro e
+    /// o proxy só com a prévia tocável pronta. Codec que não serve: proxy pendente.
+    #[test]
+    fn proxy_por_desempenho_toca_o_que_ja_toca_enquanto_falta() {
+        use TipoPrevia::*;
+        let ws = Path::new("/caso");
+        let grande = |conteiner: &str| {
+            let mut f = fonte_falsa(conteiner, "h264", "yuv420p", 0.0, 0);
+            f.exibido = (3840, 2160);
+            f
+        };
+        // MP4 em zero: o original toca já e o proxy é pedido
+        let cache = fontes::pasta_temporaria("previa-desempenho");
+        let f = grande(MP4);
+        assert_eq!((decidir(&f), tocavel(&f)), (Proxy, Original));
+        let p = consultar(ws, &cache, &f).unwrap();
+        assert_eq!((p.tipo, p.pronta, p.relativo.as_str()), (Original, true, "Mídias/v.mp4"));
+        assert_eq!(falta(&f, &p, false), Some(TipoFundo::Proxy));
+        pronta_falsa(&cache, Proxy, &f);
+        let p = consultar(ws, &cache, &f).unwrap();
+        assert_eq!((p.tipo, p.pronta), (Proxy, true));
+        assert_eq!(falta(&f, &p, false), None);
+        // MKV: a cópia primeiro, depois o proxy
+        let cache = fontes::pasta_temporaria("previa-desempenho");
+        let f = grande("matroska,webm");
+        let p = consultar(ws, &cache, &f).unwrap();
+        assert_eq!((p.tipo, p.pronta), (Copia, false));
+        assert_eq!(falta(&f, &p, false), Some(TipoFundo::CopiaPrevia));
+        pronta_falsa(&cache, Copia, &f);
+        let p = consultar(ws, &cache, &f).unwrap();
+        assert_eq!((p.tipo, p.pronta), (Copia, true));
+        assert_eq!(falta(&f, &p, false), Some(TipoFundo::Proxy));
+        pronta_falsa(&cache, Proxy, &f);
+        assert_eq!(consultar(ws, &cache, &f).unwrap().tipo, Proxy);
+        // taxa variável e mais de 60 qps também; 1080p a 30 qps não
+        let mut vfr = fonte_falsa(MP4, "h264", "yuv420p", 0.0, 0);
+        Arc::make_mut(&mut vfr.quadros).vfr = true;
+        let mut q120 = fonte_falsa(MP4, "h264", "yuv420p", 0.0, 0);
+        Arc::make_mut(&mut q120.quadros).pts = vec![0, 128, 256];
+        let mut hd = fonte_falsa(MP4, "h264", "yuv420p", 0.0, 0);
+        hd.exibido = (1920, 1080);
+        let mut em_pe = fonte_falsa(MP4, "h264", "yuv420p", 0.0, 0);
+        em_pe.exibido = (1080, 1920);
+        for (f, esperado) in [(&vfr, Proxy), (&q120, Proxy), (&hd, Original), (&em_pe, Original)] {
+            assert_eq!(decidir(f), esperado, "{:?} {:?}", f.exibido, f.quadros.pts);
+            let p = consultar(ws, Path::new("/sem-cache"), f).unwrap();
+            assert_eq!((p.tipo, p.pronta), (Original, true));
+            assert_eq!(falta(f, &p, false), (esperado == Proxy).then_some(TipoFundo::Proxy));
+        }
+        // codec que não serve: nada toca até o proxy
+        let hevc = fonte_falsa(MP4, "hevc", "yuv420p", 0.0, 0);
+        let p = consultar(ws, Path::new("/sem-cache"), &hevc).unwrap();
+        assert_eq!((p.tipo, p.pronta), (Proxy, false));
+        assert_eq!(falta(&hevc, &p, false), Some(TipoFundo::Proxy));
+        // original de fonte que não precisa: nada a pedir
+        let ok = fonte_falsa(MP4, "h264", "yuv420p", 0.0, 0);
+        assert_eq!(falta(&ok, &consultar(ws, Path::new("/sem-cache"), &ok).unwrap(), false), None);
+        // pedido pelo palco (busca lenta medida, rampa, ré): o original toca e o proxy é pedido; pronto, o proxy vale
+        // para quem pede; `consultar` sem o pedido segue no original
+        let cache = fontes::pasta_temporaria("previa-pedido");
+        let lenta = fonte_falsa(MP4, "h264", "yuv420p", 0.0, 0);
+        assert!(!proxy::precisa(&lenta, None) && proxy::precisa(&lenta, Some(238.0)));
+        let pedido = proxy::precisa(&lenta, Some(238.0));
+        let p = consultar_com(ws, &cache, &lenta, pedido).unwrap();
+        assert_eq!((p.tipo, p.pronta), (Original, true));
+        assert_eq!((falta(&lenta, &p, pedido), falta(&lenta, &p, false)), (Some(TipoFundo::Proxy), None));
+        pronta_falsa(&cache, Proxy, &lenta);
+        assert_eq!(consultar_com(ws, &cache, &lenta, pedido).unwrap().tipo, Proxy);
+        assert_eq!(consultar(ws, &cache, &lenta).unwrap().tipo, Original);
+    }
+
+    /// O proxy de GPU é conferido pela imagem: quadro zerado (o `scale_cuda` que reduz um lado só) ou de outra cor não
+    /// passa; fonte de 10 bits compara em 8; fonte que não é YUV de três planos não compara.
+    #[test]
+    fn imagem_do_proxy_de_gpu_confere_com_a_da_fonte() {
+        let q = |fmt: &str, media: &[f64]| Primeiro { pts: 0, tb: Racional { num: 1, den: 1000 }, soma: String::new(), fmt: fmt.into(), tamanho: Some((720, 480)), media: media.to_vec() };
+        let fonte = q("yuv420p", &[126.0, 127.0, 125.0]);
+        assert!(mesma_imagem(&fonte, &q("yuv420p", &[125.0, 127.0, 126.0])).is_ok());
+        let e = mesma_imagem(&fonte, &q("yuv420p", &[0.0, 0.0, 0.0])).unwrap_err();
+        assert!(e.to_string().contains(ERRO_LEITURA_DIVERGENTE), "{e}");
+        // preto de verdade (16, 128, 128) × zerado: o croma acusa
+        assert!(mesma_imagem(&q("yuv420p", &[16.0, 128.0, 128.0]), &q("yuv420p", &[0.0, 0.0, 0.0])).is_err());
+        // um plano só fora (croma trocado)
+        assert!(mesma_imagem(&fonte, &q("yuv420p", &[126.0, 127.0, 125.0 + MEDIA_GPU_MAX + 1.0])).is_err());
+        assert!(mesma_imagem(&fonte, &q("yuv420p", &[126.0, 127.0, 125.0 + MEDIA_GPU_MAX])).is_ok());
+        // 10 e 12 bits na fonte
+        assert!(mesma_imagem(&q("yuv420p10le", &[504.0, 508.0, 500.0]), &q("yuv420p", &[126.0, 127.0, 125.0])).is_ok());
+        assert!(mesma_imagem(&q("yuv420p10le", &[126.0, 127.0, 125.0]), &q("yuv420p", &[126.0, 127.0, 125.0])).is_err());
+        assert!(mesma_imagem(&q("yuv422p12be", &[2016.0, 2032.0, 2000.0]), &q("yuv420p", &[126.0, 127.0, 125.0])).is_ok());
+        assert_eq!([bits_do_formato("yuv420p"), bits_do_formato("yuvj420p"), bits_do_formato("yuv444p10le"), bits_do_formato("nv12")], [8, 8, 10, 8]);
+        // sem como comparar
+        assert!(mesma_imagem(&q("gray", &[126.0]), &q("yuv420p", &[0.0, 0.0, 0.0])).is_ok());
+        assert!(mesma_imagem(&q("bgr24", &[1.0, 2.0, 3.0]), &q("yuv420p", &[200.0, 0.0, 0.0])).is_ok());
+    }
+
+    /// O `showinfo` do primeiro quadro dá o tamanho decodificado (sem a proporção do pixel), o formato e a média de
+    /// cada plano na escala do formato.
+    #[test]
+    fn primeiro_quadro_traz_tamanho_formato_e_media() {
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = fontes::pasta_temporaria("previa-primeiro");
+        let nao = AtomicBool::new(false);
+        let px = primeiro_quadro(&cap, &fontes::gerar(Fonte::PixelNaoQuadrado).unwrap(), &pasta, "px", &nao).unwrap();
+        assert_eq!((px.tamanho, px.fmt.as_str(), px.media.len()), (Some((720, 480)), "yuv420p", 3), "{px:?} ({})", cap.versao);
+        let m8 = primeiro_quadro(&cap, &fontes::gerar(Fonte::Mp4).unwrap(), &pasta, "m8", &nao).unwrap();
+        let m10 = primeiro_quadro(&cap, &dez_bits(&cap), &pasta, "m10", &nao).unwrap();
+        assert_eq!((m8.tamanho, m10.tamanho, m10.fmt.as_str()), (Some((320, 180)), Some((320, 180)), "yuv420p10le"), "{}", cap.versao);
+        // a mesma imagem em 8 e em 10 bits: média 4× maior, igual depois de trazida a 8 bits
+        assert!(m8.media.iter().all(|&v| v > 8.0 && v < 250.0), "{m8:?}");
+        assert!(m8.media.iter().zip(&m10.media).all(|(a, b)| (b / 4.0 - a).abs() <= 2.0), "{m8:?} × {m10:?} ({})", cap.versao);
+        mesma_imagem(&m10, &m8).unwrap();
+    }
+
     /// Diferença de cor aceita no proxy (crf 23 e escala), por canal, em 0..255 (medido: até 1,4).
     const COR_PROXY: f64 = 4.0;
     /// Segunda chamada com a prévia pronta (só lê o `.json`): limite real e folga com a máquina dividida.
@@ -1258,7 +1557,7 @@ mod testes {
 
     /// Proxy de uma fonte: tipo, codec e tamanho do arquivo, mesma lista de pts (a menos do deslocamento), mesmos quadros.
     /// `origem`: números de quadro esperados no proxy; None = os que `medir` lê na fonte.
-    fn conferir_proxy(cap: &Capacidades, fonte: &FonteInfo, p: &PreviaMidia, cache: &Path, identificar: bool, origem: Option<Vec<u32>>) {
+    pub(crate) fn conferir_proxy(cap: &Capacidades, fonte: &FonteInfo, p: &PreviaMidia, cache: &Path, identificar: bool, origem: Option<Vec<u32>>) {
         let nome = fonte.caminho.file_name().unwrap().to_string_lossy().into_owned();
         assert_eq!((p.tipo, p.pronta), (TipoPrevia::Proxy, true), "{nome}");
         assert_eq!(p.relativo, format!("proxies/{}.720.mp4", fonte.sha256));
@@ -1438,7 +1737,11 @@ mod testes {
                     TipoPrevia::Copia
                 }
             };
-            assert_eq!(decidir(&f), esperado, "{nome} ({})", cap.versao);
+            assert_eq!(if codec_serve(&f) { tocavel(&f) } else { decidir(&f) }, esperado, "{nome} ({})", cap.versao);
+            if decidir(&f) != esperado {
+                assert!(por_desempenho(&f, false), "{nome}: {:?} ({})", decidir(&f), cap.versao);
+                eprintln!("{nome}: proxy por desempenho ({:?})", proxy::motivo(&f, None));
+            }
             match esperado {
                 TipoPrevia::Original => {
                     let p = consultar(&pasta, Path::new("/sem-cache"), &f).unwrap();
@@ -1467,18 +1770,26 @@ mod testes {
 
     // ------------------------------------------------------------ revisão adversa
 
-    /// Toda a matriz. MP4 com quadros B e com lista de edição (corte real, `media_time` > 0) começam em zero e ficam
-    /// `Original`: a M1/M2 não mediu corte real no `<video>` (a `hcut.mp4` do dossiê tem `media_time` 0).
+    /// Toda a matriz. MP4 com quadros B e com lista de edição (corte real, `media_time` > 0) começam em zero e tocam
+    /// o original: a M1/M2 não mediu corte real no `<video>` (a `hcut.mp4` do dossiê tem `media_time` 0). Taxa
+    /// variável, MPEG-PS e oscilação de ±4 ms têm a tabela variável (`quadros`): proxy por desempenho (§7.6), com o
+    /// tocável enquanto ele não fica pronto.
     #[test]
     fn tipo_de_cada_fonte_da_matriz() {
         let Some(cap) = fontes::cap() else { return };
         for &fonte in fontes::MATRIZ {
             let f = fonte_de_teste(&cap, &fontes::gerar(fonte).unwrap(), true);
-            let esperado = match fonte {
+            let tocavel_esperado = match fonte {
                 Fonte::Mkv30 | Fonte::Mkv23976 | Fonte::Avi25 | Fonte::Ts5994 | Fonte::TsMeioDoGop | Fonte::MpegPs | Fonte::Oscilacao => TipoPrevia::Copia,
                 _ => TipoPrevia::Original,
             };
-            assert_eq!(decidir(&f), esperado, "{fonte:?} ({})", cap.versao);
+            let esperado = match fonte {
+                Fonte::TaxaVariavel | Fonte::MpegPs | Fonte::Oscilacao => TipoPrevia::Proxy,
+                _ => tocavel_esperado,
+            };
+            assert_eq!((decidir(&f), tocavel(&f)), (esperado, tocavel_esperado), "{fonte:?} ({})", cap.versao);
+            let p = consultar(f.caminho.parent().unwrap(), Path::new("/sem-cache"), &f).unwrap();
+            assert_eq!((p.tipo, p.pronta), (tocavel_esperado, tocavel_esperado == TipoPrevia::Original), "{fonte:?}");
         }
     }
 
@@ -1724,7 +2035,7 @@ mod testes {
     }
 
     /// `true` se o ffprobe abre o arquivo e acha vídeo (MP4 de gravador sem `moov` não abre).
-    fn abre(cap: &Capacidades, video: &Path) -> bool {
+    pub(crate) fn abre(cap: &Capacidades, video: &Path) -> bool {
         let p = fontes::pasta_temporaria("previa-abre");
         let mut a = s(&["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_type", "-of", "csv=p=0"]);
         a.push(video.to_string_lossy().into_owned());

@@ -1,16 +1,22 @@
 //! Títulos como primitivas (§5.5): fundo (cor, imagem ou nada) e um sprite por bloco, em 0..1 do canvas.
-//! Espelho no front: `modelo/titulos.ts`, pela fixture `primitivas-titulo.json`. Dono: P0.5t (o acabamento dos
-//! modelos em Typst é do P1.7).
+//! Espelho no front: `modelo/titulos.ts`, pelas fixtures `primitivas-titulo.json` e `titulos-modelos.json`.
+//! Donos: P0.5t (primitivas), P1.7 (modelos).
 //!
 //! `modelo` é só rótulo: todo bloco traz o próprio `lugar` e é posto como o `EfTexto` (canto arredondado ao pixel).
 //! Fundo de cor = retângulo do canvas inteiro; de imagem = a imagem cobrindo o canvas sem distorcer, centrada, com o
 //! que sobra cortado. Contas como em `formas` (o espelho repete na mesma ordem): em px do canvas, só `+ − × ÷`,
 //! `floor` e `max`, e a saída passa por `+ 0`.
+//!
+//! Os 5 modelos do §8.6 são arranjos dos blocos (lugar, largura, tamanho, peso, alinhamento, cor, caixa) e do fundo,
+//! gravados nos blocos quando o perito escolhe o modelo. O texto sai sempre do sprite único de `texto.rs`: por isso
+//! a prévia e o render usam o mesmo arquivo (mesmo SHA-256). Sem modelo Typst por título (decisão do orquestrador).
 
 use super::formas::{Primitiva, QuadroCamada, Segmento};
 use super::texto::{FonteSprites, PedidoSprite};
 use crate::edicao::mensagens::codigo;
-use crate::edicao::modelo::{Alinhamento, AlinhamentoV, Caixa, Fundo, TamanhoPx, Titulo};
+use crate::edicao::modelo::{
+    Alinhamento, AlinhamentoV, BlocoTexto, Caixa, CaixaTexto, EstiloTexto, Fonte, Fundo, Lugar, ModeloTitulo, PapelTexto, TamanhoPx, Titulo,
+};
 use crate::error::{Result, SicroError};
 
 /// −0 → 0.
@@ -109,6 +115,185 @@ pub fn pedido(titulo: &Titulo, bloco: usize, canvas: TamanhoPx) -> PedidoSprite 
     }
 }
 
+// ---------------------------------------------------------------- modelos (P1.7)
+
+// CONTRATO: acréscimo (P1.7): `AREA_SEGURA`, `FUNDO_CHEIO`, `Arranjo`, `arranjo`, `escala_do_canvas`,
+// `sobre_o_video`, `aplicar_modelo`, `bloco_no_modelo`, `titulo_no_modelo`, `na_area_segura`. Espelho em
+// `modelo/titulos.ts` (fixture `titulos-modelos.json`).
+
+/// Área segura do texto, em fração de cada lado do canvas (a da validação, contratos-fase0 (i) 4).
+pub const AREA_SEGURA: f64 = 0.02;
+
+/// Fundo que um modelo de cartão põe quando o título não tem nenhum.
+pub const FUNDO_CHEIO: &str = "#000000";
+
+const BRANCO: &str = "#ffffff";
+const CINZA: &str = "#c8c8c8";
+const FAIXA: &str = "#0000008c";
+
+/// Como um papel fica num modelo: ponto de apoio, largura (fração da largura do canvas), tamanho (fração da altura),
+/// peso, alinhamento das linhas, cor e caixa de fundo.
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct Arranjo {
+    pub lugar: Lugar,
+    pub largura_max: f64,
+    pub tamanho: f64,
+    pub negrito: bool,
+    pub alinhamento: Alinhamento,
+    pub cor: &'static str,
+    pub caixa: Option<CaixaTexto>,
+}
+
+/// Uma linha da tabela de `arranjo`; `faixa` = margem da caixa (faixa escura), quando há.
+#[allow(clippy::too_many_arguments)]
+fn arr(x: f64, y: f64, h: Alinhamento, v: AlinhamentoV, largura_max: f64, tamanho: f64, negrito: bool, cor: &'static str, faixa: Option<f64>) -> Arranjo {
+    Arranjo {
+        lugar: Lugar { x, y, h, v },
+        largura_max,
+        tamanho,
+        negrito,
+        alinhamento: h,
+        cor,
+        caixa: faixa.map(|margem| CaixaTexto { cor: FAIXA.into(), margem, raio: 0.0 }),
+    }
+}
+
+/// Arranjo do papel no modelo. `livre` não arranja: bloco novo nele vai como na cartela.
+pub fn arranjo(modelo: ModeloTitulo, papel: PapelTexto) -> Arranjo {
+    use Alinhamento::{Centro, Dir, Esq};
+    use AlinhamentoV::{Base, Topo};
+    use ModeloTitulo as M;
+    use PapelTexto as P;
+    match (modelo, papel) {
+        // cartão centrado (as posições de `inspetor/novos.ts`, as da Fase 0)
+        (M::Cartela | M::Livre, P::Titulo) => arr(0.5, 0.44, Centro, Base, 0.86, 0.078, true, BRANCO, None),
+        (M::Cartela | M::Livre, P::Subtitulo) => arr(0.5, 0.5, Centro, Topo, 0.86, 0.052, false, BRANCO, None),
+        (M::Cartela | M::Livre, P::Corpo) => arr(0.5, 0.62, Centro, Topo, 0.86, 0.042, false, BRANCO, None),
+        (M::Cartela | M::Livre, P::Rodape) => arr(0.5, 0.93, Centro, Base, 0.86, 0.033, false, BRANCO, None),
+        // cabeçalho à esquerda
+        (M::Abertura, P::Titulo) => arr(0.08, 0.34, Esq, Base, 0.84, 0.078, true, BRANCO, None),
+        (M::Abertura, P::Subtitulo) => arr(0.08, 0.38, Esq, Topo, 0.84, 0.046, false, BRANCO, None),
+        (M::Abertura, P::Corpo) => arr(0.08, 0.52, Esq, Topo, 0.84, 0.036, false, BRANCO, None),
+        (M::Abertura, P::Rodape) => arr(0.08, 0.93, Esq, Base, 0.84, 0.03, false, CINZA, None),
+        // faixas no alto, sobre o vídeo
+        (M::Evento, P::Titulo) => arr(0.5, 0.05, Centro, Topo, 0.9, 0.052, true, BRANCO, Some(0.012)),
+        (M::Evento, P::Subtitulo) => arr(0.5, 0.15, Centro, Topo, 0.9, 0.036, false, BRANCO, Some(0.012)),
+        (M::Evento, P::Corpo) => arr(0.5, 0.225, Centro, Topo, 0.9, 0.033, false, BRANCO, Some(0.012)),
+        (M::Evento, P::Rodape) => arr(0.5, 0.95, Centro, Base, 0.9, 0.028, false, BRANCO, Some(0.012)),
+        // faixas à esquerda no terço de baixo; rodapé no canto de cima
+        (M::TercoInferior, P::Titulo) => arr(0.06, 0.76, Esq, Base, 0.7, 0.052, true, BRANCO, Some(0.013)),
+        (M::TercoInferior, P::Subtitulo) => arr(0.06, 0.775, Esq, Topo, 0.7, 0.033, false, BRANCO, Some(0.013)),
+        (M::TercoInferior, P::Corpo) => arr(0.06, 0.855, Esq, Topo, 0.7, 0.028, false, BRANCO, Some(0.013)),
+        (M::TercoInferior, P::Rodape) => arr(0.94, 0.06, Dir, Topo, 0.4, 0.024, false, BRANCO, Some(0.01)),
+        // cartão centrado, mais alto
+        (M::Encerramento, P::Titulo) => arr(0.5, 0.42, Centro, Base, 0.86, 0.078, true, BRANCO, None),
+        (M::Encerramento, P::Subtitulo) => arr(0.5, 0.46, Centro, Topo, 0.86, 0.042, false, BRANCO, None),
+        (M::Encerramento, P::Corpo) => arr(0.5, 0.58, Centro, Topo, 0.86, 0.036, false, BRANCO, None),
+        (M::Encerramento, P::Rodape) => arr(0.5, 0.94, Centro, Base, 0.86, 0.028, false, CINZA, None),
+    }
+}
+
+/// Escala do texto do modelo no canvas: 1 de 4:3 para cima; mais estreito (vertical), a largura manda, porque o
+/// tamanho é fração da altura e o texto não caberia na área segura.
+pub fn escala_do_canvas(canvas: TamanhoPx) -> f64 {
+    let k = (canvas.w as f64 * 3.0) / (canvas.h as f64 * 4.0);
+    if k.is_finite() && k > 0.0 {
+        k.min(1.0)
+    } else {
+        1.0
+    }
+}
+
+/// O arranjo com tamanho e margem da faixa na escala `k`.
+fn na_escala(mut a: Arranjo, k: f64) -> Arranjo {
+    a.tamanho *= k;
+    if let Some(c) = a.caixa.as_mut() {
+        c.margem *= k;
+    }
+    a
+}
+
+/// Modelo de faixa sobre o vídeo (preso a um clipe, sem fundo).
+pub fn sobre_o_video(modelo: ModeloTitulo) -> bool {
+    matches!(modelo, ModeloTitulo::Evento | ModeloTitulo::TercoInferior)
+}
+
+fn arranjar(b: &mut BlocoTexto, a: &Arranjo) {
+    b.lugar = a.lugar;
+    b.largura_max = a.largura_max;
+    b.estilo.tamanho = a.tamanho;
+    b.estilo.negrito = a.negrito;
+    b.estilo.alinhamento = a.alinhamento;
+    b.estilo.cor = a.cor.to_string();
+    b.estilo.caixa = a.caixa.clone();
+    b.estilo.contorno = None;
+}
+
+/// O título no modelo, para o canvas da saída: cada bloco pelo arranjo do papel (conteúdo, id, ordem, fonte e itálico
+/// ficam). Fundo: faixa presa a um clipe (`sobreposto`) fica sem fundo; o resto mantém o fundo de cor ou imagem, e o
+/// que não tinha ganha `FUNDO_CHEIO`. `livre` só troca o rótulo.
+pub fn aplicar_modelo(t: &Titulo, modelo: ModeloTitulo, sobreposto: bool, canvas: TamanhoPx) -> Titulo {
+    let mut n = t.clone();
+    n.modelo = modelo;
+    if modelo == ModeloTitulo::Livre {
+        return n;
+    }
+    n.fundo = match &t.fundo {
+        _ if sobreposto && sobre_o_video(modelo) => Fundo::Transparente,
+        Fundo::Transparente => Fundo::Cor { cor: FUNDO_CHEIO.into() },
+        f => f.clone(),
+    };
+    let k = escala_do_canvas(canvas);
+    for b in &mut n.blocos {
+        arranjar(b, &na_escala(arranjo(modelo, b.papel), k));
+    }
+    n
+}
+
+/// Bloco novo do papel no modelo do título, para o canvas da saída. Do primeiro bloco vêm a fonte, o itálico, a
+/// escala do "Tamanho" e a cor, quando o perito trocou a do modelo.
+pub fn bloco_no_modelo(t: &Titulo, papel: PapelTexto, id: &str, conteudo: &str, canvas: TamanhoPx) -> BlocoTexto {
+    let k = escala_do_canvas(canvas);
+    let a = na_escala(arranjo(t.modelo, papel), k);
+    let mut estilo = EstiloTexto {
+        fonte: Fonte::Sans,
+        negrito: a.negrito,
+        italico: false,
+        tamanho: a.tamanho,
+        cor: a.cor.to_string(),
+        alinhamento: a.alinhamento,
+        caixa: a.caixa.clone(),
+        contorno: None,
+    };
+    if let Some(r) = t.blocos.first() {
+        let ar = na_escala(arranjo(t.modelo, r.papel), k);
+        estilo.fonte = r.estilo.fonte;
+        estilo.italico = r.estilo.italico;
+        let k = r.estilo.tamanho / ar.tamanho;
+        if k.is_finite() && k > 0.0 {
+            estilo.tamanho = a.tamanho * k;
+        }
+        if r.estilo.cor != ar.cor {
+            estilo.cor = r.estilo.cor.clone();
+        }
+    }
+    BlocoTexto { id: id.to_string(), papel, conteudo: conteudo.to_string(), estilo, lugar: a.lugar, largura_max: a.largura_max }
+}
+
+/// Título novo do modelo: o fundo do modelo e um bloco de título vazio (que não desenha até ter texto).
+pub fn titulo_no_modelo(modelo: ModeloTitulo, sobreposto: bool, id_bloco: &str, canvas: TamanhoPx) -> Titulo {
+    let vazio = Titulo { modelo, fundo: Fundo::Transparente, blocos: Vec::new() };
+    let b = bloco_no_modelo(&vazio, PapelTexto::Titulo, id_bloco, "", canvas);
+    aplicar_modelo(&Titulo { blocos: vec![b], ..vazio }, modelo, sobreposto, canvas)
+}
+
+/// Caixa (0..1 do canvas) dentro da área segura, com folga de 1e-9.
+pub fn na_area_segura(c: &Caixa) -> bool {
+    const EPS: f64 = 1e-9;
+    let (a, z) = (AREA_SEGURA - EPS, 1.0 - AREA_SEGURA + EPS);
+    c.x >= a && c.y >= a && c.x + c.w <= z && c.y + c.h <= z
+}
+
 #[cfg(test)]
 mod testes {
     use std::cell::RefCell;
@@ -131,7 +316,7 @@ mod testes {
     use crate::edicao::importar_v1::{self, FontesV1};
     use crate::edicao::modelo::{ClipePrincipal, EstiloTexto, Faixa, Matriz, MidiaRef, ModeloTitulo, Tolerante};
     use crate::edicao::motor::plano::{Desenho, ImagemCamada, ItemCamada, PedidoCamada, QuadroItem, TipoCamada};
-    use crate::edicao::testes::fontes;
+    use crate::edicao::testes::{aceite, executor, fontes, medir};
 
     const MODELOS: [&str; 6] = ["cartela", "abertura", "evento", "terco_inferior", "encerramento", "livre"];
 
@@ -285,7 +470,206 @@ mod testes {
                 sem.clone(),
             ),
         ]);
+        // P1.7: os cinco modelos arranjados, como a tela grava (cartão e preso a um clipe)
+        for m in CINCO {
+            v.push((format!("arranjo {}", nome_do_modelo(m)), tipico(m, false), HD, sem.clone()));
+            if sobre_o_video(m) {
+                v.push((format!("arranjo {} preso 720p", nome_do_modelo(m)), tipico(m, true), TamanhoPx { w: 1280, h: 720 }, sem.clone()));
+            }
+        }
         v
+    }
+
+    // ------------------------------------------------------------ modelos (P1.7)
+
+    const CINCO: [ModeloTitulo; 5] = [ModeloTitulo::Cartela, ModeloTitulo::Abertura, ModeloTitulo::Evento, ModeloTitulo::TercoInferior, ModeloTitulo::Encerramento];
+    const PAPEIS: [PapelTexto; 4] = [PapelTexto::Titulo, PapelTexto::Subtitulo, PapelTexto::Corpo, PapelTexto::Rodape];
+
+    fn nome_do_modelo(m: ModeloTitulo) -> String {
+        serde_json::to_value(m).unwrap().as_str().unwrap().to_string()
+    }
+
+    /// Textos de um título de verdade, por papel.
+    const TEXTOS: [&str; 4] = ["Laudo nº 1234/2026", "Câmera 2 — Rua das Flores", "Gravação de 14/03/2026, 12:03:15", "Instituto de Criminalística"];
+    /// Os mesmos, compridos: o título quebra em duas linhas, o corpo tem duas.
+    const LONGOS: [&str; 4] = [
+        "Laudo pericial nº 1234/2026 — análise de imagens",
+        "Câmera 2 — Rua das Flores, esquina com a Avenida Central",
+        "Gravação de 14/03/2026, 12:03:15\nVeículo prata entra no cruzamento",
+        "Instituto de Criminalística — Seção de Perícias em Audiovisual",
+    ];
+
+    /// Título como a tela o monta: o modelo escolhido, depois os quatro papéis digitados em ordem.
+    fn com_textos(m: ModeloTitulo, sobreposto: bool, textos: &[&str; 4], canvas: TamanhoPx) -> Titulo {
+        let mut t = titulo_no_modelo(m, sobreposto, "b0", canvas);
+        t.blocos[0].conteudo = textos[0].into();
+        for (i, papel) in PAPEIS.iter().enumerate().skip(1) {
+            let b = bloco_no_modelo(&t, *papel, &format!("b{i}"), textos[i], canvas);
+            t.blocos.push(b);
+        }
+        t
+    }
+
+    fn tipico(m: ModeloTitulo, sobreposto: bool) -> Titulo {
+        com_textos(m, sobreposto, &TEXTOS, HD)
+    }
+
+    /// Título de partida com estilo do perito (serifa, itálico, amarelo, tamanho dobrado) e os quatro papéis fora de ordem.
+    fn do_perito(fundo: Value) -> Titulo {
+        let e = |tam: f64| estilo("#ffd84a", tam, false, Some("#00000080"), Some("#000000"));
+        let mut t = titulo("livre", fundo, vec![
+            bloco("r", "rodape", "Instituto", e(0.066), (0.1, 0.1, "esq", "topo"), 0.3),
+            bloco("t", "titulo", "Laudo", e(0.156), (0.2, 0.2, "dir", "meio"), 0.4),
+            bloco("c", "corpo", "Linha 1\nLinha 2", e(0.084), (0.3, 0.3, "centro", "base"), 0.5),
+            bloco("s", "subtitulo", "Câmera", e(0.104), (0.4, 0.4, "esq", "topo"), 0.6),
+        ]);
+        for b in &mut t.blocos {
+            b.estilo.fonte = Fonte::Serifa;
+            b.estilo.italico = true;
+        }
+        t
+    }
+
+    #[test]
+    fn fixture_titulos_modelos() {
+        let mut lista = Vec::new();
+        let todos = [CINCO.as_slice(), &[ModeloTitulo::Livre]].concat();
+        for m in &todos {
+            for p in PAPEIS {
+                let a = arranjo(*m, p);
+                lista.push(json!({ "nome": format!("arranjo {} {}", nome_do_modelo(*m), serde_json::to_value(p).unwrap().as_str().unwrap()),
+                    "entrada": { "conta": "arranjo", "modelo": m, "papel": p }, "saida": a }));
+            }
+        }
+        let fundos = [("cor", cor_fundo("#1b2a41")), ("transparente", transparente()), ("imagem", fundo_imagem("fundo"))];
+        // 16:9, 4:3 (escala 1), vertical e um quase quadrado (escala < 1) e o canvas sem altura (escala 1)
+        let canvases = [HD, TamanhoPx { w: 640, h: 480 }, TamanhoPx { w: 1080, h: 1920 }, TamanhoPx { w: 1001, h: 1080 }, TamanhoPx { w: 0, h: 0 }];
+        for c in canvases {
+            lista.push(json!({ "nome": format!("escala {}x{}", c.w, c.h), "entrada": { "conta": "escala", "canvas": c }, "saida": escala_do_canvas(c) }));
+        }
+        for m in &todos {
+            for sob in [false, true] {
+                for (nf, f) in &fundos {
+                    let t = do_perito(f.clone());
+                    lista.push(json!({ "nome": format!("aplicar {} fundo {nf} preso {sob}", nome_do_modelo(*m)),
+                        "entrada": { "conta": "aplicar", "titulo": t, "modelo": m, "sobreposto": sob, "canvas": HD }, "saida": aplicar_modelo(&t, *m, sob, HD) }));
+                }
+                for c in &canvases[1..] {
+                    let t = do_perito(cor_fundo("#1b2a41"));
+                    lista.push(json!({ "nome": format!("aplicar {} {}x{} preso {sob}", nome_do_modelo(*m), c.w, c.h),
+                        "entrada": { "conta": "aplicar", "titulo": t, "modelo": m, "sobreposto": sob, "canvas": c }, "saida": aplicar_modelo(&t, *m, sob, *c) }));
+                }
+                for c in [HD, canvases[2]] {
+                    lista.push(json!({ "nome": format!("novo {} {}x{} preso {sob}", nome_do_modelo(*m), c.w, c.h),
+                        "entrada": { "conta": "novo", "modelo": m, "sobreposto": sob, "id": "n1", "canvas": c }, "saida": titulo_no_modelo(*m, sob, "n1", c) }));
+                }
+            }
+        }
+        // livre copia o bloco como está, −0 incluído
+        let mut neg = do_perito(transparente());
+        neg.blocos[0].lugar.x = -0.0;
+        lista.push(json!({ "nome": "aplicar livre com -0", "entrada": { "conta": "aplicar", "titulo": neg, "modelo": ModeloTitulo::Livre, "sobreposto": false, "canvas": HD },
+            "saida": aplicar_modelo(&neg, ModeloTitulo::Livre, false, HD) }));
+        // bloco novo: sem bloco, com o primeiro no padrão do modelo, e com o primeiro trocado pelo perito
+        for m in &todos {
+            let mut bases = vec![("vazio", Titulo { modelo: *m, fundo: Fundo::Transparente, blocos: vec![] }), ("padrao", titulo_no_modelo(*m, false, "p", HD))];
+            let mut trocado = aplicar_modelo(&do_perito(transparente()), *m, false, HD);
+            trocado.modelo = *m;
+            for b in &mut trocado.blocos {
+                b.estilo.tamanho *= 0.5;
+                b.estilo.cor = "#00ff00".into();
+            }
+            bases.push(("trocado", trocado));
+            // tamanho zero no primeiro: a escala não vale
+            let mut zero = titulo_no_modelo(*m, false, "z", HD);
+            zero.blocos[0].estilo.tamanho = 0.0;
+            bases.push(("tamanho zero", zero));
+            // no vertical, o padrão é o do vertical (escala igual: o tamanho fica)
+            bases.push(("padrao vertical", titulo_no_modelo(*m, false, "v", canvases[2])));
+            for (nb, t) in &bases {
+                for p in PAPEIS {
+                    let c = if *nb == "padrao vertical" { canvases[2] } else { HD };
+                    lista.push(json!({ "nome": format!("bloco {} {nb} {}", nome_do_modelo(*m), serde_json::to_value(p).unwrap().as_str().unwrap()),
+                        "entrada": { "conta": "bloco", "titulo": t, "papel": p, "id": "novo", "conteudo": "Texto", "canvas": c }, "saida": bloco_no_modelo(t, p, "novo", "Texto", c) }));
+                }
+            }
+        }
+        // área segura: no limite, um fio além, e o que não é finito
+        let a = AREA_SEGURA;
+        for (n, c) in [
+            ("dentro", [0.1, 0.1, 0.5, 0.5]),
+            ("no limite", [a, a, 1.0 - 2.0 * a, 1.0 - 2.0 * a]),
+            ("à esquerda", [a - 1e-6, 0.5, 0.1, 0.1]),
+            ("em cima", [0.5, a - 1e-6, 0.1, 0.1]),
+            ("à direita", [0.9, 0.5, 0.08 + 1e-6, 0.1]),
+            ("embaixo", [0.5, 0.9, 0.1, 0.08 + 1e-6]),
+            ("nan", [f64::NAN, 0.5, 0.1, 0.1]),
+        ] {
+            let c = Caixa { x: c[0], y: c[1], w: c[2], h: c[3] };
+            let entrada = if c.x.is_nan() { json!({ "conta": "area", "caixa": { "x": "nan", "y": c.y, "w": c.w, "h": c.h } }) } else { json!({ "conta": "area", "caixa": c }) };
+            lista.push(json!({ "nome": format!("área segura {n}"), "entrada": entrada, "saida": na_area_segura(&c) }));
+        }
+        fixtures::conferir("titulos-modelos.json", Value::Array(lista));
+    }
+
+    #[test]
+    fn cinco_modelos_arranjo() {
+        // cada modelo é um arranjo diferente; aplicar duas vezes = uma; conteúdo, id, ordem, fonte e itálico ficam
+        let base = do_perito(cor_fundo("#1b2a41"));
+        let arranjados: Vec<Titulo> = CINCO.iter().map(|m| aplicar_modelo(&base, *m, false, HD)).collect();
+        for (i, a) in arranjados.iter().enumerate() {
+            assert_eq!(a.modelo, CINCO[i]);
+            assert_eq!(aplicar_modelo(a, CINCO[i], false, HD), *a, "{:?} idempotente", CINCO[i]);
+            for (b, o) in a.blocos.iter().zip(&base.blocos) {
+                assert_eq!((&b.id, b.papel, &b.conteudo, b.estilo.fonte, b.estilo.italico), (&o.id, o.papel, &o.conteudo, o.estilo.fonte, o.estilo.italico));
+                let r = arranjo(CINCO[i], b.papel);
+                assert_eq!((b.lugar, b.largura_max, b.estilo.tamanho, b.estilo.negrito, b.estilo.alinhamento), (r.lugar, r.largura_max, r.tamanho, r.negrito, r.alinhamento));
+                assert_eq!((b.estilo.cor.as_str(), &b.estilo.caixa, &b.estilo.contorno), (r.cor, &r.caixa, &None));
+            }
+            for b in &arranjados[..i] {
+                assert_ne!(a.blocos, b.blocos, "{:?} × {:?}", a.modelo, b.modelo);
+            }
+            // em todo modelo o título é o maior e o rodapé o menor
+            let tam: Vec<f64> = PAPEIS.iter().map(|p| arranjo(CINCO[i], *p).tamanho).collect();
+            assert!(tam.windows(2).all(|w| w[0] > w[1]), "{:?}: {tam:?}", CINCO[i]);
+        }
+        // fundo: cartão mantém cor e imagem; faixa presa a um clipe fica sem fundo; sem fundo ganha o cheio
+        for m in CINCO {
+            for (f, sob) in [(cor_fundo("#1b2a41"), false), (fundo_imagem("x"), false), (transparente(), false), (cor_fundo("#1b2a41"), true), (transparente(), true)] {
+                let t = aplicar_modelo(&do_perito(f.clone()), m, sob, HD);
+                let esperado: Fundo = if sob && sobre_o_video(m) {
+                    Fundo::Transparente
+                } else if f == transparente() {
+                    Fundo::Cor { cor: FUNDO_CHEIO.into() }
+                } else {
+                    serde_json::from_value(f).unwrap()
+                };
+                assert_eq!(t.fundo, esperado, "{m:?} preso {sob}");
+            }
+        }
+        // livre não mexe em nada além do rótulo
+        let l = aplicar_modelo(&base, ModeloTitulo::Livre, true, HD);
+        assert_eq!((l.modelo, &l.fundo, &l.blocos), (ModeloTitulo::Livre, &base.fundo, &base.blocos));
+        // bloco novo: escala e cor do primeiro bloco quando o perito trocou
+        let mut t = titulo_no_modelo(ModeloTitulo::Abertura, false, "a", HD);
+        t.blocos[0].estilo.tamanho = 0.039;
+        t.blocos[0].estilo.cor = "#ff0000".into();
+        t.blocos[0].estilo.fonte = Fonte::Mono;
+        let r = bloco_no_modelo(&t, PapelTexto::Rodape, "r", "x", HD);
+        assert_eq!((r.estilo.tamanho, r.estilo.cor.as_str(), r.estilo.fonte), (0.03 * 0.5, "#ff0000", Fonte::Mono));
+        assert_eq!(r.lugar, arranjo(ModeloTitulo::Abertura, PapelTexto::Rodape).lugar);
+        // sem troca, a cor é a do modelo (rodapé cinza na abertura)
+        let r = bloco_no_modelo(&titulo_no_modelo(ModeloTitulo::Abertura, false, "a", HD), PapelTexto::Rodape, "r", "x", HD);
+        assert_eq!(r.estilo.cor, CINZA);
+        // vertical: tamanho e margem da faixa na escala da largura; o que o perito fez no tamanho continua valendo
+        let v = TamanhoPx { w: 1080, h: 1920 };
+        let k = escala_do_canvas(v);
+        assert_eq!(k, (1080.0 * 3.0) / (1920.0 * 4.0));
+        let t = titulo_no_modelo(ModeloTitulo::TercoInferior, true, "a", v);
+        assert_eq!((t.blocos[0].estilo.tamanho, t.blocos[0].estilo.caixa.as_ref().unwrap().margem), (0.052 * k, 0.013 * k));
+        assert_eq!(bloco_no_modelo(&t, PapelTexto::Subtitulo, "s", "x", v).estilo.tamanho, 0.033 * k * ((0.052 * k) / (0.052 * k)));
+        assert_eq!(escala_do_canvas(TamanhoPx { w: 640, h: 480 }), 1.0);
+        assert_eq!(escala_do_canvas(TamanhoPx { w: 0, h: 0 }), 1.0);
     }
 
     /// Código do erro de validação (antes do ":").
@@ -845,5 +1229,528 @@ mod testes {
         assert!(medidos.iter().all(|&m| m >= 100), "poucos pixels de cor cheia: {medidos:?}");
         assert!(pior.iter().all(|&e| e <= 2.0), "{} ({}): erro de cor {pior:?}", cap.versao, cap.binario.display());
         let _ = std::fs::remove_dir_all(pasta);
+    }
+
+    // ------------------------------------------------------------ modelos rasterizados (P1.7)
+
+    /// Camada do título rasterizada de verdade e a caixa (px) de cada bloco com texto, na ordem dos blocos.
+    fn rasterizado(t: &Titulo, canvas: TamanhoPx, cache: &Path) -> (image::RgbaImage, Vec<[f64; 4]>) {
+        let c = camada::rasterizar(&pedido_camada(t, canvas, 1, Vec::new()), cache, &AtomicBool::new(false)).unwrap();
+        (png_da_camada(&c), caixas_dos_blocos(t, canvas, cache))
+    }
+
+    fn caixas_dos_blocos(t: &Titulo, canvas: TamanhoPx, cache: &Path) -> Vec<[f64; 4]> {
+        let prims = primitivas(t, &quadro(canvas), &SpritesEmCache { cache, imagens: &[] }).unwrap();
+        prims.iter().filter(|p| matches!(p, Primitiva::Sprite { src, .. } if !src.starts_with("midia:"))).map(|p| caixa_px(p, canvas)).collect()
+    }
+
+    fn em(c: &[f64; 4], x: u32, y: u32) -> bool {
+        let (fx, fy) = (x as f64, y as f64);
+        fx >= c[0] && fx < c[0] + c[2] && fy >= c[1] && fy < c[1] + c[3]
+    }
+
+    fn sobrepoem(a: &[f64; 4], b: &[f64; 4]) -> bool {
+        a[0] < b[0] + b[2] && b[0] < a[0] + a[2] && a[1] < b[1] + b[3] && b[1] < a[1] + a[3]
+    }
+
+    /// Caixa [x0, y0, x1, y1] (px; x1 e y1 inclusivos) dos pixels de `img` dentro de `c` que passam em `f`.
+    fn caixa_de(img: &image::RgbaImage, c: &[f64; 4], f: impl Fn(&image::Rgba<u8>) -> bool) -> Option<[u32; 4]> {
+        let mut r: Option<[u32; 4]> = None;
+        for (x, y, p) in img.enumerate_pixels() {
+            if em(c, x, y) && f(p) {
+                let a = r.get_or_insert([x, y, x, y]);
+                *a = [a[0].min(x), a[1].min(y), a[2].max(x), a[3].max(y)];
+            }
+        }
+        r
+    }
+
+    fn rgb_de(cor: &str) -> [u8; 3] {
+        let c = cor::ler(cor).unwrap();
+        [c.r, c.g, c.b]
+    }
+
+    /// Os cinco modelos com texto de verdade (Typst) em 1920×1080: blocos sem sobreposição e na área segura; fundo
+    /// do cartão opaco e o da faixa presa vazio; a cor de cada papel nos pixels; o alinhamento e a altura de cada
+    /// modelo medidos na tinta; os cinco diferentes. Depois, pelo motor e pelo ffmpeg, cada modelo no vídeo.
+    #[test]
+    fn cinco_modelos() {
+        let cache = fontes::pasta_temporaria("p17-cinco");
+        let mut camadas: Vec<image::RgbaImage> = Vec::new();
+        for m in CINCO {
+            let preso = sobre_o_video(m);
+            let t = tipico(m, preso);
+            let (png, caixas) = rasterizado(&t, HD, &cache);
+            let (cw, ch) = (HD.w as f64, HD.h as f64);
+            assert_eq!(caixas.len(), 4, "{m:?}");
+            for (i, a) in caixas.iter().enumerate() {
+                assert!(na_area_segura(&Caixa { x: a[0] / cw, y: a[1] / ch, w: a[2] / cw, h: a[3] / ch }), "{m:?} bloco {i} fora da área segura: {a:?}");
+                for b in &caixas[..i] {
+                    assert!(!sobrepoem(a, b), "{m:?}: blocos sobrepostos {a:?} × {b:?}");
+                }
+            }
+            // fundo: fora dos blocos, o fundo do cartão (opaco) ou nada (faixa presa)
+            let fundo = if preso { [0, 0, 0, 0] } else { [0, 0, 0, 255] };
+            let fora = png.enumerate_pixels().filter(|(x, y, p)| !caixas.iter().any(|c| em(c, *x, *y)) && p.0 != fundo).count();
+            assert_eq!(fora, 0, "{m:?}: pixel fora dos blocos diferente do fundo");
+            let mut alturas = Vec::new();
+            for (i, (b, c)) in t.blocos.iter().zip(&caixas).enumerate() {
+                let a = arranjo(m, b.papel);
+                let cor = rgb_de(a.cor);
+                // tinta = pixel opaco da cor do papel (o miolo das letras sai exato em alfa reto)
+                let n_cor = png.enumerate_pixels().filter(|(x, y, p)| em(c, *x, *y) && p[3] == 255 && p.0[..3] == cor).count();
+                assert!(n_cor > 200, "{m:?} bloco {i}: {n_cor} px da cor {}", a.cor);
+                // nenhum pixel opaco de cor que não seja a do papel misturada ao fundo (cinza de borda incluído)
+                let estranho = png.enumerate_pixels().filter(|(x, y, p)| em(c, *x, *y) && p[3] == 255 && !(p[0] == p[1] && p[1] == p[2])).count();
+                assert_eq!(estranho, 0, "{m:?} bloco {i}: pixel com matiz");
+                let tinta = caixa_de(&png, c, |p| p[3] == 255 && p[0] > 100).unwrap();
+                // faixa: a caixa inteira coberta pela faixa (borda da caixa = cor da faixa, alfa reto)
+                if let Some(f) = &a.caixa {
+                    let cf = cor::ler(&f.cor).unwrap();
+                    for (x, y) in [(c[0] + 1.0, c[1] + 1.0), (c[0] + c[2] - 2.0, c[1] + c[3] - 2.0)] {
+                        assert_eq!(png.get_pixel(x.round() as u32, y.round() as u32).0, [cf.r, cf.g, cf.b, cf.a], "{m:?} bloco {i}: faixa");
+                    }
+                }
+                // alinhamento medido: centrado pelo meio da tinta, à esquerda e à direita pela borda da caixa
+                let (x0, x1) = (tinta[0] as f64, tinta[2] as f64 + 1.0);
+                let lx = a.lugar.x * cw;
+                // a margem da faixa fica entre a borda da caixa e a letra
+                let folga = a.caixa.as_ref().map_or(0.0, |f| f.margem * ch) + 0.012 * cw;
+                match a.lugar.h {
+                    Alinhamento::Centro => assert!(((x0 + x1) * 0.5 - lx).abs() <= 0.006 * cw, "{m:?} bloco {i}: meio da tinta {} × {lx}", (x0 + x1) * 0.5),
+                    Alinhamento::Esq => {
+                        assert!((c[0] - lx).abs() <= 0.5, "{m:?} bloco {i}: caixa em {} × {lx}", c[0]);
+                        assert!(x0 >= lx && x0 - lx <= folga, "{m:?} bloco {i}: tinta começa em {x0} × {lx}");
+                    }
+                    Alinhamento::Dir => {
+                        assert!((c[0] + c[2] - lx).abs() <= 0.5, "{m:?} bloco {i}: caixa termina em {} × {lx}", c[0] + c[2]);
+                        assert!(x1 <= lx && lx - x1 <= folga, "{m:?} bloco {i}: tinta termina em {x1} × {lx}");
+                    }
+                }
+                // vertical: o ponto de apoio na borda da caixa (topo ou base), a tinta dentro dela
+                let ly = a.lugar.y * ch;
+                let borda = if a.lugar.v == AlinhamentoV::Topo { c[1] } else { c[1] + c[3] };
+                assert!((borda - ly).abs() <= 0.5, "{m:?} bloco {i}: {borda} × {ly}");
+                alturas.push(c[3]);
+            }
+            // tamanho: título maior, rodapé menor (uma linha cada)
+            assert!(alturas.windows(2).all(|w| w[0] > w[1]), "{m:?}: alturas {alturas:?}");
+            for (j, o) in camadas.iter().enumerate() {
+                assert!(o != &png, "{m:?} igual ao modelo {:?}", CINCO[j]);
+            }
+            camadas.push(png);
+        }
+        // assinatura de cada modelo, na tinta
+        let tinta_do = |m: ModeloTitulo, i: usize| {
+            let t = tipico(m, sobre_o_video(m));
+            let (png, caixas) = rasterizado(&t, HD, &cache);
+            caixa_de(&png, &caixas[i], |p| p[3] == 255 && p[0] > 100).unwrap()
+        };
+        // evento: título no décimo de cima; terço inferior: título, subtítulo e corpo entre 60 % e 95 % da altura
+        assert!(tinta_do(ModeloTitulo::Evento, 0)[3] < 1080 / 7);
+        for i in 0..3 {
+            let k = tinta_do(ModeloTitulo::TercoInferior, i);
+            assert!(k[1] > 1080 * 6 / 10 && k[3] < 1080 * 95 / 100 && k[2] < 1920 * 77 / 100, "terço inferior bloco {i}: {k:?}");
+        }
+        // abertura: a mesma margem esquerda nos quatro blocos (até 1 % da largura de diferença: o lado das letras)
+        let esq: Vec<u32> = (0..4).map(|i| tinta_do(ModeloTitulo::Abertura, i)[0]).collect();
+        assert!(esq.iter().max().unwrap() - esq.iter().min().unwrap() <= 19, "abertura: {esq:?}");
+
+        // ---- no vídeo: os cinco como cartões da principal, pelo compilador e pelo ffmpeg
+        let Some(cap) = fontes::cap() else {
+            let _ = std::fs::remove_dir_all(cache);
+            return;
+        };
+        let canvas = TamanhoPx { w: 640, h: 360 };
+        let principal: Vec<Value> = CINCO
+            .iter()
+            .enumerate()
+            .map(|(k, m)| json!({ "tipo": "titulo", "id": format!("t{k}"), "rotulo": "", "duracao_s": 0.1, "titulo": tipico(*m, false) }))
+            .collect();
+        let p = aceite::projeto(canvas.w, canvas.h, (30, 1), vec![], principal, json!({}));
+        let quadros = renderizar(&cap, &p, &aceite::Mundo::novo(&cap), "p17-cinco-video");
+        assert_eq!(quadros.len(), 15);
+        for (k, m) in CINCO.iter().enumerate() {
+            let (esperado, _) = rasterizado(&tipico(*m, false), canvas, &cache);
+            let q = &quadros[3 * k + 1];
+            let (mut soma, mut longe) = (0u64, 0u64);
+            for (x, y, e) in esperado.enumerate_pixels() {
+                let i = ((y * canvas.w + x) * 3) as usize;
+                let d = (0..3).map(|c| q.px[i + c].abs_diff(e[c])).max().unwrap();
+                soma += d as u64;
+                longe += u64::from(d > 24);
+            }
+            let n = (canvas.w * canvas.h) as f64;
+            eprintln!("{m:?} no vídeo ({}): erro médio {:.3}, {longe} px acima de 24", cap.versao, soma as f64 / n);
+            // medido: erro médio 0,002 e nenhum pixel acima de 24 nos dois binários
+            assert!(soma as f64 / n <= 0.25 && (longe as f64) <= 0.0005 * n, "{m:?} ({}): erro médio {}, {longe} px longe", cap.versao, soma as f64 / n);
+        }
+        let _ = std::fs::remove_dir_all(cache);
+    }
+
+    /// Área segura (2 %): em 16:9 (1080p e 720p), 4:3 e vertical, com o texto de sempre e com o comprido (duas linhas),
+    /// todo bloco dos cinco modelos cabe nela, e com o de sempre nenhum encosta no outro; na camada de 1280×720, nenhum
+    /// pixel de texto fora dela.
+    #[test]
+    fn area_segura() {
+        let cache = fontes::pasta_temporaria("p17-area");
+        let mut falhas = Vec::new();
+        for m in CINCO {
+            for canvas in [HD, TamanhoPx { w: 1280, h: 720 }, TamanhoPx { w: 640, h: 480 }, TamanhoPx { w: 1080, h: 1920 }] {
+                for (nt, textos) in [("típico", &TEXTOS), ("longo", &LONGOS)] {
+                    let t = com_textos(m, sobre_o_video(m), textos, canvas);
+                    let caixas = caixas_dos_blocos(&t, canvas, &cache);
+                    let (cw, ch) = (canvas.w as f64, canvas.h as f64);
+                    for (i, a) in caixas.iter().enumerate() {
+                        if !na_area_segura(&Caixa { x: a[0] / cw, y: a[1] / ch, w: a[2] / cw, h: a[3] / ch }) {
+                            falhas.push(format!("{m:?} {}×{} {nt}: bloco {i} fora {a:?}", canvas.w, canvas.h));
+                        }
+                        // o comprido pode encostar no vizinho (cada papel tem um ponto de apoio fixo): a prévia mostra
+                        for b in caixas[..i].iter().filter(|_| nt == "típico") {
+                            if sobrepoem(a, b) {
+                                falhas.push(format!("{m:?} {}×{} {nt}: blocos sobrepostos {a:?} × {b:?}", canvas.w, canvas.h));
+                            }
+                        }
+                    }
+                }
+            }
+            // pixel: a camada sem fundo, texto longo
+            let canvas = TamanhoPx { w: 1280, h: 720 };
+            let t = Titulo { fundo: Fundo::Transparente, ..com_textos(m, sobre_o_video(m), &LONGOS, canvas) };
+            let (png, _) = rasterizado(&t, canvas, &cache);
+            let (a0, a1) = ((AREA_SEGURA * 1280.0) as u32, (AREA_SEGURA * 720.0) as u32);
+            let fora = png.enumerate_pixels().filter(|(x, y, p)| p[3] > 0 && (*x < a0 || *y < a1 || *x >= 1280 - a0 || *y >= 720 - a1)).count();
+            assert_eq!(fora, 0, "{m:?}: pixel fora da área segura");
+            assert!(png.pixels().filter(|p| p[3] > 0).count() > 5000, "{m:?}: nada desenhado");
+        }
+        assert!(falhas.is_empty(), "{}", falhas.join("\n"));
+        // a validação (o aviso da tela) também não acusa os cinco, como cartão e como faixa presa
+        let cap = crate::edicao::quadros::apoio::cap_falsa();
+        let fontes = std::collections::HashMap::new();
+        let ctx = crate::edicao::motor::Contexto {
+            fontes: &fontes,
+            cap: &cap,
+            rastreios: &crate::edicao::quadros::apoio::SemRastreios,
+            pasta_projeto: Path::new("/nao/existe/projeto"),
+            midias: &[],
+        };
+        for canvas in [HD, TamanhoPx { w: 1280, h: 720 }, TamanhoPx { w: 640, h: 480 }, TamanhoPx { w: 1080, h: 1920 }] {
+            let (mut principal, mut presos) = (Vec::new(), Vec::new());
+            for (k, m) in CINCO.iter().enumerate() {
+                principal.push(json!({ "tipo": "titulo", "id": format!("t{k}"), "rotulo": "", "duracao_s": 1.0, "titulo": com_textos(*m, false, &TEXTOS, canvas) }));
+                presos.push(sob_titulo(&format!("s{k}"), json!({ "ref": "clipe", "clipe": format!("t{k}"), "desloc": 0.0 }), None, &com_textos(*m, true, &TEXTOS, canvas)));
+            }
+            let p = aceite::projeto(canvas.w, canvas.h, (30, 1), vec![], principal, json!({ "sobreposicoes": [{ "id": "s", "nome": "", "oculta": false, "clipes": presos }] }));
+            let a = crate::edicao::validar::analisar(&p, &ctx, None);
+            let ruins: Vec<String> = a.problemas.iter().filter(|x| [codigo::TEXTO_FORA, codigo::ITEM_INVALIDO].contains(&x.codigo)).map(|x| format!("{} {:?}", x.codigo, x.clipe)).collect();
+            assert!(ruins.is_empty(), "{}×{}: {ruins:?}", canvas.w, canvas.h);
+        }
+        // e as contas acusam o bloco que sai dela
+        let mut t = tipico(ModeloTitulo::TercoInferior, true);
+        t.blocos[0].lugar.x = 0.01;
+        let c = caixas_dos_blocos(&t, HD, &cache)[0];
+        assert!(!na_area_segura(&Caixa { x: c[0] / 1920.0, y: c[1] / 1080.0, w: c[2] / 1920.0, h: c[3] / 1080.0 }));
+        let p = aceite::projeto(1920, 1080, (30, 1), vec![], vec![json!({ "tipo": "titulo", "id": "t", "rotulo": "", "duracao_s": 1.0, "titulo": t })], json!({}));
+        assert!(crate::edicao::validar::analisar(&p, &ctx, None).problemas.iter().any(|x| x.codigo == codigo::TEXTO_FORA));
+        let _ = std::fs::remove_dir_all(cache);
+    }
+
+    fn sha256_hex(b: &[u8]) -> String {
+        Sha256::digest(b).iter().map(|v| format!("{v:02x}")).collect()
+    }
+
+    /// O pedido como a prévia o manda (fio JSON do front, `edicao_sprite_texto`) dá o MESMO arquivo, com o mesmo
+    /// SHA-256, que o render pede ao rasterizar o plano do motor; e o sprite entra na camada sem reamostrar.
+    #[test]
+    fn sprite_da_previa_igual_ao_do_render() {
+        let canvas = TamanhoPx { w: 1280, h: 720 };
+        // os cinco na principal (os de faixa com fundo transparente) e as faixas presas ao clipe
+        let mut principal = Vec::new();
+        let mut presos = Vec::new();
+        let mut titulos = Vec::new();
+        for (k, m) in CINCO.iter().enumerate() {
+            let t = Titulo { fundo: Fundo::Transparente, ..tipico(*m, true) };
+            principal.push(json!({ "tipo": "titulo", "id": format!("t{k}"), "rotulo": "", "duracao_s": 0.2, "titulo": t }));
+            titulos.push(t);
+            if sobre_o_video(*m) {
+                let mut s = tipico(*m, true);
+                s.blocos.iter_mut().for_each(|b| b.conteudo = format!("{} (preso)", b.conteudo));
+                presos.push(json!({ "tipo": "titulo", "id": format!("s{k}"), "rotulo": "", "pos": { "ref": "clipe", "clipe": format!("t{k}"), "desloc": 0.0 },
+                    "duracao_s": null, "transformacao": { "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [], "titulo": s }));
+                titulos.push(s);
+            }
+        }
+        let p = aceite::projeto(canvas.w, canvas.h, (30, 1), vec![], principal, json!({ "sobreposicoes": [{ "id": "s", "nome": "", "oculta": false, "clipes": presos }] }));
+        let cap = std::sync::Arc::new(crate::edicao::quadros::apoio::cap_falsa());
+        let plano = aceite::Mundo::novo(&cap).compilar(&p, &aceite::alvo_final("cpu")).unwrap();
+        let render = fontes::pasta_temporaria("p17-render");
+        let prontas = camada::rasterizar_todos(&plano.camadas, &render, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let do_render: BTreeMap<String, String> = arquivos(&render.join("sprites")).into_iter().map(|(k, b)| (format!("sprites/{}", k.display()), sha256_hex(&b))).collect();
+        // prévia: um pedido por bloco, pelo fio
+        let previa = fontes::pasta_temporaria("p17-previa");
+        let mut da_previa = BTreeMap::new();
+        for t in &titulos {
+            for i in 0..t.blocos.len() {
+                let fio = serde_json::to_string(&pedido(t, i, canvas)).unwrap();
+                let s = texto::sprite(&previa, &serde_json::from_str::<PedidoSprite>(&fio).unwrap()).unwrap();
+                da_previa.insert(s.relativo.clone(), sha256_hex(&std::fs::read(previa.join(&s.relativo)).unwrap()));
+            }
+        }
+        // blocos de sprite igual (o título da cartela e o do encerramento: só o lugar muda) dão o mesmo arquivo
+        assert!(da_previa.len() >= 3 * titulos.len(), "{} sprites", da_previa.len());
+        assert_eq!(da_previa, do_render, "prévia × render");
+        // na camada de cada cartão (sem transformação): os pixels do sprite, alfa exato
+        let mut conferidas = 0;
+        for (pedido_c, pronta) in plano.camadas.iter().zip(&prontas) {
+            let Some(ItemCamada { desenho: Desenho::Titulo { titulo: t }, quadros: q, .. }) = pedido_c.itens.first() else { continue };
+            if q[0].transformacao.is_some() {
+                continue;
+            }
+            let png = png_da_camada(pronta);
+            let [ox, oy, ..] = pedido_c.caixa_px;
+            for (i, c) in caixas_dos_blocos(t, canvas, &previa).iter().enumerate() {
+                let s = texto::sprite(&previa, &pedido(t, i, canvas)).unwrap();
+                let sprite = image::open(previa.join(&s.relativo)).unwrap().to_rgba8();
+                for (x, y, e) in sprite.enumerate_pixels() {
+                    // a caixa vem em 0..1: o canto volta a px com resto de arredondamento
+                    let a = png.get_pixel(c[0].round() as u32 + x - ox, c[1].round() as u32 + y - oy);
+                    assert_eq!(a[3], e[3], "{:?} bloco {i} ({x}, {y})", t.modelo);
+                    let tol = if e[3] == 255 || e[3] == 0 { 0 } else { 255u8.div_ceil(e[3]) };
+                    assert!(e[3] == 0 || (0..3).all(|k| a[k].abs_diff(e[k]) <= tol), "{:?} bloco {i} ({x}, {y}): {a:?} × {e:?}", t.modelo);
+                }
+            }
+            conferidas += 1;
+        }
+        assert_eq!(conferidas, CINCO.len(), "uma camada por cartão");
+        for d in [render, previa] {
+            let _ = std::fs::remove_dir_all(d);
+        }
+    }
+
+    // ------------------------------------------------------------ presos e marca fixa, no vídeo (P1.7)
+
+    /// Compila (alvo final), roda sem perdas e devolve os quadros, um por slot.
+    fn renderizar(cap: &std::sync::Arc<Capacidades>, p: &crate::edicao::modelo::ProjetoEdicao, mundo: &aceite::Mundo, nome: &str) -> Vec<medir::QuadroRgb> {
+        let plano = mundo.compilar(p, &aceite::alvo_final("cpu")).unwrap_or_else(|e| panic!("{nome}: {e}"));
+        let pasta = fontes::pasta_temporaria(nome);
+        let op = executor::Opcoes { sem_perdas: true, ..executor::Opcoes::default() };
+        let r = executor::rodar(cap, &plano, &pasta, &op).unwrap_or_else(|e| panic!("{nome} ({}): {e}", cap.versao));
+        let mut q = Vec::new();
+        for b in &r.blocos {
+            q.extend(medir::quadros(cap, b).unwrap_or_else(|e| panic!("{nome}: {e}")));
+        }
+        assert_eq!(q.len() as u64, plano.total_q, "{nome}: quadros × slots");
+        let _ = std::fs::remove_dir_all(pasta);
+        q
+    }
+
+    fn px3(q: &medir::QuadroRgb, x: u32, y: u32) -> [u8; 3] {
+        let i = ((y * q.w + x) * 3) as usize;
+        [q.px[i], q.px[i + 1], q.px[i + 2]]
+    }
+
+    /// Quantos pixels da região passam em `f`. A medida é pela cor dominante: o RGB lido do vídeo cru sem etiqueta
+    /// sai por BT.601 (o #c00000 volta como (175, 0, 2)).
+    fn quantos(q: &medir::QuadroRgb, r: [u32; 4], f: fn([u8; 3]) -> bool) -> u32 {
+        let mut n = 0;
+        for y in r[1]..r[3] {
+            for x in r[0]..r[2] {
+                n += u32::from(f(px3(q, x, y)));
+            }
+        }
+        n
+    }
+
+    /// Caixa [x, y, w, h] (px) dos pixels que passam em `f`.
+    fn caixa_q(q: &medir::QuadroRgb, f: fn([u8; 3]) -> bool) -> Option<[u32; 4]> {
+        let mut r: Option<[u32; 4]> = None;
+        for y in 0..q.h {
+            for x in 0..q.w {
+                if f(px3(q, x, y)) {
+                    let a = r.get_or_insert([x, y, x, y]);
+                    *a = [a[0].min(x), a[1].min(y), a[2].max(x), a[3].max(y)];
+                }
+            }
+        }
+        r.map(|a| [a[0], a[1], a[2] - a[0] + 1, a[3] - a[1] + 1])
+    }
+
+    fn amarelo(p: [u8; 3]) -> bool {
+        p[0] > 120 && p[1] > 120 && p[2] < 60
+    }
+    fn ciano(p: [u8; 3]) -> bool {
+        p[1] > 120 && p[2] > 120 && p[0] < 60
+    }
+    fn verde(p: [u8; 3]) -> bool {
+        p[1] > 120 && p[0] < 60 && p[2] < 60
+    }
+    fn magenta(p: [u8; 3]) -> bool {
+        p[0] > 120 && p[2] > 120 && p[1] < 60
+    }
+
+    const AMARELO: &str = "#c0c000";
+    const CIANO: &str = "#00c0c0";
+
+    fn cartao(id: &str, cor: &str, duracao_s: f64, transicao: Value) -> Value {
+        json!({ "tipo": "titulo", "id": id, "rotulo": "", "duracao_s": duracao_s, "transicao_entrada": transicao,
+                "titulo": { "modelo": "cartela", "fundo": { "tipo": "cor", "cor": cor }, "blocos": [] } })
+    }
+
+    fn sob_titulo(id: &str, pos: Value, duracao_s: Option<f64>, t: &Titulo) -> Value {
+        json!({ "tipo": "titulo", "id": id, "rotulo": "", "pos": pos, "duracao_s": duracao_s,
+                "transformacao": { "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.0, "saida_s": 0.0, "efeitos": [], "titulo": t })
+    }
+
+    /// De que clipe é o quadro, pelo canto de cima à esquerda: cartão amarelo, cartão ciano ou o trecho.
+    fn de_quem(q: &medir::QuadroRgb) -> char {
+        let r = [2, 2, 14, 14];
+        if quantos(q, r, amarelo) == 144 {
+            'A'
+        } else if quantos(q, r, ciano) == 144 {
+            'C'
+        } else {
+            'B'
+        }
+    }
+
+    /// Terço inferior "até o fim do clipe" preso ao trecho B: a faixa aparece EXATAMENTE nos quadros do trecho, com
+    /// B no meio, depois do clipe reordenado para o começo e depois de aparado (outros quadros da mídia, outra duração).
+    #[test]
+    fn terco_inferior_segue_o_clipe_reordenado_e_aparado() {
+        let Some(cap) = fontes::cap() else { return };
+        let m = crate::edicao::quadros::apoio::medida(&cap, fontes::Fonte::Mp4);
+        let tab = &m.info.quadros;
+        // a faixa do terço em verde opaco, para medir
+        let cor_faixa = "#00e000";
+        let mut terco = titulo_no_modelo(ModeloTitulo::TercoInferior, true, "b0", TamanhoPx { w: 320, h: 180 });
+        terco.blocos[0].conteudo = "Câmera 2".into();
+        terco.blocos[0].estilo.caixa.as_mut().unwrap().cor = cor_faixa.into();
+        assert_eq!(terco.fundo, Fundo::Transparente);
+        let cache = fontes::pasta_temporaria("p17-terco-caixa");
+        let esperada = caixas_dos_blocos(&terco, TamanhoPx { w: 320, h: 180 }, &cache)[0];
+        let sob = json!({ "sobreposicoes": [{ "id": "s1", "nome": "", "oculta": false,
+            "clipes": [sob_titulo("ti", json!({ "ref": "clipe", "clipe": "B", "desloc": 0.0 }), None, &terco)] }] });
+        let a = cartao("A", AMARELO, 0.5, Value::Null);
+        let c = cartao("C", CIANO, 0.5, Value::Null);
+        let mundo = aceite::Mundo::novo(&cap).com("m1", &m.info);
+        // terço de baixo, metade esquerda
+        let regiao = [0, 90, 220, 175];
+        for (nome, principal, n_b) in [
+            ("no meio", vec![a.clone(), aceite::trecho("B", "m1", tab, 60, 90, 1.0, json!([])), c.clone()], 30),
+            ("reordenado", vec![aceite::trecho("B", "m1", tab, 60, 90, 1.0, json!([])), a.clone(), c.clone()], 30),
+            ("aparado", vec![a.clone(), aceite::trecho("B", "m1", tab, 66, 80, 1.0, json!([])), c.clone()], 14),
+            ("aparado e reordenado", vec![a.clone(), c.clone(), aceite::trecho("B", "m1", tab, 100, 145, 1.0, json!([]))], 45),
+        ] {
+            let p = aceite::projeto(320, 180, (30, 1), vec![aceite::midia("m1", "video", json!([]))], principal, sob.clone());
+            let q = renderizar(&cap, &p, &mundo, &format!("p17-terco-{}", nome.replace(' ', "-")));
+            let quem: String = q.iter().map(de_quem).collect();
+            let faixa: Vec<bool> = q.iter().map(|x| quantos(x, regiao, verde) > 150).collect();
+            eprintln!("{nome} ({}): {quem}", cap.versao);
+            assert_eq!(quem.matches('B').count(), n_b, "{nome}: quadros do trecho");
+            for (k, (c, f)) in quem.chars().zip(&faixa).enumerate() {
+                assert_eq!(*f, c == 'B', "{nome} ({}): quadro {k} do clipe {c} com faixa {f}", cap.versao);
+            }
+            // no lugar do modelo: a faixa no vídeo é a caixa do bloco, a 1 px (borda do croma 4:2:0), e na área segura
+            for (k, x) in q.iter().enumerate().filter(|(k, _)| faixa[*k]) {
+                let v = caixa_q(x, verde).unwrap();
+                let bordas = [v[0] as f64, v[1] as f64, (v[0] + v[2]) as f64, (v[1] + v[3]) as f64];
+                let alvo = [esperada[0], esperada[1], esperada[0] + esperada[2], esperada[1] + esperada[3]];
+                assert!(bordas.iter().zip(&alvo).all(|(a, b)| (a - b).abs() <= 1.0), "{nome} ({}): quadro {k}: faixa em {v:?} × {esperada:?}", cap.versao);
+                assert!(na_area_segura(&Caixa { x: v[0] as f64 / 320.0, y: v[1] as f64 / 180.0, w: v[2] as f64 / 320.0, h: v[3] as f64 / 180.0 }), "{nome}: quadro {k}: {v:?}");
+            }
+        }
+        let _ = std::fs::remove_dir_all(cache);
+    }
+
+    /// O mesmo terço preso ao trecho B em 29,97 a 0,5×, em 25 a 2× e deslocado 0,4 s: a faixa só nos quadros do
+    /// trecho (a partir do deslocamento); sem o terço, nenhum quadro com faixa (o medidor não acende no vídeo).
+    #[test]
+    fn terco_inferior_em_2997_25_e_deslocado() {
+        let Some(cap) = fontes::cap() else { return };
+        let m = crate::edicao::quadros::apoio::medida(&cap, fontes::Fonte::Mp4);
+        let tab = &m.info.quadros;
+        let mut terco = titulo_no_modelo(ModeloTitulo::TercoInferior, true, "b0", TamanhoPx { w: 320, h: 180 });
+        terco.blocos[0].conteudo = "Câmera 2".into();
+        terco.blocos[0].estilo.caixa.as_mut().unwrap().cor = "#00e000".into();
+        let (a, c) = (cartao("A", AMARELO, 0.5, Value::Null), cartao("C", CIANO, 0.5, Value::Null));
+        let mundo = aceite::Mundo::novo(&cap).com("m1", &m.info);
+        let regiao = [0, 90, 220, 175];
+        // (nome, fps, velocidade, deslocamento, quadros de B, com o terço)
+        for (nome, fps, vel, desloc, n_b, com) in [
+            ("sem o terco", (30, 1), 1.0, 0.0, 30, false),
+            ("2997 a meia", (30000, 1001), 0.5, 0.0, 60, true),
+            ("25 a 2x", (25, 1), 2.0, 0.0, 13, true),
+            ("deslocado", (30, 1), 1.0, 0.4, 30, true),
+        ] {
+            let sob = if com {
+                json!({ "sobreposicoes": [{ "id": "s1", "nome": "", "oculta": false,
+                    "clipes": [sob_titulo("ti", json!({ "ref": "clipe", "clipe": "B", "desloc": desloc }), None, &terco)] }] })
+            } else {
+                json!({})
+            };
+            let principal = vec![a.clone(), aceite::trecho("B", "m1", tab, 60, 90, vel, json!([])), c.clone()];
+            let p = aceite::projeto(320, 180, fps, vec![aceite::midia("m1", "video", json!([]))], principal, sob);
+            let q = renderizar(&cap, &p, &mundo, &format!("p17-terco2-{}", nome.replace(' ', "-")));
+            let quem: String = q.iter().map(de_quem).collect();
+            eprintln!("{nome} ({}): {quem}", cap.versao);
+            assert_eq!(quem.matches('B').count(), n_b, "{nome}: quadros do trecho");
+            let b0 = quem.find('B').unwrap();
+            // início do preso = início da âncora + round(desloc·fps)
+            let de = b0 + (desloc * fps.0 as f64 / fps.1 as f64).round() as usize;
+            for (k, (cl, x)) in quem.chars().zip(&q).enumerate() {
+                let faixa = quantos(x, regiao, verde) > 150;
+                assert_eq!(faixa, com && cl == 'B' && k >= de, "{nome} ({}): quadro {k} do clipe {cl}", cap.versao);
+            }
+        }
+    }
+
+    /// Marca fixa (título preso ao programa, sem duração): a mesma, nos mesmos pixels, em todo quadro do programa, por
+    /// cima de cartões, trecho, transições e fecho; começando em 1 s, só dali ao último quadro.
+    #[test]
+    fn marca_fixa_no_programa_inteiro() {
+        let Some(cap) = fontes::cap() else { return };
+        let m = crate::edicao::quadros::apoio::medida(&cap, fontes::Fonte::Mp4);
+        let tab = &m.info.quadros;
+        let cor_marca = "#e000e0";
+        let mut marca = titulo_no_modelo(ModeloTitulo::Livre, true, "b0", TamanhoPx { w: 320, h: 180 });
+        let b = &mut marca.blocos[0];
+        b.conteudo = "SICRO".into();
+        b.lugar = Lugar { x: 0.97, y: 0.04, h: Alinhamento::Dir, v: AlinhamentoV::Topo };
+        b.estilo.tamanho = 0.08;
+        b.estilo.caixa = Some(CaixaTexto { cor: cor_marca.into(), margem: 0.02, raio: 0.0 });
+        let escurecer = json!({ "tipo": "escurecer", "duracao_s": 0.2, "audio": "acompanhar" });
+        let principal = vec![
+            cartao("A", AMARELO, 0.5, Value::Null),
+            aceite::trecho("B", "m1", tab, 60, 90, 1.0, json!([])),
+            cartao("C", CIANO, 0.5, escurecer.clone()),
+        ];
+        let mundo = aceite::Mundo::novo(&cap).com("m1", &m.info);
+        let canto = [200, 0, 320, 60];
+        for (inicio, de_q) in [(0.0, 0usize), (1.0, 30)] {
+            let extra = json!({ "fecho": escurecer, "sobreposicoes": [{ "id": "s1", "nome": "", "oculta": false,
+                "clipes": [sob_titulo("mf", json!({ "ref": "programa", "t": inicio }), None, &marca)] }] });
+            let p = aceite::projeto(320, 180, (30, 1), vec![aceite::midia("m1", "video", json!([]))], principal.clone(), extra);
+            let q = renderizar(&cap, &p, &mundo, &format!("p17-marca-{de_q}"));
+            assert_eq!(q.len(), 15 + 30 + 15);
+            let presente: Vec<bool> = q.iter().map(|x| quantos(x, canto, magenta) > 150).collect();
+            let esperado: Vec<bool> = (0..q.len()).map(|k| k >= de_q).collect();
+            assert_eq!(presente, esperado, "início {inicio} ({})", cap.versao);
+            // a mesma em todo quadro: caixa da cor no mesmo lugar (a borda do croma 4:2:0 mistura o fundo: 1 px) e o
+            // miolo da faixa, com o texto, pixel a pixel (a 6 px da borda: a leitura em RGB interpola o croma vizinho)
+            let caixa_em = |x: &medir::QuadroRgb| caixa_q(x, magenta).unwrap();
+            let ref_q = &q[de_q];
+            let cx = caixa_em(ref_q);
+            assert!(cx[2] > 30 && cx[3] > 15, "faixa da marca {cx:?}");
+            for (k, x) in q.iter().enumerate().skip(de_q) {
+                let c = caixa_em(x);
+                let bordas = |c: [u32; 4]| [c[0], c[1], c[0] + c[2], c[1] + c[3]];
+                assert!(bordas(c).iter().zip(&bordas(cx)).all(|(a, b)| a.abs_diff(*b) <= 1), "quadro {k}: marca em {c:?} × {cx:?}");
+                for yy in cx[1] + 6..cx[1] + cx[3] - 6 {
+                    for xx in cx[0] + 6..cx[0] + cx[2] - 6 {
+                        assert_eq!(px3(x, xx, yy), px3(ref_q, xx, yy), "quadro {k} ({xx}, {yy}): miolo da marca mudou");
+                    }
+                }
+            }
+        }
     }
 }

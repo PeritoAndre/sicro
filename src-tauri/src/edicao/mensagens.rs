@@ -225,6 +225,8 @@ const NAO_SUPORTADOS: &[(&str, &str)] = &[
     ("estabilizar", "estabilização"),
     ("lente", "correção de lente"),
     ("desentrelacar", "desentrelaçamento"),
+    // P1.4 (`realce::recusa_na_fonte`): passo de um tique por quadro não tem meio para o segundo campo
+    ("desentrelacar_campo", "desentrelaçamento por campo nesta gravação"),
     ("media_temporal", "média de quadros"),
     ("ajustes", "ajustes de imagem"),
     ("nitidez", "nitidez"),
@@ -414,5 +416,10 @@ mod testes {
             assert_eq!(msg(erro_de_comando(v(&uma))), uma, "{cru}");
         }
         assert_eq!(msg(erro_de_comando(v("nao_suportado: ocultar_imagem"))), "nao_suportado: Ainda não suportado: ocultação em imagem");
+        assert_eq!(frase(NAO_SUPORTADO, None, Some("desentrelacar_campo")), "Ainda não suportado: desentrelaçamento por campo nesta gravação");
+        // rótulo de `nao_suportado`: um por detalhe, nenhum vazio
+        let detalhes: BTreeSet<_> = NAO_SUPORTADOS.iter().map(|x| x.0).collect();
+        assert_eq!(detalhes.len(), NAO_SUPORTADOS.len(), "detalhe repetido");
+        assert!(NAO_SUPORTADOS.iter().all(|x| !x.1.is_empty()));
     }
 }

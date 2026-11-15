@@ -1,0 +1,2270 @@
+[
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1001,
+        "passos": [
+          1001,
+          1001,
+          1001,
+          1001,
+          1001,
+          1001
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 30000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "ntsc 1/30000, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 500,
+      "passos": [
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 30000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1001,
+        "passos": [
+          1001,
+          1001,
+          1001,
+          1001,
+          1001,
+          1001
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 30000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "ntsc 1/30000, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1001,
+      "passos": [
+        1001,
+        1001,
+        1001,
+        1001,
+        1001,
+        1001
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 30000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1001,
+        "passos": [
+          1001,
+          1001,
+          1001,
+          1001,
+          1001,
+          1001
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 30000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "ntsc 1/30000, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1001,
+      "passos": [
+        1001,
+        1001,
+        1001,
+        1001,
+        1001,
+        1001
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 30000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1001,
+        "passos": [
+          1001,
+          1001,
+          1001,
+          1001,
+          1001,
+          1001
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 30000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "ntsc 1/30000, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1001,
+      "passos": [
+        1001,
+        1001,
+        1001,
+        1001,
+        1001,
+        1001
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 30000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1001,
+        "passos": [
+          1001,
+          1001,
+          1001,
+          1001,
+          1001,
+          1001
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 30000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "ntsc 1/30000, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 500,
+      "passos": [
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501,
+        500,
+        501
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 30000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 3600,
+        "passos": [
+          3600,
+          3600,
+          3600,
+          3600,
+          3600
+        ],
+        "pts0": 126000,
+        "tb": {
+          "den": 90000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "pal 1/90000 com início, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1800,
+      "passos": [
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800
+      ],
+      "pts0": 126000,
+      "tb": {
+        "den": 90000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 3600,
+        "passos": [
+          3600,
+          3600,
+          3600,
+          3600,
+          3600
+        ],
+        "pts0": 126000,
+        "tb": {
+          "den": 90000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "pal 1/90000 com início, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 3600,
+      "passos": [
+        3600,
+        3600,
+        3600,
+        3600,
+        3600
+      ],
+      "pts0": 126000,
+      "tb": {
+        "den": 90000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 3600,
+        "passos": [
+          3600,
+          3600,
+          3600,
+          3600,
+          3600
+        ],
+        "pts0": 126000,
+        "tb": {
+          "den": 90000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "pal 1/90000 com início, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 3600,
+      "passos": [
+        3600,
+        3600,
+        3600,
+        3600,
+        3600
+      ],
+      "pts0": 126000,
+      "tb": {
+        "den": 90000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 3600,
+        "passos": [
+          3600,
+          3600,
+          3600,
+          3600,
+          3600
+        ],
+        "pts0": 126000,
+        "tb": {
+          "den": 90000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "pal 1/90000 com início, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 3600,
+      "passos": [
+        3600,
+        3600,
+        3600,
+        3600,
+        3600
+      ],
+      "pts0": 126000,
+      "tb": {
+        "den": 90000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 3600,
+        "passos": [
+          3600,
+          3600,
+          3600,
+          3600,
+          3600
+        ],
+        "pts0": 126000,
+        "tb": {
+          "den": 90000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "pal 1/90000 com início, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1800,
+      "passos": [
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800,
+        1800
+      ],
+      "pts0": 126000,
+      "tb": {
+        "den": 90000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33,
+          33,
+          34
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "mkv 1 ms, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 16,
+      "passos": [
+        17,
+        16,
+        17,
+        17,
+        17,
+        16,
+        17,
+        16,
+        17,
+        17,
+        17
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33,
+          33,
+          34
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "mkv 1 ms, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 33,
+      "passos": [
+        33,
+        34,
+        33,
+        33,
+        34
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33,
+          33,
+          34
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "mkv 1 ms, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 33,
+      "passos": [
+        33,
+        34,
+        33,
+        33,
+        34
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33,
+          33,
+          34
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "mkv 1 ms, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 33,
+      "passos": [
+        33,
+        34,
+        33,
+        33,
+        34
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33,
+          33,
+          34
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "mkv 1 ms, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 16,
+      "passos": [
+        17,
+        16,
+        17,
+        17,
+        17,
+        16,
+        17,
+        16,
+        17,
+        17,
+        17
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33
+        ],
+        "pts0": -40,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "negativo, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 16,
+      "passos": [
+        17,
+        16,
+        17,
+        17,
+        17,
+        16,
+        17
+      ],
+      "pts0": -40,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33
+        ],
+        "pts0": -40,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "negativo, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 33,
+      "passos": [
+        33,
+        34,
+        33
+      ],
+      "pts0": -40,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33
+        ],
+        "pts0": -40,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "negativo, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 33,
+      "passos": [
+        33,
+        34,
+        33
+      ],
+      "pts0": -40,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33
+        ],
+        "pts0": -40,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "negativo, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 33,
+      "passos": [
+        33,
+        34,
+        33
+      ],
+      "pts0": -40,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 33,
+        "passos": [
+          33,
+          34,
+          33
+        ],
+        "pts0": -40,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "negativo, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 16,
+      "passos": [
+        17,
+        16,
+        17,
+        17,
+        17,
+        16,
+        17
+      ],
+      "pts0": -40,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [],
+        "pts0": 512,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "um quadro, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [],
+      "pts0": 512,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [],
+        "pts0": 512,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "um quadro, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [],
+      "pts0": 512,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [],
+        "pts0": 512,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "um quadro, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [],
+      "pts0": 512,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [],
+        "pts0": 512,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "um quadro, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [],
+      "pts0": 512,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [],
+        "pts0": 512,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "um quadro, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [],
+      "pts0": 512,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 25,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "avi um tique por quadro, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 25,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 25,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "avi um tique por quadro, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 25,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 25,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "avi um tique por quadro, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 25,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 25,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "avi um tique por quadro, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 25,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 1,
+        "passos": [
+          1,
+          1,
+          1,
+          1,
+          1
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 25,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "avi um tique por quadro, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 1,
+      "passos": [
+        1,
+        1,
+        1,
+        1,
+        1
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 25,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 40,
+        "passos": [
+          40,
+          0,
+          40
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": true
+      }
+    },
+    "nome": "pts repetido, campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 40,
+      "passos": [
+        40,
+        0,
+        40
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": true
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 40,
+        "passos": [
+          40,
+          0,
+          40
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": true
+      }
+    },
+    "nome": "pts repetido, quadro",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 40,
+      "passos": [
+        40,
+        0,
+        40
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": true
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 40,
+        "passos": [
+          40,
+          0,
+          40
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": true
+      }
+    },
+    "nome": "pts repetido, sem efeito",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 40,
+      "passos": [
+        40,
+        0,
+        40
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": true
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 40,
+        "passos": [
+          40,
+          0,
+          40
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": true
+      }
+    },
+    "nome": "pts repetido, campo desligado",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 40,
+      "passos": [
+        40,
+        0,
+        40
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": true
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 40,
+        "passos": [
+          40,
+          0,
+          40
+        ],
+        "pts0": 0,
+        "tb": {
+          "den": 1000,
+          "num": 1
+        },
+        "vfr": true
+      }
+    },
+    "nome": "pts repetido, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 40,
+      "passos": [
+        40,
+        0,
+        40
+      ],
+      "pts0": 0,
+      "tb": {
+        "den": 1000,
+        "num": 1
+      },
+      "vfr": true
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0,
+          3,
+          6
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 512,
+        "passos": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "pts0": 1024,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "quadros-chave no meio, campo",
+    "saida": {
+      "chaves": [
+        0,
+        6,
+        12
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 256,
+      "passos": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "pts0": 1024,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "quadro",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0,
+          3,
+          6
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 512,
+        "passos": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "pts0": 1024,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "quadros-chave no meio, quadro",
+    "saida": {
+      "chaves": [
+        0,
+        3,
+        6
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 512,
+      "passos": [
+        512,
+        512,
+        512,
+        512,
+        512,
+        512,
+        512
+      ],
+      "pts0": 1024,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [],
+      "tab": {
+        "chaves": [
+          0,
+          3,
+          6
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 512,
+        "passos": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "pts0": 1024,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "quadros-chave no meio, sem efeito",
+    "saida": {
+      "chaves": [
+        0,
+        3,
+        6
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 512,
+      "passos": [
+        512,
+        512,
+        512,
+        512,
+        512,
+        512,
+        512
+      ],
+      "pts0": 1024,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "ativo": null,
+          "id": "d",
+          "ligado": false,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0,
+          3,
+          6
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 512,
+        "passos": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "pts0": 1024,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "quadros-chave no meio, campo desligado",
+    "saida": {
+      "chaves": [
+        0,
+        3,
+        6
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 512,
+      "passos": [
+        512,
+        512,
+        512,
+        512,
+        512,
+        512,
+        512
+      ],
+      "pts0": 1024,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  },
+  {
+    "entrada": {
+      "efeitos": [
+        {
+          "id": "x",
+          "tipo": "do_futuro"
+        },
+        {
+          "ativo": null,
+          "id": "m1",
+          "ligado": true,
+          "nome": "",
+          "quadros": 4,
+          "tipo": "media_temporal"
+        },
+        {
+          "ativo": null,
+          "id": "d1",
+          "ligado": true,
+          "modo": "campo",
+          "nome": "",
+          "ordem": "auto",
+          "tipo": "desentrelacar"
+        }
+      ],
+      "tab": {
+        "chaves": [
+          0,
+          3,
+          6
+        ],
+        "origem": "decodificador",
+        "passo_mediano": 512,
+        "passos": [
+          512,
+          512,
+          512,
+          512,
+          512,
+          512,
+          512
+        ],
+        "pts0": 1024,
+        "tb": {
+          "den": 15360,
+          "num": 1
+        },
+        "vfr": false
+      }
+    },
+    "nome": "quadros-chave no meio, desconhecido e campo",
+    "saida": {
+      "chaves": [
+        0,
+        6,
+        12
+      ],
+      "origem": "decodificador",
+      "passo_mediano": 256,
+      "passos": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "pts0": 1024,
+      "tb": {
+        "den": 15360,
+        "num": 1
+      },
+      "vfr": false
+    }
+  }
+]

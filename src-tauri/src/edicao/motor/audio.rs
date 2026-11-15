@@ -1,23 +1,26 @@
 //! Áudio do programa inteiro numa passada (§5.9). Dono: P1.5 (herda do P0.6b; inclui o som das transições, O3).
 //! Decisão O6: a passada de áudio e a de medição rodam SEMPRE com `-cpuflags 0`, antes das entradas.
 //!
-//! Fase 0: uma entrada por mídia (`-vn`, sem `-ss`) com `asplit`, e outra da mesma mídia quando o som teria de
-//! esperar na memória mais de `TETO_ESPERA_S` (`distribuir`); por clipe `atrim` absoluto, `asetpts=PTS-T0/TB`,
-//! `aresample=48000:async=1:first_pts=0` (silêncio inicial e buracos), velocidade, `apad` e `atrim=end_sample`;
-//! principal emendada por `concat`, `afade` no `escurecer`; trilhas presas por `adelay` e somadas por `amix=normalize=0`
-//! (`de_s`/`ate_s` do clipe de áudio contam do começo do som do arquivo).
-//! Normalização, abaixar, silenciar, volume animado, limitador e transição com sobreposição: `nao_suportado` (Fase 1).
+//! Uma entrada por mídia (`-vn`, sem `-ss`) com `asplit`, e outra da mesma mídia quando o som teria de esperar na
+//! memória mais de `TETO_ESPERA_S` (`distribuir`); por clipe `atrim` absoluto, `asetpts=PTS-T0/TB`,
+//! `aresample=48000:async=1:first_pts=0` (silêncio inicial e buracos), volume animado, silenciar e tom (no tempo
+//! da fonte), velocidade, `apad` e `atrim=end_sample`. A principal é emendada por `concat`; onde dois clipes se
+//! sobrepõem (transição), os pedaços saem por amostra e somam por `amix` com `afade` de cada lado ("cortar": a troca
+//! no meio). Depois: volume do original, abaixar sob as trilhas, trilhas presas por `adelay` e somadas por
+//! `amix=normalize=0` (`de_s`/`ate_s` do clipe de áudio contam do começo do som do arquivo), ganho da normalização
+//! (medido numa prévia) e limitador.
 
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use super::plano::{Entrada, Papel, PassoAudio, Previa, MARCA_GANHO};
+use super::grafo::filtro;
+use super::plano::{ArquivoTexto, Entrada, Papel, PassoAudio, Previa, MARCA_GANHO};
 use super::{Alvo, Contexto, FonteInfo};
 use crate::edicao::ffmpeg::args;
 use crate::edicao::ffmpeg::sonda::Capacidades;
 use crate::edicao::modelo::{
-    Animavel, AudioTransicao, ClipeBase, ClipePrincipal, ClipeSobreposto, LinhaResolvida, Normalizar, ProjetoEdicao, Racional,
-    Tolerante, Transicao, Velocidade,
+    Animavel, AudioTransicao, Chave, ClipeBase, ClipePrincipal, ClipeSobreposto, Interp, LinhaResolvida, ModoSilencio, Normalizar, ProjetoEdicao, Racional,
+    Silencio, Tolerante, Transicao, Velocidade,
 };
 use crate::edicao::tempo::{self, TAXA_AUDIO};
 use crate::error::{Result, SicroError};
@@ -42,6 +45,8 @@ pub struct Loudnorm {
 
 const SAIDA: &str = "audio.wav";
 const HASH: &str = "audio.sha256";
+/// Grafo da medição (auxiliar do passo).
+const MEDIR: &str = "audio-medir.txt";
 /// Todo pedaço antes de juntar.
 const FORMATO: &str = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo";
 /// O PCM da saída sai do grafo já em s16: `[a]` e `[ah]` recebem os mesmos bytes.
@@ -62,6 +67,27 @@ const ATEMPO_RAPIDO_MS: f64 = 12.0;
 const TETO_ESPERA_S: f64 = 120.0;
 /// Entradas a mais no passo inteiro (a linha de comando não cresce além disso).
 const MAX_ENTRADAS_EXTRAS: usize = 16;
+/// Quadro do envelope por intervalos: o `enable` do `afade` vale por quadro (`receitas-audio-saida.md` §3).
+const QUADRO_ENVELOPE: u64 = 1024;
+/// Intervalo mínimo do envelope (45 ms): meio intervalo tem de passar de um quadro.
+const MIN_ENVELOPE: u64 = 2160;
+/// O `enable` cobre a rampa com esta folga (50 ms, mais de dois quadros).
+const FOLGA_ENVELOPE: u64 = 2400;
+/// Rampa do silenciar e do tom: 10 ms.
+const RAMPA_SILENCIO: u64 = TAXA_AUDIO as u64 / 100;
+/// Tom do "Silenciar trecho": 1 kHz a −18 dBFS (`aevalsrc` sai igual nos dois binários; o `sine` não).
+const TOM: &str = "aevalsrc=exprs=0.125*sin(2*PI*1000*t):s=48000:n=1024";
+/// Quadro do volume animado (`volume` com `eval=frame`): 5 ms.
+const QUADRO_VOLUME: u32 = 256;
+/// `loudnorm` da medição: só os `input_*` são lidos, os alvos daqui não pesam.
+const LOUDNORM: &str = "loudnorm=I=-16:TP=-1.5:LRA=50:print_format=json";
+/// Teto do limitador sem normalização (dBTP).
+const LIMITE_PADRAO_DB: f64 = -1.0;
+// CONTRATO: com o limitador ligado, `PassoAudio.normalizar.pico_db` leva este valor em vez do alvo do projeto
+// (`executar` chama `ganho_db(medido, passo.normalizar)` e não sabe do limitador).
+/// Com o limitador ligado o pico é dele: o ganho da normalização deixa de ser limitado pelo pico medido
+/// (o alvo de pico do projeto vira o teto do `alimiter` e segue na proveniência, em `mixagem`).
+const PICO_COM_LIMITADOR_DB: f64 = 120.0;
 
 fn erro(codigo: impl Into<String>) -> SicroError {
     SicroError::Validation(codigo.into())
@@ -72,23 +98,28 @@ fn nao_suportado(o_que: &str) -> SicroError {
 }
 
 /// O que o motor de áudio ainda não faz, pelo detalhe do catálogo (`mensagens`). Uma regra só: `validar` (fase_0 e
-/// transições) e `recusar` perguntam aqui; o P1.5 tira da lista o que passa a fazer, junto com o sítio de recusa.
-const RECUSAS: &[&str] = &["normalizar", "limitador", "silenciar", "volume_animado", "abaixar", "transicao"];
+/// transições) pergunta aqui. Vazia desde o P1.5 (rampa, `tela` e vídeo sobreposto são de outras fases).
+const RECUSAS: &[&str] = &[];
 
 /// `detalhe` ainda é recusado pelo motor de áudio?
 pub fn recusa(detalhe: &str) -> bool {
     RECUSAS.contains(&detalhe)
 }
 
-/// Recorte de mídia que vira som (tempo de fonte). `ate` None = até o fim do som; `entrada`/`saida` = `afade` em amostras.
+/// Recorte de mídia que vira som (tempo de fonte). `ate` None = até o fim do som. `curva`, `mudos` e `tons` valem
+/// no tempo do recorte, antes da velocidade; `entrada`/`saida` = `afade` (amostra inicial, amostras; 0 = nenhum)
+/// no clipe pronto.
 struct Som<'a> {
     fonte: &'a FonteInfo,
     de: f64,
     ate: Option<f64>,
     velocidade: Ritmo,
     volume: f64,
-    entrada: u64,
-    saida: u64,
+    curva: Option<String>,
+    mudos: Vec<(u64, u64)>,
+    tons: Vec<(u64, u64)>,
+    entrada: (u64, u64),
+    saida: (u64, u64),
 }
 
 /// Velocidade já decidida: 1×, `atempo` em estágios ou `asetrate` (Hz).
@@ -98,9 +129,10 @@ enum Ritmo {
     Asetrate(u64),
 }
 
-/// Pedaço da trilha principal: amostras e o som (None = silêncio).
-struct Pedaco<'a> {
-    amostras: u64,
+/// Clipe da trilha principal no programa: amostras [ini, fim) e o som (None = silêncio).
+struct Item<'a> {
+    ini: u64,
+    fim: u64,
     som: Option<(&'a str, Som<'a>)>,
 }
 
@@ -120,6 +152,8 @@ struct Grafo<'a> {
     entradas: Vec<(&'a str, usize, &'a FonteInfo)>,
     usos: Vec<usize>,
     linhas: Vec<String>,
+    /// Contador dos rótulos auxiliares (tom).
+    aux: usize,
 }
 
 // CONTRATO: a mesma mídia pode ter mais de uma entrada no `PassoAudio` (mesmo `Papel::Midia`, mesmo caminho).
@@ -185,6 +219,18 @@ impl<'a> Grafo<'a> {
         l.extend(self.linhas.iter().cloned());
         l.join(";\n")
     }
+
+    fn entradas_do_passo(&self) -> Vec<Entrada> {
+        self.entradas
+            .iter()
+            .map(|(id, _, f)| Entrada {
+                antes: vec!["-vn".into()],
+                antes_sem_busca: None,
+                caminho: f.caminho.clone(),
+                papel: Papel::Midia { id: id.to_string(), clipe: String::new() },
+            })
+            .collect()
+    }
 }
 
 /// Segundos para opção de duração (µs, como o ffmpeg lê).
@@ -192,14 +238,119 @@ fn seg(t: f64) -> String {
     format!("{t:.6}")
 }
 
+/// Número dentro de expressão: negativo entre parênteses.
+fn num(v: f64) -> String {
+    let v = v + 0.0;
+    if v < 0.0 {
+        format!("({v})")
+    } else {
+        format!("{v}")
+    }
+}
+
+/// Segundos em amostras a 48 kHz (negativo e NaN viram 0).
+fn em_amostras(s: f64) -> u64 {
+    (s * TAXA_AUDIO as f64).round() as u64
+}
+
 /// Silêncio estéreo de `n` amostras.
 fn silencio(n: u64) -> String {
     format!("anullsrc=r={TAXA_AUDIO}:cl=stereo:n={QUADRO_SILENCIO},atrim=end_sample={n},{FORMATO}")
 }
 
-/// Cadeia de um recorte: `n` amostras a 48 kHz, estéreo, pts a partir de 0 (§5.3, "Áudio do trecho").
-fn cadeia(s: &Som, n: u64) -> String {
-    let mut c = format!("atrim=start={}", seg(s.de));
+/// Intervalos [a, b) em ordem, com o mínimo de `MIN_ENVELOPE`, cortados em `total` e unidos quando as rampas
+/// (`desce` antes, `sobe` depois) se cruzariam.
+fn unir(mut v: Vec<(u64, u64)>, desce: u64, sobe: u64, total: u64) -> Vec<(u64, u64)> {
+    v.retain(|&(a, b)| b > a && a < total);
+    v.sort_unstable();
+    let mut o: Vec<(u64, u64)> = Vec::with_capacity(v.len());
+    for (a, b) in v {
+        let b = b.max(a.saturating_add(MIN_ENVELOPE)).min(total);
+        match o.last_mut() {
+            Some(u) if a.saturating_sub(desce) <= u.1.saturating_add(sobe) => u.1 = u.1.max(b),
+            _ => o.push((a, b)),
+        }
+    }
+    o
+}
+
+/// Envelope por intervalos (`receitas-audio-saida.md` §2 e §3; `p1b/out/03c-afade.log`): ganho `piso` em [a, b),
+/// descendo nas `desce` amostras antes de `a` e subindo nas `sobe` depois de `b`. O `afade` de saída segura o piso
+/// depois da rampa e o de entrada antes dela; o `enable` (por quadro de `QUADRO_ENVELOPE`) passa de um para o outro
+/// no meio do intervalo. Intervalo que começa em 0 só tem o de entrada; o que vai até `total`, só o de saída.
+fn envelope(intervalos: &[(u64, u64)], total: u64, desce: u64, sobe: u64, piso: f64) -> Vec<String> {
+    let s = |x: u64| seg(x as f64 / TAXA_AUDIO as f64);
+    let mut f = vec![format!("asetnsamples=n={QUADRO_ENVELOPE}:p=0")];
+    for &(a, b) in intervalos {
+        let (com_saida, com_entrada) = (a > 0, b < total || a == 0);
+        let meio = s(a + (b - a) / 2);
+        let mut afade = |tipo: &str, ss: u64, ns: u64, enable: String| {
+            let mut o = vec![("t", tipo.to_string()), ("ss", ss.to_string()), ("ns", ns.max(1).to_string())];
+            if piso > 0.0 {
+                o.push(("silence", format!("{piso:.6}")));
+            }
+            o.push(("enable", enable));
+            f.push(filtro("afade", None, &o));
+        };
+        if com_saida {
+            let ss = a.saturating_sub(desce);
+            let de = format!("gte(t,{})", s(ss.saturating_sub(FOLGA_ENVELOPE)));
+            afade("out", ss, a - ss, if com_entrada { format!("{de}*lt(t,{meio})") } else { de });
+        }
+        if com_entrada {
+            let ate = format!("lte(t,{})", s(b.saturating_add(sobe).saturating_add(FOLGA_ENVELOPE)));
+            afade("in", b, sobe, if com_saida { format!("gte(t,{meio})*{ate}") } else { ate });
+        }
+    }
+    f
+}
+
+/// Silêncios do trecho em amostras do recorte `[de, ate)` (antes da velocidade): (todos, só os de tom).
+fn silencios(v: &[Silencio], de: f64, ate: f64) -> (Vec<(u64, u64)>, Vec<(u64, u64)>) {
+    let total = em_amostras(ate - de);
+    let do_modo = |so_tom: bool| {
+        let i = v.iter().filter(|s| (!so_tom || s.modo == ModoSilencio::Tom) && s.ate > s.de);
+        unir(i.map(|s| (em_amostras(s.de - de), em_amostras(s.ate - de))).collect(), RAMPA_SILENCIO, RAMPA_SILENCIO, total)
+    };
+    (do_modo(false), do_modo(true))
+}
+
+/// Árvore balanceada sobre `t` (D9): `partes[i]` = (vale enquanto `t` é menor que isto, expressão).
+fn arvore(partes: &[(f64, String)]) -> String {
+    if partes.len() == 1 {
+        return partes[0].1.clone();
+    }
+    let m = partes.len() / 2;
+    format!("if(lt(t,{}),{},{})", num(partes[m - 1].0), arvore(&partes[..m]), arvore(&partes[m..]))
+}
+
+/// Expressão do volume animado sobre `t` do recorte: chaves em s com o zero em `zero`; fora delas vale a ponta
+/// (como `curva::avaliar`).
+fn curva_do_volume(ks: &[Chave<f64>], zero: f64) -> String {
+    let mut partes: Vec<(f64, String)> = vec![(ks[0].t - zero, num(ks[0].v))];
+    for w in ks.windows(2) {
+        let (t0, t1) = (w[0].t - zero, w[1].t - zero);
+        if t1 <= t0 {
+            continue;
+        }
+        let (v0, dv) = (w[0].v, w[1].v - w[0].v);
+        let u = format!("((t-{})/{})", num(t0), num(t1 - t0));
+        let e = match w[0].interp {
+            _ if dv == 0.0 => num(v0),
+            Interp::Degrau => num(v0),
+            Interp::Linear => format!("{}+{}*{u}", num(v0), num(dv)),
+            Interp::Suave => format!("{}+{}*{u}*{u}*(3-2*{u})", num(v0), num(dv)),
+        };
+        partes.push((t1, e));
+    }
+    partes.push((f64::INFINITY, num(ks[ks.len() - 1].v)));
+    arvore(&partes)
+}
+
+/// Cadeia de um recorte a partir do rótulo `de`, sem o rótulo de saída: `n` amostras a 48 kHz, estéreo, pts a
+/// partir de 0 (§5.3, "Áudio do trecho"). Com tom a cadeia se parte: as linhas de antes vão para `g`.
+fn cadeia(g: &mut Grafo, de: &str, s: &Som, n: u64) -> String {
+    let mut c = format!("[{de}]atrim=start={}", seg(s.de));
     if let Some(ate) = s.ate {
         let _ = write!(c, ":end={}", seg(ate));
     }
@@ -210,12 +361,45 @@ fn cadeia(s: &Som, n: u64) -> String {
         let _ = write!(c, ",asetpts=PTS-{}/TB", seg(s.de));
     }
     // mono e estéreo pelo índice do canal (cópia exata); mais canais: o `aformat` faz o downmix
-    match s.fonte.audio.as_ref().map_or(0, |a| a.canais) {
+    let canais = s.fonte.audio.as_ref().map_or(0, |a| a.canais);
+    match canais {
         1 => c.push_str(",pan=stereo|c0=c0|c1=c0"),
         2 => c.push_str(",pan=stereo|c0=c0|c1=c1"),
         _ => {}
     }
     let _ = write!(c, ",aresample={TAXA_AUDIO}:async=1:first_pts=0");
+    if let Some(e) = &s.curva {
+        let _ = write!(c, ",asetnsamples=n={QUADRO_VOLUME}:p=0,{}", filtro("volume", None, &[("volume", e.clone()), ("eval", "frame".into())]));
+    }
+    let recorte = s.ate.map_or(u64::MAX, |ate| em_amostras(ate - s.de));
+    if !s.mudos.is_empty() {
+        for f in envelope(&s.mudos, recorte, RAMPA_SILENCIO, RAMPA_SILENCIO, 0.0) {
+            c.push(',');
+            c.push_str(&f);
+        }
+    }
+    if !s.tons.is_empty() {
+        // o tom soma por `amix` (duas entradas): o que vem antes fecha num rótulo e a cadeia segue depois dele
+        if !(1..=2).contains(&canais) {
+            c.push_str(",aformat=channel_layouts=stereo");
+        }
+        let base = format!("s{}", g.aux);
+        g.aux += 1;
+        g.linhas.push(format!("{c}[{base}]"));
+        c = format!("[{base}]");
+        for (k, &(a, b)) in s.tons.iter().enumerate() {
+            let ss = a.saturating_sub(RAMPA_SILENCIO);
+            let dur = b.saturating_add(RAMPA_SILENCIO).min(recorte).saturating_sub(ss).max(2);
+            let rampa = RAMPA_SILENCIO.min(dur / 2);
+            let mut l = format!("{TOM},atrim=end_sample={dur},afade=t=in:ss=0:ns={rampa},afade=t=out:ss={}:ns={rampa},aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0", dur - rampa);
+            if ss > 0 {
+                let _ = write!(l, ",adelay=delays={ss}S:all=1");
+            }
+            g.linhas.push(format!("{l}[{base}t{k}]"));
+            let _ = write!(c, "[{base}t{k}]");
+        }
+        let _ = write!(c, "amix=inputs={}:normalize=0:dropout_transition=0:duration=first", s.tons.len() + 1);
+    }
     match &s.velocidade {
         Ritmo::Normal => {}
         Ritmo::Atempo(e) => {
@@ -231,12 +415,11 @@ fn cadeia(s: &Som, n: u64) -> String {
     if s.volume != 1.0 {
         let _ = write!(c, ",volume={}", s.volume);
     }
-    if s.entrada > 0 {
-        let _ = write!(c, ",afade=t=in:ss=0:ns={}", s.entrada.min(n));
+    if s.entrada.1 > 0 {
+        let _ = write!(c, ",afade=t=in:ss={}:ns={}", s.entrada.0, s.entrada.1);
     }
-    if s.saida > 0 {
-        let k = s.saida.min(n);
-        let _ = write!(c, ",afade=t=out:ss={}:ns={k}", n - k);
+    if s.saida.1 > 0 {
+        let _ = write!(c, ",afade=t=out:ss={}:ns={}", s.saida.0, s.saida.1);
     }
     c
 }
@@ -283,22 +466,34 @@ fn velocidade(v: &Velocidade, manter_tom: bool) -> Result<(Ritmo, f64)> {
     Ok((Ritmo::Asetrate((hz / r.den as i128) as u64), 0.0))
 }
 
-/// Volume fixo (0..2); chaves todas iguais contam como fixo. Animado: Fase 1.
-fn volume_fixo(v: &Animavel<f64>) -> Result<f64> {
-    let x = match v {
-        Animavel::Fixo(x) => *x,
+/// Volume do modelo: fixo (0..2; chaves todas iguais contam como fixo) ou as chaves da curva.
+enum Vol<'a> {
+    Fixo(f64),
+    Curva(&'a [Chave<f64>]),
+}
+
+fn volume_de(v: &Animavel<f64>) -> Result<Vol<'_>> {
+    let ruim = || erro("item_invalido: volume");
+    let ok = |x: f64| x.is_finite() && x >= 0.0;
+    match v {
+        Animavel::Fixo(x) if ok(*x) => Ok(Vol::Fixo(*x)),
+        Animavel::Fixo(_) => Err(ruim()),
         Animavel::Chaves(c) => {
-            let Some(k) = c.first() else { return Err(erro("item_invalido: volume")) };
-            if c.iter().any(|o| o.v != k.v) {
-                return Err(nao_suportado("volume animado"));
+            let k = c.first().ok_or_else(ruim)?;
+            if c.iter().any(|o| !ok(o.v) || !o.t.is_finite()) {
+                return Err(ruim());
             }
-            k.v
+            Ok(if c.iter().all(|o| o.v == k.v) { Vol::Fixo(k.v) } else { Vol::Curva(c) })
         }
-    };
-    if !x.is_finite() || x < 0.0 {
-        return Err(erro("item_invalido: volume"));
     }
-    Ok(x)
+}
+
+/// (volume fixo, expressão da curva com o zero do tempo em `zero`).
+fn volume_e_curva(v: &Animavel<f64>, zero: f64) -> Result<(f64, Option<String>)> {
+    Ok(match volume_de(v)? {
+        Vol::Fixo(x) => (x, None),
+        Vol::Curva(ks) => (1.0, Some(curva_do_volume(ks, zero))),
+    })
 }
 
 fn base(c: &ClipePrincipal) -> &ClipeBase {
@@ -311,43 +506,24 @@ fn base(c: &ClipePrincipal) -> &ClipeBase {
     }
 }
 
-/// Recusa o que a Fase 0 não faz (nunca ignora calado).
+/// Recusa o que é de outra fase (nunca ignora calado) e o volume inválido.
 fn recusar(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &ClipePrincipal>) -> Result<()> {
-    if p.mixagem.normalizar.is_some() && recusa("normalizar") {
-        return Err(nao_suportado("normalizar"));
-    }
-    if p.mixagem.limitador && recusa("limitador") {
-        return Err(nao_suportado("limitador"));
-    }
-    let com_sobreposicao = |t: &Option<Transicao>| t.as_ref().is_some_and(|t| tempo::transicao_sobrepoe(&t.tipo) && recusa("transicao"));
     for r in &linha.clipes {
         let Some(c) = clipes.get(r.id.as_str()) else { continue };
-        if com_sobreposicao(&base(c).transicao_entrada) {
-            return Err(nao_suportado("transicao"));
-        }
         match c {
             ClipePrincipal::Tela(_) => return Err(nao_suportado("tela")),
             ClipePrincipal::Trecho(t) if !t.audio.mudo => {
                 if matches!(t.velocidade, Velocidade::Rampa { .. }) {
                     return Err(nao_suportado("rampa"));
                 }
-                if !t.audio.silencios.is_empty() && recusa("silenciar") {
-                    return Err(nao_suportado("silenciar"));
-                }
-                volume_fixo(&t.audio.volume)?;
+                volume_de(&t.audio.volume)?;
             }
             _ => {}
         }
     }
-    if com_sobreposicao(&p.fecho) {
-        return Err(nao_suportado("transicao"));
-    }
     for t in p.audios.iter().filter(|t| !t.mudo && !t.clipes.is_empty()) {
-        if t.abaixa_original && recusa("abaixar") {
-            return Err(nao_suportado("abaixar"));
-        }
         for c in &t.clipes {
-            volume_fixo(&c.volume)?;
+            volume_de(&c.volume)?;
         }
     }
     // trilha oculta não entra no render (nem na imagem, `sobrepor::aplicar`): nada a recusar nela
@@ -363,7 +539,7 @@ fn recusar(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &Cl
     Ok(())
 }
 
-/// Amostras do `afade` de uma transição `escurecer` de `d` slots que começa no slot `q`.
+/// Amostras do `afade` de uma transição sem sobreposição de `d` slots que começa no slot `q`.
 fn amostras_da_transicao(t: &Transicao, q: u64, d: u64, fps: Racional) -> u64 {
     let n = tempo::amostra_do_slot(q + d, fps) - tempo::amostra_do_slot(q, fps);
     match t.audio {
@@ -372,32 +548,60 @@ fn amostras_da_transicao(t: &Transicao, q: u64, d: u64, fps: Racional) -> u64 {
     }
 }
 
-/// `afade` de entrada e de saída (amostras) de cada clipe da linha: `escurecer` de entrada (e a saída do anterior) e o `fecho`.
-fn fades(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &ClipePrincipal>) -> (Vec<u64>, Vec<u64>) {
+/// `afade` de entrada e de saída de cada clipe da linha, em amostras do clipe: (amostra inicial, amostras).
+/// Com sobreposição (`sobrepoe_q`, a mesma de `juncao::Peca.sobrepoe`): "acompanhar" cruza os dois sons na
+/// sobreposição inteira; "cortar" troca no meio dela, com 10 ms de cada lado. Sem sobreposição (`escurecer`, a
+/// entrada do primeiro clipe e o `fecho`, que misturam com o fundo dentro do próprio clipe): rampa na ponta do
+/// clipe, do tamanho da transição ("cortar": 10 ms).
+fn fades(p: &ProjetoEdicao, linha: &LinhaResolvida, clipes: &HashMap<&str, &ClipePrincipal>) -> Vec<[(u64, u64); 2]> {
     let fps = linha.fps;
+    let a = |q: u64| tempo::amostra_do_slot(q, fps);
+    let faixa = |k: usize| (a(linha.clipes[k].inicio_q), a(linha.clipes[k].inicio_q + linha.clipes[k].n_q as u64));
     let n = linha.clipes.len();
-    let (mut ent, mut sai) = (vec![0u64; n], vec![0u64; n]);
+    let mut f = vec![[(0u64, 0u64); 2]; n];
     let slots = |t: &Transicao| tempo::slots(t.duracao_s, fps);
     for (i, r) in linha.clipes.iter().enumerate() {
         let Some(t) = clipes.get(r.id.as_str()).and_then(|c| base(c).transicao_entrada.as_ref()) else { continue };
-        if tempo::transicao_sobrepoe(&t.tipo) {
+        let (ini, fim) = faixa(i);
+        if i > 0 && tempo::transicao_sobrepoe(&t.tipo) {
+            let (ini_ant, fim_ant) = faixa(i - 1);
+            // amostras em que os dois clipes tocam juntos
+            let s = fim_ant.min(fim).saturating_sub(ini);
+            if s == 0 || ini < ini_ant {
+                continue;
+            }
+            let de_ant = ini - ini_ant;
+            match t.audio {
+                AudioTransicao::Acompanhar => {
+                    f[i][0] = (0, s);
+                    f[i - 1][1] = (de_ant, s);
+                }
+                AudioTransicao::Cortar => {
+                    let meio = s / 2;
+                    let k = CORTE_AMOSTRAS.min(meio).min(s - meio).max(1);
+                    f[i][0] = (meio, k);
+                    f[i - 1][1] = (de_ant + meio.saturating_sub(k), k);
+                }
+            }
             continue;
         }
         let d = slots(t).min(r.n_q as u64);
-        ent[i] = amostras_da_transicao(t, r.inicio_q, d, fps);
+        f[i][0] = (0, amostras_da_transicao(t, r.inicio_q, d, fps));
         if i > 0 {
-            let a = &linha.clipes[i - 1];
-            let d = slots(t).min(a.n_q as u64);
-            let fim = a.inicio_q + a.n_q as u64;
-            sai[i - 1] = amostras_da_transicao(t, fim - d, d, fps);
+            let ant = &linha.clipes[i - 1];
+            let d = slots(t).min(ant.n_q as u64);
+            let (ini_ant, fim_ant) = faixa(i - 1);
+            let k = amostras_da_transicao(t, ant.inicio_q + ant.n_q as u64 - d, d, fps);
+            f[i - 1][1] = (fim_ant - ini_ant - k, k);
         }
     }
-    if let (Some(t), Some(r)) = (p.fecho.as_ref().filter(|t| !tempo::transicao_sobrepoe(&t.tipo)), linha.clipes.last()) {
+    if let (Some(t), Some(r)) = (p.fecho.as_ref(), linha.clipes.last()) {
         let d = slots(t).min(r.n_q as u64);
-        let fim = r.inicio_q + r.n_q as u64;
-        sai[n - 1] = amostras_da_transicao(t, fim - d, d, fps);
+        let (ini, fim) = faixa(n - 1);
+        let k = amostras_da_transicao(t, r.inicio_q + r.n_q as u64 - d, d, fps);
+        f[n - 1][1] = (fim - ini - k, k);
     }
-    (ent, sai)
+    f
 }
 
 /// Maior desvio do `atempo` (ms) entre os trechos que tocam som no programa INTEIRO, qualquer que seja o alvo
@@ -411,7 +615,7 @@ pub(crate) fn tolerancia_atempo_do_programa(p: &ProjetoEdicao, linha: &LinhaReso
         let Some(Tolerante::Conhecido(ClipePrincipal::Trecho(t))) = p.principal.iter().find(|c| matches!(c, Tolerante::Conhecido(c) if base(c).id == r.id)) else {
             continue;
         };
-        let toca = !t.audio.mudo && volume_fixo(&t.audio.volume).is_ok_and(|v| v > 0.0);
+        let toca = !t.audio.mudo && volume_de(&t.audio.volume).is_ok_and(|v| !matches!(v, Vol::Fixo(x) if x <= 0.0));
         if toca && ctx.fontes.get(&t.midia).is_some_and(|f| f.audio.is_some()) {
             atempo = atempo.max(velocidade(&t.velocidade, t.audio.manter_tom).map_or(0.0, |x| x.1));
         }
@@ -429,9 +633,244 @@ pub fn tolerancia_buraco_ms(passo: Option<&PassoAudio>) -> f64 {
     }
 }
 
+/// A trilha principal: os clipes no lugar, `concat` dos segmentos entre fronteiras de clipe; segmento com dois
+/// clipes (transição com sobreposição) soma os pedaços por `amix`. `inst` = instância da entrada de cada clipe com
+/// som, na ordem. Devolve o rótulo.
+fn principal<'a>(g: &mut Grafo<'a>, itens: &[Item<'a>], total: u64, inst: &mut dyn Iterator<Item = usize>) -> String {
+    let mut cortes: Vec<u64> = itens.iter().flat_map(|i| [i.ini, i.fim]).chain([0, total]).filter(|x| *x <= total).collect();
+    cortes.sort_unstable();
+    cortes.dedup();
+    // segmentos [de, ate) e os clipes com som que tocam nele; vizinhos iguais viram um
+    let mut segmentos: Vec<(u64, u64, Vec<usize>)> = Vec::new();
+    for w in cortes.windows(2) {
+        let quem: Vec<usize> = (0..itens.len()).filter(|&k| itens[k].som.is_some() && itens[k].ini <= w[0] && itens[k].fim >= w[1]).collect();
+        match segmentos.last_mut() {
+            Some(u) if u.2 == quem => u.1 = w[1],
+            _ => segmentos.push((w[0], w[1], quem)),
+        }
+    }
+    let n_pedacos: Vec<usize> = (0..itens.len()).map(|k| segmentos.iter().filter(|s| s.2.contains(&k)).count()).collect();
+    let mut dados = vec![0usize; itens.len()];
+    let mut rotulos = Vec::with_capacity(segmentos.len());
+    for (k, (de, ate, quem)) in segmentos.iter().enumerate() {
+        let r = format!("p{k}");
+        let mut pedacos = Vec::with_capacity(quem.len());
+        for &c in quem {
+            let it = &itens[c];
+            let Some((id, s)) = &it.som else { continue };
+            // rótulo deste pedaço: o do segmento quando o clipe toca sozinho nele
+            let pedaco = if quem.len() == 1 { r.clone() } else { format!("c{c}q{}", dados[c]) };
+            if dados[c] == 0 {
+                let entrada = g.uso(*id, inst.next().unwrap_or(0), s.fonte);
+                let mut l = cadeia(g, &entrada, s, it.fim - it.ini);
+                if n_pedacos[c] == 1 {
+                    let _ = write!(l, "[{pedaco}]");
+                } else {
+                    let saidas: String = (0..n_pedacos[c]).map(|j| format!("[c{c}s{j}]")).collect();
+                    let _ = write!(l, ",asplit={}{saidas}", n_pedacos[c]);
+                }
+                g.linhas.push(l);
+            }
+            if n_pedacos[c] > 1 {
+                g.linhas.push(format!("[c{c}s{}]atrim=start_sample={}:end_sample={},asetpts=N/SR/TB[{pedaco}]", dados[c], de - it.ini, ate - it.ini));
+            }
+            dados[c] += 1;
+            pedacos.push(pedaco);
+        }
+        match pedacos.len() {
+            0 => g.linhas.push(format!("{}[{r}]", silencio(ate - de))),
+            1 => {}
+            m => {
+                let entradas: String = pedacos.iter().map(|x| format!("[{x}]")).collect();
+                g.linhas.push(format!("{entradas}amix=inputs={m}:normalize=0:dropout_transition=0:duration=first[{r}]"));
+            }
+        }
+        rotulos.push(r);
+    }
+    match rotulos.len() {
+        1 => rotulos.remove(0),
+        n => {
+            g.linhas.push(format!("{}concat=n={n}:v=0:a=1[pr]", rotulos.iter().map(|r| format!("[{r}]")).collect::<String>()));
+            "pr".to_string()
+        }
+    }
+}
+
+/// Limitador (`receitas-audio-saida.md` §4): pico real por 4× de sobreamostragem, sem ganho automático e com o
+/// atraso compensado; a contagem de amostras volta a `n`.
+fn limitador(teto_db: f64, n: u64) -> String {
+    let limite = 10f64.powf(teto_db / 20.0).clamp(0.0625, 1.0);
+    format!("aresample=192000,alimiter=limit={limite:.6}:attack=5:release=50:level=0:latency=1,aresample={TAXA_AUDIO},apad,atrim=end_sample={n},asetpts=N/SR/TB")
+}
+
+/// O grafo até a mixagem (antes do ganho) e o rótulo do fim.
+struct Mixado<'a> {
+    g: Grafo<'a>,
+    fim: String,
+    tolerancia: f64,
+}
+
+/// Monta o som do programa para as amostras `[s0, s1)`: clipes fora da janela viram silêncio (a mídia nem abre).
+fn mixar<'a>(p: &'a ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto<'a>, (s0, s1): (u64, u64), teto: f64) -> Result<Mixado<'a>> {
+    let fps = linha.fps;
+    let a = |q: u64| tempo::amostra_do_slot(q, fps);
+    let total = a(linha.total_q);
+    let mut g = Grafo::default();
+    let mut tolerancia: f64 = 0.0;
+    let clipes: HashMap<&str, &ClipePrincipal> = p
+        .principal
+        .iter()
+        .filter_map(|c| match c {
+            Tolerante::Conhecido(c) => Some((base(c).id.as_str(), c)),
+            Tolerante::Desconhecido(_) => None,
+        })
+        .collect();
+    recusar(p, linha, &clipes)?;
+    let rampas = fades(p, linha, &clipes);
+
+    // trilha principal: um item por clipe; os de fora da janela e os sem som são silêncio
+    let mut itens: Vec<Item> = Vec::with_capacity(linha.clipes.len());
+    for (i, r) in linha.clipes.iter().enumerate() {
+        let (ini, fim) = (a(r.inicio_q), a(r.inicio_q + r.n_q as u64));
+        let mut som = None;
+        if let Some(ClipePrincipal::Trecho(t)) = clipes.get(r.id.as_str()).copied() {
+            let vol = if t.audio.mudo { Vol::Fixo(0.0) } else { volume_de(&t.audio.volume)? };
+            if !matches!(vol, Vol::Fixo(x) if x <= 0.0) && fim > s0 && ini < s1 {
+                let fonte = ctx.fontes.get(&t.midia).ok_or_else(|| erro(format!("midia_ausente: {}", t.midia)))?;
+                let faixa = r.fonte.as_ref().ok_or_else(|| erro(format!("intervalo: {}", r.id)))?;
+                if fonte.audio.is_some() {
+                    let tab = &fonte.quadros;
+                    let tb = |pts: i64| pts as f64 * tab.tb.num as f64 / tab.tb.den as f64;
+                    let (de, ate) = (tb(faixa.pts_in), faixa.pts_out.map_or_else(|| tab.fim_s(), tb));
+                    let (v, tol) = velocidade(&t.velocidade, t.audio.manter_tom)?;
+                    tolerancia = tolerancia.max(tol);
+                    // chaves do volume e silêncios em tempo de fonte (§3.1)
+                    let (volume, curva) = match vol {
+                        Vol::Fixo(x) => (x, None),
+                        Vol::Curva(ks) => (1.0, Some(curva_do_volume(ks, de))),
+                    };
+                    let (mudos, tons) = silencios(&t.audio.silencios, de, ate);
+                    let s = Som { fonte, de, ate: Some(ate), velocidade: v, volume, curva, mudos, tons, entrada: rampas[i][0], saida: rampas[i][1] };
+                    som = Some((t.midia.as_str(), s));
+                }
+            }
+        }
+        itens.push(Item { ini, fim, som });
+    }
+    // trilhas de áudio: cada clipe no lugar dele, do tamanho do programa
+    let mut faixas: Vec<(&str, Som, u64, u64)> = Vec::new();
+    // onde o original abaixa: os clipes que tocam nas trilhas com `abaixa_original`, no programa inteiro
+    let mut falas: Vec<(u64, u64)> = Vec::new();
+    for t in p.audios.iter().filter(|t| !t.mudo) {
+        for c in &t.clipes {
+            let Some(r) = linha.livres.iter().find(|l| l.id == c.id && l.trilha == t.id) else { continue };
+            let (ini, fim) = (a(r.inicio_q), a(r.inicio_q + r.n_q as u64).min(total));
+            let n = a(r.inicio_q + r.n_q as u64) - ini;
+            // volume animado: tempo local do clipe
+            let (fixo, curva) = volume_e_curva(&c.volume, 0.0)?;
+            let volume = t.volume * fixo;
+            if !volume.is_finite() || volume <= 0.0 || ini >= fim {
+                continue;
+            }
+            let fonte = ctx.fontes.get(&c.midia);
+            if t.abaixa_original && fonte.is_none_or(|f| f.audio.is_some()) {
+                falas.push((ini, fim));
+            }
+            if fim <= s0 || ini >= s1 {
+                continue;
+            }
+            let fonte = fonte.ok_or_else(|| erro(format!("midia_ausente: {}", c.midia)))?;
+            let Some(som_da_fonte) = &fonte.audio else { continue };
+            let amostras_de = |s: f64| if s.is_finite() && s > 0.0 { em_amostras(s).min(n) } else { 0 };
+            // `de_s`/`ate_s` contam do começo do som do arquivo (MP3 começa em 0,025 s; início negativo é pré-rolagem)
+            let inicio = som_da_fonte.inicio_s.max(0.0);
+            let saida = amostras_de(c.saida_s);
+            let s = Som {
+                fonte,
+                de: inicio + c.de_s,
+                ate: c.ate_s.map(|x| inicio + x),
+                velocidade: Ritmo::Normal,
+                volume,
+                curva,
+                mudos: Vec::new(),
+                tons: Vec::new(),
+                entrada: (0, amostras_de(c.entrada_s)),
+                saida: (n - saida, saida),
+            };
+            faixas.push((c.midia.as_str(), s, n, ini));
+        }
+    }
+
+    // instância da entrada de cada uso: os da principal (na ordem) e depois os das trilhas
+    let mut usos: Vec<Uso> = Vec::new();
+    for it in &itens {
+        if let Some((id, s)) = &it.som {
+            usos.push(Uso { id, de: s.de, ate: s.ate.unwrap_or(s.de), ini: it.ini, n: it.fim - it.ini });
+        }
+    }
+    for (id, s, n, ini) in &faixas {
+        let ate = s.ate.unwrap_or(s.de + *n as f64 / TAXA_AUDIO as f64);
+        usos.push(Uso { id, de: s.de, ate, ini: *ini, n: *n });
+    }
+    let mut inst = distribuir(&usos, teto).into_iter();
+
+    let mut atual = principal(&mut g, &itens, total, &mut inst);
+    let vo = p.mixagem.volume_original;
+    if !vo.is_finite() || vo < 0.0 {
+        return Err(erro("item_invalido: volume_original"));
+    }
+    if vo != 1.0 {
+        g.linhas.push(format!("[{atual}]volume={vo}[po]"));
+        atual = "po".into();
+    }
+    // abaixar o original sob as trilhas (`receitas-audio-saida.md` §2)
+    if !falas.is_empty() {
+        let ab = &p.mixagem.abaixar;
+        let rampa_ok = |x: f64| x.is_finite() && x >= 0.0;
+        if ab.db.is_nan() || !rampa_ok(ab.ataque_s) || !rampa_ok(ab.soltura_s) {
+            return Err(erro("item_invalido: abaixar"));
+        }
+        let piso = 10f64.powf(ab.db / 20.0).clamp(0.0, 1.0);
+        let (desce, sobe) = (em_amostras(ab.ataque_s).max(1), em_amostras(ab.soltura_s).max(1));
+        let intervalos = unir(falas, desce, sobe, total);
+        if piso < 1.0 && !intervalos.is_empty() {
+            g.linhas.push(format!("[{atual}]{}[pb]", envelope(&intervalos, total, desce, sobe, piso).join(",")));
+            atual = "pb".into();
+        }
+    }
+
+    let mut mistura = vec![atual];
+    for (id, s, n, ini) in &faixas {
+        let r = format!("n{}", mistura.len() - 1);
+        let entrada = g.uso(*id, inst.next().unwrap_or(0), s.fonte);
+        let mut l = cadeia(&mut g, &entrada, s, *n);
+        if *ini > 0 {
+            let _ = write!(l, ",adelay=delays={ini}S:all=1");
+        }
+        let _ = write!(l, ",apad,atrim=end_sample={total}[{r}]");
+        g.linhas.push(l);
+        mistura.push(r);
+    }
+    let mut atual = match mistura.len() {
+        1 => mistura.pop().unwrap_or_default(),
+        n => {
+            let entradas: String = mistura.iter().map(|r| format!("[{r}]")).collect();
+            g.linhas.push(format!("{entradas}amix=inputs={n}:normalize=0:dropout_transition=0:duration=first[mi]"));
+            "mi".into()
+        }
+    };
+    if (s0, s1) != (0, total) {
+        g.linhas.push(format!("[{atual}]atrim=start_sample={s0}:end_sample={s1},asetpts=N/SR/TB[jn]"));
+        atual = "jn".into();
+    }
+    Ok(Mixado { g, fim: atual, tolerancia })
+}
+
 /// Monta o passo de áudio do programa e a prévia de medição. (None, vazio) quando o alvo não tem som (`Alvo::Quadro`).
-/// Programa sem `saida.audio`: trilha de silêncio. `Alvo::Previa`: as amostras dos slots `[de_q, ate_q)`.
-/// Fase 0: nenhuma prévia (a medição do `loudnorm` entra com a normalização, P1.5).
+/// Programa sem `saida.audio`: trilha de silêncio, sem medição. `Alvo::Previa`: as amostras dos slots `[de_q, ate_q)`.
+/// A medição (`Previa::Loudnorm`, grafo em `auxiliares`) é sempre a do programa INTEIRO: roda em toda exportação
+/// final (com `normalizar` None só mede, para o aviso de pico) e, na prévia, só quando há normalização.
+/// Com o limitador a prévia de uma janela não é a fatia exata do final (o limitador começa na janela).
 pub fn montar(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo: &Alvo) -> Result<(Option<PassoAudio>, Vec<Previa>)> {
     montar_com_teto(p, linha, ctx, alvo, TETO_ESPERA_S)
 }
@@ -453,186 +892,59 @@ fn montar_com_teto(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, al
     let a = |q: u64| tempo::amostra_do_slot(q, fps);
     let total = a(linha.total_q);
     let (s0, s1) = (a(de_q), a(ate_q));
-    let mut g = Grafo::default();
-    let mut tolerancia: f64 = 0.0;
-
-    let fim_do_programa = if !p.saida.audio {
-        g.linhas.push(format!("{}[sl]", silencio(s1 - s0)));
-        "sl".to_string()
-    } else {
-        let clipes: HashMap<&str, &ClipePrincipal> = p
-            .principal
-            .iter()
-            .filter_map(|c| match c {
-                Tolerante::Conhecido(c) => Some((base(c).id.as_str(), c)),
-                Tolerante::Desconhecido(_) => None,
-            })
-            .collect();
-        recusar(p, linha, &clipes)?;
-        let (ent, sai) = fades(p, linha, &clipes);
-
-        // trilha principal: um pedaço por clipe; os de fora da janela e os sem som são silêncio
-        let mut pedacos: Vec<Pedaco> = Vec::with_capacity(linha.clipes.len());
-        for (i, r) in linha.clipes.iter().enumerate() {
-            let (ini, fim) = (a(r.inicio_q), a(r.inicio_q + r.n_q as u64));
-            let mut som = None;
-            if let Some(ClipePrincipal::Trecho(t)) = clipes.get(r.id.as_str()).copied() {
-                let volume = if t.audio.mudo { 0.0 } else { volume_fixo(&t.audio.volume)? };
-                if volume > 0.0 && fim > s0 && ini < s1 {
-                    let fonte = ctx.fontes.get(&t.midia).ok_or_else(|| erro(format!("midia_ausente: {}", t.midia)))?;
-                    let faixa = r.fonte.as_ref().ok_or_else(|| erro(format!("intervalo: {}", r.id)))?;
-                    if fonte.audio.is_some() {
-                        let tab = &fonte.quadros;
-                        let tb = |pts: i64| pts as f64 * tab.tb.num as f64 / tab.tb.den as f64;
-                        let (v, tol) = velocidade(&t.velocidade, t.audio.manter_tom)?;
-                        tolerancia = tolerancia.max(tol);
-                        let s = Som {
-                            fonte,
-                            de: tb(faixa.pts_in),
-                            ate: Some(faixa.pts_out.map_or_else(|| tab.fim_s(), tb)),
-                            velocidade: v,
-                            volume,
-                            entrada: ent[i],
-                            saida: sai[i],
-                        };
-                        som = Some((t.midia.as_str(), s));
-                    }
-                }
-            }
-            // silêncios vizinhos viram um só
-            if som.is_none() {
-                if let Some(u) = pedacos.last_mut().filter(|u| u.som.is_none()) {
-                    u.amostras += fim - ini;
-                    continue;
-                }
-            }
-            pedacos.push(Pedaco { amostras: fim - ini, som });
-        }
-        // trilhas de áudio: cada clipe no lugar dele, do tamanho do programa
-        let mut faixas: Vec<(&str, Som, u64, u64)> = Vec::new();
-        for t in p.audios.iter().filter(|t| !t.mudo) {
-            for c in &t.clipes {
-                let Some(r) = linha.livres.iter().find(|l| l.id == c.id && l.trilha == t.id) else { continue };
-                let (ini, fim) = (a(r.inicio_q), a(r.inicio_q + r.n_q as u64).min(total));
-                let volume = t.volume * volume_fixo(&c.volume)?;
-                if !volume.is_finite() || volume <= 0.0 || ini >= fim || fim <= s0 || ini >= s1 {
-                    continue;
-                }
-                let fonte = ctx.fontes.get(&c.midia).ok_or_else(|| erro(format!("midia_ausente: {}", c.midia)))?;
-                let Some(som_da_fonte) = &fonte.audio else { continue };
-                let n = a(r.inicio_q + r.n_q as u64) - ini;
-                let amostras_de = |s: f64| if s.is_finite() && s > 0.0 { ((s * TAXA_AUDIO as f64).round() as u64).min(n) } else { 0 };
-                // `de_s`/`ate_s` contam do começo do som do arquivo (MP3 começa em 0,025 s; início negativo é pré-rolagem)
-                let inicio = som_da_fonte.inicio_s.max(0.0);
-                let s = Som {
-                    fonte,
-                    de: inicio + c.de_s,
-                    ate: c.ate_s.map(|x| inicio + x),
-                    velocidade: Ritmo::Normal,
-                    volume,
-                    entrada: amostras_de(c.entrada_s),
-                    saida: amostras_de(c.saida_s),
-                };
-                faixas.push((c.midia.as_str(), s, n, ini));
-            }
-        }
-
-        // instância da entrada de cada uso: os da principal (na ordem) e depois os das trilhas
-        let mut usos: Vec<Uso> = Vec::new();
-        let mut ini = 0u64;
-        for pd in &pedacos {
-            if let Some((id, s)) = &pd.som {
-                usos.push(Uso { id, de: s.de, ate: s.ate.unwrap_or(s.de), ini, n: pd.amostras });
-            }
-            ini += pd.amostras;
-        }
-        for (id, s, n, ini) in &faixas {
-            let ate = s.ate.unwrap_or(s.de + *n as f64 / TAXA_AUDIO as f64);
-            usos.push(Uso { id, de: s.de, ate, ini: *ini, n: *n });
-        }
-        let mut inst = distribuir(&usos, teto).into_iter();
-        let mut proxima = || inst.next().unwrap_or(0);
-
-        let rotulos: Vec<String> = pedacos
-            .iter()
-            .enumerate()
-            .map(|(k, pd)| {
-                let r = format!("p{k}");
-                let linha = match &pd.som {
-                    Some((id, s)) => format!("[{}]{}[{r}]", g.uso(id, proxima(), s.fonte), cadeia(s, pd.amostras)),
-                    None => format!("{}[{r}]", silencio(pd.amostras)),
-                };
-                g.linhas.push(linha);
-                r
-            })
-            .collect();
-        let mut atual = match rotulos.len() {
-            1 => rotulos[0].clone(),
-            n => {
-                g.linhas.push(format!("{}concat=n={n}:v=0:a=1[pr]", rotulos.iter().map(|r| format!("[{r}]")).collect::<String>()));
-                "pr".to_string()
-            }
-        };
-        let vo = p.mixagem.volume_original;
-        if !vo.is_finite() || vo < 0.0 {
-            return Err(erro("item_invalido: volume_original"));
-        }
-        if vo != 1.0 {
-            g.linhas.push(format!("[{atual}]volume={vo}[po]"));
-            atual = "po".into();
-        }
-
-        let mut mistura = vec![atual];
-        for (id, s, n, ini) in &faixas {
-            let r = format!("n{}", mistura.len() - 1);
-            let mut l = format!("[{}]{}", g.uso(id, proxima(), s.fonte), cadeia(s, *n));
-            if *ini > 0 {
-                let _ = write!(l, ",adelay=delays={ini}S:all=1");
-            }
-            let _ = write!(l, ",apad,atrim=end_sample={total}[{r}]");
-            g.linhas.push(l);
-            mistura.push(r);
-        }
-        let mut atual = match mistura.len() {
-            1 => mistura.pop().unwrap_or_default(),
-            n => {
-                let entradas: String = mistura.iter().map(|r| format!("[{r}]")).collect();
-                g.linhas.push(format!("{entradas}amix=inputs={n}:normalize=0:dropout_transition=0:duration=first[mi]"));
-                "mi".into()
-            }
-        };
-        if (s0, s1) != (0, total) {
-            g.linhas.push(format!("[{atual}]atrim=start_sample={s0}:end_sample={s1},asetpts=N/SR/TB[jn]"));
-            atual = "jn".into();
-        }
-        atual
-    };
-    g.linhas.push(format!("[{fim_do_programa}]volume={MARCA_GANHO}dB,{FORMATO_SAIDA},asplit=2[a][ah]"));
-
     let mut globais: Vec<String> = CPUFLAGS.iter().map(|s| s.to_string()).collect();
     globais.extend(args::globais());
-    let entradas = g
-        .entradas
-        .iter()
-        .map(|(id, _, f)| Entrada {
-            antes: vec!["-vn".into()],
-            antes_sem_busca: None,
-            caminho: f.caminho.clone(),
-            papel: Papel::Midia { id: id.to_string(), clipe: String::new() },
-        })
-        .collect();
-    let passo = PassoAudio {
+    let fecho = |fim: &str, limitador: &str| format!("[{fim}]volume={MARCA_GANHO}dB{limitador},{FORMATO_SAIDA},asplit=2[a][ah]");
+    let mut passo = PassoAudio {
         globais,
-        entradas,
-        grafo: g.texto(),
+        entradas: Vec::new(),
+        grafo: String::new(),
         auxiliares: Vec::new(),
         saida: SAIDA.into(),
         hash: HASH.into(),
         amostras: s1 - s0,
         normalizar: None,
-        tolerancia_atempo_ms: tolerancia,
+        tolerancia_atempo_ms: 0.0,
     };
-    Ok((Some(passo), Vec::new()))
+    if !p.saida.audio {
+        passo.grafo = format!("{}[sl];\n{}", silencio(s1 - s0), fecho("sl", ""));
+        return Ok((Some(passo), Vec::new()));
+    }
+    let mix = p.mixagem.clone();
+    if mix.normalizar.is_some_and(|n| !n.lufs.is_finite() || !n.pico_db.is_finite()) {
+        return Err(erro("item_invalido: normalizar"));
+    }
+    let m = mixar(p, linha, ctx, (s0, s1), teto)?;
+    let limite = if mix.limitador { format!(",{}", limitador(mix.normalizar.map_or(LIMITE_PADRAO_DB, |n| n.pico_db), s1 - s0)) } else { String::new() };
+    passo.grafo = format!("{};\n{}", m.g.texto(), fecho(&m.fim, &limite));
+    passo.entradas = m.g.entradas_do_passo();
+    passo.tolerancia_atempo_ms = m.tolerancia;
+    passo.normalizar = mix.normalizar.map(|n| Normalizar { lufs: n.lufs, pico_db: if mix.limitador { PICO_COM_LIMITADOR_DB } else { n.pico_db } });
+
+    // medição do programa inteiro, antes do ganho e do limitador
+    let inteiro = (s0, s1) == (0, total);
+    let medido = match alvo {
+        Alvo::Previa { .. } if mix.normalizar.is_none() => None,
+        _ if inteiro => Some((m.g.texto(), m.fim.clone(), passo.entradas.clone())),
+        _ => {
+            let t = mixar(p, linha, ctx, (0, total), teto)?;
+            Some((t.g.texto(), t.fim, t.g.entradas_do_passo()))
+        }
+    };
+    let mut previas = Vec::new();
+    if let Some((grafo, fim, entradas)) = medido {
+        passo.auxiliares.push(ArquivoTexto { nome: MEDIR.into(), conteudo: format!("{grafo};\n[{fim}]{LOUDNORM}[an]") });
+        let mut v = passo.globais.clone();
+        for e in &entradas {
+            v.extend(e.antes.iter().cloned());
+            v.push("-i".into());
+            v.push(e.caminho.to_string_lossy().into_owned());
+        }
+        v.extend(args::grafo_em_arquivo(ctx.cap, MEDIR));
+        v.extend(["-map", "[an]", "-f", "null", "-"].iter().map(|s| s.to_string()));
+        previas.push(Previa::Loudnorm { args: v });
+    }
+    Ok((Some(passo), previas))
 }
 
 // CONTRATO: acréscimo. A linha do E9 montada num lugar só (executor e testes).
@@ -764,8 +1076,19 @@ mod testes {
         let ctx = Contexto { fontes, cap, rastreios: &leitor, pasta_projeto: &pasta, midias: &midias };
         let linha = tempo::resolver(p, &ctx);
         let (passo, previas) = montar(p, &linha, &ctx, alvo)?;
-        assert!(previas.is_empty());
+        // medição: uma, em toda exportação final com som; na prévia só com normalização
+        let mede = p.saida.audio && (matches!(alvo, Alvo::Final { .. }) || p.mixagem.normalizar.is_some());
+        assert_eq!(previas.len(), usize::from(mede));
         Ok((passo.expect("passo"), linha))
+    }
+
+    /// Como `montar_com`, com a prévia de medição.
+    fn montar_e_medir(p: &ProjetoEdicao, fontes: &HashMap<String, FonteInfo>, cap: &Capacidades, alvo: &Alvo) -> (PassoAudio, Vec<Previa>, LinhaResolvida) {
+        let (leitor, pasta, midias) = (apoio::SemRastreios, PathBuf::new(), Vec::<EstadoMidia>::new());
+        let ctx = Contexto { fontes, cap, rastreios: &leitor, pasta_projeto: &pasta, midias: &midias };
+        let linha = tempo::resolver(p, &ctx);
+        let (passo, previas) = montar(p, &linha, &ctx, alvo).expect("montar");
+        (passo.expect("passo"), previas, linha)
     }
 
     // ------------------------------------------------------------ ffmpeg
@@ -861,8 +1184,13 @@ mod testes {
 
     /// Roda o passo como o executor (grafo em arquivo, linha de `argumentos`); `globais` troca os globais (O6).
     fn rodar_com(cap: &Capacidades, passo: &PassoAudio, pasta: &Path, globais: Option<Vec<String>>) -> (Pcm, f64) {
+        rodar_com_ganho(cap, passo, pasta, globais, None)
+    }
+
+    /// `rodar_com` com o ganho da normalização (dB).
+    fn rodar_com_ganho(cap: &Capacidades, passo: &PassoAudio, pasta: &Path, globais: Option<Vec<String>>, ganho: Option<f64>) -> (Pcm, f64) {
         std::fs::create_dir_all(pasta).unwrap();
-        args::gravar_texto(pasta, "audio.txt", &grafo_com_ganho(passo, None)).unwrap();
+        args::gravar_texto(pasta, "audio.txt", &grafo_com_ganho(passo, ganho)).unwrap();
         let mut p = passo.clone();
         if let Some(g) = globais {
             p.globais = g;
@@ -1027,7 +1355,14 @@ mod testes {
         assert!(passo.grafo.contains("asetrate=24000,aresample=48000"));
         assert!(passo.grafo.contains("atempo=2"));
         assert!(passo.grafo.contains("volume=0.8"));
-        assert_eq!((passo.saida.as_str(), passo.hash.as_str(), passo.normalizar, passo.auxiliares.len()), ("audio.wav", "audio.sha256", None, 0));
+        assert_eq!((passo.saida.as_str(), passo.hash.as_str(), passo.normalizar), ("audio.wav", "audio.sha256", None));
+        // o grafo da medição é o mesmo, terminando no `loudnorm`
+        assert_eq!(passo.auxiliares.len(), 1);
+        let medir = &passo.auxiliares[0];
+        let ate_o_ganho = passo.grafo.rsplit_once(";\n").unwrap();
+        assert_eq!(medir.nome, "audio-medir.txt");
+        assert_eq!(medir.conteudo, format!("{};\n[mi]{LOUDNORM}[an]", ate_o_ganho.0));
+        assert!(ate_o_ganho.1.starts_with("[mi]volume="), "{}", ate_o_ganho.1);
         assert_eq!(passo.tolerancia_atempo_ms, ATEMPO_RAPIDO_MS);
         // a linha do E9
         let a = argumentos(&passo, &cap, "audio.txt");
@@ -1094,52 +1429,19 @@ mod testes {
     }
 
     #[test]
-    fn recusa_o_que_e_da_fase_1() {
+    fn recusa_o_que_e_de_outra_fase_e_o_valor_invalido() {
         let (cap, fontes) = (apoio::cap_falsa(), fontes_falsas());
         let erro_de = |p: &ProjetoEdicao| match montar_com(p, &fontes, &cap, &final_(p)) {
             Err(SicroError::Validation(c)) => c,
             outro => panic!("esperava erro: {outro:?}"),
         };
         type Mudanca = Box<dyn Fn(&mut ProjetoEdicao)>;
+        let trecho_0 = |p: &mut ProjetoEdicao, f: &dyn Fn(&mut crate::edicao::modelo::ClipeTrecho)| {
+            let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };
+            f(t);
+        };
         let casos: Vec<(&str, Mudanca)> = vec![
-            ("nao_suportado: normalizar", Box::new(|p| p.mixagem.normalizar = Some(Normalizar { lufs: -16.0, pico_db: -1.5 }))),
-            ("nao_suportado: limitador", Box::new(|p| p.mixagem.limitador = true)),
-            ("nao_suportado: abaixar", Box::new(|p| p.audios[0].abaixa_original = true)),
-            (
-                "nao_suportado: volume animado",
-                Box::new(|p| {
-                    p.audios[0].clipes[0].volume = serde_json::from_value(json!([{ "t": 0.0, "v": 1.0 }, { "t": 1.0, "v": 0.5 }])).unwrap()
-                }),
-            ),
-            (
-                "nao_suportado: silenciar",
-                Box::new(|p| {
-                    let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };
-                    t.audio.silencios = serde_json::from_value(json!([{ "id": "s", "de": 1.5, "ate": 2.0, "modo": "tom", "motivo": "" }])).unwrap();
-                }),
-            ),
-            (
-                "nao_suportado: volume animado",
-                Box::new(|p| {
-                    let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };
-                    t.audio.volume = serde_json::from_value(json!([{ "t": 1.0, "v": 1.0 }, { "t": 2.0, "v": 0.2 }])).unwrap();
-                }),
-            ),
-            (
-                "nao_suportado: transicao",
-                Box::new(|p| {
-                    let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[2] else { panic!() };
-                    t.base.transicao_entrada.as_mut().unwrap().tipo = "fundir".into();
-                }),
-            ),
-            ("nao_suportado: transicao", Box::new(|p| p.fecho = serde_json::from_value(json!({ "tipo": "fundir", "duracao_s": 0.5, "audio": "acompanhar" })).unwrap())),
-            (
-                "nao_suportado: rampa",
-                Box::new(|p| {
-                    let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };
-                    t.velocidade = serde_json::from_value(json!({ "tipo": "rampa", "pontos": [{ "t": 1.0, "v": 1.0 }, { "t": 2.0, "v": 0.5 }] })).unwrap();
-                }),
-            ),
+            ("nao_suportado: rampa", Box::new(move |p| trecho_0(p, &|t| t.velocidade = serde_json::from_value(json!({ "tipo": "rampa", "pontos": [{ "t": 1.0, "v": 1.0 }, { "t": 2.0, "v": 0.5 }] })).unwrap()))),
             (
                 "nao_suportado: video sobreposto",
                 Box::new(|p| {
@@ -1154,43 +1456,54 @@ mod testes {
                 }),
             ),
             ("item_invalido: volume_original", Box::new(|p| p.mixagem.volume_original = f64::NAN)),
-            ("midia_ausente: n1", Box::new(|p| p.audios[0].clipes[0].midia = "n1".into())),
+            ("item_invalido: volume", Box::new(move |p| trecho_0(p, &|t| t.audio.volume = Animavel::Chaves(Vec::new())))),
+            ("item_invalido: volume", Box::new(|p| p.audios[0].clipes[0].volume = serde_json::from_value(json!([{ "t": 0.0, "v": 1.0 }, { "t": 1.0, "v": -0.5 }])).unwrap())),
+            ("item_invalido: normalizar", Box::new(|p| p.mixagem.normalizar = Some(Normalizar { lufs: f64::NAN, pico_db: -1.5 }))),
+            (
+                "item_invalido: abaixar",
+                Box::new(|p| {
+                    p.audios[0].abaixa_original = true;
+                    p.mixagem.abaixar.ataque_s = -1.0;
+                }),
+            ),
         ];
         for (i, (esperado, mudar)) in casos.iter().enumerate() {
             let mut p = projeto_falso();
             mudar(&mut p);
-            if i == casos.len() - 1 {
-                let mut f = fontes.clone();
-                f.remove("n1");
-                let e = match montar_com(&p, &f, &cap, &final_(&p)) {
-                    Err(SicroError::Validation(c)) => c,
-                    outro => panic!("{outro:?}"),
-                };
-                assert_eq!(e, *esperado);
-                continue;
-            }
             assert_eq!(erro_de(&p), *esperado, "caso {i}");
         }
+        // mídia da narração sumida
+        let mut f = fontes.clone();
+        f.remove("n1");
+        let p = projeto_falso();
+        assert!(matches!(montar_com(&p, &f, &cap, &final_(&p)), Err(SicroError::Validation(c)) if c == "midia_ausente: n1"));
         // vídeo sobreposto com som em trilha OCULTA não entra no render: nada a recusar (a validação também não acusa)
         let mut p = projeto_falso();
-        casos[casos.len() - 3].1(&mut p);
+        casos[1].1(&mut p);
         assert_eq!(erro_de(&p), "nao_suportado: video sobreposto");
         p.sobreposicoes[0].oculta = true;
         assert!(montar_com(&p, &fontes, &cap, &final_(&p)).is_ok(), "trilha oculta recusada");
-        // o mesmo sem efeito no som: clipe mudo com silêncio e trilha muda com abaixar passam
+        // sem efeito no som: clipe mudo com silêncio e trilha muda com abaixar não deixam nada no grafo
         let mut p = projeto_falso();
-        let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };
-        t.audio.mudo = true;
-        t.audio.silencios = serde_json::from_value(json!([{ "id": "s", "de": 1.5, "ate": 2.0, "modo": "mudo", "motivo": "" }])).unwrap();
+        trecho_0(&mut p, &|t| {
+            t.audio.mudo = true;
+            t.audio.silencios = serde_json::from_value(json!([{ "id": "s", "de": 1.5, "ate": 2.0, "modo": "mudo", "motivo": "" }])).unwrap();
+        });
         p.audios[0].abaixa_original = true;
         p.audios[0].mudo = true;
         let (passo, _) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
         // v1 ainda entra pelo clipe "c"; n1 (trilha muda) não
         assert_eq!(passo.entradas.len(), 2);
+        assert!(!passo.grafo.contains("enable") && !passo.grafo.contains("aevalsrc"), "{}", passo.grafo);
         // chaves todas iguais = volume fixo
         let mut p = projeto_falso();
         p.audios[0].clipes[0].volume = serde_json::from_value(json!([{ "t": 0.0, "v": 0.5 }, { "t": 1.0, "v": 0.5 }])).unwrap();
-        assert!(montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0.grafo.contains("volume=0.4"));
+        let g = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0.grafo;
+        assert!(g.contains("volume=0.4") && !g.contains("eval=frame"), "{g}");
+        // nada da Fase 1 é recusado
+        for d in ["normalizar", "limitador", "silenciar", "volume_animado", "abaixar", "transicao"] {
+            assert!(!recusa(d), "{d}");
+        }
     }
 
     #[test]
@@ -2121,5 +2434,724 @@ mod testes {
         eprintln!("fatia do som inteiro (desvio em amostras): {}", conferidas.join(", "));
         eprintln!("PCM diferente nos dois binários: {divergem:?}");
         assert!(conferidas.len() >= 3, "{conferidas:?}");
+    }
+
+    // ------------------------------------------------------------ Fase 1 (P1.5)
+
+    /// Valor s16 de um nível 0..1.
+    fn nivel(v: f64) -> i32 {
+        (v * 32_768.0).round() as i32
+    }
+
+    /// Maior degrau entre amostras vizinhas em [a, b).
+    fn degrau(x: &[i16], a: usize, b: usize) -> i32 {
+        x[a..b.min(x.len())].windows(2).map(|w| (w[1] as i32 - w[0] as i32).abs()).max().unwrap_or(0)
+    }
+
+    /// RMS em dBFS de [a, b).
+    fn rms_db(x: &[i16], a: usize, b: usize) -> f64 {
+        let s = &x[a..b];
+        let m = s.iter().map(|&v| (v as f64 / 32_768.0).powi(2)).sum::<f64>() / s.len() as f64;
+        10.0 * m.max(1e-24).log10()
+    }
+
+    /// Frequência (Hz) pela contagem de passagens por zero em [a, b).
+    fn frequencia(x: &[i16], a: usize, b: usize) -> f64 {
+        let n = x[a..b].windows(2).filter(|w| (w[0] < 0) != (w[1] < 0)).count();
+        n as f64 / 2.0 / ((b - a) as f64 / 48_000.0)
+    }
+
+    /// Roda a medição e a passada como o executor: auxiliares na pasta de trabalho, a linha da prévia, o ganho
+    /// de `ganho_db` e o grafo com ele.
+    fn rodar_medindo(cap: &Capacidades, passo: &PassoAudio, previas: &[Previa], pasta: &Path) -> (Pcm, Loudnorm, Option<f64>) {
+        std::fs::create_dir_all(pasta).unwrap();
+        for a in &passo.auxiliares {
+            args::gravar_texto(pasta, &a.nome, &a.conteudo).unwrap();
+        }
+        let [Previa::Loudnorm { args: linha }] = previas else { panic!("uma medição: {previas:?}") };
+        assert_eq!(&linha[..2], &CPUFLAGS.map(String::from)[..]);
+        let cmd = comando(cap, pasta, "medir", linha.clone());
+        let t = exec::rodar(&cmd, &AtomicBool::new(false)).expect("ffmpeg");
+        exec::exigir_sucesso(&cmd, &t).expect("medição");
+        let m = ler_loudnorm(&std::fs::read_to_string(&cmd.stderr).unwrap()).expect("loudnorm");
+        let g = ganho_db(&m, passo.normalizar.as_ref());
+        (rodar_com_ganho(cap, passo, pasta, None, g).0, m, g)
+    }
+
+    /// Volume do `audio.wav` da pasta, medido por fora do passo.
+    fn medir_wav(cap: &Capacidades, pasta: &Path) -> Loudnorm {
+        let a = texto(&["-cpuflags", "0", "-hide_banner", "-nostdin", "-y", "-loglevel", "verbose", "-i", SAIDA, "-af", LOUDNORM, "-f", "null", "-"]);
+        let cmd = comando(cap, pasta, "conferir", a);
+        let t = exec::rodar(&cmd, &AtomicBool::new(false)).expect("ffmpeg");
+        exec::exigir_sucesso(&cmd, &t).expect("ebur128");
+        ler_loudnorm(&std::fs::read_to_string(&cmd.stderr).unwrap()).unwrap()
+    }
+
+    fn mixagem(normalizar: Value, limitador: bool) -> crate::edicao::modelo::Mixagem {
+        serde_json::from_value(json!({ "volume_original": 1.0, "abaixar": { "db": -12.0, "ataque_s": 0.3, "soltura_s": 0.5 }, "normalizar": normalizar, "limitador": limitador })).unwrap()
+    }
+
+    fn com_transicao(mut c: Value, tipo: &str, duracao: f64, som: &str) -> Value {
+        c["transicao_entrada"] = json!({ "tipo": tipo, "duracao_s": duracao, "audio": som });
+        c
+    }
+
+    #[test]
+    fn intervalos_unidos_e_envelope() {
+        // mínimo de 45 ms, corte no total, união quando as rampas se cruzam, fora do total cai
+        assert_eq!(unir(vec![(48_000, 48_100), (10, 5), (200_000, 300_000)], 480, 480, 100_000), vec![(48_000, 50_160)]);
+        assert_eq!(unir(vec![(5_000, 9_000), (1_000, 4_100), (20_000, 99_999_999)], 480, 480, 30_000), vec![(1_000, 9_000), (20_000, 30_000)]);
+        assert_eq!(unir(vec![(1_000, 4_000), (4_961, 9_000)], 480, 480, 30_000), vec![(1_000, 4_000), (4_961, 9_000)]);
+        assert_eq!(unir(vec![(1_000, 4_000), (4_960, 9_000)], 480, 480, 30_000), vec![(1_000, 9_000)]);
+        // do meio: saída até o meio, entrada do meio em diante
+        let f = envelope(&[(48_000, 96_000)], 480_000, 14_400, 24_000, 0.25);
+        assert_eq!(
+            f,
+            vec![
+                "asetnsamples=n=1024:p=0".to_string(),
+                "afade=t=out:ss=33600:ns=14400:silence=0.250000:enable=gte(t\\,0.650000)*lt(t\\,1.500000)".to_string(),
+                "afade=t=in:ss=96000:ns=24000:silence=0.250000:enable=gte(t\\,1.500000)*lte(t\\,2.550000)".to_string(),
+            ]
+        );
+        // desde o começo: só a entrada; até o fim: só a saída; o clipe inteiro: a entrada depois do fim
+        let f = envelope(&[(0, 4_800), (96_000, 100_000)], 100_000, 480, 480, 0.0);
+        assert_eq!(f[1..], ["afade=t=in:ss=4800:ns=480:enable=lte(t\\,0.160000)".to_string(), "afade=t=out:ss=95520:ns=480:enable=gte(t\\,1.940000)".to_string()]);
+        assert_eq!(envelope(&[(0, 100_000)], 100_000, 480, 480, 0.0)[1..], ["afade=t=in:ss=100000:ns=480:enable=lte(t\\,2.143333)".to_string()]);
+        // rampa mais curta quando o intervalo começa antes dela caber
+        assert!(envelope(&[(100, 9_000)], 100_000, 480, 480, 0.0)[1].starts_with("afade=t=out:ss=0:ns=100:enable=gte(t\\,0.000000)*lt(t\\,"));
+    }
+
+    #[test]
+    fn curva_do_volume_e_arvore_sobre_t() {
+        let ks: Vec<Chave<f64>> = serde_json::from_value(json!([
+            { "t": 2.0, "v": 1.0 }, { "t": 4.0, "v": 0.2 }, { "t": 5.0, "v": 0.2, "interp": "suave" }, { "t": 6.0, "v": 1.5, "interp": "degrau" }, { "t": 6.5, "v": 0.5 }
+        ]))
+        .unwrap();
+        let e = curva_do_volume(&ks, 1.0);
+        let (desce, sobe, u) = (num(0.2 - 1.0), num(1.5 - 0.2), "((t-4)/1)");
+        assert_eq!(e, format!("if(lt(t,4),if(lt(t,1),1,if(lt(t,3),1+{desce}*((t-1)/2),0.2)),if(lt(t,5),0.2+{sobe}*{u}*{u}*(3-2*{u}),if(lt(t,5.5),1.5,0.5)))"));
+        // fora das chaves vale a ponta; chave repetida no mesmo instante não divide por zero
+        let dupla: Vec<Chave<f64>> = serde_json::from_value(json!([{ "t": 1.0, "v": 0.5 }, { "t": 1.0, "v": 1.0 }, { "t": 2.0, "v": 1.0 }])).unwrap();
+        assert_eq!(curva_do_volume(&dupla, 0.0), "if(lt(t,1),0.5,if(lt(t,2),1,1))");
+        // 1 000 chaves: profundidade de árvore, não de fila
+        let muitas: Vec<Chave<f64>> = (0..1000).map(|i| Chave { t: i as f64 * 0.01, pts: None, v: (i % 7) as f64 * 0.1, interp: Interp::Linear }).collect();
+        let e = curva_do_volume(&muitas, 0.0);
+        let fundo = e.bytes().scan(0i32, |d, b| { *d += i32::from(b == b'(') - i32::from(b == b')'); Some(*d) }).max().unwrap();
+        assert!(fundo <= 16, "{fundo}");
+    }
+
+    #[test]
+    fn grafo_da_fase_1() {
+        let (cap, fontes) = (apoio::cap_falsa(), fontes_falsas());
+        // a(30000/1001): sobreposição de 15 slots entre "a" e "b"
+        let mut p = projeto(
+            (30, 1),
+            vec![
+                trecho("a", "v1", 1.0, 3.0, 1.0, true),
+                com_transicao(trecho("b", "v2", 4.0, 6.0, 1.0, true), "fundir", 0.5, "acompanhar"),
+                com_transicao(trecho("c", "v1", 10.0, 12.0, 1.0, true), "deslizar_esq", 1.0, "cortar"),
+            ],
+            vec![trilha("t", 1.0, vec![clipe_audio("n", "n1", json!({ "ref": "clipe", "clipe": "b", "desloc": 0.5 }), 0.0, Some(1.0))])],
+            vec![],
+        );
+        p.audios[0].abaixa_original = true;
+        p.mixagem = mixagem(json!({ "lufs": -16.0, "pico_db": -1.5 }), true);
+        let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[0] else { panic!() };
+        t.audio.silencios = serde_json::from_value(json!([{ "id": "s1", "de": 1.5, "ate": 1.75, "modo": "tom", "motivo": "nome" }, { "id": "s2", "de": 2.0, "ate": 2.5, "modo": "mudo", "motivo": "" }])).unwrap();
+        t.audio.volume = serde_json::from_value(json!([{ "t": 1.0, "v": 1.0 }, { "t": 2.0, "v": 0.5 }])).unwrap();
+        let (passo, previas, linha) = montar_e_medir(&p, &fontes, &cap, &final_(&p));
+        let g = &passo.grafo;
+        assert_eq!(linha.clipes.iter().map(|c| (c.inicio_q, c.n_q, c.sobrepoe_q)).collect::<Vec<_>>(), vec![(0, 60, 0), (45, 60, 15), (75, 60, 30)]);
+        // "a": volume animado, silêncios e tom antes do resto; o tom entra por amix
+        assert!(g.contains("aresample=48000:async=1:first_pts=0,asetnsamples=n=256:p=0,volume=volume=if(lt(t\\,0)\\,1\\,if(lt(t\\,1)\\,1+(-0.5)*((t-0)/1)\\,0.5)):eval=frame,asetnsamples=n=1024:p=0,afade=t=out:ss=23520:ns=480:enable=gte(t\\,0.440000)*lt(t\\,0.625000),afade=t=in:ss=36000:ns=480:enable=gte(t\\,0.625000)*lte(t\\,0.810000),afade=t=out:ss=47520:ns=480:enable=gte(t\\,0.940000)*lt(t\\,1.250000),afade=t=in:ss=72000:ns=480:enable=gte(t\\,1.250000)*lte(t\\,1.560000)[s0]"), "{g}");
+        assert!(g.contains("aevalsrc=exprs=0.125*sin(2*PI*1000*t):s=48000:n=1024,atrim=end_sample=12960,afade=t=in:ss=0:ns=480,afade=t=out:ss=12480:ns=480,aformat=sample_fmts=fltp,pan=stereo|c0=c0|c1=c0,adelay=delays=23520S:all=1[s0t0]"), "{g}");
+        // "a" toca sozinho em [0, 72000) e com "b" em [72000, 96000): dois pedaços, a saída acompanha (rampa de 24000)
+        assert!(g.contains("[s0][s0t0]amix=inputs=2:normalize=0:dropout_transition=0:duration=first,apad,atrim=end_sample=96000,asetpts=N/SR/TB,aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo,afade=t=out:ss=72000:ns=24000,asplit=2[c0s0][c0s1]"), "{g}");
+        assert!(g.contains("[c0s0]atrim=start_sample=0:end_sample=72000,asetpts=N/SR/TB[p0]"), "{g}");
+        assert!(g.contains("[c0s1]atrim=start_sample=72000:end_sample=96000,asetpts=N/SR/TB[c0q1]"), "{g}");
+        // "b": entra acompanhando (24000) e sai cortando no meio dos 48000 da sobreposição com "c"
+        assert!(g.contains("afade=t=in:ss=0:ns=24000,afade=t=out:ss=71520:ns=480,asplit=3[c1s0][c1s1][c1s2]"), "{g}");
+        assert!(g.contains("[c0q1][c1q0]amix=inputs=2:normalize=0:dropout_transition=0:duration=first[p1]"), "{g}");
+        assert!(g.contains("afade=t=in:ss=24000:ns=480,asplit=2[c2s0][c2s1]"), "{g}");
+        assert!(g.contains("[p0][p1][p2][p3][p4]concat=n=5:v=0:a=1[pr]"), "{g}");
+        // abaixar: a narração toca em [96000, 144000) do programa
+        assert!(g.contains("[pr]asetnsamples=n=1024:p=0,afade=t=out:ss=81600:ns=14400:silence=0.251189:enable=gte(t\\,1.650000)*lt(t\\,2.500000),afade=t=in:ss=144000:ns=24000:silence=0.251189:enable=gte(t\\,2.500000)*lte(t\\,3.550000)[pb]"), "{g}");
+        // ganho, limitador no pico do alvo e saída
+        assert!(g.ends_with(&format!("[mi]volume={MARCA_GANHO}dB,aresample=192000,alimiter=limit=0.841395:attack=5:release=50:level=0:latency=1,aresample=48000,apad,atrim=end_sample=216000,asetpts=N/SR/TB,{FORMATO_SAIDA},asplit=2[a][ah]")), "{g}");
+        // com o limitador o ganho não é limitado pelo pico medido
+        assert_eq!(passo.normalizar, Some(Normalizar { lufs: -16.0, pico_db: PICO_COM_LIMITADOR_DB }));
+        let m = Loudnorm { integrado: Some(-30.0), pico: Some(-3.0), faixa: 1.0, limiar: None };
+        assert_eq!(ganho_db(&m, passo.normalizar.as_ref()), Some(14.0));
+        // a medição: o mesmo grafo sem ganho nem limitador, e a linha inteira da prévia
+        assert_eq!(passo.auxiliares[0].conteudo, format!("{};\n[mi]{LOUDNORM}[an]", g.rsplit_once(";\n").unwrap().0));
+        let [Previa::Loudnorm { args: linha_medir }] = &previas[..] else { panic!("{previas:?}") };
+        let fim = texto(&["-/filter_complex", "audio-medir.txt", "-map", "[an]", "-f", "null", "-"]);
+        assert_eq!(&linha_medir[linha_medir.len() - fim.len()..], &fim[..]);
+        assert_eq!((&linha_medir[..2], linha_medir.iter().filter(|x| *x == "-i").count()), (&CPUFLAGS.map(String::from)[..], 3));
+        // prévia de uma janela: a passada é a da janela, a medição continua a do programa inteiro
+        let (janela, previas_janela, _) = montar_e_medir(&p, &fontes, &cap, &Alvo::Previa { altura: 360, de_q: 100, ate_q: 120 });
+        assert_eq!(janela.auxiliares, passo.auxiliares);
+        assert_eq!(previas_janela, previas);
+        assert!(janela.entradas.len() < passo.entradas.len() && janela.grafo.contains("atrim=start_sample=160000:end_sample=192000"));
+        // sem limitador o alvo de pico é o do projeto
+        p.mixagem.limitador = false;
+        let (passo, _) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+        assert_eq!(passo.normalizar, Some(Normalizar { lufs: -16.0, pico_db: -1.5 }));
+        assert!(!passo.grafo.contains("alimiter"));
+    }
+
+    #[test]
+    fn normalizacao_no_alvo() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-normalizar");
+        // ruído rosa; e o mesmo, mais alto, com estalos de 0,2 ms a cada 2 s: pico que limita o ganho linear e quase
+        // não pesa no volume
+        let ruido = gerar(&cap, &pasta, "ruido.wav", &["-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.05:seed=7:r=48000:d=12", "-c:a", "pcm_s16le"]);
+        let estalos = gerar(
+            &cap,
+            &pasta,
+            "estalos.wav",
+            &["-f", "lavfi", "-i", "anoisesrc=color=pink:amplitude=0.2:seed=7:r=48000:d=12", "-f", "lavfi", "-i", "aevalsrc=exprs=0.8*lt(mod(t+0.5\\,2)\\,0.0002):s=48000:d=12",
+              "-filter_complex", "amix=inputs=2:normalize=0:duration=first", "-c:a", "pcm_s16le"],
+        );
+        let fontes = HashMap::from([("r".to_string(), info_som(&cap, &ruido)), ("e".to_string(), info_som(&cap, &estalos))]);
+        let narrado = |midia: &str, mix: crate::edicao::modelo::Mixagem| {
+            let c = clipe_audio("x", midia, json!({ "ref": "programa", "t": 0.0 }), 0.0, Some(12.0));
+            let mut p = projeto((30, 1), vec![imagem("i", 12.0)], vec![trilha("t", 1.0, vec![c])], vec![]);
+            p.mixagem = mix;
+            p
+        };
+        // (mídia, alvo, limitador, o pico limita o ganho?)
+        let casos = [("r", (-23.0, -1.0), false, false), ("r", (-16.0, -1.5), false, false), ("e", (-16.0, -1.5), false, true), ("e", (-16.0, -1.5), true, false)];
+        for (k, (midia, (lufs, pico), limitador, limitado)) in casos.into_iter().enumerate() {
+            let p = narrado(midia, mixagem(json!({ "lufs": lufs, "pico_db": pico }), limitador));
+            let (passo, previas, _) = montar_e_medir(&p, &fontes, &cap, &final_(&p));
+            let dir = pasta.join(format!("n{k}"));
+            let (pcm, medido, ganho) = rodar_medindo(&cap, &passo, &previas, &dir);
+            assert_eq!(pcm.n() as u64, passo.amostras);
+            let (i0, tp0) = (medido.integrado.expect("integrado"), medido.pico.expect("pico"));
+            let ganho = ganho.expect("ganho");
+            let saida = medir_wav(&cap, &dir);
+            let (i1, tp1) = (saida.integrado.unwrap(), saida.pico.unwrap());
+            eprintln!("{midia} alvo {lufs}/{pico} limitador {limitador}: medido {i0} LUFS {tp0} dBTP, ganho {ganho:.2} dB, saída {i1} LUFS {tp1} dBTP");
+            if limitado {
+                // o pico manda: fica abaixo do alvo de volume, com o pico no alvo
+                assert!((ganho - (pico - tp0)).abs() < 1e-9 && ganho < lufs - i0 - 1.0, "ganho {ganho}");
+                assert!((i1 - (i0 + ganho)).abs() <= 0.5 && i1 < lufs - 1.0, "saída {i1}");
+                assert!((tp1 - pico).abs() <= 0.2, "pico {tp1}");
+            } else {
+                assert!((ganho - (lufs - i0)).abs() < 1e-9, "ganho {ganho}");
+                assert!((i1 - lufs).abs() <= 0.5, "saída {i1} LUFS, alvo {lufs}");
+                assert!(tp1 <= pico + 0.2, "pico {tp1}");
+            }
+        }
+        // sem normalização: só mede, o som não muda
+        let p = narrado("r", mixagem(Value::Null, false));
+        let (passo, previas, _) = montar_e_medir(&p, &fontes, &cap, &final_(&p));
+        let (pcm, medido, ganho) = rodar_medindo(&cap, &passo, &previas, &pasta.join("so-mede"));
+        assert_eq!(ganho, None);
+        assert!(medido.integrado.is_some_and(|i| i < -25.0));
+        let original = rodar_pedaco(&cap, &pasta, "original", Some(&ruido), "pan=stereo|c0=c0|c1=c0,aformat=sample_fmts=fltp:channel_layouts=stereo", None);
+        assert!(pcm.x == original, "sem normalizar o PCM é o da fonte");
+        // prévia de uma janela com normalização: o ganho é o do programa inteiro
+        let p = narrado("r", mixagem(json!({ "lufs": -23.0, "pico_db": -1.0 }), false));
+        let (inteiro, previas, _) = montar_e_medir(&p, &fontes, &cap, &final_(&p));
+        let (todo, _, g_todo) = rodar_medindo(&cap, &inteiro, &previas, &pasta.join("inteiro"));
+        let (janela, previas, _) = montar_e_medir(&p, &fontes, &cap, &Alvo::Previa { altura: 360, de_q: 60, ate_q: 90 });
+        let (parte, _, g_parte) = rodar_medindo(&cap, &janela, &previas, &pasta.join("janela"));
+        assert_eq!(g_parte, g_todo);
+        assert!(parte.x == todo.x[2 * 96_000..2 * 144_000], "a prévia é a fatia do final normalizado");
+    }
+
+    #[test]
+    fn limitador_segura_o_pico_e_nao_mexe_no_que_esta_abaixo() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-limitador");
+        // 2 s a 0,3 e 2 s a 0,95 (440 Hz), sem normalização: teto de −1 dBTP
+        let n = gerar(&cap, &pasta, "tom.wav", &["-f", "lavfi", "-i", "aevalsrc=exprs=(0.3+0.65*gte(t\\,2))*sin(2*PI*440*t):s=48000:d=4", "-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("n".to_string(), info_som(&cap, &n))]);
+        let mut p = projeto_narrado(4.0);
+        let sem = rodar(&cap, &montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0, &pasta.join("sem")).canal(0);
+        p.mixagem = mixagem(Value::Null, true);
+        let (passo, _) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+        let pcm = rodar(&cap, &passo, &pasta.join("com"));
+        let com = pcm.canal(0);
+        assert_eq!((com.len(), sem.len()), (192_000, 192_000));
+        let pico = |x: &[i16]| x.iter().map(|v| v.unsigned_abs()).max().unwrap() as f64 / 32_768.0;
+        let teto = 10f64.powf(LIMITE_PADRAO_DB / 20.0);
+        eprintln!("limitador: pico {:.4} → {:.4} (teto {teto:.4})", pico(&sem[100_000..]), pico(&com[100_000..]));
+        assert!(pico(&sem[100_000..]) > 0.94);
+        assert!(pico(&com[100_000..]) <= teto * 1.01 && pico(&com[100_000..]) > teto * 0.9, "{}", pico(&com[100_000..]));
+        // abaixo do teto: igual ao som sem limitador, na mesma amostra (atraso compensado)
+        let d = sem[2_000..90_000].iter().zip(&com[2_000..90_000]).map(|(a, b)| (*a as i32 - *b as i32).abs()).max().unwrap();
+        assert!(d <= 3, "diferença {d}");
+        // PCM igual nos dois binários
+        if let Some(bins) = dois_binarios() {
+            let h: Vec<String> = bins.iter().map(|b| rodar(b, &passo, &pasta.join(format!("b-{}", b.versao))).sha).collect();
+            assert_eq!(h[0], h[1], "limitador: PCM diferente nos dois binários");
+        }
+    }
+
+    #[test]
+    fn abaixar_12_db_com_rampas() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-abaixar");
+        let src = com_video(&cap, &pasta, "tom.mkv", ("30", 14.0), &[], "aevalsrc=exprs=0.5:s=48000:c=mono:d=14", &["-c:a", "pcm_s16le"]);
+        // narração de silêncio digital: o que se mede é só o original
+        let fala = gerar(&cap, &pasta, "fala.wav", &["-f", "lavfi", "-i", "anullsrc=r=48000:cl=mono:d=4", "-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("v".to_string(), info(&cap, &src)), ("n".to_string(), info_som(&cap, &fala))]);
+        // no começo do programa (1 s) e de 3 a 7 s
+        let clipes = vec![
+            clipe_audio("x", "n", json!({ "ref": "programa", "t": 0.0 }), 0.0, Some(1.0)),
+            clipe_audio("y", "n", json!({ "ref": "programa", "t": 3.0 }), 0.0, Some(4.0)),
+        ];
+        let mut p = projeto((30, 1), vec![trecho("a", "v", 1.0, 13.0, 1.0, true)], vec![trilha("t", 1.0, clipes)], vec![]);
+        let sem = rodar(&cap, &montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0, &pasta.join("sem")).canal(0);
+        assert!(sem.iter().all(|&x| x as i32 == nivel(0.5)), "sem abaixar o original fica inteiro");
+        p.audios[0].abaixa_original = true;
+        let (passo, _) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+        let l = rodar(&cap, &passo, &pasta.join("com")).canal(0);
+        assert_eq!(l.len(), 12 * 48_000);
+        let cheio = nivel(0.5) as f64;
+        let ganho = |i: usize| l[i] as f64 / cheio;
+        let db = |i: usize| 20.0 * ganho(i).log10();
+        let piso = 10f64.powf(-12.0 / 20.0);
+        let s = |t: f64| (t * 48_000.0).round() as usize;
+        // desde a amostra 0 no piso; sobe em 0,5 s depois de 1 s; cheio até 0,3 s antes de 3 s; −12 dB de 3 a 7 s; sobe em 0,5 s
+        for (de, ate, esperado) in [(0.0, 1.0, piso), (1.5, 2.7, 1.0), (3.0, 7.0, piso), (7.5, 12.0, 1.0)] {
+            let pior = (s(de)..s(ate)).map(|i| (ganho(i) - esperado).abs()).fold(0.0, f64::max);
+            assert!(pior <= 0.0005, "{de}..{ate} s: ganho fora de {esperado} por {pior}");
+        }
+        assert!((db(s(5.0)) + 12.0).abs() <= 0.02, "{} dB", db(s(5.0)));
+        // rampas lineares: no meio, a média entre cheio e piso
+        let meio = (1.0 + piso) / 2.0;
+        for t in [1.25, 2.85, 7.25] {
+            assert!((ganho(s(t)) - meio).abs() <= 0.002, "{t} s: {}", ganho(s(t)));
+        }
+        // um quarto da descida (0,3 s) e da subida (0,5 s)
+        assert!((ganho(s(2.775)) - (1.0 - (1.0 - piso) * 0.25)).abs() <= 0.002 && (ganho(s(7.125)) - (piso + (1.0 - piso) * 0.25)).abs() <= 0.002);
+        // nenhum degrau: a rampa mais inclinada anda 0,85 de um nível por amostra
+        let maior = degrau(&l, 0, l.len());
+        eprintln!("abaixar: {:.2} dB de 3 a 7 s; maior degrau entre amostras {maior} de 32768", db(s(5.0)));
+        assert!(maior <= 2, "degrau de {maior}");
+    }
+
+    /// Método de `p1b/out/03c-afade.log`: mudo, tom e mudo curto sobre um seno; degrau nas bordas igual ao do
+    /// sinal, silêncio digital, tom de 1 kHz a −18 dBFS, e os intervalos no lugar depois da velocidade.
+    #[test]
+    fn tom_e_mudo_sem_estalo() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-silenciar");
+        // seno de 317 Hz, pico −9 dBFS
+        let src = com_video(&cap, &pasta, "seno.mkv", ("30", 14.0), &[], "aevalsrc=exprs=0.3548*sin(2*PI*317*t):s=48000:c=mono:d=14", &["-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("v".to_string(), info(&cap, &src))]);
+        // em tempo de FONTE (o trecho começa em 1 s): mudo 6-8, tom 9-10, mudo curto 11,00-11,05. O tom acaba 12
+        // amostras depois de 10 s: fora do cruzamento por zero dele (sem a rampa do tom, degrau de 4096)
+        let silencios = json!([
+            { "id": "s1", "de": 6.0, "ate": 8.0, "modo": "mudo", "motivo": "nome" },
+            { "id": "s2", "de": 9.0, "ate": 10.00025, "modo": "tom", "motivo": "nome" },
+            { "id": "s3", "de": 11.0, "ate": 11.05, "modo": "mudo", "motivo": "" }
+        ]);
+        let com = |id: &str, fator: f64, tom: bool| {
+            let mut c = trecho(id, "v", 1.0, 13.0, fator, tom);
+            c["audio"]["silencios"] = silencios.clone();
+            c
+        };
+        let p = projeto((30, 1), vec![com("a", 1.0, true), com("b", 2.0, true), com("c", 2.0, false)], vec![], vec![]);
+        let (passo, _) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+        let pcm = rodar(&cap, &passo, &pasta.join("saida"));
+        let l = pcm.canal(0);
+        assert_eq!(l, pcm.canal(1));
+        assert_eq!(l.len(), (12 + 6 + 6) * 48_000);
+        let s = |t: f64| (t * 48_000.0).round() as usize;
+        let janela = |t: f64| degrau(&l, s(t - 0.03), s(t + 0.03));
+        // 1×: no tempo do clipe, 5-7, 8-9 e 10,00-10,05
+        let referencia = degrau(&l, 0, 48_000);
+        let do_tom = (0.125 * 2.0 * std::f64::consts::PI * 1000.0 / 48_000.0 * 32_768.0).ceil() as i32;
+        assert!((referencia - 485).abs() <= 2, "{referencia}");
+        for (t, teto) in [(5.0, referencia), (7.0, referencia), (8.0, do_tom), (9.0, do_tom), (10.0, referencia), (10.05, referencia)] {
+            assert!(janela(t) <= teto + 2, "estalo em {t} s: degrau {} (o do sinal é {teto})", janela(t));
+        }
+        assert!(l[s(5.0)..s(7.0)].iter().all(|&x| x == 0) && l[s(10.0)..s(10.05)].iter().all(|&x| x == 0), "silêncio digital");
+        for (de, ate) in [(4.0, 4.9), (7.02, 7.9), (9.02, 9.9), (10.07, 11.9)] {
+            assert!((rms_db(&l, s(de), s(ate)) + 12.0).abs() <= 0.1 && (frequencia(&l, s(de), s(ate)) - 317.0).abs() <= 2.0, "{de}..{ate}: {} dB", rms_db(&l, s(de), s(ate)));
+        }
+        let pico = l[s(8.0)..s(9.0)].iter().map(|x| x.unsigned_abs()).max().unwrap() as f64 / 32_768.0;
+        let (rms, hz) = (rms_db(&l, s(8.0), s(9.0)), frequencia(&l, s(8.02), s(8.98)));
+        eprintln!("1×: degrau do sinal {referencia}, nas bordas {:?}; tom {hz:.1} Hz, pico {:.2} dBFS, RMS {rms:.2} dBFS", [5.0, 7.0, 8.0, 9.0, 10.0, 10.05].map(janela), 20.0 * pico.log10());
+        assert!((20.0 * pico.log10() + 18.06).abs() <= 0.05 && (rms + 21.07).abs() <= 0.1 && (hz - 1000.0).abs() <= 2.0);
+        // 2× com `atempo` (clipe "b", de 12 a 18 s): os intervalos caem na metade do tempo, o tom segue em 1 kHz
+        let b = 12.0;
+        assert!(l[s(b + 2.52)..s(b + 3.48)].iter().all(|&x| x == 0), "mudo depois do atempo");
+        let (rms, hz) = (rms_db(&l, s(b + 4.03), s(b + 4.47)), frequencia(&l, s(b + 4.03), s(b + 4.47)));
+        assert!((rms + 21.07).abs() <= 0.2 && (hz - 1000.0).abs() <= 3.0, "atempo: tom {hz} Hz, {rms} dB");
+        // 2× exato (clipe "c", de 18 a 24 s): mesmas amostras de silêncio; o tom sobe uma oitava com o som
+        let c = 18.0;
+        assert!(l[s(c + 2.51)..s(c + 3.49)].iter().all(|&x| x == 0) && l[s(c + 5.005)..s(c + 5.02)].iter().all(|&x| x == 0), "mudo no modo exato");
+        let hz = frequencia(&l, s(c + 4.02), s(c + 4.48));
+        assert!((hz - 2000.0).abs() <= 4.0 && (rms_db(&l, s(c + 4.02), s(c + 4.48)) + 21.07).abs() <= 0.2, "exato: {hz} Hz");
+        assert!(janela(c + 2.5) <= 2 * referencia + 4 && janela(c + 3.5) <= 2 * referencia + 4);
+        // o som de fora dos intervalos é o da fonte, amostra por amostra
+        let p0 = projeto((30, 1), vec![trecho("a", "v", 1.0, 13.0, 1.0, true)], vec![], vec![]);
+        let limpo = rodar(&cap, &montar_com(&p0, &fontes, &cap, &final_(&p0)).unwrap().0, &pasta.join("limpo")).canal(0);
+        for (de, ate) in [(0.0, 4.9), (7.1, 7.9), (9.1, 9.9), (10.2, 12.0)] {
+            assert!(l[s(de)..s(ate)] == limpo[s(de)..s(ate)], "{de}..{ate} s mudou");
+        }
+        // silêncio que cobre o começo e o fim do clipe: zero da primeira à última amostra
+        let mut todo = trecho("a", "v", 2.0, 4.0, 1.0, true);
+        todo["audio"]["silencios"] = json!([{ "id": "s", "de": 0.0, "ate": 2.5, "modo": "mudo", "motivo": "" }, { "id": "z", "de": 3.5, "ate": 99.0, "modo": "tom", "motivo": "" }]);
+        let p = projeto((30, 1), vec![todo], vec![], vec![]);
+        let l = rodar(&cap, &montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0, &pasta.join("pontas")).canal(0);
+        assert_eq!(l.len(), 96_000);
+        assert!(l[..24_000].iter().all(|&x| x == 0), "começo");
+        assert!((rms_db(&l, 28_800, 67_200) + 12.0).abs() <= 0.1, "meio");
+        // o tom vai até o fim do clipe, sem o som da fonte por baixo
+        assert!((frequencia(&l, 73_000, 95_000) - 1000.0).abs() <= 3.0 && (rms_db(&l, 73_000, 95_000) + 21.07).abs() <= 0.1, "{} dB", rms_db(&l, 73_000, 95_000));
+    }
+
+    #[test]
+    fn volume_animado() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-volume");
+        let src = com_video(&cap, &pasta, "tom.mkv", ("30", 8.0), &[], "aevalsrc=exprs=0.5:s=48000:c=mono:d=8", &["-c:a", "pcm_s16le"]);
+        let n = gerar(&cap, &pasta, "narr.wav", &["-f", "lavfi", "-i", "aevalsrc=exprs=0.25:s=48000:c=mono:d=3", "-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("v".to_string(), info(&cap, &src)), ("n".to_string(), info_som(&cap, &n))]);
+        // trecho: chaves em tempo de FONTE (linear, parado, suave, degrau)
+        let chaves = json!([{ "t": 2.0, "v": 1.0 }, { "t": 4.0, "v": 0.2 }, { "t": 5.0, "v": 0.2, "interp": "suave" }, { "t": 6.0, "v": 1.5, "interp": "degrau" }, { "t": 6.5, "v": 0.5 }]);
+        let mut c = trecho("a", "v", 1.0, 7.0, 1.0, true);
+        c["audio"]["volume"] = chaves.clone();
+        let p = projeto((30, 1), vec![c], vec![], vec![]);
+        let l = rodar(&cap, &montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0, &pasta.join("trecho")).canal(0);
+        assert_eq!(l.len(), 6 * 48_000);
+        let curva: Animavel<f64> = serde_json::from_value(chaves).unwrap();
+        // o volume vale por quadro de 256 amostras, no instante do começo dele
+        let esperado = |i: usize, zero: f64, base: f64| nivel(base * crate::edicao::curva::avaliar(&curva, zero + (i / 256 * 256) as f64 / 48_000.0));
+        let pior = (0..l.len()).map(|i| (l[i] as i32 - esperado(i, 1.0, 0.5)).abs()).max().unwrap();
+        eprintln!("volume animado no trecho: pior diferença para a curva {pior} de 32768; maior degrau {}", degrau(&l, 0, 5 * 48_000));
+        assert!(pior <= 2, "{pior}");
+        assert_eq!((l[0] as i32, l[s_(3.5)] as i32, l[s_(5.2)] as i32, l[s_(5.9)] as i32), (nivel(0.5), nivel(0.1), nivel(0.75), nivel(0.25)));
+        // nas rampas o degrau é o de um quadro de 256 amostras (a mais inclinada, a suave, anda 1,95 por segundo)
+        assert!(degrau(&l, 0, s_(4.99)) <= 180, "{}", degrau(&l, 0, s_(4.99)));
+        // narração: chaves em tempo LOCAL do clipe, com o volume da trilha por cima
+        let mut x = clipe_audio("x", "n", json!({ "ref": "programa", "t": 1.0 }), 0.5, Some(2.5));
+        x["volume"] = json!([{ "t": 0.5, "v": 1.0 }, { "t": 1.5, "v": 0.0 }]);
+        let p = projeto((30, 1), vec![imagem("i", 4.0)], vec![trilha("t", 0.5, vec![x])], vec![]);
+        let l = rodar(&cap, &montar_com(&p, &fontes, &cap, &final_(&p)).unwrap().0, &pasta.join("narracao")).canal(0);
+        let local: Animavel<f64> = serde_json::from_value(json!([{ "t": 0.5, "v": 1.0 }, { "t": 1.5, "v": 0.0 }])).unwrap();
+        assert!(l[..48_000].iter().all(|&v| v == 0) && l[3 * 48_000..].iter().all(|&v| v == 0));
+        let pior = (0..96_000).map(|i| (l[48_000 + i] as i32 - nivel(0.25 * 0.5 * crate::edicao::curva::avaliar(&local, (i / 256 * 256) as f64 / 48_000.0))).abs()).max().unwrap();
+        assert!(pior <= 2, "narração: {pior}");
+        // quadro que começa em 0,96 s do clipe: 1 − 0,46 do volume
+        assert_eq!((l[48_000] as i32, l[48_000 + 180 * 256] as i32, l[48_000 + s_(1.6)] as i32), (nivel(0.125), nivel(0.125 * 0.54), 0));
+    }
+
+    fn s_(t: f64) -> usize {
+        (t * 48_000.0).round() as usize
+    }
+
+    /// Fontes de nível constante: "a" a 0,5 e "b" a 0,25, 8 s cada, vídeo a `fps`.
+    fn dois_niveis(cap: &Capacidades, pasta: &Path, fps: &str) -> HashMap<String, FonteInfo> {
+        let a = com_video(cap, pasta, "a.mkv", (fps, 8.0), &[], "aevalsrc=exprs=0.5:s=48000:c=mono:d=8", &["-c:a", "pcm_s16le"]);
+        let b = com_video(cap, pasta, "b.mkv", (fps, 8.0), &[], "aevalsrc=exprs=0.25:s=48000:c=mono:d=8", &["-c:a", "pcm_s16le"]);
+        HashMap::from([("a".to_string(), info(cap, &a)), ("b".to_string(), info(cap, &b))])
+    }
+
+    /// O som das transições programado contra `juncao::Peca` (O3): as peças são montadas à mão, com a sobreposição
+    /// em quadros, e o PCM tem de cair nas fronteiras de amostra delas, nas três taxas.
+    #[test]
+    fn transicao_com_sobreposicao_amostras_exatas() {
+        use crate::edicao::motor::juncao::Peca;
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-transicao");
+        let t = |tipo: &str, d: f64, som: AudioTransicao| Transicao { tipo: tipo.into(), duracao_s: d, audio: som };
+        // (taxa do vídeo e da saída, slots de cada clipe, sobreposição do 2º e do 3º, entrada do 1º e fecho)
+        for (k, (fps, nome, n_q, sob, pontas)) in [((30, 1), "30", 60u32, [15u32, 12], [9u64, 6]), ((30000, 1001), "30000/1001", 60, [15, 12], [9, 6]), ((25, 1), "25", 50, [13, 10], [8, 5])].into_iter().enumerate() {
+            let dir = pasta.join(format!("f{k}"));
+            std::fs::create_dir_all(&dir).unwrap();
+            let fontes = dois_niveis(&cap, &dir, nome);
+            let fr = racional(fps);
+            let quadro = fps.1 as f64 / fps.0 as f64;
+            // as peças do vídeo, como o `motor/mod.rs` as entrega à junção
+            let (fundir, deslizar) = (t("fundir", 0.5, AudioTransicao::Acompanhar), t("deslizar_esq", 0.4, AudioTransicao::Cortar));
+            let (abre, fecha) = (t("fundir", 0.3, AudioTransicao::Acompanhar), t("fundir", 0.2, AudioTransicao::Cortar));
+            let peca = |clipe: &str, sobrepoe: u32, entrada: &Transicao, saida: &Transicao, d: (u32, u32)| Peca {
+                rotulo: format!("{clipe}v"),
+                clipe: clipe.into(),
+                n_q,
+                de: 0,
+                ate: n_q,
+                sobrepoe,
+                entrada: Some((entrada.clone(), d.0)),
+                saida: Some((saida.clone(), d.1)),
+            };
+            let pecas = [
+                peca("c0", 0, &abre, &fundir, (pontas[0] as u32, sob[0])),
+                peca("c1", sob[0], &fundir, &deslizar, (sob[0], sob[1])),
+                peca("c2", sob[1], &deslizar, &fecha, (sob[1], pontas[1] as u32)),
+            ];
+            // começo de cada peça em slots: soma das anteriores menos as sobreposições até ela
+            let inicio: Vec<u64> = (0..3).map(|i| pecas[..i].iter().map(|p| p.n_q as u64).sum::<u64>() - pecas[..=i].iter().map(|p| p.sobrepoe as u64).sum::<u64>()).collect();
+            let total_q = inicio[2] + n_q as u64;
+            // o projeto que dá essas peças: cada trecho com `n_q` quadros da fonte, na taxa dela
+            let fim = 1.0 + n_q as f64 * quadro;
+            let mut p = projeto(
+                fps,
+                vec![
+                    com_transicao(trecho("c0", "a", 1.0, fim, 1.0, true), &abre.tipo, abre.duracao_s, "acompanhar"),
+                    com_transicao(trecho("c1", "b", 1.0, fim, 1.0, true), &fundir.tipo, fundir.duracao_s, "acompanhar"),
+                    com_transicao(trecho("c2", "a", 3.0, 2.0 + fim, 1.0, true), &deslizar.tipo, deslizar.duracao_s, "cortar"),
+                ],
+                vec![],
+                vec![],
+            );
+            p.fecho = Some(fecha.clone());
+            let (passo, linha) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+            assert_eq!(linha.clipes.iter().map(|c| (c.inicio_q, c.n_q, c.sobrepoe_q)).collect::<Vec<_>>(), (0..3).map(|i| (inicio[i], n_q, pecas[i].sobrepoe)).collect::<Vec<_>>(), "{fps:?}");
+            assert_eq!(linha.total_q, total_q);
+            let pcm = rodar(&cap, &passo, &dir.join("saida"));
+            let l = pcm.canal(0);
+            let a = |q: u64| tempo::amostra_do_slot(q, fr) as usize;
+            assert_eq!((l.len(), passo.amostras as usize), (a(total_q), a(total_q)), "{fps:?}: amostras");
+            assert_eq!(l, pcm.canal(1));
+            let (na, nb) = (nivel(0.5) as f64, nivel(0.25) as f64);
+            // valor esperado em cada amostra, pelas peças
+            let mut esperado = vec![0f64; l.len()];
+            let soma = |v: &mut Vec<f64>, de: usize, ate: usize, f: &dyn Fn(usize) -> f64| (de..ate).for_each(|i| v[i] += f(i - de));
+            // c0: entra do fundo em `pontas[0]` slots, cheio, e sai cruzando com c1
+            let (x0, x1) = (a(inicio[1]), a(inicio[1] + sob[0] as u64));
+            let r0 = a(pontas[0]);
+            soma(&mut esperado, 0, r0, &|i| na * i as f64 / r0 as f64);
+            soma(&mut esperado, r0, x0, &|_| na);
+            soma(&mut esperado, x0, x1, &|i| na * ((x1 - x0) - i) as f64 / (x1 - x0) as f64);
+            // c1: entra cruzando, cheio até 10 ms antes do meio da sobreposição com c2, e corta
+            let (y0, y1) = (a(inicio[2]), a(inicio[2] + sob[1] as u64));
+            let meio = y0 + (y1 - y0) / 2;
+            soma(&mut esperado, x0, x1, &|i| nb * i as f64 / (x1 - x0) as f64);
+            soma(&mut esperado, x1, meio - 480, &|_| nb);
+            soma(&mut esperado, meio - 480, meio, &|i| nb * (480 - i) as f64 / 480.0);
+            // c2: do meio em diante, cheio, e o fecho cortando: 10 ms no fim
+            let fim = l.len();
+            soma(&mut esperado, meio, meio + 480, &|i| na * i as f64 / 480.0);
+            soma(&mut esperado, meio + 480, fim - 480, &|_| na);
+            soma(&mut esperado, fim - 480, fim, &|i| na * (480 - i) as f64 / 480.0);
+            let pior = (0..l.len()).map(|i| (l[i] as f64 - esperado[i]).abs()).fold(0.0, f64::max);
+            eprintln!("{fps:?}: {} slots, {} amostras; sobreposições em {x0}..{x1} e {y0}..{y1} (troca em {meio}); pior diferença {pior:.2} de 32768", total_q, l.len());
+            assert!(pior <= 1.5, "{fps:?}: {pior}");
+            // o meio da sobreposição cruzada é a mistura dos dois lados
+            let m = x0 + (x1 - x0) / 2;
+            assert!((l[m] as f64 - (na + nb) / 2.0).abs() <= 2.0, "{}", l[m]);
+            assert_eq!((l[x0 - 1] as i32, l[x1 + 1] as i32), (nivel(0.5), nivel(0.25)));
+            // PCM igual nos dois binários
+            if let Some(bins) = dois_binarios() {
+                let h: Vec<String> = bins.iter().map(|b| rodar(b, &passo, &dir.join(format!("b-{}", b.versao))).sha).collect();
+                assert_eq!(h[0], h[1], "{fps:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn cortar_troca_o_som_no_meio() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-cortar");
+        let fontes = dois_niveis(&cap, &pasta, "30");
+        let projeto_com = |som: &str| projeto((30, 1), vec![trecho("c0", "a", 1.0, 4.0, 1.0, true), com_transicao(trecho("c1", "b", 1.0, 4.0, 1.0, true), "fundir", 1.0, som)], vec![], vec![]);
+        let rodar_com_som = |som: &str| {
+            let p = projeto_com(som);
+            let (passo, linha) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+            // 30 slots de sobreposição: c1 começa no slot 60
+            assert_eq!((linha.clipes[1].inicio_q, linha.clipes[1].sobrepoe_q, linha.total_q), (60, 30, 150));
+            rodar(&cap, &passo, &pasta.join(som)).canal(0)
+        };
+        let (cortar, acompanhar) = (rodar_com_som("cortar"), rodar_com_som("acompanhar"));
+        assert_eq!((cortar.len(), acompanhar.len()), (240_000, 240_000));
+        // sobreposição em [96000, 144000); o meio é 120000
+        let (ini, meio, fim) = (96_000usize, 120_000usize, 144_000usize);
+        let (na, nb) = (nivel(0.5), nivel(0.25));
+        // até 10 ms antes do meio só o som de quem sai; 10 ms depois do meio só o de quem entra
+        assert!(cortar[..meio - 480].iter().all(|&x| x as i32 == na), "antes do meio");
+        assert!(cortar[meio + 480..].iter().all(|&x| x as i32 == nb), "depois do meio");
+        // no meio os dois estão em zero; 5 ms de cada lado, a meia rampa de cada um
+        assert_eq!(cortar[meio], 0);
+        assert!((cortar[meio - 240] as i32 - na / 2).abs() <= 1 && (cortar[meio + 240] as i32 - nb / 2).abs() <= 1, "{} {}", cortar[meio - 240], cortar[meio + 240]);
+        // sem estalo: o degrau é o da rampa de 10 ms
+        let maior = degrau(&cortar, 0, cortar.len());
+        assert!(maior <= na / 480 + 2, "degrau {maior}");
+        // "acompanhar" cruza a sobreposição inteira: no meio, a média
+        assert_eq!((acompanhar[ini - 1] as i32, acompanhar[fim] as i32), (na, nb));
+        assert!((acompanhar[meio] as i32 - (na + nb) / 2).abs() <= 1, "{}", acompanhar[meio]);
+        assert!(degrau(&acompanhar, 0, acompanhar.len()) <= 2);
+        eprintln!("cortar: {} até {}, 0 em {meio}, {} de {} em diante; acompanhar no meio {}", na, meio - 480, nb, meio + 480, acompanhar[meio]);
+    }
+
+    /// Média das amostras em [a, b).
+    fn media(x: &[i16], a: usize, b: usize) -> f64 {
+        x[a..b].iter().map(|&v| v as f64).sum::<f64>() / (b - a) as f64
+    }
+
+    /// Silenciar nas fontes que o gravador entrega: tempo absoluto (começa em 1 h), 8 kHz A-law e 5.1; intervalo
+    /// colado no começo e no fim do clipe, tom vizinho de mudo. Mede o zero digital amostra a amostra e, sob o tom,
+    /// a falta do nível contínuo da fonte (média zero em ciclos inteiros).
+    #[test]
+    fn silenciar_em_tempo_absoluto_8_khz_e_seis_canais() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-silenciar-fontes");
+        let com = |mut c: Value, s: Value| {
+            c["audio"]["silencios"] = s;
+            c
+        };
+        let rodar_p = |p: &ProjetoEdicao, fontes: &HashMap<String, FonteInfo>, nome: &str| rodar(&cap, &montar_com(p, fontes, &cap, &final_(p)).unwrap().0, &pasta.join(nome)).canal(0);
+
+        // 8 kHz A-law, começo em 1 h: nível contínuo de 0,5
+        let h = com_video(&cap, &pasta, "h.mkv", ("30", 8.0), &[], "aevalsrc=exprs=0.5:s=8000:c=mono:d=8", &["-c:a", "pcm_alaw", "-output_ts_offset", "3600"]);
+        let fonte = info(&cap, &h);
+        assert_eq!((fonte.audio.as_ref().unwrap().inicio_s, fonte.audio.as_ref().unwrap().taxa), (3600.0, 8000));
+        let fontes = HashMap::from([("h".to_string(), fonte)]);
+        let sil = json!([{ "id": "m", "de": 3603.0, "ate": 3603.5, "modo": "mudo", "motivo": "" }, { "id": "t", "de": 3604.0, "ate": 3604.3, "modo": "tom", "motivo": "" }]);
+        let p = projeto((30, 1), vec![com(trecho("a", "h", 3602.2, 3604.8, 1.0, true), sil.clone()), com(trecho("b", "h", 3602.2, 3604.8, 0.5, false), sil)], vec![], vec![]);
+        let l = rodar_p(&p, &fontes, "h");
+        let p0 = projeto((30, 1), vec![trecho("a", "h", 3602.2, 3604.8, 1.0, true), trecho("b", "h", 3602.2, 3604.8, 0.5, false)], vec![], vec![]);
+        let limpo = rodar_p(&p0, &fontes, "h-limpo");
+        assert_eq!((l.len(), limpo.len()), (3 * 124_800, 3 * 124_800));
+        let cheio = media(&limpo, 20_000, 30_000);
+        assert!((cheio - nivel(0.5) as f64).abs() < 400.0, "{cheio}");
+        // 1×: mudo em [38400, 62400) e tom em [86400, 100800) do clipe; fora das rampas de 10 ms, o som da fonte
+        assert!(l[38_400..62_400].iter().all(|&x| x == 0), "mudo");
+        for (de, ate) in [(0, 37_920), (62_880, 85_920), (101_280, 124_800)] {
+            assert!(l[de..ate] == limpo[de..ate], "{de}..{ate} mudou");
+        }
+        assert!((l[38_160] as f64 - cheio / 2.0).abs() < 40.0 && (l[62_640] as f64 - cheio / 2.0).abs() < 40.0, "meia rampa: {} {}", l[38_160], l[62_640]);
+        let m = media(&l, 86_400, 100_800);
+        assert!(m.abs() <= 2.0 && (rms_db(&l, 86_400, 100_800) + 21.07).abs() <= 0.1 && (frequencia(&l, 86_400, 100_800) - 1000.0).abs() <= 2.0, "tom: média {m}");
+        // 0,5× exato: o dobro das amostras, a partir de 124800
+        let b = 124_800;
+        assert!(l[b + 76_800 + 64..b + 124_800 - 64].iter().all(|&x| x == 0), "mudo a 0,5×");
+        assert!((media(&l, b + 60_000, b + 70_000) - cheio).abs() < 40.0 && (media(&l, b + 130_000, b + 160_000) - cheio).abs() < 40.0);
+        let m = media(&l, b + 172_800 + 96, b + 201_600 - 96);
+        assert!(m.abs() <= 3.0 && (frequencia(&l, b + 172_800 + 96, b + 201_600 - 96) - 500.0).abs() <= 2.0, "tom a 0,5×: média {m}");
+
+        // 5.1 com nível contínuo: tom, e mudo de 20 ms que vira o mínimo de 45 ms
+        let seis = com_video(&cap, &pasta, "seis.mkv", ("30", 4.0), &[], "aevalsrc=exprs=0.3|0.3|0.3|0.3|0.3|0.3:c=5.1:s=48000:d=4", &["-c:a", "pcm_s16le"]);
+        let fonte = info(&cap, &seis);
+        assert_eq!(fonte.audio.as_ref().unwrap().canais, 6);
+        let fontes = HashMap::from([("s".to_string(), fonte)]);
+        let sil = json!([{ "id": "t", "de": 1.0, "ate": 1.5, "modo": "tom", "motivo": "" }, { "id": "m", "de": 2.0, "ate": 2.02, "modo": "mudo", "motivo": "" }]);
+        let p = projeto((30, 1), vec![com(trecho("a", "s", 0.0, 3.0, 1.0, true), sil)], vec![], vec![]);
+        let l = rodar_p(&p, &fontes, "seis");
+        let p0 = projeto((30, 1), vec![trecho("a", "s", 0.0, 3.0, 1.0, true)], vec![], vec![]);
+        let limpo = rodar_p(&p0, &fontes, "seis-limpo");
+        assert!(limpo[1_000] != 0 && limpo[1_000..140_000].iter().all(|&x| x == limpo[1_000]), "nível contínuo");
+        let m = media(&l, 48_000, 72_000);
+        assert!(m.abs() <= 2.0 && (rms_db(&l, 48_000, 72_000) + 21.07).abs() <= 0.1, "tom no 5.1: média {m}");
+        assert!(l[96_000..98_160].iter().all(|&x| x == 0), "mudo mínimo");
+        for (de, ate) in [(0, 47_520), (72_480, 95_520), (98_640, 144_000)] {
+            assert!(l[de..ate] == limpo[de..ate], "5.1: {de}..{ate} mudou");
+        }
+
+        // coladas nas pontas: tom 2 ms depois do começo do clipe, mudo vizinho dele, mudo que passa do fim
+        let dc = com_video(&cap, &pasta, "dc.mkv", ("30", 5.0), &[], "aevalsrc=exprs=0.5:s=48000:c=mono:d=5", &["-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("d".to_string(), info(&cap, &dc))]);
+        let sil = json!([
+            { "id": "t", "de": 1.002, "ate": 1.2, "modo": "tom", "motivo": "" },
+            { "id": "m", "de": 1.2, "ate": 1.5, "modo": "mudo", "motivo": "" },
+            { "id": "v1", "de": 2.0, "ate": 2.2, "modo": "mudo", "motivo": "" },
+            { "id": "v2", "de": 2.23, "ate": 2.4, "modo": "mudo", "motivo": "" },
+            { "id": "z", "de": 2.99, "ate": 3.5, "modo": "mudo", "motivo": "" }
+        ]);
+        let p = projeto((30, 1), vec![com(trecho("a", "d", 1.0, 3.0, 1.0, true), sil)], vec![], vec![]);
+        let l = rodar_p(&p, &fontes, "pontas");
+        assert_eq!(l.len(), 96_000);
+        // o tom ainda sobe nos primeiros 10 ms; o som da fonte (16384) já saiu na amostra 96
+        let m = media(&l, 480, 9_600);
+        assert!(m.abs() <= 2.0 && l[96..9_600].iter().all(|&x| x.unsigned_abs() <= 4_100), "tom colado no começo: média {m}");
+        assert!(l[10_080..24_000].iter().all(|&x| x == 0) && l[95_520..].iter().all(|&x| x == 0), "mudos");
+        // dois mudos a 30 ms um do outro (não se unem; os `enable` dos dois se cruzam): 10 ms de som inteiro no meio
+        assert!(l[48_000..57_600].iter().all(|&x| x == 0) && l[59_040..67_200].iter().all(|&x| x == 0), "mudos vizinhos");
+        assert!(l[58_080..58_560].iter().all(|&x| x as i32 == nivel(0.5)), "entre os mudos vizinhos: {}", l[58_320]);
+        assert!(l[24_480..47_520].iter().all(|&x| x as i32 == nivel(0.5)) && l[67_680..95_040].iter().all(|&x| x as i32 == nivel(0.5)), "o resto fica inteiro");
+    }
+
+    /// "Da degravação…" marca dezenas de falas: 100 intervalos (tom e mudo alternados) num clipe só.
+    #[test]
+    fn cem_silencios_num_clipe() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-cem-silencios");
+        let dc = com_video(&cap, &pasta, "dc.mkv", ("30", 124.0), &[], "aevalsrc=exprs=0.5:s=48000:c=mono:d=124", &["-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("d".to_string(), info(&cap, &dc))]);
+        // em tempo de fonte: fala i de 2 + 1,1·i a 2,6 + 1,1·i (o clipe começa em 1 s)
+        let fala = |i: usize| (2.0 + 1.1 * i as f64, 2.6 + 1.1 * i as f64);
+        let sil: Vec<Value> = (0..100).map(|i| json!({ "id": format!("s{i}"), "de": fala(i).0, "ate": fala(i).1, "modo": if i % 2 == 0 { "tom" } else { "mudo" }, "motivo": "" })).collect();
+        let mut c = trecho("a", "d", 1.0, 121.0, 1.0, true);
+        c["audio"]["silencios"] = json!(sil);
+        let p = projeto((30, 1), vec![c], vec![], vec![]);
+        let (passo, _) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+        let t0 = Instant::now();
+        let l = rodar(&cap, &passo, &pasta.join("saida")).canal(0);
+        eprintln!("100 silêncios em 120 s de som: {:.1} s", t0.elapsed().as_secs_f64());
+        assert_eq!(l.len(), 120 * 48_000);
+        let s = |t: f64| ((t - 1.0) * 48_000.0).round() as usize;
+        for i in 0..100 {
+            let (a, b) = (s(fala(i).0), s(fala(i).1));
+            if i % 2 == 0 {
+                let m = media(&l, a, b);
+                assert!(m.abs() <= 2.0 && l[a..b].iter().all(|&x| x.unsigned_abs() <= 4_100) && (rms_db(&l, a, b) + 21.07).abs() <= 0.1, "tom {i}: média {m}");
+            } else {
+                assert!(l[a..b].iter().all(|&x| x == 0), "mudo {i}");
+            }
+            // entre uma fala e a seguinte (fora das rampas de 10 ms), o som da fonte
+            let seguinte = if i < 99 { s(fala(i + 1).0) } else { l.len() };
+            assert!(l[b + 480..seguinte - 480].iter().all(|&x| x as i32 == nivel(0.5)), "depois da fala {i}");
+        }
+    }
+
+    /// Tudo da Fase 1 junto: a prévia de uma janela é a fatia exata do render final.
+    #[test]
+    fn previa_e_a_fatia_do_final_com_transicao_silencio_e_abaixar() {
+        let Some(cap) = fontes::cap() else { return };
+        eprintln!("ffmpeg {}", cap.versao);
+        let pasta = fontes::pasta_temporaria("audio-previa-f1");
+        let som = format!("{SINAL}:s=48000:c=stereo:d=12");
+        let src = com_video(&cap, &pasta, "cliques.mkv", ("30", 12.0), &[], &som, &["-c:a", "pcm_s16le"]);
+        let n = gerar(&cap, &pasta, "narr.wav", &["-f", "lavfi", "-i", "sine=f=700:r=48000:d=3", "-c:a", "pcm_s16le"]);
+        let fontes = HashMap::from([("v".to_string(), info(&cap, &src)), ("n".to_string(), info_som(&cap, &n))]);
+        let mut a = trecho("a", "v", 1.0, 3.0, 1.0, true);
+        a["audio"]["silencios"] = json!([{ "id": "s", "de": 1.5, "ate": 2.1, "modo": "tom", "motivo": "" }]);
+        a["audio"]["volume"] = json!([{ "t": 1.0, "v": 0.4 }, { "t": 3.0, "v": 1.2 }]);
+        let mut p = projeto(
+            (30000, 1001),
+            vec![
+                a,
+                com_transicao(trecho("b", "v", 6.0, 9.0, 2.0, true), "fundir", 0.5, "acompanhar"),
+                com_transicao(imagem("i", 0.7), "fundir", 0.3, "cortar"),
+                com_transicao(trecho("c", "v", 0.2, 1.4, 0.5, false), "deslizar_esq", 0.4, "cortar"),
+            ],
+            vec![trilha("t", 0.6, vec![clipe_audio("x", "n", json!({ "ref": "clipe", "clipe": "b", "desloc": 0.3 }), 0.5, Some(2.5))])],
+            vec![],
+        );
+        p.audios[0].abaixa_original = true;
+        let (passo, linha) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+        let todo = rodar(&cap, &passo, &pasta.join("final"));
+        assert_eq!(todo.n() as u64, tempo::amostra_do_slot(linha.total_q, linha.fps));
+        let a = |q| tempo::amostra_do_slot(q, linha.fps) as usize;
+        // a narração toca nos slots 54 a 114: as janelas 40..52 e 116..125 só têm a descida e a subida do original
+        assert_eq!(linha.livres.iter().map(|x| (x.inicio_q, x.n_q)).collect::<Vec<_>>(), vec![(54, 60)]);
+        for (de_q, ate_q) in [(0, 20), (37, 101), (40, 52), (116, 125), (50, linha.total_q)] {
+            let (previa, _) = montar_com(&p, &fontes, &cap, &Alvo::Previa { altura: 360, de_q, ate_q }).unwrap();
+            let x = rodar(&cap, &previa, &pasta.join(format!("previa{de_q}")));
+            assert!(x.x == todo.x[2 * a(de_q)..2 * a(ate_q)], "janela {de_q}..{ate_q}");
+        }
+        // PCM igual nos dois binários (O6), com tudo junto
+        if let Some(bins) = dois_binarios() {
+            let h: Vec<String> = bins.iter().map(|b| rodar(b, &passo, &pasta.join(format!("b-{}", b.versao))).sha).collect();
+            assert_eq!(h[0], h[1], "PCM diferente nos dois binários");
+        }
     }
 }
