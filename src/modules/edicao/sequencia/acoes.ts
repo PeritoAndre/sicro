@@ -154,7 +154,14 @@ function noCursor(): { id: Id; j: number; tab: NonNullable<ReturnType<typeof rec
   const tab = rec.tabela;
   // dividir e congelar gravam pts da tabela: só com ela confiável (contratos (h) 17)
   if (!tab || marcarBloqueado(rec.info, tab)) return null;
-  return { id, j: exibido(tab, s.cursor.t), tab };
+  const j = exibido(tab, s.cursor.t);
+  // o palco mostra a mídia inteira: fora da faixa do clipe do cursor, vale o trecho da mesma mídia que tem o quadro
+  const dentro = (x: (typeof s.doc.principal)[number]) => clipeConhecido(x) && x.tipo === "trecho" && x.midia === c.midia && ((f) => j >= f[0] && j < f[1])(faixaDoClipe(x, tab));
+  if (!dentro(c)) {
+    const outro = s.doc.principal.find(dentro);
+    if (outro) return { id: (outro as { id: Id }).id, j, tab };
+  }
+  return { id, j, tab };
 }
 
 /** "Congelar aqui" é possível agora? (cursor dentro de um trecho com tabela) */

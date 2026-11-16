@@ -304,6 +304,24 @@ describe("ações pela store (alterar e desfazer)", () => {
     expect(st().doc!.principal.filter(clipeConhecido)).toHaveLength(4);
   });
 
+  it("Ctrl+B de novo depois de dividir: o cursor ficou no outro pedaço da mesma mídia e divide o pedaço que tem o quadro", () => {
+    selecionarClipe("b");
+    st().posicionar({ modo: "clipe", clipe: "b", t: (75 * 512 + 256) / 15360 });
+    dividir();
+    expect(ids()).toHaveLength(4);
+    // o cursor volta ao clipe "b" (agora [60, 75)) num quadro que só o segundo pedaço tem
+    st().posicionar({ modo: "clipe", clipe: "b", t: (90 * 512 + 256) / 15360 });
+    expect(podeCongelar()).toBe(true);
+    dividir();
+    expect(ids()).toHaveLength(5);
+    // e para trás: cursor no último pedaço, quadro do primeiro
+    const ultimo = ids()[3]!;
+    st().posicionar({ modo: "clipe", clipe: ultimo, t: (65 * 512 + 256) / 15360 });
+    dividir();
+    expect(ids()).toHaveLength(6);
+    expect(ids()[0]).toBe("a");
+  });
+
   it("mídia não marcável (contratos (h) 17): Dividir e Congelar aqui não gravam pts da tabela de pacotes", () => {
     marcar(false);
     selecionarClipe("b");
