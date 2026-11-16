@@ -34,4 +34,6 @@
 .chipAtivo { border-color: var(--sicro-accent); background: var(--sicro-surface-3); color: var(--sicro-fg); }
 .bloco { display: flex; flex-direction: column; gap: 10px; }
 .mono { font-family: var(--sicro-font-mono, monospace); font-size: 11.5px; color: var(--sicro-fg-dim); }
+.previaPalco { position: relative; flex: 1; align-self: stretch; min-width: 0; min-height: 480px; }
+.previaPalco > svg { position: absolute; inset: 0; display: block; }
 .previaSvg { width: 100%; height: 100%; min-height: 480px; max-height: 640px; display: block; }

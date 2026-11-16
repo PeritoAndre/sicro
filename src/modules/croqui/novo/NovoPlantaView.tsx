@@ -44,7 +44,8 @@ function Previa({ w, h }: { w: number; h: number }) {
   for (let y = 0; y <= h + 1e-6; y += passo) ys.push(y);
   const cota = "var(--sicro-fg-dim)";
   return (
-    <div ref={ref} style={{ width: "100%", height: "100%", minHeight: 480 }}>
+    // o svg fica fora do fluxo: medir a caixa pelo conteúdo fazia ela crescer a cada medida (a folha "caía")
+    <div ref={ref} className={styles.previaPalco}>
       <svg width={box.w} height={box.h} role="img" aria-label="Folha da planta">
         <rect x={ox} y={oy} width={W} height={H} fill="#f5f6f8" />
         {xs.map((x) => <line key={`x${x}`} x1={ox + x * s} y1={oy} x2={ox + x * s} y2={oy + H} stroke={x % (passo * 5) === 0 ? "#b8c0cc" : "#dde3ea"} />)}
