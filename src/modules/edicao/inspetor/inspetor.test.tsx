@@ -5,6 +5,7 @@
  * inválido aparece só para leitura; nenhum texto fora do §8.6 e nenhum texto de exemplo.
  */
 
+import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ClipeCongelar, ClipeTitulo, ClipeTrecho, EfDestaque, EfEnquadramento, EfGirar, EfOcultar, EfTexto, MidiaRef, ProjetoAberto, ProjetoEdicao, Problema } from "@domain/edicao";
 
@@ -317,6 +318,16 @@ describe("Clipe · Marcações", () => {
     await sair(rot);
     expect(d().rotulo?.texto).toBe("Suspeito");
     expect([passos(), ultimo()]).toEqual([n + 4, "Rótulo"]);
+    expect(d().rotulo?.estilo.cor).toBe(d().traco.cor);
+    // trocar a Cor leva o rótulo junto
+    const cor = campo(linha, "Cor").querySelector<HTMLInputElement>('input[type="color"]')!;
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(cor, "#00ff00");
+      cor.dispatchEvent(new Event("input", { bubbles: true }));
+      cor.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    expect([d().traco.cor.slice(0, 7), d().rotulo?.estilo.cor.slice(0, 7)]).toEqual(["#00ff00", "#00ff00"]);
+    st().desfazer();
     await clicar(linha.querySelector<HTMLButtonElement>('[data-acao="marcar"]')!);
     const f = useInspetorUi.getState().ferramenta!;
     expect(f).toMatchObject({ tipo: "caixa", rastreio: d().rastreio, efeito: d().id });
@@ -324,6 +335,19 @@ describe("Clipe · Marcações", () => {
     const r = doc().rastreios.find((x) => x.id === d().rastreio)!;
     expect(r.ancoras.map((a) => a.t)).toEqual([12, 14]);
     expect([passos(), ultimo()]).toEqual([n + 5, "Marcar"]);
+  });
+
+  it("Marcar ligado num destaque e Adicionar → Destaque: a ferramenta desliga e não marca no anterior", async () => {
+    const id = principal()[1].id;
+    await esperar(() => selecionar("clipe", id));
+    const linha = await abrirEfeito("destaque");
+    const antigo = principal()[1].efeitos.find((e) => (e as EfDestaque).tipo === "destaque") as EfDestaque;
+    await clicar(linha.querySelector<HTMLButtonElement>('[data-acao="marcar"]')!);
+    expect(useInspetorUi.getState().ferramenta).toMatchObject({ efeito: antigo.id });
+    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="adicionar"]')!);
+    await clicar([...document.querySelectorAll<HTMLElement>("button, [role=menuitem]")].find((x) => x.textContent?.trim() === "Destaque")!);
+    expect(st().selecao.efeito).not.toBe(antigo.id);
+    expect(useInspetorUi.getState().ferramenta).toBeNull();
   });
 
   it("Ocultar: Modo, Intensidade (arrasto = um passo), Margem negativa não entra, Só neste clipe", async () => {

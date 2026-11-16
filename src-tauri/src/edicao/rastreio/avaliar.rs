@@ -86,8 +86,17 @@ pub fn avaliar(r: &Rastreio, denso: Option<&ArquivoDenso>, em: Instante) -> Opti
         let segura = matches!(r.origem, OrigemRastreio::Manual);
         return segura.then_some(Avaliado { caixa: ks[n - 1].v, como: Como::Segurado, incerto: false });
     }
+    // rastreio seguido: âncoras longe uma da outra, sem amostra no meio, não se ligam (nada foi seguido ali)
+    if !matches!(r.origem, OrigemRastreio::Manual) && ks[n].t - ks[n - 1].t > BURACO_S {
+        return None;
+    }
     Some(Avaliado { caixa: curva::entre(&ks[n - 1], &ks[n], em.t), como: Como::Interpolado, incerto: false })
 }
+
+/// Rastreio que não é manual: duas âncoras mais distantes que isto (s), sem amostra do denso entre elas, ficam sem
+/// caixa no meio (teste do dono, 16/11: 29 s inventados entre a saída e a volta da pessoa). Espelho em `modelo/rastreio.ts`.
+// CONTRATO: regra nova do `avaliar`, nos dois lados.
+pub const BURACO_S: f64 = 4.0;
 
 /// O instante cai numa ausência aceita pelo perito? Intervalo fechado `[de_s, ate_s]`.
 pub fn em_ausencia(r: &Rastreio, t: f64) -> bool {
@@ -289,6 +298,13 @@ pub(crate) mod testes {
         for k in [10, 30, 50, 90, 91] {
             casos.push(caso(&format!("assistido quadro {k}"), &assistido, em(k)));
         }
+        // buraco: a 4 s (120 quadros) ainda liga; a mais, não (manual sempre liga)
+        let longe = |b: i64, origem: OrigemRastreio| rastreio(vec![ch(30, cx(0.1, 0.1, 0.1, 0.1), Interp::Linear), ch(30 + b, cx(0.7, 0.7, 0.1, 0.1), Interp::Linear)], origem);
+        for (b, k) in [(120, 90), (121, 90), (870, 400), (121, 30), (121, 151)] {
+            casos.push(caso(&format!("assistido buraco {b} quadro {k}"), &longe(b, OrigemRastreio::Assistido), em(k)));
+        }
+        casos.push(caso("manual buraco 870 quadro 400", &longe(870, OrigemRastreio::Manual), em(400)));
+        casos.push(caso("pessoas buraco 870 quadro 400", &longe(870, OrigemRastreio::Pessoas { pessoa_id: "p7".into(), estado: EstadoPessoa::Auto, copiado_em: "2026-11-14T00:00:00Z".into() }), em(400)));
         let pessoas = rastreio(tres(), OrigemRastreio::Pessoas { pessoa_id: "p7".into(), estado: EstadoPessoa::Auto, copiado_em: "2026-11-14T00:00:00Z".into() });
         casos.push(caso("pessoas depois da ultima", &pessoas, em(120)));
         let deteccao = rastreio(tres(), OrigemRastreio::Deteccao { classe: ClasseDeteccao::Rosto });

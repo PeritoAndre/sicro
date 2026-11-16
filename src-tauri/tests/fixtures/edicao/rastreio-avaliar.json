@@ -1366,6 +1366,395 @@
   {
     "entrada": {
       "em": {
+        "pts": 46080,
+        "t": 3.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 76800,
+            "t": 5.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido buraco 120 quadro 90",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.4,
+        "y": 0.4
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 46080,
+        "t": 3.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 77312,
+            "t": 5.033333333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido buraco 121 quadro 90",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 204800,
+        "t": 13.333333333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 460800,
+            "t": 30.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido buraco 870 quadro 400",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 15360,
+        "t": 1.0
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 77312,
+            "t": 5.033333333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido buraco 121 quadro 30",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.1,
+        "y": 0.1
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 77312,
+        "t": 5.033333333333333
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 77312,
+            "t": 5.033333333333333,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "assistido"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "assistido buraco 121 quadro 151",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.7,
+        "y": 0.7
+      },
+      "como": "ancora",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 204800,
+        "t": 13.333333333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 460800,
+            "t": 30.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "tipo": "manual"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "manual buraco 870 quadro 400",
+    "saida": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.1,
+        "x": 0.3551724137931035,
+        "y": 0.3551724137931035
+      },
+      "como": "interpolado",
+      "incerto": false
+    }
+  },
+  {
+    "entrada": {
+      "em": {
+        "pts": 204800,
+        "t": 13.333333333333334
+      },
+      "rastreio": {
+        "ancoras": [
+          {
+            "interp": "linear",
+            "pts": 15360,
+            "t": 1.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.1,
+              "y": 0.1
+            }
+          },
+          {
+            "interp": "linear",
+            "pts": 460800,
+            "t": 30.0,
+            "v": {
+              "h": 0.1,
+              "w": 0.1,
+              "x": 0.7,
+              "y": 0.7
+            }
+          }
+        ],
+        "ausencias": [],
+        "base": "fonte",
+        "confirmacao": null,
+        "cor": "#ffcc00",
+        "denso": null,
+        "espaco": "original",
+        "id": "r1",
+        "midia": "m1",
+        "nome": "",
+        "origem": {
+          "copiado_em": "2026-11-14T00:00:00Z",
+          "estado": "auto",
+          "pessoa_id": "p7",
+          "tipo": "pessoas"
+        },
+        "silhuetas": null,
+        "tipo": "caixa"
+      }
+    },
+    "nome": "pessoas buraco 870 quadro 400",
+    "saida": null
+  },
+  {
+    "entrada": {
+      "em": {
         "pts": 61440,
         "t": 4.0
       },

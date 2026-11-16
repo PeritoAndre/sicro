@@ -40,7 +40,18 @@ export function DestaqueEditor({ valor: e }: EditorEfeitoProps<EfDestaque>) {
   return (
     <Grade>
       <Escolha rotulo="Forma" larga valor={e.forma} opcoes={FORMAS.map((v) => ({ v, icone: <FormaIcone forma={v} /> }))} aplicar={(v) => em((x) => void (x.forma = v))} />
-      <Cor rotulo="Cor" item={id} valor={e.traco.cor} aplicar={(v) => em((x) => void (x.traco.cor = v))} />
+      <Cor
+        rotulo="Cor"
+        item={id}
+        valor={e.traco.cor}
+        aplicar={(v) =>
+          em((x) => {
+            // o rótulo nasce com a cor do traço e acompanha enquanto for a mesma
+            if (x.rotulo && x.rotulo.estilo.cor === x.traco.cor) x.rotulo.estilo.cor = v;
+            x.traco.cor = v;
+          })
+        }
+      />
       <Numero
         rotulo="Espessura"
         item={id}

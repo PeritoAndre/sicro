@@ -55,6 +55,9 @@ function doDenso(d: ArquivoDenso, em: Instante): Avaliado | null | undefined {
   return { caixa: { x, y, w, h }, como, incerto: estado === ESTADO_INCERTO };
 }
 
+/** Espelho de `rastreio::avaliar::BURACO_S`: rastreio que não é manual não liga âncoras mais distantes que isto (s). */
+export const BURACO_S = 4;
+
 /** Caixa do rastreio no instante; null = nada. Sem `denso` segue pelas âncoras. */
 export function avaliar(r: Rastreio, em: Instante, denso?: ArquivoDenso | null): Avaliado | null {
   const ks = r.ancoras;
@@ -69,6 +72,8 @@ export function avaliar(r: Rastreio, em: Instante, denso?: ArquivoDenso | null):
   if (n === ks.length) {
     return r.origem.tipo === "manual" ? { caixa: (ks[n - 1] as Chave<Caixa>).v, como: "segurado", incerto: false } : null;
   }
+  // rastreio seguido: âncoras longe uma da outra, sem amostra no meio, não se ligam (nada foi seguido ali)
+  if (r.origem.tipo !== "manual" && (ks[n] as Chave<Caixa>).t - (ks[n - 1] as Chave<Caixa>).t > BURACO_S) return null;
   return { caixa: entre(ks[n - 1] as Chave<Caixa>, ks[n] as Chave<Caixa>, em.t), como: "interpolado", incerto: false };
 }
 

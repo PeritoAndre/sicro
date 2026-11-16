@@ -225,7 +225,7 @@ fn simplificar_ancoras(r: &Rastreio, tolerancia: f64, janela_s: f64, tb: Raciona
     }
     // o denso não existe mais: o tamanho do quadro só pesa no piso de 2 px
     let pixel = TamanhoPx { w: 1920, h: 1080 };
-    let escolhidas: BTreeSet<usize> = laco::quadros_chave(&am, pixel, tolerancia, PISO_PX).into_iter().collect();
+    let escolhidas: BTreeSet<usize> = com_teto(&am, laco::quadros_chave(&am, pixel, tolerancia, PISO_PX), tb).into_iter().collect();
     let mut out: Vec<Chave<Caixa>> = ks
         .iter()
         .zip(&am)
@@ -235,6 +235,34 @@ fn simplificar_ancoras(r: &Rastreio, tolerancia: f64, janela_s: f64, tb: Raciona
         .collect();
     out.sort_by(|a, b| a.t.total_cmp(&b.t).then(a.pts.cmp(&b.pts)));
     Some(out)
+}
+
+/// Âncoras do "Simplificar" a no máximo `ESPACO_MAX_S` uma da outra quando há amostra no meio (pessoa parada dá
+/// pontas longe; mais que `BURACO_S` viraria buraco). Buraco de verdade (sem amostra) fica como está.
+const ESPACO_MAX_S: f64 = super::avaliar::BURACO_S / 2.0;
+fn com_teto(am: &[AmostraCorrida], chaves: Vec<usize>, tb: Racional) -> Vec<usize> {
+    let t = |i: usize| tempo(am[i].pts, tb);
+    let mut out = Vec::with_capacity(chaves.len());
+    for w in chaves.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        out.push(a);
+        let partes = ((t(b) - t(a)) / ESPACO_MAX_S).ceil() as usize;
+        let mut ultimo = a;
+        for m in 1..partes {
+            let alvo = t(a) + (t(b) - t(a)) * m as f64 / partes as f64;
+            // a amostra com caixa mais perto do alvo, depois da última posta
+            let melhor = (ultimo + 1..b).filter(|&i| am[i].caixa.is_some()).min_by(|&x, &y| (t(x) - alvo).abs().total_cmp(&(t(y) - alvo).abs()));
+            if let Some(i) = melhor {
+                out.push(i);
+                ultimo = i;
+            }
+        }
+    }
+    if let Some(&z) = chaves.last() {
+        out.push(z);
+    }
+    out.dedup();
+    out
 }
 
 /// Média móvel centrada (janela `janela_s`, pelo tempo de cada quadro) de x, y, w e h das amostras com caixa.
@@ -590,7 +618,7 @@ pub(crate) fn aplicar_com(
                 if let Some(s) = suavizar_s {
                     suavizar(&mut am, s, tb);
                 }
-                for k in laco::quadros_chave(&am, d.pixel, tolerancia, PISO_PX) {
+                for k in com_teto(&am, laco::quadros_chave(&am, d.pixel, tolerancia, PISO_PX), tb) {
                     let a = &am[k];
                     novas.push(Chave { t: tempo(a.pts, tb), pts: Some(a.pts), v: a.caixa.expect("chave com caixa"), interp: Interp::Linear });
                 }
@@ -1179,6 +1207,26 @@ pub(crate) mod testes {
     }
 
     #[test]
+    fn simplificar_poe_ancoras_a_cada_2_s_e_buraco_de_4_s_fica_vazio() {
+        // parada 10 s (300 quadros): sem o teto ficariam só as pontas, e o buraco de 4 s apagaria a pessoa
+        let mut d = com_cabecalho(denso_teste(0, 300, |_| ESTADO_OK, |_| TIPO_MEDIDO));
+        for j in 0..d.pts.len() {
+            (d.x[j], d.y[j], d.w[j], d.h[j]) = (0.3, 0.3, 0.1, 0.2);
+        }
+        let r = rastreio(vec![], OrigemRastreio::Assistido);
+        let anc = aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(0.5) }, TB).unwrap().0.unwrap();
+        assert!(anc.windows(2).all(|w| w[1].t - w[0].t <= ESPACO_MAX_S + 1e-9), "{:?}", anc.iter().map(|k| k.t).collect::<Vec<_>>());
+        let r2 = rastreio(anc, OrigemRastreio::Assistido);
+        assert!((0..=300).all(|k| avaliar(&r2, None, em(k)).is_some()));
+        // duas âncoras seguidas a mais de 4 s, sem nada no meio: vazio no meio (manual liga)
+        let r3 = rastreio(vec![ch(0, Caixa { x: 0.1, y: 0.1, w: 0.1, h: 0.1 }, Interp::Linear), ch(200, Caixa { x: 0.6, y: 0.6, w: 0.1, h: 0.1 }, Interp::Linear)], OrigemRastreio::Assistido);
+        assert!(avaliar(&r3, None, em(100)).is_none());
+        let mut r4 = r3.clone();
+        r4.origem = OrigemRastreio::Manual;
+        assert!(avaliar(&r4, None, em(100)).is_some());
+    }
+
+    #[test]
     fn simplificar_vira_ancoras() {
         // caixa em px de 640×360: reta até 60, curva depois; buraco em 70..=74
         let px = |k: i64| -> Option<[f64; 4]> {
@@ -1286,7 +1334,8 @@ pub(crate) mod testes {
         let sem = aplicar(&r, Some(&d), &op, TB).unwrap().0.unwrap();
         let t = tab(&mut (0..=140));
         let com = aplicar_com(&r, Some(&d), &op, TB, Some(&t)).unwrap().0.unwrap();
-        assert!(sem.len() > 35 && com.len() <= 3, "sem a tabela {}, com {}", sem.len(), com.len());
+        // com a tabela: as pontas e as do teto de 2 s (6 s de reta)
+        assert!(sem.len() > 35 && com.len() <= 4, "sem a tabela {}, com {}", sem.len(), com.len());
         let r2 = rastreio(com, OrigemRastreio::Assistido);
         for k in 0..=140i64 {
             let a = avaliar(&r2, None, Instante { t: pts(k) as f64 / 15360.0, pts: Some(pts(k)) }).unwrap();
@@ -1304,7 +1353,7 @@ pub(crate) mod testes {
         furado.corrida.remove(fora);
         furado.pts.remove(fora);
         let ks: Vec<i64> = aplicar_com(&r, Some(&furado), &op, TB, Some(&t)).unwrap().0.unwrap().iter().map(|k| k.pts.unwrap()).collect();
-        assert!(ks.contains(&pts(119)) && ks.contains(&pts(121)) && ks.len() <= 5, "{ks:?}");
+        assert!(ks.contains(&pts(119)) && ks.contains(&pts(121)) && ks.len() <= 6, "{ks:?}");
         // tabela que não tem os pts do denso (outro espaço): cai na regra do passo mediano
         let outra = tab(&mut (0..=70));
         assert_eq!(aplicar_com(&r, Some(&d), &op, TB, Some(&outra)).unwrap().0.unwrap().len(), sem.len());

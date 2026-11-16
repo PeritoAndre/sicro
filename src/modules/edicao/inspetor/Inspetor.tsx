@@ -34,12 +34,18 @@ export function Inspetor() {
   const abrirAba = useInspetorUi((s) => s.abrirAba);
   const foco = useEdicaoStore((s) => s.selecao.foco);
   const aberto = useEdicaoStore((s) => !!s.doc);
+  const efeito = useEdicaoStore((s) => s.selecao.efeito);
   // item novo em foco: a aba dele; a marcação pendente do item anterior se desliga
   useEffect(() => {
     useInspetorUi.getState().cancelarMarcacao();
     if (foco?.k === "audio") abrirAba("audio");
     else if (foco?.k === "clipe" || foco?.k === "livre") abrirAba("clipe");
   }, [foco?.k, foco?.id, abrirAba]);
+  // outro efeito aberto (ou um novo): a marcação do anterior, que segue ligada depois de marcar, se desliga
+  useEffect(() => {
+    const f = useInspetorUi.getState().ferramenta;
+    if (f?.efeito && f.efeito !== efeito) useInspetorUi.getState().cancelarMarcacao();
+  }, [efeito]);
   return (
     <div className={styles.raiz} data-inspetor>
       <div className={styles.abas} role="tablist">
