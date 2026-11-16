@@ -642,6 +642,12 @@ export function opSimplificar(d: ProjetoEdicao, rid: Id): OpRastreio {
     : { tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR, suavizar_s: SUAVIZAR_ANOTACAO_S };
 }
 
+/** Sem denso, o "Simplificar" ainda alisa as âncoras do programa (o de antes deixou uma por quadro) quando suaviza. */
+export function podeSimplificar(d: ProjetoEdicao, r: Rastreio): boolean {
+  const op = opSimplificar(d, r.id);
+  return !!r.denso || (op.tipo === "simplificar" && op.suavizar_s !== undefined && (r.ancoras_do_programa?.length ?? 0) >= 3);
+}
+
 /** "Da análise" e "Atualizar": a trilha da pessoa vira rastreio do projeto (o backend copia o denso) e o efeito passa
  *  a usá-lo; o rastreio anterior sai se ninguém mais o usa. Um passo. */
 export async function trazerDaAnalise(efeitoId: Id, midiaId: Id, sha256: string, pessoaId: string, rotulo: string): Promise<void> {

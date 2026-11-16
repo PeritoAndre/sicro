@@ -28,6 +28,10 @@ use crate::error::{Result, SicroError};
 pub const ESQUEMA_DENSO: u32 = 2;
 /// Teto do arquivo lido do disco (10 min a 30 qps ≈ 1 MB; 2 h a 60 qps cabe com folga).
 pub const MAX_BYTES_DENSO: u64 = 256 << 20;
+/// "Simplificar" sem denso: caixa do programa a até 2 s de uma correção do perito e com lado (raiz da área) 1,5×
+/// maior ou menor que a dela é descartada.
+const PERTO_DO_PERITO_S: f64 = 2.0;
+const TAMANHO_FORA: f64 = 1.5;
 /// Piso do "Simplificar" (§5.11): 2 px.
 pub const PISO_PX: f64 = 2.0;
 /// Passo que separa dois trechos do denso no "Simplificar": maior que 1,5 × o passo mediano.
@@ -188,6 +192,49 @@ fn da_amostra(a: &AmostraCorrida, corrida: u32) -> Linha {
     let caixa = a.caixa.map(|c| [c.x, c.y, c.w, c.h]).unwrap_or([0.0; 4]);
     let estado = if a.caixa.is_some() { a.estado } else { ESTADO_AUSENTE };
     Linha { pts: a.pts, caixa, conf: a.conf, estado, tipo: TIPO_MEDIDO, corrida }
+}
+
+/// Sem denso (um "Simplificar" de antes já o trocou por âncoras, uma por quadro quando o motor tremia): as âncoras do
+/// programa são suavizadas e reduzidas; as do perito ficam como estão. None = menos de 3 do programa.
+fn simplificar_ancoras(r: &Rastreio, tolerancia: f64, janela_s: f64, tb: Racional) -> Option<Vec<Chave<Caixa>>> {
+    let programa: BTreeSet<u64> = r.ancoras_do_programa.iter().map(|t| t.to_bits()).collect();
+    let do_programa = |k: &Chave<Caixa>| programa.contains(&k.t.to_bits());
+    if r.ancoras.iter().filter(|k| do_programa(k)).count() < 3 {
+        return None;
+    }
+    let mut ks: Vec<&Chave<Caixa>> = r.ancoras.iter().collect();
+    ks.sort_by(|a, b| a.t.total_cmp(&b.t));
+    // perto de uma correção do perito, a caixa do programa com outro tamanho é o motor que cresceu (rosto → corpo): sai
+    let perito: Vec<&Chave<Caixa>> = ks.iter().copied().filter(|k| !do_programa(k)).collect();
+    let fora_do_tamanho = |k: &Chave<Caixa>| -> bool {
+        let i = perito.partition_point(|p| p.t <= k.t);
+        let perto: Vec<&Chave<Caixa>> = [i.checked_sub(1).map(|j| perito[j]), perito.get(i).copied()].into_iter().flatten().filter(|p| (p.t - k.t).abs() <= PERTO_DO_PERITO_S).collect();
+        let Some(&p) = perto.iter().min_by(|a, b| (a.t - k.t).abs().total_cmp(&(b.t - k.t).abs())) else { return false };
+        let razao = (k.v.w * k.v.h / (p.v.w * p.v.h).max(1e-12)).sqrt();
+        !(1.0 / TAMANHO_FORA..=TAMANHO_FORA).contains(&razao)
+    };
+    ks.retain(|k| !do_programa(k) || !fora_do_tamanho(k));
+    let pts = |k: &Chave<Caixa>| k.pts.unwrap_or_else(|| (k.t * tb.den as f64 / tb.num as f64).round() as i64);
+    let mut am: Vec<AmostraCorrida> = ks.iter().map(|k| AmostraCorrida { pts: pts(k), caixa: Some(k.v), conf: 1.0, estado: ESTADO_OK, silhueta: None }).collect();
+    suavizar(&mut am, janela_s, tb);
+    // as do perito não mudam (entram na média dos vizinhos, mas ficam onde ele pôs)
+    for (a, k) in am.iter_mut().zip(&ks) {
+        if !do_programa(k) {
+            a.caixa = Some(k.v);
+        }
+    }
+    // o denso não existe mais: o tamanho do quadro só pesa no piso de 2 px
+    let pixel = TamanhoPx { w: 1920, h: 1080 };
+    let escolhidas: BTreeSet<usize> = laco::quadros_chave(&am, pixel, tolerancia, PISO_PX).into_iter().collect();
+    let mut out: Vec<Chave<Caixa>> = ks
+        .iter()
+        .zip(&am)
+        .enumerate()
+        .filter(|(i, (k, _))| !do_programa(k) || escolhidas.contains(i))
+        .map(|(_, (k, a))| if do_programa(k) { Chave { t: k.t, pts: k.pts, v: a.caixa.expect("com caixa"), interp: Interp::Linear } } else { (*k).clone() })
+        .collect();
+    out.sort_by(|a, b| a.t.total_cmp(&b.t).then(a.pts.cmp(&b.pts)));
+    Some(out)
 }
 
 /// Média móvel centrada (janela `janela_s`, pelo tempo de cada quadro) de x, y, w e h das amostras com caixa.
@@ -530,7 +577,12 @@ pub(crate) fn aplicar_com(
             if suavizar_s.is_some_and(|s| !(s.is_finite() && s > 0.0 && s <= 10.0)) {
                 return Err(invalido("suavizar"));
             }
-            let Some(d) = denso else { return Ok((None, None)) };
+            let Some(d) = denso else {
+                return Ok(match suavizar_s {
+                    Some(s) => (simplificar_ancoras(r, tolerancia, s, tb), None),
+                    None => (None, None),
+                });
+            };
             let ls = linhas(d);
             let mut novas: Vec<Chave<Caixa>> = Vec::new();
             for tr in trechos(d, tab) {
@@ -1069,6 +1121,61 @@ pub(crate) mod testes {
         }
         assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(0.0) }, TB).is_err());
         assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(f64::NAN) }, TB).is_err());
+    }
+
+    #[test]
+    fn simplificar_de_novo_sem_denso_alisa_as_ancoras_do_programa() {
+        // o "Simplificar" de antes deixou uma âncora tremida por quadro (do programa); o perito corrigiu duas
+        let verdade = |t: f64| [100.0 + 2.0 * t, 100.0 + 0.4 * t, 80.0, 160.0];
+        let cx = |c: [f64; 4]| Caixa { x: c[0] / 640.0, y: c[1] / 360.0, w: c[2] / 640.0, h: c[3] / 360.0 };
+        let mut ks: Vec<Chave<Caixa>> = (0..=150)
+            .map(|k: i64| {
+                let tr = if k % 2 == 0 { 6.0 } else { -6.0 };
+                let v = verdade(k as f64);
+                ch(k, cx([v[0] + tr, v[1] - tr, v[2] + tr, v[3] - tr]), Interp::Linear)
+            })
+            .collect();
+        let mut r = rastreio(vec![], OrigemRastreio::Assistido);
+        r.ancoras_do_programa = ks.iter().map(|k| k.t).filter(|t| *t != em(40).t && *t != em(90).t).collect();
+        let (p40, p90) = (cx(verdade(40.0)), cx(verdade(90.0)));
+        ks[40].v = p40;
+        ks[90].v = p90;
+        r.ancoras = ks;
+        let op = |s: Option<f64>| OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: s };
+        // sem suavizar e sem denso: nada (como antes)
+        assert_eq!(aplicar(&r, None, &op(None), TB).unwrap(), (None, None));
+        let (anc, novo) = aplicar(&r, None, &op(Some(0.5)), TB).unwrap();
+        assert!(novo.is_none());
+        let anc = anc.unwrap();
+        assert!(anc.len() <= 10, "{}", anc.len());
+        // as do perito ficam, iguais
+        assert_eq!(anc.iter().find(|k| k.t == em(40).t).unwrap().v, p40);
+        assert_eq!(anc.iter().find(|k| k.t == em(90).t).unwrap().v, p90);
+        let r2 = rastreio(anc, OrigemRastreio::Assistido);
+        for k in 10..=140 {
+            let a = avaliar(&r2, None, em(k)).unwrap().caixa;
+            let v = verdade(k as f64);
+            let e = (a.x * 640.0 - v[0]).abs().max((a.y * 360.0 - v[1]).abs());
+            assert!(e < 3.0, "quadro {k}: {e}");
+        }
+        // menos de 3 do programa: nada
+        r.ancoras_do_programa.truncate(2);
+        assert_eq!(aplicar(&r, None, &op(Some(0.5)), TB).unwrap(), (None, None));
+    }
+
+    #[test]
+    fn simplificar_sem_denso_descarta_o_motor_que_cresceu_perto_da_correcao() {
+        // rosto ~40×40 px; em 60..=80 o motor pegou o corpo (100×200); o perito corrigiu só o 70
+        let rosto = |k: i64| Caixa { x: (100.0 + k as f64) / 640.0, y: 80.0 / 360.0, w: 40.0 / 640.0, h: 40.0 / 360.0 };
+        let corpo = |k: i64| Caixa { x: (90.0 + k as f64) / 640.0, y: 70.0 / 360.0, w: 100.0 / 640.0, h: 200.0 / 360.0 };
+        let mut r = rastreio((0..=140).map(|k| ch(k, if (60..=80).contains(&k) && k != 70 { corpo(k) } else { rosto(k) }, Interp::Linear)).collect(), OrigemRastreio::Assistido);
+        r.ancoras_do_programa = r.ancoras.iter().map(|k| k.t).filter(|t| *t != em(70).t).collect();
+        let anc = aplicar(&r, None, &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(0.5) }, TB).unwrap().0.unwrap();
+        let r2 = rastreio(anc, OrigemRastreio::Assistido);
+        for k in 0..=140 {
+            let a = avaliar(&r2, None, em(k)).unwrap().caixa;
+            assert!((a.w * 640.0 - 40.0).abs() < 4.0, "quadro {k}: largura {}", a.w * 640.0);
+        }
     }
 
     #[test]

@@ -61,6 +61,7 @@ import {
   TOLERANCIA_SIMPLIFICAR,
   SUAVIZAR_ANOTACAO_S,
   opSimplificar,
+  podeSimplificar,
   trazerDaAnalise,
   trechoSemAlvo,
   useOuvirRastreio,
@@ -569,6 +570,15 @@ describe("Simplificar: suaviza só o rastreio de anotação", () => {
       alvo: { rastreio: "r1", forma: "retangulo", vertices: null, margem: 0, borda_suave: 0, inverter: false } } as unknown as Efeito;
     st().alterar("Ocultar", (x) => void (x.midias[0]!.ocultacoes as unknown as Efeito[]).push(oc));
     expect(opSimplificar(st().doc! as ProjetoEdicao, "r1")).toEqual({ tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR });
+  });
+
+  it("sem denso: o botão vale com 3 ou mais âncoras do programa, só no rastreio de anotação", () => {
+    const d = () => st().doc! as ProjetoEdicao;
+    expect(podeSimplificar(d(), r1())).toBe(false);
+    st().alterar("x", (x) => void (x.rastreios[0]!.ancoras_do_programa = [q(31).t, q(32).t, q(33).t]));
+    expect(podeSimplificar(d(), r1())).toBe(true);
+    st().alterar("x", (x) => void (x.rastreios[0]!.ancoras_do_programa = [q(31).t, q(32).t]));
+    expect(podeSimplificar(d(), r1())).toBe(false);
   });
 });
 
