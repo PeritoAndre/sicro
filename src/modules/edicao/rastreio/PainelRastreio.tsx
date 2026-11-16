@@ -33,7 +33,7 @@ import {
   RASTREIO_PRONTO,
   seguirEfeito,
   temFraco,
-  TOLERANCIA_SIMPLIFICAR,
+  opSimplificar,
   trazerDaAnalise,
   useRastreioStore,
 } from "../store/rastreioStore";
@@ -229,7 +229,7 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
         <Mini disabled={!livre || !algoDepois} onClick={() => comEspera(() => apagarDaquiEmDiante(x))} data-acao="apagar-daqui">
           <Eraser size={12} /> Apagar daqui em diante
         </Mini>
-        <Mini disabled={!livre || !r.denso} onClick={() => comEspera(() => editarRastreio(r.id, { tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR }, "Simplificar"))} data-acao="simplificar">
+        <Mini disabled={!livre || !r.denso} onClick={() => comEspera(() => editarRastreio(r.id, opSimplificar(doc, r.id), "Simplificar"))} data-acao="simplificar">
           <Spline size={12} /> Simplificar
         </Mini>
       </div>

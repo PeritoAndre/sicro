@@ -50,6 +50,9 @@ export const RASTREIO_PRONTO = true;
 
 /** Tolerância do "Simplificar": fração do lado médio (`modelos-rastreio.md`, quadros-chave: 4 %, mínimo 2 px no Rust). */
 export const TOLERANCIA_SIMPLIFICAR = 0.04;
+/** Rastreio só de anotação (seta, lupa, destaque…): janela da média móvel antes de simplificar (o tremido do motor
+ *  viraria uma marcação por quadro). */
+export const SUAVIZAR_ANOTACAO_S = 0.5;
 /** Densos guardados em memória (o resto é relido do disco). */
 export const MAX_DENSOS = 32;
 
@@ -625,11 +628,18 @@ function apontar(e: Draft<Efeito>, rid: Id) {
   else if (e.tipo === "velocidade_exibida" && e.onde.modo === "segue") e.onde.rastreio = rid;
 }
 
-function usado(d: ProjetoEdicao, rid: Id): boolean {
-  const em = (l: readonly unknown[]) => l.some((e) => efeitoConhecido(e as Efeito) && rastreioDe(e as Efeito) === rid);
+function usado(d: ProjetoEdicao, rid: Id, tipos?: readonly Efeito["tipo"][]): boolean {
+  const em = (l: readonly unknown[]) => l.some((e) => efeitoConhecido(e as Efeito) && rastreioDe(e as Efeito) === rid && (!tipos || tipos.includes((e as Efeito).tipo)));
   for (const c of d.principal) if (c && typeof c === "object" && Array.isArray((c as { efeitos?: unknown }).efeitos) && em((c as { efeitos: unknown[] }).efeitos)) return true;
   for (const t of d.sobreposicoes) for (const c of t.clipes) if (Array.isArray(c.efeitos) && em(c.efeitos)) return true;
   return d.midias.some((m) => em(m.ocultacoes));
+}
+
+/** "Simplificar": ocultação e holofote pedem a caixa fiel ao alvo; o resto só precisa andar liso (suaviza antes). */
+export function opSimplificar(d: ProjetoEdicao, rid: Id): OpRastreio {
+  return usado(d, rid, ["ocultar", "holofote"])
+    ? { tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR }
+    : { tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR, suavizar_s: SUAVIZAR_ANOTACAO_S };
 }
 
 /** "Da análise" e "Atualizar": a trilha da pessoa vira rastreio do projeto (o backend copia o denso) e o efeito passa

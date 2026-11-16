@@ -43,7 +43,14 @@ pub enum OpRastreio {
     /// "Apagar daqui em diante": tira as amostras (e as âncoras) da faixa, inclusive as pontas.
     ApagarFaixa { de_pts: i64, ate_pts: Option<i64> },
     /// "Simplificar": denso → âncoras (Douglas-Peucker em x, y, w, h; `tolerancia` = fração do lado médio, mínimo 2 px).
-    Simplificar { tolerancia: f64 },
+    /// `suavizar_s` (rastreio só de anotação): média móvel centrada nessa janela antes de escolher as âncoras; sem ela
+    /// o tremido do motor vira uma âncora por quadro.
+    // CONTRATO: `suavizar_s` acrescentado no teste do dono (16/11), opcional; espelho em `src/types/edicao.ts`.
+    Simplificar {
+        tolerancia: f64,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        suavizar_s: Option<f64>,
+    },
 }
 
 /// Resultado de uma edição: o front grava `ancoras` quando vem e `denso` SEMPRE (null = rastreio sem denso).
@@ -181,6 +188,34 @@ fn da_amostra(a: &AmostraCorrida, corrida: u32) -> Linha {
     let caixa = a.caixa.map(|c| [c.x, c.y, c.w, c.h]).unwrap_or([0.0; 4]);
     let estado = if a.caixa.is_some() { a.estado } else { ESTADO_AUSENTE };
     Linha { pts: a.pts, caixa, conf: a.conf, estado, tipo: TIPO_MEDIDO, corrida }
+}
+
+/// Média móvel centrada (janela `janela_s`, pelo tempo de cada quadro) de x, y, w e h das amostras com caixa.
+fn suavizar(am: &mut [AmostraCorrida], janela_s: f64, tb: Racional) {
+    let com: Vec<(f64, Caixa)> = am.iter().filter_map(|a| a.caixa.map(|c| (tempo(a.pts, tb), c))).collect();
+    if com.len() < 3 {
+        return;
+    }
+    let meia = janela_s / 2.0;
+    let (mut i0, mut i1, mut soma, mut n) = (0usize, 0usize, [0f64; 4], 0f64);
+    let mut lisas = Vec::with_capacity(com.len());
+    for &(t, _) in &com {
+        while i1 < com.len() && com[i1].0 <= t + meia {
+            let c = com[i1].1;
+            (soma[0], soma[1], soma[2], soma[3], n) = (soma[0] + c.x, soma[1] + c.y, soma[2] + c.w, soma[3] + c.h, n + 1.0);
+            i1 += 1;
+        }
+        while com[i0].0 < t - meia {
+            let c = com[i0].1;
+            (soma[0], soma[1], soma[2], soma[3], n) = (soma[0] - c.x, soma[1] - c.y, soma[2] - c.w, soma[3] - c.h, n - 1.0);
+            i0 += 1;
+        }
+        lisas.push(Caixa { x: soma[0] / n, y: soma[1] / n, w: soma[2] / n, h: soma[3] / n });
+    }
+    let mut it = lisas.into_iter();
+    for a in am.iter_mut().filter(|a| a.caixa.is_some()) {
+        a.caixa = it.next();
+    }
 }
 
 fn amostra(l: &Linha) -> AmostraCorrida {
@@ -488,15 +523,21 @@ pub(crate) fn aplicar_com(
             });
             Ok((ancoras, denso))
         }
-        OpRastreio::Simplificar { tolerancia } => {
+        OpRastreio::Simplificar { tolerancia, suavizar_s } => {
             if !(tolerancia.is_finite() && tolerancia > 0.0 && tolerancia <= 1.0) {
                 return Err(invalido("tolerância"));
+            }
+            if suavizar_s.is_some_and(|s| !(s.is_finite() && s > 0.0 && s <= 10.0)) {
+                return Err(invalido("suavizar"));
             }
             let Some(d) = denso else { return Ok((None, None)) };
             let ls = linhas(d);
             let mut novas: Vec<Chave<Caixa>> = Vec::new();
             for tr in trechos(d, tab) {
-                let am: Vec<AmostraCorrida> = ls[tr.clone()].iter().map(amostra).collect();
+                let mut am: Vec<AmostraCorrida> = ls[tr.clone()].iter().map(amostra).collect();
+                if let Some(s) = suavizar_s {
+                    suavizar(&mut am, s, tb);
+                }
                 for k in laco::quadros_chave(&am, d.pixel, tolerancia, PISO_PX) {
                     let a = &am[k];
                     novas.push(Chave { t: tempo(a.pts, tb), pts: Some(a.pts), v: a.caixa.expect("chave com caixa"), interp: Interp::Linear });
@@ -1002,6 +1043,35 @@ pub(crate) mod testes {
     }
 
     #[test]
+    fn simplificar_suavizado_alisa_o_tremido_do_motor() {
+        // pessoa andando em reta (caixa ~80×160 px) com tremido de ±6 px quadro a quadro, como a moldura da máscara
+        let verdade = |t: f64| [100.0 + 2.0 * t, 100.0 + 0.4 * t, 80.0, 160.0];
+        let mut d = com_cabecalho(denso_teste(0, 150, |_| ESTADO_OK, |_| TIPO_MEDIDO));
+        for (j, k) in (0..=150).enumerate() {
+            let tr = if k % 2 == 0 { 6.0 } else { -6.0 };
+            let v = verdade(k as f64);
+            let c = [v[0] + tr, v[1] - tr, v[2] + tr, v[3] - tr];
+            (d.x[j], d.y[j], d.w[j], d.h[j]) = (c[0] / 640.0, c[1] / 360.0, c[2] / 640.0, c[3] / 360.0);
+        }
+        let r = rastreio(vec![], OrigemRastreio::Assistido);
+        let anc = |s: Option<f64>| aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: s }, TB).unwrap().0.unwrap();
+        // sem suavizar o tremido vira uma âncora por quadro (era o "não funcionou" do dono)
+        assert!(anc(None).len() > 100, "{}", anc(None).len());
+        let lisas = anc(Some(0.5));
+        assert!(lisas.len() <= 6, "{}", lisas.len());
+        // o caminho que sobra fica perto da verdade (o tremido some na média)
+        let r2 = rastreio(lisas, OrigemRastreio::Assistido);
+        for k in 10..=140 {
+            let a = avaliar(&r2, None, em(k)).unwrap().caixa;
+            let v = verdade(k as f64);
+            let e = (a.x * 640.0 - v[0]).abs().max((a.y * 360.0 - v[1]).abs());
+            assert!(e < 3.0, "quadro {k}: {e}");
+        }
+        assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(0.0) }, TB).is_err());
+        assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(f64::NAN) }, TB).is_err());
+    }
+
+    #[test]
     fn simplificar_vira_ancoras() {
         // caixa em px de 640×360: reta até 60, curva depois; buraco em 70..=74
         let px = |k: i64| -> Option<[f64; 4]> {
@@ -1019,7 +1089,7 @@ pub(crate) mod testes {
         }
         let perito = Caixa { x: 0.5, y: 0.5, w: 0.1, h: 0.1 };
         let r = rastreio(vec![ch(30, perito, Interp::Linear)], OrigemRastreio::Assistido);
-        let (anc, novo) = aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04 }, TB).unwrap();
+        let (anc, novo) = aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None }, TB).unwrap();
         assert!(novo.is_none(), "o denso vira âncoras");
         let anc = anc.unwrap();
         let pts: Vec<i64> = anc.iter().map(|k| k.pts.unwrap() / 512).collect();
@@ -1043,9 +1113,9 @@ pub(crate) mod testes {
             assert!(e <= lim, "quadro {k}: erro {e} > {lim}");
             assert!(matches!(a.como, Como::Ancora | Como::Interpolado));
         }
-        assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.0 }, TB).is_err());
-        assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: f64::NAN }, TB).is_err());
-        assert_eq!(aplicar(&r, None, &OpRastreio::Simplificar { tolerancia: 0.04 }, TB).unwrap(), (None, None));
+        assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.0, suavizar_s: None }, TB).is_err());
+        assert!(aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: f64::NAN, suavizar_s: None }, TB).is_err());
+        assert_eq!(aplicar(&r, None, &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None }, TB).unwrap(), (None, None));
     }
 
     /// Taxa variável (passo de 256 tiques até o quadro 70, depois 768): a fração entre duas chaves é pelo tempo, como
@@ -1060,7 +1130,7 @@ pub(crate) mod testes {
             (d.x[j], d.y[j], d.w[j], d.h[j]) = ((100.0 + 2.0 * k as f64) / 640.0, 0.2, 0.1, 0.2);
         }
         let r = rastreio(vec![], OrigemRastreio::Assistido);
-        let (anc, _) = aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04 }, TB).unwrap();
+        let (anc, _) = aplicar(&r, Some(&d), &OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None }, TB).unwrap();
         let anc = anc.unwrap();
         assert!(anc.len() >= 3 && anc.len() < 10, "{}", anc.len());
         let r2 = rastreio(anc, OrigemRastreio::Assistido);
@@ -1105,7 +1175,7 @@ pub(crate) mod testes {
             }
         };
         let r = rastreio(vec![], OrigemRastreio::Assistido);
-        let op = OpRastreio::Simplificar { tolerancia: 0.04 };
+        let op = OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None };
         let sem = aplicar(&r, Some(&d), &op, TB).unwrap().0.unwrap();
         let t = tab(&mut (0..=140));
         let com = aplicar_com(&r, Some(&d), &op, TB, Some(&t)).unwrap().0.unwrap();

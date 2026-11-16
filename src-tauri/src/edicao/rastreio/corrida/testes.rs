@@ -644,11 +644,11 @@ fn ponta_a_ponta_com_a_mancha() {
     assert_eq!((apagado.pts.first(), apagado.pts.last()), (Some(&tab.pts[0]), Some(&tab.pts[149])));
     assert_eq!(ed.denso.as_ref().unwrap().ate_s, tab.tempo(149));
     assert_eq!(arquivo::ler(&c.pasta(), "r1", &ptr.sha256).unwrap(), d);
-    let ed = arquivo::editar(c.ws.path(), c.cache.path(), &c.projeto, "r1", &arquivo::OpRastreio::Simplificar { tolerancia: 0.04 }).unwrap();
+    let ed = arquivo::editar(c.ws.path(), c.cache.path(), &c.projeto, "r1", &arquivo::OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None }).unwrap();
     let ks = ed.ancoras.unwrap();
     assert!(ed.denso.is_none() && ks.len() >= 2 && ks.len() < 60, "{}", ks.len());
     assert!(ks.iter().all(|k| k.pts.is_some_and(|p| tab.indice_do_pts(p).is_some()) && (k.t - tab.tempo(tab.indice_do_pts(k.pts.unwrap()).unwrap())).abs() < 1e-12));
-    assert!(arquivo::editar(c.ws.path(), c.cache.path(), &c.projeto, "../r1", &arquivo::OpRastreio::Simplificar { tolerancia: 0.04 }).unwrap_err().to_string().contains(codigo::ITEM_INVALIDO));
+    assert!(arquivo::editar(c.ws.path(), c.cache.path(), &c.projeto, "../r1", &arquivo::OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None }).unwrap_err().to_string().contains(codigo::ITEM_INVALIDO));
     let ocultar = |ate: f64| json!([aceite::ocultar("o1", "r1", "solido", json!({ "ativo": { "de": tab.tempo(0), "ate": ate }, "alvo": { "rastreio": "r1", "forma": "retangulo", "vertices": null, "margem": 0.02, "borda_suave": 0.0, "inverter": false } }))]);
     let analisar = |projeto: &Value| {
         let p = armazem::tipado(projeto).unwrap();

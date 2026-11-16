@@ -352,7 +352,7 @@ describe("botões da linha do efeito e do palco", () => {
     cmd.edicaoRastreioEditar.mockResolvedValueOnce({ ancoras: [{ ...q(30), v: CAIXA }], denso: null });
     await clicar(acao(painel()!, "simplificar")!);
     await espera(0);
-    expect(cmd.edicaoRastreioEditar.mock.calls[1]!.slice(2)).toEqual(["r1", { tipo: "simplificar", tolerancia: 0.04 }]);
+    expect(cmd.edicaoRastreioEditar.mock.calls[1]!.slice(2)).toEqual(["r1", { tipo: "simplificar", tolerancia: 0.04, suavizar_s: 0.5 }]);
     expect(st().passado.slice(-2).map((p) => p.rotulo)).toEqual(["Apagar daqui em diante", "Simplificar"]);
   });
 

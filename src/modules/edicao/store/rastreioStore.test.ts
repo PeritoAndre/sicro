@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { EventoRastreio, ProjetoAberto, ProjetoEdicao, Rastreio } from "@domain/edicao";
+import type { Efeito, EventoRastreio, ProjetoAberto, ProjetoEdicao, Rastreio } from "@domain/edicao";
 
 const cmd = vi.hoisted(() => ({
   edicaoAbrir: vi.fn(),
@@ -59,6 +59,8 @@ import {
   RASTREIO_PRONTO,
   seguirEfeito,
   TOLERANCIA_SIMPLIFICAR,
+  SUAVIZAR_ANOTACAO_S,
+  opSimplificar,
   trazerDaAnalise,
   trechoSemAlvo,
   useOuvirRastreio,
@@ -558,6 +560,17 @@ describe("ações da linha do efeito", () => {
   });
 });
 
+
+describe("Simplificar: suaviza só o rastreio de anotação", () => {
+  it("destaque suaviza; com ocultação ou holofote no mesmo rastreio, não", () => {
+    const d = st().doc! as ProjetoEdicao;
+    expect(opSimplificar(d, "r1")).toEqual({ tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR, suavizar_s: SUAVIZAR_ANOTACAO_S });
+    const oc = { id: "o1", ligado: true, nome: "", ativo: null, tipo: "ocultar", modo: "solido", cor: "#000000ff", intensidade: 1, conteudo: "outro", motivo: "",
+      alvo: { rastreio: "r1", forma: "retangulo", vertices: null, margem: 0, borda_suave: 0, inverter: false } } as unknown as Efeito;
+    st().alterar("Ocultar", (x) => void (x.midias[0]!.ocultacoes as unknown as Efeito[]).push(oc));
+    expect(opSimplificar(st().doc! as ProjetoEdicao, "r1")).toEqual({ tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR });
+  });
+});
 
 describe("âncoras do programa (Simplificar)", () => {
   const k = (j: number, x = 0.4) => ({ ...q(j), v: { ...CAIXA, x } });

@@ -530,7 +530,7 @@ export interface FalhaRastreio { tipo: "falhou"; tarefa_id: string; rastreio_id:
 export type EventoRastreio = AvancoRastreio | FimRastreio | FalhaRastreio;
 export const EVENTO_RASTREIO = "edicao:rastreio";
 /** `edicao_rastreio_editar`: faixas por pts do quadro (`ate_pts` null = até o fim). */
-export type OpRastreio = { tipo: "apagar_faixa"; de_pts: Pts; ate_pts: Pts | null } | { tipo: "simplificar"; tolerancia: number };
+export type OpRastreio = { tipo: "apagar_faixa"; de_pts: Pts; ate_pts: Pts | null } | { tipo: "simplificar"; tolerancia: number; suavizar_s?: number };
 /** O front grava `ancoras` quando vem e `denso` sempre (null = rastreio sem denso). */
 export interface Editado { ancoras: Chave<Caixa>[] | null; denso: Denso | null }
 /** "Conferir ocultações" (conferencia.rs, P2.6): segundos do arquivo exportado, `[de_s, ate_s)`. */
