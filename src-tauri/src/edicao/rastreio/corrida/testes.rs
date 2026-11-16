@@ -22,10 +22,10 @@ use crate::edicao::testes::fontes::{self, MATRIZ};
 const LIMITE_CANCELAR_S: f64 = 0.5;
 const FOLGA: f64 = 3.0;
 
-/// Uma corrida por processo: os testes que pedem corrida passam um de cada vez.
+/// Uma corrida por processo: os testes que pedem corrida passam um de cada vez (também os de ponta a ponta).
 static VEZ_TESTE: Mutex<()> = Mutex::new(());
 
-fn vez() -> std::sync::MutexGuard<'static, ()> {
+pub(crate) fn vez() -> std::sync::MutexGuard<'static, ()> {
     VEZ_TESTE.lock().unwrap_or_else(|e| e.into_inner())
 }
 
@@ -465,6 +465,110 @@ fn cancelar_em_menos_de_meio_segundo() {
     assert!(em_curso().is_none());
 }
 
+/// Cancelar em menos de 0,5 s também no preparo da corrida: o SHA-256 da sessão de uma mídia grande (aqui 8 GiB
+/// esparsos, segundos de conta) olha o cancelamento, e só a mídia do rastreio é preparada.
+#[test]
+fn cancelar_no_preparo_em_menos_de_meio_segundo() {
+    let _v = vez();
+    let Some(mut c) = caso(60, 320, 240, 60, 3) else { return };
+    let grande = c.ws.path().join("Midias/grande.mp4");
+    std::fs::File::create(&grande).unwrap().set_len(8 << 30).unwrap();
+    c.projeto["midias"][0]["relativo"] = json!("Midias/grande.mp4");
+    // outra mídia do projeto, que a corrida não usa (o preparo do projeto inteiro a leria também)
+    let mut outra = c.projeto["midias"][0].clone();
+    (outra["id"], outra["sha256"]) = (json!("m2"), json!("e".repeat(64)));
+    c.projeto["midias"].as_array_mut().unwrap().push(outra);
+    let (ev, emitir) = coletor();
+    let tarefa = pedir(c.ws.path(), c.cache.path(), &ai_padrao(), &c.projeto, &c.pedido(SentidoPedido::Frente), emitir).unwrap();
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(ev.lock().unwrap().is_empty(), "o SHA-256 de 8 GiB já acabou: o teste não mede o preparo");
+    let pedido_em = Instant::now();
+    cancelar(&tarefa).unwrap();
+    let (fim_em, fim) = esperar_fim(&ev, 60);
+    let gasto = fim_em.duration_since(pedido_em).as_secs_f64();
+    eprintln!("cancelar no preparo: {gasto:.3} s ({})", c.cap.versao);
+    assert!(gasto < LIMITE_CANCELAR_S * FOLGA, "cancelar no preparo levou {gasto:.3} s");
+    let EventoRastreio::Fim(fim) = fim else { panic!("{fim:?}") };
+    assert_eq!((fim.parou.len(), fim.parou[0].motivo, fim.denso.is_none()), (1, Motivo::Cancelado, true));
+    assert!(em_curso().is_none());
+}
+
+/// Motor que falha no segundo `iniciar` (o lado para trás de `ambos`), contando os motores criados.
+struct FalhaNoSegundo {
+    m: Box<dyn Rastreador>,
+    inicios: usize,
+}
+
+impl Rastreador for FalhaNoSegundo {
+    fn iniciar(&mut self, q: &Imagem, c: crate::edicao::rastreio::CaixaPx) -> Result<crate::edicao::rastreio::Passo> {
+        self.inicios += 1;
+        if self.inicios == 2 {
+            return Err(SicroError::Validation(codigo::GPU_SEM_MEMORIA.into()));
+        }
+        self.m.iniciar(q, c)
+    }
+    fn seguir(&mut self, q: &Imagem, b: &crate::edicao::rastreio::Busca) -> Result<crate::edicao::rastreio::Passo> {
+        self.m.seguir(q, b)
+    }
+    fn laco(&self) -> crate::edicao::rastreio::Laco {
+        self.m.laco()
+    }
+    fn limiares(&self, fps: f64) -> crate::edicao::rastreio::Limiares {
+        self.m.limiares(fps)
+    }
+    fn corrida(&self) -> crate::edicao::rastreio::MotorCorrida {
+        self.m.corrida()
+    }
+}
+
+/// `ambos`: um motor só para os dois lados (nenhuma sessão nova a esperar entre eles); falha no lado para trás depois
+/// de o da frente seguir: o fim sai com o denso do que foi seguido (só o lado da frente em `parou`) e depois a falha,
+/// com a frase do catálogo.
+#[test]
+fn ambos_com_um_motor_e_falha_no_segundo_lado_guarda_o_primeiro() {
+    let _v = vez();
+    let (n, some, j0) = (240u32, 200u32, 100usize);
+    let Some(c) = caso(n, 640, 360, some, j0) else { return };
+    let (ev, emitir) = coletor();
+    let mut criados = 0;
+    let mut criar = |ai: &AiSettings, m: EscolhaMotor| -> Result<Box<dyn Rastreador>> {
+        criados += 1;
+        Ok(Box::new(FalhaNoSegundo { m: escolher(ai, m)?, inicios: 0 }))
+    };
+    pedir_com(c.ws.path(), c.cache.path(), &ai_padrao(), &c.projeto, &c.pedido(SentidoPedido::Ambos), emitir, &mut criar).unwrap();
+    let finais = || ev.lock().unwrap().iter().filter(|(_, e)| !matches!(e, EventoRastreio::Avanco(_))).count();
+    let t = Instant::now();
+    while finais() == 0 {
+        assert!(t.elapsed() < Duration::from_secs(600), "a corrida não acabou");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    // a falha do segundo lado sai logo depois do fim
+    let t = Instant::now();
+    while finais() < 2 && t.elapsed() < Duration::from_secs(10) {
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(criados, 1);
+    let finais: Vec<EventoRastreio> = ev.lock().unwrap().iter().filter(|(_, e)| !matches!(e, EventoRastreio::Avanco(_))).map(|(_, e)| e.clone()).collect();
+    let [EventoRastreio::Fim(fim), EventoRastreio::Falhou(falha)] = &finais[..] else { panic!("{finais:?}") };
+    let tab = c.fonte.quadros.clone();
+    assert_eq!(fim.parou, vec![ParouSentido { sentido: Sentido::Frente, motivo: Motivo::Perdido, pts: Some(tab.pts[some as usize]) }]);
+    let d = arquivo::ler(&c.pasta(), "r1", &fim.denso.as_ref().expect("o lado da frente vira denso").sha256).unwrap();
+    assert_eq!(d.pts, tab.pts[j0..some as usize].to_vec());
+    assert_eq!(arquivo::corridas(&d).unwrap().iter().map(|x| x.sentido).collect::<Vec<_>>(), vec![Sentido::Frente]);
+    assert_eq!(falha.mensagem, "gpu_sem_memoria: Memória de vídeo insuficiente");
+    assert!(em_curso().is_none());
+    // sem falha: os dois lados com o mesmo motor
+    let (ev, emitir) = coletor();
+    let mut criados = 0;
+    let mut criar = |ai: &AiSettings, m: EscolhaMotor| -> Result<Box<dyn Rastreador>> {
+        criados += 1;
+        escolher(ai, m)
+    };
+    pedir_com(c.ws.path(), c.cache.path(), &ai_padrao(), &c.projeto, &c.pedido(SentidoPedido::Ambos), emitir, &mut criar).unwrap();
+    let EventoRastreio::Fim(fim) = esperar_fim(&ev, 600).1 else { panic!() };
+    assert_eq!((criados, fim.parou.len(), fim.parou[1].motivo), (1, 2, Motivo::Fim));
+}
+
 /// Caixa (px) do denso no quadro j.
 fn caixa_do_denso(d: &ArquivoDenso, tab: &TabelaQuadros, j: usize, w: u32, h: u32) -> Option<[f64; 4]> {
     let i = d.pts.binary_search(&tab.pts[j]).ok()?;
@@ -681,7 +785,6 @@ fn origem_longa_le_com_busca() {
     let t = Trabalho {
         ws: c.ws.path().to_path_buf(),
         cache: c.cache.path().to_path_buf(),
-        ai: ai_padrao(),
         clipe: trecho(&p, "c1"),
         p,
         r,

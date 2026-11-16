@@ -24,7 +24,7 @@ import type {
 } from "@domain/edicao";
 import { acharMidia, acharRastreio, efeitoConhecido } from "../modelo/projeto";
 import { aDe, type Afim, type Tamanho } from "../modelo/geometria";
-import { avaliar } from "../modelo/rastreio";
+import { avaliar, emAusencia } from "../modelo/rastreio";
 import { densoEmCache } from "../store/rastreioStore";
 import { primitivas } from "./desenho/primitivas";
 
@@ -120,6 +120,12 @@ export function quadroDaCena(
       if (!r) return null;
       const em = r.base === "fonte" && fonte ? fonte : { t: inst.t, pts: inst.pts };
       return avaliar(r, em, densoEmCache(r))?.caixa ?? null;
+    },
+    ausente: (id: Id): boolean => {
+      const r = acharRastreio(doc, id);
+      if (!r) return false;
+      const em = r.base === "fonte" && fonte ? fonte : { t: inst.t, pts: inst.pts };
+      return emAusencia(r, em.t) && !avaliar(r, em, densoEmCache(r))?.caixa;
     },
     sprite: (p) => fontes.sprite(p),
     atlas: (e, h) => fontes.atlas(e, h),

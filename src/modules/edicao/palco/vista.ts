@@ -84,3 +84,13 @@ export function paraTela(v: Vista, img: Retangulo, p: Ponto): { x: number; y: nu
   const m = mostrado(v, img);
   return { x: m.x + p.x * m.w, y: m.y + p.y * m.h };
 }
+
+/** Parte do retângulo `r` que cabe na caixa do palco (com zoom o quadro passa das bordas: o que se desenha sobre ele
+ *  e precisa ser visto, como a barra da corrida, fica nesta parte). */
+export function visivel(r: Retangulo, caixa: Tamanho): Retangulo {
+  const x0 = Math.max(r.x, 0);
+  const y0 = Math.max(r.y, 0);
+  const x1 = Math.min(r.x + r.w, caixa.w);
+  const y1 = Math.min(r.y + r.h, caixa.h);
+  return { x: x0, y: y0, w: Math.max(0, x1 - x0), h: Math.max(0, y1 - y0) };
+}

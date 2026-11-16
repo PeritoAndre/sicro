@@ -9,6 +9,7 @@ import { Button } from "@components/Button/Button";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { revealExported } from "@core/reveal";
+import { useSettingsStore } from "@stores/settingsStore";
 import type { VideoMedia } from "@domain/video";
 import { useVideoStore } from "../../store/videoStore";
 import { formatDuration } from "../format";
@@ -49,6 +50,14 @@ interface Props {
 export function RealcePanel({ workspacePath, media, currentTime, onVideoDerivado }: Props) {
   const s = useRealceStore();
   const addFrames = useVideoStore((v) => v.addStoryboardFrames);
+  // "Usar modelos de IA" desligado: some a super-resolução
+  const iaLigada = !useSettingsStore((v) => v.settings.ai.modelos_desligados);
+  const abas = iaLigada ? ABAS : ABAS.filter((a) => a.id !== "superres");
+
+  useEffect(() => {
+    if (!iaLigada && s.aba === "superres") s.setAba("media");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [iaLigada, s.aba]);
 
   useEffect(() => {
     s.bind(media.sha256);
@@ -78,7 +87,7 @@ export function RealcePanel({ workspacePath, media, currentTime, onVideoDerivado
 
   const ctx: CtxRealce = { workspacePath, media, currentTime, onVideoDerivado, usarQuadro };
   const q = s.quadro;
-  const aba = ABAS.find((a) => a.id === s.aba)!;
+  const aba = abas.find((a) => a.id === s.aba) ?? abas[0]!;
   const aviso = aba.precisaQuadro && !q;
 
   const paraStoryboard = async (id: string) => {
@@ -118,7 +127,7 @@ export function RealcePanel({ workspacePath, media, currentTime, onVideoDerivado
       </section>
 
       <nav className={styles.abas} aria-label="Ferramentas de realce">
-        {ABAS.map((a) => (
+        {abas.map((a) => (
           <button key={a.id} type="button" aria-pressed={s.aba === a.id} onClick={() => s.setAba(a.id)}>
             {a.rotulo}
           </button>
@@ -129,13 +138,13 @@ export function RealcePanel({ workspacePath, media, currentTime, onVideoDerivado
         <section className={styles.sec}>
           <span className={styles.dim}>Pause no instante e clique em “Usar o quadro atual”.</span>
         </section>
-      ) : s.aba === "media" ? (
+      ) : aba.id === "media" ? (
         <MediaTab {...ctx} />
-      ) : s.aba === "superres" ? (
+      ) : aba.id === "superres" ? (
         <SuperResTab {...ctx} />
-      ) : s.aba === "estab" ? (
+      ) : aba.id === "estab" ? (
         <EstabTab {...ctx} />
-      ) : s.aba === "lente" ? (
+      ) : aba.id === "lente" ? (
         <LenteTab {...ctx} />
       ) : (
         <PerspectivaTab {...ctx} />

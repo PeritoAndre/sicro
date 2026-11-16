@@ -36,7 +36,7 @@ import type {
 } from "@domain/edicao";
 import { separarErro, useEdicaoStore } from "./edicaoStore";
 import { acharClipe, acharEfeito, acharMidia, acharRastreio, efeitoConhecido } from "../modelo/projeto";
-import { avaliar, emAusencia } from "../modelo/rastreio";
+import { ancorasDoSimplificar, avaliar, emAusencia } from "../modelo/rastreio";
 import { exibido, nQuadros, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 import { recursoDe, useRecursos } from "../palco/recursos";
 import { marcarAncora, rastreioDe } from "../inspetor/acoes";
@@ -79,6 +79,8 @@ export interface RastreioState {
 
 /** Tarefas que já acabaram: evento atrasado e resposta do comando depois do fim não ressuscitam a corrida. */
 const acabadas = new Set<string>();
+/** Tarefas acabadas cuja falha (depois do fim) já foi para o aviso do app. */
+const avisadas = new Set<string>();
 /** "Parar" antes de o comando responder: cancela assim que o id chegar. */
 let pararAoChegar = false;
 
@@ -91,7 +93,11 @@ function cancelarCalado(tarefa: string) {
 
 function acabou(tarefa: string) {
   acabadas.add(tarefa);
-  if (acabadas.size > 64) acabadas.delete(acabadas.values().next().value as string);
+  if (acabadas.size > 64) {
+    const velha = acabadas.values().next().value as string;
+    acabadas.delete(velha);
+    avisadas.delete(velha);
+  }
 }
 
 /** "<código>: <frase>" (do catálogo) ou o erro de um comando: a frase no aviso do app. */
@@ -160,6 +166,12 @@ export const useRastreioStore = create<RastreioState>((set, get) => ({
 
   receber(ev) {
     const c = get().corrida;
+    // "ambos" com o segundo lado em falha: o fim (o que foi seguido) e depois a falha da mesma tarefa, só a frase
+    if (ev.tipo === "falhou" && acabadas.has(ev.tarefa_id) && !avisadas.has(ev.tarefa_id)) {
+      avisadas.add(ev.tarefa_id);
+      avisar(ev.mensagem);
+      return;
+    }
     if (!c || acabadas.has(ev.tarefa_id)) return;
     if (c.tarefa ? c.tarefa !== ev.tarefa_id : c.rastreio !== ev.rastreio_id) return;
     if (ev.tipo === "avanco") {
@@ -257,6 +269,7 @@ export function esquecerRastreios(): void {
   lendo.clear();
   naoLidos.clear();
   acabadas.clear();
+  avisadas.clear();
   pararAoChegar = false;
   useRastreioStore.setState({ corrida: null, densos: {}, paradas: {} });
 }
@@ -489,11 +502,37 @@ export interface MarcasDoAlvo {
   j0: number;
 }
 
+/** Marcas guardadas por tabela e rastreio: refeitas só quando muda o que elas olham (quadro e pts das âncoras,
+ *  origem, denso, ausências, faixa), nunca a caixa de uma âncora (cada passo do arrasto de uma alça). */
+const marcasGuardadas = new WeakMap<TabelaQuadros, Map<Id, { chave: string; denso: ArquivoDenso | null; mm: MarcasDoAlvo }>>();
+
+function chaveDasMarcas(r: Rastreio, j0: number, j1: number): string {
+  const ancoras = r.ancoras.map((k) => `${k.t}/${k.pts ?? ""}`).join(",");
+  const ausencias = r.ausencias.map((a) => `${a.de_s}/${a.ate_s}`).join(",");
+  return `${j0}|${j1}|${r.origem.tipo}|${ancoras}|${ausencias}`;
+}
+
 export function marcasDoAlvo(x: AlvoRastreio): MarcasDoAlvo | null {
   const tab = x.tabela;
   const q = tab ? quadrosDaFaixa(tab, x.de, x.ate, x.ateExclusivo) : null;
   if (!tab || !q) return null;
-  return { m: marcas(x.rastreio, densoEmCache(x.rastreio), tab, q[0], q[1]), j0: q[0] };
+  const d = densoEmCache(x.rastreio);
+  const chave = chaveDasMarcas(x.rastreio, q[0], q[1]);
+  let porRastreio = marcasGuardadas.get(tab);
+  if (!porRastreio) marcasGuardadas.set(tab, (porRastreio = new Map()));
+  const g = porRastreio.get(x.rastreio.id);
+  if (g && g.chave === chave && g.denso === d) return g.mm;
+  const mm = { m: marcas(x.rastreio, d, tab, q[0], q[1]), j0: q[0] };
+  porRastreio.set(x.rastreio.id, { chave, denso: d, mm });
+  return mm;
+}
+
+/** Há trecho fraco nas marcas? (guardado por marcas: o painel pergunta a cada desenho) */
+const comFraco = new WeakMap<MarcasDoAlvo, boolean>();
+export function temFraco(mm: MarcasDoAlvo): boolean {
+  let v = comFraco.get(mm);
+  if (v === undefined) comFraco.set(mm, (v = mm.m.some((k) => FRACAS.has(k))));
+  return v;
 }
 
 /** Índice do quadro do cursor nas marcas (fora da faixa: -1 antes, o tamanho depois). */
@@ -520,9 +559,22 @@ export function ausenciaNoCursor(x: AlvoRastreio, mm: MarcasDoAlvo | null = marc
 
 type Motivo = Rastreio["ausencias"][number]["motivo"];
 
+/** Frase de `perito_ausente` no catálogo (`edicao/mensagens.rs`; o teste confere). */
+export const FRASE_PERITO_AUSENTE = "Caso sem perito";
+
+/** Quem registra (ausência aceita, confirmação de trilha revisada): o perito das Configurações. Sem nome, a recusa da
+ *  Fase 1 para o perito ausente (`perito_ausente`): nada é gravado e a frase vai para o aviso do app. */
+export function peritoQueRegistra(): string | null {
+  const nome = useSettingsStore.getState().settings.profile.full_name.trim();
+  if (nome) return nome;
+  pushToast("error", FRASE_PERITO_AUSENTE);
+  return null;
+}
+
 /** "Aceitar ausência" → motivo: grava a lacuna com quem aceitou (o perito das Configurações) e quando. */
 export function aceitarAusencia(rid: Id, de_s: Seg, ate_s: Seg, motivo: Motivo): void {
-  const por = useSettingsStore.getState().settings.profile.full_name;
+  const por = peritoQueRegistra();
+  if (!por) return;
   const aceita_em = new Date().toISOString();
   edicao().alterar("Aceitar ausência", (d) => {
     const r = d.rastreios.find((x) => x.id === rid);
@@ -545,7 +597,15 @@ export async function editarRastreio(rid: Id, op: OpRastreio, rotulo: string): P
   edicao().alterar(rotulo, (d) => {
     const r = d.rastreios.find((x) => x.id === rid);
     if (!r) return;
-    if (ed.ancoras) r.ancoras = ed.ancoras;
+    if (ed.ancoras) {
+      // as âncoras que o programa escolheu ficam marcadas (proveniência e PDF); mexer nelas à mão tira a marca
+      if (op.tipo === "simplificar") {
+        const programa = ancorasDoSimplificar(r as Rastreio, ed.ancoras);
+        if (programa.length > 0) r.ancoras_do_programa = programa;
+        else delete r.ancoras_do_programa;
+      }
+      r.ancoras = ed.ancoras;
+    }
     r.denso = ed.denso;
     if (!ed.denso) r.silhuetas = null;
   });
@@ -581,8 +641,14 @@ export async function trazerDaAnalise(efeitoId: Id, midiaId: Id, sha256: string,
   try {
     novo = await commands.edicaoRastreioDePessoas(e.ws, e.aberta.projetoId, midiaId, sha256, pessoaId);
   } catch (x) {
-    avisar(x);
+    if (separarErro(x).codigo !== "cancelado") avisar(x);
     return;
+  }
+  // trilha revisada entra confirmada: quem confirma é o perito das Configurações (a análise não guarda quem revisou)
+  if (novo.confirmacao) {
+    const por = peritoQueRegistra();
+    if (!por) return;
+    novo = { ...novo, confirmacao: { ...novo.confirmacao, por } };
   }
   edicao().alterar(rotulo, (d) => {
     const a = acharEfeito(d as ProjetoEdicao, efeitoId);

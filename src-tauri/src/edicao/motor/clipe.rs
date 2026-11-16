@@ -20,7 +20,7 @@ use crate::edicao::ffmpeg::args;
 use crate::edicao::geometria::{self, Afim};
 use crate::edicao::modelo::{
     BaseRastreio, Caixa, ClipeCongelar, ClipeImagem, ClipePrincipal, ClipeResolvido, ClipeTitulo, ClipeTrecho, EfOcultar, Efeito, EstiloTexto,
-    Fundo, MidiaRef, MostraCarimbo, ProjetoEdicao, Racional, Rastreio, TamanhoPx, Titulo, Tolerante,
+    FormaRegiao, Fundo, MidiaRef, MostraCarimbo, ProjetoEdicao, Racional, Rastreio, TamanhoPx, Titulo, Tolerante,
 };
 use crate::edicao::quadros::TabelaQuadros;
 use crate::edicao::rastreio::avaliar::{self, Avaliado, Instante};
@@ -189,27 +189,58 @@ pub(crate) fn caixa_da_ocultacao(rs: &mut Rastreios, o: &EfOcultar, tab: &Tabela
     }
 }
 
-/// Caixa da ocultação num quadro LIDO. `mostrados` = [a, b): os quadros da fonte que o clipe mostra. Fora deles o
+// CONTRATO: revisão do fecho da Fase 2 (`caixa_no_lido` devolvia `Option<Avaliado>`: a ausência aceita e o "não vale"
+// saíam iguais, e a invertida não cobria nada sem o alvo).
+/// A ocultação num quadro lido.
+pub(crate) enum NoLido {
+    /// Não vale nesse quadro (fora do `ativo`).
+    Fora,
+    /// Vale, sem caixa: o alvo está numa ausência aceita.
+    Ausente,
+    Caixa(Avaliado),
+}
+
+/// `caixa_da_ocultacao` com a ausência aceita separada do "não vale".
+fn no_quadro(rs: &mut Rastreios, o: &EfOcultar, tab: &TabelaQuadros, j: usize) -> Result<NoLido> {
+    Ok(match caixa_da_ocultacao(rs, o, tab, j)? {
+        Some(a) => NoLido::Caixa(a),
+        // dentro do `ativo`, sem caixa só numa ausência aceita (fora dela, `sem_cobertura`)
+        None if efeitos::base_ativa(&o.base, tab.tempo(j)) => NoLido::Ausente,
+        None => NoLido::Fora,
+    })
+}
+
+/// A ocultação num quadro LIDO. `mostrados` = [a, b): os quadros da fonte que o clipe mostra. Fora deles o
 /// quadro só alimenta média, desentrelace ou estabilização e nunca aparece sozinho: vale o `ativo` do quadro
 /// mostrado mais próximo (a ocultação criada pela tela nasce com `ativo` = faixa do clipe; lido pelo instante do
 /// vizinho, ele entrava descoberto na média). Sem caixa no vizinho, a do quadro mostrado mais próximo.
-pub(crate) fn caixa_no_lido(rs: &mut Rastreios, o: &EfOcultar, tab: &TabelaQuadros, j: usize, mostrados: (usize, usize)) -> Result<Option<Avaliado>> {
+pub(crate) fn caixa_no_lido(rs: &mut Rastreios, o: &EfOcultar, tab: &TabelaQuadros, j: usize, mostrados: (usize, usize)) -> Result<NoLido> {
     let (a, b) = mostrados;
     if b <= a || (a..b).contains(&j) {
-        return caixa_da_ocultacao(rs, o, tab, j);
+        return no_quadro(rs, o, tab, j);
     }
     let perto = j.clamp(a, b - 1);
     if !efeitos::base_ativa(&o.base, tab.tempo(perto)) {
-        return Ok(None);
+        return Ok(NoLido::Fora);
     }
     let r = rs.achar(&o.alvo.rastreio)?;
     let t = tab.tempo(j);
     match rs.em(r, Instante { t, pts: Some(tab.pts[j]) })? {
-        Some(x) => Ok(Some(x)),
-        None if avaliar::em_ausencia(r, t) => Ok(None),
-        None => caixa_da_ocultacao(rs, o, tab, perto),
+        Some(x) => Ok(NoLido::Caixa(x)),
+        None if avaliar::em_ausencia(r, t) => Ok(NoLido::Ausente),
+        None => no_quadro(rs, o, tab, perto),
     }
 }
+
+/// Invertida sem o alvo (ausência aceita): tudo está fora da forma, então a região é o quadro inteiro (retângulo
+/// 0..1 sobre a caixa `QUADRO_TODO`), com a mesma variante.
+fn quadro_inteiro(o: &EfOcultar) -> EfOcultar {
+    let mut x = o.clone();
+    (x.alvo.forma, x.alvo.vertices, x.alvo.margem, x.alvo.borda_suave, x.alvo.inverter) = (FormaRegiao::Retangulo, None, 0.0, 0.0, false);
+    x
+}
+
+const QUADRO_TODO: Caixa = Caixa { x: 0.0, y: 0.0, w: 1.0, h: 1.0 };
 
 /// Detalhe do `nao_suportado` de um efeito que o motor ainda não renderiza; None = renderiza. A regra é do pacote
 /// dono do efeito (realce: P1.4; lupa: P1.2; régua e velocidade: P1.3); a validação pergunta o mesmo.
@@ -344,24 +375,48 @@ impl Montagem<'_, '_> {
         let (mut os, mut mks, mut unioes, mut lados) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
         for o in ocultacoes_de(midia_ref, efeitos_do_clipe) {
             let efeito = Efeito::Ocultar(o.clone());
+            // invertida: os quadros sem o alvo vão num segundo item, que cobre o quadro inteiro
+            let inteiro = o.alvo.inverter.then(|| Efeito::Ocultar(quadro_inteiro(o)));
             let (mut quadros, mut prims, mut lado, mut algum) = (Vec::with_capacity(jb - ja), Vec::with_capacity(cb - ca), 0u32, false);
+            let (mut quadros_inteiro, mut sem_alvo) = (Vec::new(), false);
             for j in ca..cb {
-                let mut rastreios = BTreeMap::new();
-                if let Some(a) = caixa_no_lido(&mut self.rastreios, o, tab, j, mostrados)? {
-                    rastreios.insert(o.alvo.rastreio.clone(), a.caixa);
-                    lado = lado.max((a.caixa.w * espaco.w as f64).min(a.caixa.h * espaco.h as f64).round().max(0.0) as u32);
-                    algum |= (ja..jb).contains(&j);
+                let (mut rastreios, mut todo) = (BTreeMap::new(), BTreeMap::new());
+                match caixa_no_lido(&mut self.rastreios, o, tab, j, mostrados)? {
+                    NoLido::Caixa(a) => {
+                        rastreios.insert(o.alvo.rastreio.clone(), a.caixa);
+                        lado = lado.max((a.caixa.w * espaco.w as f64).min(a.caixa.h * espaco.h as f64).round().max(0.0) as u32);
+                        algum |= (ja..jb).contains(&j);
+                    }
+                    NoLido::Ausente if inteiro.is_some() => {
+                        todo.insert(o.alvo.rastreio.clone(), QUADRO_TODO);
+                        // a região é o quadro inteiro: dá o raio do desfoque e a célula do mosaico
+                        lado = lado.max(espaco.w.min(espaco.h));
+                        algum |= (ja..jb).contains(&j);
+                        sem_alvo |= (ja..jb).contains(&j);
+                    }
+                    _ => {}
                 }
                 // `q` e `programa_s` fixos: a máscara só depende da fonte e serve a todo clipe que lê esses quadros
                 let q = QuadroCamada { q: j as u64, t: tab.tempo(j), pts: Some(tab.pts[j]), a: Afim::IDENTIDADE, canvas: espaco, rastreios, indice: Some(j as u64), programa_s: 0.0 };
                 prims.push(formas::primitivas(&efeito, &q, &self.sprites())?);
+                if let Some(e) = &inteiro {
+                    let q = QuadroCamada { rastreios: todo, ..q.clone() };
+                    prims.push(formas::primitivas(e, &q, &self.sprites())?);
+                    if (ja..jb).contains(&j) {
+                        quadros_inteiro.push(QuadroItem { quadro: q, transformacao: None });
+                    }
+                }
                 if (ja..jb).contains(&j) {
                     quadros.push(QuadroItem { quadro: q, transformacao: None });
                 }
             }
             let Some(uniao) = mascara::uniao_px(&prims, espaco).filter(|_| algum) else { continue };
-            let item = ItemCamada { desenho: Desenho::Efeito { efeito }, de: 0, quadros };
-            let ent = self.entrada_camada('m', TipoCamada::MascaraFonte, uniao, (jb - ja) as u32, vec![item], Vec::new());
+            let mut itens = vec![ItemCamada { desenho: Desenho::Efeito { efeito }, de: 0, quadros }];
+            // sem quadro sem o alvo, a camada fica a de antes (mesmo hash)
+            if let Some(e) = inteiro.filter(|_| sem_alvo) {
+                itens.push(ItemCamada { desenho: Desenho::Efeito { efeito: e }, de: 0, quadros: quadros_inteiro });
+            }
+            let ent = self.entrada_camada('m', TipoCamada::MascaraFonte, uniao, (jb - ja) as u32, itens, Vec::new());
             mks.push(anotacao::entrada_por_quadro(self.g, &ent, tab.tb, &tab.pts[ja..jb]));
             os.push(o);
             unioes.push(uniao);

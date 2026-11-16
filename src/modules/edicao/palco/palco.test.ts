@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Caixa, EfEnquadramento, EfGirar, EfLupa, EfRegua, EfVelocidadeExibida, PreviaMidia, TabelaQuadros } from "@domain/edicao";
-import { VISTA_INICIAL, caixaMedida, contido, daTela, deslocar, limitar, mostrado, paraTela, zoomEm, zoomMaximo } from "./vista";
+import { VISTA_INICIAL, caixaMedida, contido, daTela, deslocar, limitar, mostrado, paraTela, visivel, zoomEm, zoomMaximo } from "./vista";
 import { aparar, bordaArrastada, entradaNoCursor, faixaDoClipe, fronteira, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor, tempoDaFronteira, tempoDoX, xDoTempo } from "./faixa";
 import { Buscador, ESPERA_MS, type Agenda } from "./motor/busca";
 import type { ElementoBusca } from "./motor/elemento";
@@ -57,6 +57,19 @@ describe("vista: zoom e deslocamento da tela", () => {
     perto(de.y, q.y);
     expect(zoomMaximo(img, saida)).toBe(Math.max(16, (40 * 1920) / 800));
     expect(zoomEm(VISTA_INICIAL, 1e6, { x: 0, y: 0 }, caixa, img, 16).s).toBe(16);
+  });
+
+  it("com zoom, a parte visível do quadro fica dentro da caixa (onde a ferramenta de seguir desenha a barra)", () => {
+    const v = zoomEm(VISTA_INICIAL, 4, { x: 700, y: 520 }, caixa, img);
+    const m = mostrado(v, img);
+    expect(m.x <= 0 && m.y < 0 && m.x + m.w >= caixa.w && m.y + m.h >= caixa.h && m.w > caixa.w).toBe(true);
+    expect(visivel(m, caixa)).toEqual({ x: 0, y: 0, w: caixa.w, h: caixa.h });
+    // sem zoom: o quadro inteiro (barras de cima e de baixo fora)
+    expect(visivel(mostrado(VISTA_INICIAL, img), caixa)).toEqual(img);
+    // deslocado para um canto: só a parte dentro
+    const canto = deslocar(zoomEm(VISTA_INICIAL, 2, { x: 0, y: 0 }, caixa, img), 5000, 5000, caixa, img);
+    const r = visivel(mostrado(canto, img), caixa);
+    expect(r.x >= 0 && r.y >= 0 && r.x + r.w <= caixa.w && r.y + r.h <= caixa.h && r.w > 0 && r.h > 0).toBe(true);
   });
 
   it("palco escondido mede 0×0: a caixa anterior vale e a vista não perde o deslocamento (§8.1)", () => {

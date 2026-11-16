@@ -31,12 +31,13 @@ use crate::edicao::rastreio::{
     self as nucleo, arquivo, corrida, ArquivoDenso, Corrida, EscolhaMotor, MotorRastreio, PedidoCorrida, ResultadoCorrida,
     Sentido, ESTADO_AUSENTE, ESTADO_OK, TIPO_INTERPOLADO, TIPO_MEDIDO,
 };
+use crate::edicao::fundo::{self, EstadoFundo, TipoFundo};
 use crate::edicao::{armazem, executar};
 use crate::error::{Result, SicroError};
 use crate::hashing::sha256::{sha256_bytes, sha256_file};
 use crate::models::{CollectFrameInput, VideoMedia, VideoStoryboardFrame};
 use crate::video::pessoas::classes::{self, ClasseInfo, CLASSE_MANUAL};
-use crate::video::pessoas::mancha::{self, Motivo, OpcoesMancha};
+use crate::video::pessoas::mancha::{Motivo, OpcoesMancha};
 use crate::video::pessoas::pipeline::{self, OpcoesRastreio};
 use crate::video::pessoas::render::Opcoes as OpcoesDesenho;
 use crate::video::pessoas::{cor_padrao, decode, Amostra, Cadencia, Pessoa};
@@ -63,8 +64,14 @@ fn encerrar_tarefa() {
     }
 }
 
+// CONTRATO: acréscimo do fecho da Fase 2 (`da_analise`, opcional): sem ele, a tarefa de sempre; com `true`, só as
+// esperas do "Da análise" da Edição (a tarefa da análise segue).
 #[tauri::command]
-pub async fn pessoas_cancelar() -> Result<()> {
+pub async fn pessoas_cancelar(da_analise: Option<bool>) -> Result<()> {
+    if da_analise == Some(true) {
+        cancelar_da_analise();
+        return Ok(());
+    }
     if let Ok(g) = TAREFA.lock() {
         if let Some(f) = g.as_ref() {
             f.store(true, Ordering::Relaxed);
@@ -117,7 +124,8 @@ fn view(p: &Pessoa) -> PessoaView {
         numero: p.numero,
         nome: p.nome.clone(),
         cor: p.cor.clone(),
-        estado: p.estado.clone(),
+        // "conferido" é "editado" na tela (a regra da conferência é da Edição)
+        estado: if p.editada() { "editado" } else { "auto" }.into(),
         classe: p.classe,
         classe_nome: p.rotulo(),
         origem: p.origem.clone(),
@@ -247,24 +255,7 @@ pub async fn pessoas_rastrear(
         m.numero = n;
         repo::update(&c.conn, &m)?;
     }
-    let run = Run {
-        media_hash: media_hash.clone(),
-        model: "YOLOX-S (Apache-2.0)".into(),
-        runtime: format!("onnxruntime {}", ai.pessoas_version),
-        params_json: json!({
-            "limiar": op_run.limiar, "passo": op_run.passo, "tracker": "ByteTrack",
-            "classes": op_run.classes,
-            "classes_nomes": op_run.classes.iter().map(|&c| classes::nome(c as i32)).collect::<Vec<_>>(),
-        }).to_string(),
-        width: r.meta.largura,
-        height: r.meta.altura,
-        frame_dur_s: r.meta.frame_dur_s,
-        step: r.meta.passo,
-        frames_total: r.meta.quadros_total,
-        frames_analyzed: r.meta.quadros_analisados,
-        elapsed_s: r.meta.tempo_s,
-        created_at: Utc::now().to_rfc3339(),
-    };
+    let run = run_da_analise(&media_hash, &op_run, &r);
     repo::replace_run(&c.conn, &c.occ, &run)?;
     video_repo::insert_log(
         &c.conn,
@@ -274,6 +265,30 @@ pub async fn pessoas_rastrear(
         &json!({ "pessoas": r.pessoas.len(), "meta": r.meta, "params": run.params_json, "modelo": run.model }).to_string(),
     )?;
     estado(&c.conn, &c.occ, &media_hash)
+}
+
+/// A análise gravada: o onnxruntime carregado (`ia::sessao::versao_runtime`) e onde o detector rodou (§6.6).
+fn run_da_analise(media_hash: &str, op: &OpcoesRastreio, r: &pipeline::Rastreio) -> Run {
+    Run {
+        media_hash: media_hash.to_string(),
+        model: "YOLOX-S (Apache-2.0)".into(),
+        runtime: crate::ia::sessao::versao_runtime(),
+        params_json: json!({
+            "limiar": op.limiar, "passo": op.passo, "tracker": "ByteTrack",
+            "classes": op.classes,
+            "classes_nomes": op.classes.iter().map(|&c| classes::nome(c as i32)).collect::<Vec<_>>(),
+            "provedor": r.meta.provedor,
+        })
+        .to_string(),
+        width: r.meta.largura,
+        height: r.meta.altura,
+        frame_dur_s: r.meta.frame_dur_s,
+        step: r.meta.passo,
+        frames_total: r.meta.quadros_total,
+        frames_analyzed: r.meta.quadros_analisados,
+        elapsed_s: r.meta.tempo_s,
+        created_at: Utc::now().to_rfc3339(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -365,11 +380,11 @@ pub async fn pessoas_editar(
                 n += 1;
                 todas[i].numero = n;
             }
+            // automática com a cor de outro número vira editada (a conferida fica conferida)
             for p in &mut todas {
-                if p.estado == "auto" && p.cor == cor_padrao(p.numero) {
-                    continue;
+                if p.estado == "auto" && p.cor != cor_padrao(p.numero) {
+                    p.estado = "editado".into();
                 }
-                p.estado = "editado".into();
             }
             for p in &todas {
                 repo::update(&c.conn, p)?;
@@ -604,7 +619,7 @@ pub async fn pessoas_exportar_tabela(workspace_path: String, media_hash: String)
     let mut csv = String::from("\u{feff}numero;classe;nome;entra_em;sai_de;entra_s;sai_s;quadros;situacao;origem\r\n");
     let mut linhas = String::new();
     for p in &pessoas {
-        let situ = if p.estado == "editado" { "editada" } else { "automática" };
+        let situ = if p.editada() { "editada" } else { "automática" };
         let origem = if p.origem == "manual" { "manual" } else { "automática" };
         let classe = if p.classe == CLASSE_MANUAL { "mancha".to_string() } else { classes::nome(p.classe).to_string() };
         csv.push_str(&format!(
@@ -707,8 +722,13 @@ pub async fn pessoas_seguir_mancha(
     let flag = iniciar_tarefa()?;
     let (app2, hash2) = (app.clone(), media_hash.clone());
     let r = tauri::async_runtime::spawn_blocking(move || {
-        seguir_mancha_em(&ws, &cache, &ai, &hash2, &marca, &flag, &mut |n| {
-            let _ = app2.emit("pessoas-progress", Progresso { media_hash: &hash2, fase: "mancha", feitos: n, total: 0, pessoas: 0 });
+        seguir_mancha_em(&ws, &cache, &ai, &hash2, &marca, &flag, &mut |a| {
+            let p = match a {
+                // a tabela do decodificador (primeira mancha da mídia): fração em milésimos
+                AndamentoMancha::Preparar(f) => Progresso { media_hash: &hash2, fase: "preparar", feitos: (f.clamp(0.0, 1.0) * 1000.0) as u32, total: 1000, pessoas: 0 },
+                AndamentoMancha::Seguir(n) => Progresso { media_hash: &hash2, fase: "mancha", feitos: n, total: 0, pessoas: 0 },
+            };
+            let _ = app2.emit("pessoas-progress", p);
         })
     })
     .await
@@ -725,7 +745,7 @@ struct SaidaSentido {
     conf_media: f32,
 }
 
-/// Resultado das corridas de uma marca. `corridas` vazio = seguidor antigo.
+/// Resultado das corridas de uma marca.
 struct Seguido {
     sentidos: Vec<(bool, SaidaSentido)>,
     largura: u32,
@@ -735,8 +755,15 @@ struct Seguido {
     corridas: Vec<Corrida>,
 }
 
-fn nao_suportado(e: &SicroError) -> bool {
-    matches!(e, SicroError::Validation(m) if m.starts_with(codigo::NAO_SUPORTADO))
+/// Andamento de `seguir_mancha_em`: a tabela do decodificador (0..1, só na primeira mancha da mídia) e os quadros seguidos.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum AndamentoMancha {
+    Preparar(f32),
+    Seguir(u32),
+}
+
+fn cancelado() -> SicroError {
+    SicroError::Validation("cancelado".into())
 }
 
 /// Corpo de `pessoas_seguir_mancha` (sem o `AppHandle`): segue a caixa pelo motor novo (§6.4) e grava a trilha como
@@ -748,7 +775,7 @@ pub(crate) fn seguir_mancha_em(
     media_hash: &str,
     marca: &MarcaMancha,
     cancelar: &AtomicBool,
-    progresso: &mut dyn FnMut(u32),
+    progresso: &mut dyn FnMut(AndamentoMancha),
 ) -> Result<ResultadoMancha> {
     let c = contexto_em(ws, media_hash)?;
     let video = resolver_relativo(&c.ws, &c.media.relative_path);
@@ -766,11 +793,7 @@ pub(crate) fn seguir_mancha_em(
     };
     let run_atual = repo::get_run(&c.conn, &c.occ, media_hash)?;
     let dims = run_atual.as_ref().map(|r| (r.width, r.height));
-    let seguido = match pelo_motor(cache, ai, &video, media_hash, dims, marca, &direcoes, cancelar, progresso) {
-        // FECHO: sai com o P2.2 (sem o núcleo do rastreio, o seguidor de antes)
-        Err(e) if nao_suportado(&e) => pela_mancha_antiga(&video, marca, &direcoes, cancelar, progresso)?,
-        r => r?,
-    };
+    let seguido = pelo_motor(cache, ai, &video, media_hash, dims, marca, &direcoes, cancelar, progresso)?;
 
     // união das amostras (o quadro inicial vem nas duas direções)
     let mut novas: Vec<Amostra> = Vec::new();
@@ -812,7 +835,8 @@ pub(crate) fn seguir_mancha_em(
             if !marca.nome.trim().is_empty() {
                 p.nome = marca.nome.trim().to_string();
             }
-            p.estado = "editado".into();
+            // o perito desenhou a caixa de novo: conferida (§6.4)
+            p.estado = "conferido".into();
             repo::update(&c.conn, p)?;
             p.id.clone()
         }
@@ -881,39 +905,6 @@ fn descricao_da_mancha(c: Option<&Corrida>) -> (String, String, Value) {
     (format!("Mancha manual ({nome})"), runtime, json!({ "manual": true, "motor": c.motor.motor, "provedor": c.motor.provedor }))
 }
 
-/// O seguidor de antes (`video::pessoas::mancha`), por busca de entrada em segundos.
-fn pela_mancha_antiga(
-    video: &Path,
-    marca: &MarcaMancha,
-    direcoes: &[bool],
-    cancelar: &AtomicBool,
-    progresso: &mut dyn FnMut(u32),
-) -> Result<Seguido> {
-    let times = decode::frame_times(video)?;
-    let (dw, dh) = decode::display_size(video)?;
-    let t = marca.t;
-    let idx0 = times
-        .iter()
-        .enumerate()
-        .min_by(|a, b| (a.1 - t).abs().total_cmp(&(b.1 - t).abs()))
-        .map_or(0, |(i, _)| i);
-    let (x0, y0) = (marca.x.clamp(0.0, dw as f32 - 2.0), marca.y.clamp(0.0, dh as f32 - 2.0));
-    let caixa = (x0, y0, marca.w.min(dw as f32 - x0), marca.h.min(dh as f32 - y0));
-    let mut sentidos = Vec::new();
-    for &frente in direcoes {
-        let r = mancha::seguir(video, &times, dw, dh, idx0, caixa, frente, OpcoesMancha::default(), cancelar, progresso)?;
-        sentidos.push((frente, SaidaSentido { amostras: r.amostras, motivo: r.motivo, parou_em: r.parou_em, conf_media: r.conf_media }));
-    }
-    Ok(Seguido {
-        sentidos,
-        largura: dw,
-        altura: dh,
-        frame_dur_s: decode::frame_dur(&times),
-        quadros_total: times.len() as u32,
-        corridas: Vec::new(),
-    })
-}
-
 /// Pelo núcleo do rastreio (§6.4, contratos-fase2 (c) P2.5): motor por `corrida::escolher`, quadros pelo
 /// `LeitorPipe` (busca do §5.3 sobre a tabela do decodificador do cache), laço por `rastreio::correr`.
 /// `dims` = espaço das trilhas (`run.width/height`); sem análise, o tamanho exibido.
@@ -927,11 +918,11 @@ fn pelo_motor(
     marca: &MarcaMancha,
     direcoes: &[bool],
     cancelar: &AtomicBool,
-    progresso: &mut dyn FnMut(u32),
+    progresso: &mut dyn FnMut(AndamentoMancha),
 ) -> Result<Seguido> {
     let mut primeiro = Some(corrida::escolher(ai, marca.motor)?);
     let cap = sonda::capacidades()?;
-    let tabela = tabela_do_decodificador(&cap, cache, media_hash, video, cancelar)?;
+    let tabela = tabela_do_decodificador(&cap, cache, media_hash, video, cancelar, &mut |f| progresso(AndamentoMancha::Preparar(f)))?;
     let fonte = quadros::fonte_info(&cap, video, media_hash, tabela.clone(), None)?;
     let dims = match dims {
         Some(d) => d,
@@ -953,16 +944,16 @@ fn pelo_motor(
             nucleo::correr(&p, &mut leitor, r.as_mut(), cancelar, &mut |a| {
                 feitos = a.feitos;
                 if a.feitos % 8 == 0 {
-                    progresso(a.feitos);
+                    progresso(AndamentoMancha::Seguir(a.feitos));
                 }
             })
         });
-        progresso(feitos);
+        progresso(AndamentoMancha::Seguir(feitos));
         // cancelado pelo perito: a tela de sempre ("cancelado" não vira erro)
         let res = match res {
             Ok(r) if r.parou.motivo != nucleo::Motivo::Cancelado && !cancelar.load(Ordering::Relaxed) => r,
             Err(e) if !cancelar.load(Ordering::Relaxed) => return Err(e),
-            _ => return Err(SicroError::Validation("cancelado".into())),
+            _ => return Err(cancelado()),
         };
         sentidos.push((frente, de_corrida(&res, tabela.tb, dims)));
         corridas.push(res.corrida);
@@ -977,17 +968,69 @@ fn pelo_motor(
     })
 }
 
-/// A tabela do decodificador (cache da Edição); só com a de pacotes, faz a do decodificador uma vez e guarda.
-fn tabela_do_decodificador(cap: &Capacidades, cache: &Path, sha: &str, video: &Path, cancelar: &AtomicBool) -> Result<Arc<TabelaQuadros>> {
+/// Passo da espera pela fila de fundo.
+const ESPERA_FUNDO: std::time::Duration = std::time::Duration::from_millis(100);
+
+/// Espera o trabalho de fundo `chave` acabar, com o progresso dele (0..1) e o cancelamento de quem espera (o trabalho
+/// segue na fila). true = havia trabalho vivo.
+fn esperar_fundo(chave: &str, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<bool> {
+    let mut viu = false;
+    loop {
+        if cancelar.load(Ordering::Relaxed) {
+            return Err(cancelado());
+        }
+        match fundo::estado(chave) {
+            Some(t) if matches!(t.estado, EstadoFundo::NaFila | EstadoFundo::Rodando) => {
+                viu = true;
+                progresso(t.feito);
+                std::thread::sleep(ESPERA_FUNDO);
+            }
+            _ => return Ok(viu),
+        }
+    }
+}
+
+/// Faz a tabela do decodificador aqui (progresso 0..1, cancelável) e guarda no cache da Edição.
+fn fazer_tabela(cap: &Capacidades, cache: &Path, sha: &str, video: &Path, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<Arc<TabelaQuadros>> {
+    match TabelaQuadros::do_decodificador(cap, video, cancelar, progresso) {
+        Ok(t) => t.guardar(cache, sha),
+        Err(_) if cancelar.load(Ordering::Relaxed) => Err(cancelado()),
+        Err(e) => Err(e),
+    }
+}
+
+/// A tabela do decodificador para a mancha da análise: a do cache; a que a fila de fundo da Edição já está fazendo
+/// (espera por ela); senão faz aqui (na fila ela poderia esperar um proxy longo), com progresso e cancelamento.
+fn tabela_do_decodificador(cap: &Capacidades, cache: &Path, sha: &str, video: &Path, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<Arc<TabelaQuadros>> {
     let t = TabelaQuadros::obter_com(cap, cache, sha, video)?;
     if t.origem == OrigemTabela::Decodificador {
         return Ok(t);
     }
-    match TabelaQuadros::do_decodificador(cap, video, cancelar, &mut |_| {}) {
-        Ok(t) => t.guardar(cache, sha),
-        Err(_) if cancelar.load(Ordering::Relaxed) => Err(SicroError::Validation("cancelado".into())),
-        Err(e) => Err(e),
+    let chave = fundo::chave(TipoFundo::Tabela, sha);
+    if fundo::estado(&chave).is_some_and(|f| f.estado == EstadoFundo::Rodando) && esperar_fundo(&chave, cancelar, progresso)? {
+        let t = TabelaQuadros::obter_com(cap, cache, sha, video)?;
+        if t.origem == OrigemTabela::Decodificador {
+            return Ok(t);
+        }
     }
+    fazer_tabela(cap, cache, sha, video, cancelar, progresso)
+}
+
+/// A tabela do decodificador para o "Da análise" (Edição): pedida à fila de fundo na frente (o progresso chega à tela
+/// pelo `edicao:fundo` da chave `tabela:<sha256>`, como o das outras tabelas); se a fila não a deixou no cache deste
+/// caso (falhou, ou era a mesma mídia de outro caso), faz aqui.
+fn tabela_pela_fila(cap: &Arc<Capacidades>, cache: &Path, sha: &str, video: &Path, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<Arc<TabelaQuadros>> {
+    let t = TabelaQuadros::obter_com(cap, cache, sha, video)?;
+    if t.origem == OrigemTabela::Decodificador {
+        return Ok(t);
+    }
+    let chave = executar::pedir_tabela(cap, cache, sha, video, "", true);
+    esperar_fundo(&chave, cancelar, progresso)?;
+    let t = TabelaQuadros::obter_com(cap, cache, sha, video)?;
+    if t.origem == OrigemTabela::Decodificador {
+        return Ok(t);
+    }
+    fazer_tabela(cap, cache, sha, video, cancelar, progresso)
 }
 
 fn segundos(pts: i64, tb: Racional) -> f64 {
@@ -1105,8 +1148,9 @@ fn trilha(conn: &Connection, occ: &Uuid, id: &str) -> Result<Option<(Pessoa, Str
         .optional()?)
 }
 
+/// "Revisada" na Edição = caixa conferida pelo perito na análise (decisão do orquestrador, fecho da Fase 2).
 fn revisada(p: &Pessoa) -> bool {
-    p.estado == "editado"
+    p.conferida()
 }
 
 /// Impressão da trilha copiada (caixas efetivas e revisão): `trilha_sha256` na corrida do denso. Renomear, trocar a
@@ -1249,7 +1293,7 @@ struct DaAnalise {
     tabela: Arc<TabelaQuadros>,
 }
 
-fn ler_da_analise(ws: &Path, cache: &Path, media_sha256: &str, pessoa_id: &str) -> Result<DaAnalise> {
+fn ler_da_analise(ws: &Path, cache: &Path, media_sha256: &str, pessoa_id: &str, cancelar: &AtomicBool, progresso: &mut dyn FnMut(f32)) -> Result<DaAnalise> {
     let ausente = || SicroError::Validation(codigo::PESSOA_AUSENTE.into());
     let midia = || SicroError::Validation(codigo::MIDIA_AUSENTE.into());
     let (conn, occ) = executar::abrir_banco(ws)?;
@@ -1261,7 +1305,7 @@ fn ler_da_analise(ws: &Path, cache: &Path, media_sha256: &str, pessoa_id: &str) 
         return Err(midia());
     }
     // a do decodificador: quadro que só os pacotes têm (TS cortado, gravador) não vira linha
-    let tabela = tabela_do_decodificador(&*sonda::capacidades()?, cache, media_sha256, &video, &AtomicBool::new(false))?;
+    let tabela = tabela_pela_fila(&sonda::capacidades()?, cache, media_sha256, &video, cancelar, progresso)?;
     Ok(DaAnalise { pessoa, atualizada_em, run, tabela })
 }
 
@@ -1278,12 +1322,59 @@ pub(crate) fn rastreio_da_pessoa(
     media_sha256: &str,
     pessoa_id: &str,
 ) -> Result<Rastreio> {
+    let espera = EsperaDaAnalise::nova();
+    rastreio_da_pessoa_com(ws, cache, projeto_id, midia_id, media_sha256, pessoa_id, &espera.0, &mut |_| {})
+}
+
+/// Esperas do "Da análise" em curso (a tabela do decodificador da primeira cópia de uma mídia).
+static DA_ANALISE: Mutex<Vec<Arc<AtomicBool>>> = Mutex::new(Vec::new());
+
+/// Cancela as esperas do "Da análise" (a tabela segue na fila de fundo): o comando volta com `cancelado`.
+pub(crate) fn cancelar_da_analise() {
+    cancelar_todas(&DA_ANALISE);
+}
+
+fn cancelar_todas(lista: &Mutex<Vec<Arc<AtomicBool>>>) {
+    for f in lista.lock().unwrap_or_else(|e| e.into_inner()).iter() {
+        f.store(true, Ordering::SeqCst);
+    }
+}
+
+/// Bandeira de uma espera do "Da análise", registrada enquanto vive.
+struct EsperaDaAnalise(Arc<AtomicBool>);
+
+impl EsperaDaAnalise {
+    fn nova() -> Self {
+        let f = Arc::new(AtomicBool::new(false));
+        DA_ANALISE.lock().unwrap_or_else(|e| e.into_inner()).push(f.clone());
+        Self(f)
+    }
+}
+
+impl Drop for EsperaDaAnalise {
+    fn drop(&mut self) {
+        DA_ANALISE.lock().unwrap_or_else(|e| e.into_inner()).retain(|f| !Arc::ptr_eq(f, &self.0));
+    }
+}
+
+/// `rastreio_da_pessoa` com o cancelamento e o progresso (0..1) da tabela do decodificador.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn rastreio_da_pessoa_com(
+    ws: &Path,
+    cache: &Path,
+    projeto_id: &str,
+    midia_id: &str,
+    media_sha256: &str,
+    pessoa_id: &str,
+    cancelar: &AtomicBool,
+    progresso: &mut dyn FnMut(f32),
+) -> Result<Rastreio> {
     if !armazem::id_valido(projeto_id) || !sha_valido(media_sha256) {
         return Err(SicroError::Validation(codigo::ITEM_INVALIDO.into()));
     }
     // antes de ler: mudança gravada durante a cópia fica depois de `copiado_em`
     let copiado_em = Utc::now().to_rfc3339();
-    let a = ler_da_analise(ws, cache, media_sha256, pessoa_id)?;
+    let a = ler_da_analise(ws, cache, media_sha256, pessoa_id, cancelar, progresso)?;
     let rid = Uuid::new_v4().to_string();
     let d = denso_da_pessoa(&a.pessoa, &a.run, &a.tabela, &rid, media_sha256)?;
     let ponteiro = arquivo::gravar(&armazem::pasta_projeto(ws, projeto_id), &d, a.tabela.tb)?;
@@ -1476,7 +1567,10 @@ mod testes {
         let mut q = p.clone();
         (q.nome, q.cor, q.numero) = ("Outro".into(), "#000000".into(), 9);
         assert_eq!(assinatura_da_trilha(&q), base);
+        // editada sem caixa conferida (renumerar, juntar) não é revisão
         q.estado = "editado".into();
+        assert_eq!(assinatura_da_trilha(&q), base);
+        q.estado = "conferido".into();
         assert_ne!(assinatura_da_trilha(&q), base);
         let mut r = p.clone();
         r.ajustes = vec![Ajuste { t: 1.0, dx: 0.5, dy: 0.0, dw: 0.0, dh: 0.0 }];
@@ -1507,7 +1601,7 @@ mod testes {
 
     #[test]
     fn revisada_confirmada() {
-        let mut p = pessoa("pa", "h", "editado", vec![]);
+        let mut p = pessoa("pa", "h", "conferido", vec![]);
         (p.nome, p.cor) = ("Suspeito".into(), "vermelho".into());
         let d = denso_falso();
         let r = rastreio_de(&p, "r1", "m1", d.clone(), "2026-11-15T12:00:00+00:00", "2026-11-15T11:00:00+00:00");
@@ -1517,6 +1611,145 @@ mod testes {
         );
         assert!(matches!(r.origem, OrigemRastreio::Pessoas { estado: EstadoPessoa::Revisada, .. }));
         assert_eq!((r.nome.as_str(), r.cor.as_str()), ("3 · Suspeito", cor_padrao(3).as_str()));
+    }
+
+    /// "Rastrear" de verdade (YOLOX-S em CPU, lib dos testes): a análise gravada diz o onnxruntime carregado
+    /// ("onnxruntime 1.31.1", não "onnxruntime onnxruntime 1.31.1 + YOLOX-S") e o provedor; os quadros são os do
+    /// decodificador.
+    #[test]
+    fn analise_grava_runtime_e_provedor() {
+        use crate::ia::testes as t;
+        let Some(cap) = fontes::cap() else { return };
+        let Some(lib) = t::ou_dispensa(t::ort_lib(), "analise_grava_runtime_e_provedor", "a lib dos testes") else { return };
+        let modelo = Path::new(t::DOSSIE).join("p2/modelos/yolox_s.onnx");
+        if t::ou_dispensa(modelo.is_file().then_some(()), "analise_grava_runtime_e_provedor", "yolox_s.onnx").is_none() {
+            return;
+        }
+        let video = fontes::gerar(Fonte::TsMeioDoGop).unwrap();
+        let op = OpcoesRastreio { limiar: 0.5, passo: 9, classes: vec![0] };
+        let r = pipeline::rastrear(&video, "h", &lib, &modelo, op.clone(), &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let run = run_da_analise("h", &op, &r);
+        assert_eq!(run.runtime, crate::ia::sessao::versao_runtime());
+        assert!(run.runtime.starts_with("onnxruntime 1.31") && !run.runtime.contains("YOLOX"), "{}", run.runtime);
+        let pj: Value = serde_json::from_str(&run.params_json).unwrap();
+        assert_eq!(pj["provedor"].as_str(), Some("cpu"), "{pj}");
+        let tab = TabelaQuadros::do_decodificador(&cap, &video, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        assert_eq!((run.frames_total as usize, run.frames_analyzed as usize), (tab.pts.len(), tab.pts.len().div_ceil(9)));
+    }
+
+    // ---------------------------------------------------------------- "revisada" = caixa conferida (fecho da Fase 2)
+
+    /// Leitor de densos em memória.
+    struct Densos(std::collections::HashMap<(String, String), Arc<ArquivoDenso>>);
+
+    impl crate::edicao::motor::LeitorRastreios for Densos {
+        fn denso(&self, r: &str, sha: &str) -> Result<Arc<ArquivoDenso>> {
+            self.0.get(&(r.to_string(), sha.to_string())).cloned().ok_or_else(|| SicroError::Validation("rastreio_ausente".into()))
+        }
+        fn silhuetas(&self, _: &str, _: &str) -> Result<Arc<crate::edicao::rastreio::ArquivoSilhuetas>> {
+            Err(SicroError::Validation("rastreio_ausente".into()))
+        }
+    }
+
+    /// Códigos da validação de um projeto com um trecho da mídia (quadros 4 a 15) e um `ocultar` sólido que segue a
+    /// trilha `p` copiada para a Edição (denso gravado de verdade em `pasta`).
+    fn codigos_do_ocultar(p: &Pessoa, pasta: &Path) -> (EstadoPessoa, bool, Vec<&'static str>) {
+        let tab = tabela_ts();
+        let sha = "0".repeat(64);
+        let d = denso_da_pessoa(p, &run(640, 360, 1, 1.0 / 30.0), &tab, "r1", &sha).unwrap();
+        let ponteiro = arquivo::gravar(pasta, &d, tab.tb).unwrap();
+        let r = rastreio_de(p, "r1", "m1", ponteiro.clone(), "2026-11-15T12:00:00+00:00", "2026-11-15T11:00:00+00:00");
+        let OrigemRastreio::Pessoas { estado, .. } = r.origem.clone() else { panic!("origem") };
+        let efeitos = json!([aceite::ocultar("o1", "r1", "solido", json!({}))]);
+        let projeto = aceite::projeto(
+            640,
+            360,
+            (30, 1),
+            vec![aceite::midia("m1", "video", json!([]))],
+            vec![aceite::trecho("c1", "m1", &tab, 4, 16, 1.0, efeitos)],
+            json!({ "rastreios": [serde_json::to_value(&r).unwrap()] }),
+        );
+        let fontes = std::collections::HashMap::from([("m1".to_string(), apoio::fonte(tab.clone(), (640, 360)))]);
+        let densos = Densos(std::collections::HashMap::from([(("r1".to_string(), ponteiro.sha256.clone()), Arc::new(d))]));
+        let midias = vec![crate::edicao::modelo::EstadoMidia {
+            id: "m1".into(),
+            estado: crate::edicao::modelo::SituacaoMidia::Ok,
+            tabela: Some(OrigemTabela::Decodificador),
+            busca: Some(quadros::Busca::Confiavel),
+            erros: Some(0),
+        }];
+        let cap = apoio::cap_falsa();
+        let ctx = crate::edicao::motor::Contexto { fontes: &fontes, cap: &cap, rastreios: &densos, pasta_projeto: pasta, midias: &midias };
+        let cods = crate::edicao::validar::analisar(&projeto, &ctx, None).problemas.iter().map(|x| x.codigo).collect();
+        (estado, r.confirmacao.is_some(), cods)
+    }
+
+    /// Decisão do orquestrador (fecho da Fase 2): na Edição a trilha de Pessoas só é "revisada" com caixa conferida
+    /// pelo perito (ajuste ou mancha refeita). Renumerar, trocar a cor, juntar e separar deixam a tabela da análise
+    /// dizendo "editada" como antes, mas a trilha entra como `auto`, sem confirmação, e a validação cobra
+    /// (`rastreio_nao_confirmado`). Ajustada, entra revisada e confirmada; juntada com uma não conferida, volta a ser
+    /// cobrada.
+    #[test]
+    fn renumerada_entra_como_auto_e_a_validacao_cobra() {
+        let (d, ws, occ) = caso();
+        let falso = d.path().join("v.mp4");
+        std::fs::write(&falso, b"nada").unwrap();
+        let (_, sha) = midia_no_caso(&ws, &occ, &falso, "v.mp4");
+        let tab = tabela_ts();
+        let am: Vec<Amostra> = (4..16).map(|j| Amostra { t: t6(tab.tempo(j)), x: 100.0, y: 50.0, w: 40.0, h: 80.0 }).collect();
+        let conn = banco(&ws);
+        repo::replace_run(&conn, &occ, &Run { media_hash: sha.clone(), ..run(640, 360, 1, 1.0 / 30.0) }).unwrap();
+        for (id, n) in [("pa", 3), ("pb", 1), ("pc", 2), ("pd", 4)] {
+            let mut p = pessoa(id, &sha, "auto", am.clone());
+            (p.numero, p.cor) = (n, cor_padrao(n));
+            repo::insert(&conn, &occ, &p).unwrap();
+        }
+        let editar = |e: Edicao| tauri::async_runtime::block_on(pessoas_editar(ws.to_string_lossy().into_owned(), sha.clone(), e)).unwrap();
+        let ids = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+        // renumerar (a pa vira 1, com a cor do 3), trocar a cor, juntar e separar
+        let e = editar(Edicao::Ordem { ids: ids(&["pa", "pb", "pc", "pd"]) });
+        let vista = |e: &PessoasEstado, id: &str| e.pessoas.iter().find(|p| p.id == id).map(|p| p.estado.clone()).unwrap();
+        assert_eq!(vista(&e, "pa"), "editado", "a tabela segue dizendo editada");
+        editar(Edicao::Cor { id: "pc".into(), cor: "#123456".into() });
+        editar(Edicao::Juntar { destino: "pb".into(), origem: "pc".into() });
+        editar(Edicao::Separar { id: "pd".into(), t: am[6].t });
+        let todas = repo::list(&conn, &occ, &sha).unwrap();
+        let pasta = d.path().join("proj");
+        for p in &todas {
+            assert!(p.editada() && !p.conferida(), "{}: {}", p.id, p.estado);
+            let (estado, confirmada, cods) = codigos_do_ocultar(p, &pasta);
+            assert_eq!((estado, confirmada), (EstadoPessoa::Auto, false), "{} ({})", p.id, p.estado);
+            assert!(cods.contains(&codigo::RASTREIO_NAO_CONFIRMADO), "{}: {cods:?}", p.id);
+        }
+        // a tabela CSV continua com "editada"
+        let t = tauri::async_runtime::block_on(pessoas_exportar_tabela(ws.to_string_lossy().into_owned(), sha.clone())).unwrap();
+        let csv = std::fs::read_to_string(&t.csv.absoluto).unwrap();
+        assert_eq!(csv.matches(";editada;").count(), todas.len(), "{csv}");
+        // caixa conferida: revisada, confirmada, sem cobrança
+        editar(Edicao::Ajustar { id: "pa".into(), t: am[2].t, x: 104.0, y: 50.0, w: 40.0, h: 80.0 });
+        let pa = repo::list(&conn, &occ, &sha).unwrap().into_iter().find(|p| p.id == "pa").unwrap();
+        assert_eq!(pa.estado, "conferido");
+        let e = tauri::async_runtime::block_on(pessoas_listar(ws.to_string_lossy().into_owned(), sha.clone())).unwrap();
+        assert_eq!(vista(&e, "pa"), "editado");
+        let (estado, confirmada, cods) = codigos_do_ocultar(&pa, &pasta);
+        assert_eq!((estado, confirmada), (EstadoPessoa::Revisada, true));
+        assert!(!cods.contains(&codigo::RASTREIO_NAO_CONFIRMADO), "{cods:?}");
+        // juntar a conferida com uma que ninguém conferiu: as caixas da outra não foram vistas (auto e cobrada)
+        let achar = |id: &str| repo::list(&conn, &occ, &sha).unwrap().into_iter().find(|p| p.id == id).unwrap();
+        editar(Edicao::Juntar { destino: "pb".into(), origem: "pa".into() });
+        let pb = achar("pb");
+        assert!(pb.ajustes.is_empty() && !revisada(&pb), "{}", pb.estado);
+        let (estado, confirmada, cods) = codigos_do_ocultar(&pb, &pasta);
+        assert_eq!((estado, confirmada), (EstadoPessoa::Auto, false));
+        assert!(cods.contains(&codigo::RASTREIO_NAO_CONFIRMADO), "{cods:?}");
+        // duas conferidas: a junta fica conferida (a correção vira caixa e sai); renumerar de novo não a tira
+        editar(Edicao::Ajustar { id: "pb".into(), t: am[3].t, x: 102.0, y: 50.0, w: 40.0, h: 80.0 });
+        editar(Edicao::Ajustar { id: "pd".into(), t: am[1].t, x: 98.0, y: 50.0, w: 40.0, h: 80.0 });
+        editar(Edicao::Juntar { destino: "pb".into(), origem: "pd".into() });
+        editar(Edicao::Ordem { ids: ids(&["pb"]) });
+        let pb = achar("pb");
+        assert!(pb.ajustes.is_empty() && revisada(&pb), "{}", pb.estado);
+        assert_eq!(codigos_do_ocultar(&pb, &pasta).0, EstadoPessoa::Revisada);
     }
 
     // ---------------------------------------------------------------- caso de verdade (banco)
@@ -1649,7 +1882,7 @@ mod testes {
             let conn = banco(&ws);
             repo::insert(&conn, &occ, &pessoa("pa", &sha, "auto", amostras)).unwrap();
             repo::replace_run(&conn, &occ, &Run { media_hash: sha.clone(), ..run(320, 180, 2, decode::frame_dur(&pacotes)) }).unwrap();
-            let a = ler_da_analise(&ws, &d.path().join("cache"), &sha, "pa").unwrap();
+            let a = ler_da_analise(&ws, &d.path().join("cache"), &sha, "pa", &AtomicBool::new(false), &mut |_| {}).unwrap();
             assert_eq!(a.tabela.origem, OrigemTabela::Decodificador, "{f:?}");
             assert_eq!(a.tabela.pts, pts, "{f:?}: tabela ≠ pts do decodificador");
             let den = denso_da_pessoa(&a.pessoa, &a.run, &a.tabela, "r1", &sha).unwrap();
@@ -1788,6 +2021,15 @@ mod testes {
     /// Bloco texturizado 40×60 em x = 20 + 2n, y = 80, nos quadros n < 130, sobre fundo liso; 25 qps, 6 s, início
     /// em 3 s, quadro-chave a cada 25. `ts` = MPEG-TS.
     fn bloco(dir: &Path, ts: bool) -> Option<PathBuf> {
+        bloco_com(dir, ts, None)
+    }
+
+    /// `bloco` com bytes só deste teste (metadado), para nenhuma tabela de quadros da mídia estar pronta.
+    fn bloco_unico(dir: &Path, ts: bool) -> Option<PathBuf> {
+        bloco_com(dir, ts, Some(Uuid::new_v4().to_string()))
+    }
+
+    fn bloco_com(dir: &Path, ts: bool, marca: Option<String>) -> Option<PathBuf> {
         let cap = fontes::cap()?;
         let p = dir.join(if ts { "bloco.ts" } else { "bloco.mp4" });
         let mut cmd = crate::tools::command(&cap.binario);
@@ -1799,6 +2041,9 @@ mod testes {
             ])
             .args(["-t", "6", "-c:v", "libx264", "-qp", "0", "-g", "25", "-keyint_min", "25", "-sc_threshold", "0", "-bf", "0", "-pix_fmt", "yuv420p"])
             .args(["-output_ts_offset", "3"]);
+        if let Some(m) = &marca {
+            cmd.args(["-metadata", &format!("comment={m}"), "-metadata", &format!("service_name={m}")]);
+        }
         if ts {
             cmd.args(["-f", "mpegts"]);
         }
@@ -1840,8 +2085,8 @@ mod testes {
         }
     }
 
-    /// `pessoas_seguir_mancha` (corpo): segue, une, grava a trilha no formato de sempre, cria a análise e o registro.
-    /// Roda pelo motor novo quando o núcleo do rastreio existe; sem ele, pelo seguidor de antes.
+    /// `pessoas_seguir_mancha` (corpo): segue pelo motor novo, une, grava a trilha no formato de sempre, cria a análise
+    /// e o registro.
     #[test]
     fn seguir_mancha_grava_a_trilha_como_antes() {
         let (d, ws, occ) = caso();
@@ -1853,7 +2098,12 @@ mod testes {
         assert!((segundos(pts[0], tb) - 3.0).abs() < 1e-3, "início {}", segundos(pts[0], tb));
         let m = marca(segundos(pts[10], tb), 40.0, 80.0, 40.0, 60.0, "frente", EscolhaMotor::Mancha);
         let mut n = Vec::new();
-        let r = seguir_mancha_em(&ws, &d.path().join("cache"), &AiSettings::default(), &sha, &m, &AtomicBool::new(false), &mut |k| n.push(k)).unwrap();
+        let r = seguir_mancha_em(&ws, &d.path().join("cache"), &AiSettings::default(), &sha, &m, &AtomicBool::new(false), &mut |a| {
+            if let AndamentoMancha::Seguir(k) = a {
+                n.push(k)
+            }
+        })
+        .unwrap();
         confere_bloco(&quadros_da_trilha(&ws, &occ, &sha, &r.id, &pts, tb), 10);
         assert_eq!(r.avisos.len(), 1);
         let a = &r.avisos[0];
@@ -1871,6 +2121,13 @@ mod testes {
         let run = r.estado.run.as_ref().expect("análise criada");
         assert_eq!((run.width, run.height, run.frames_total), (320, 240, 150));
         assert_eq!(ultimo_log(&ws)["continuacao"], json!(false));
+        assert!(!revisada(&repo::list(&banco(&ws), &occ, &sha).unwrap()[0]));
+        // "Recolocar e continuar": o perito desenhou a caixa de novo; a trilha fica conferida (revisada na Edição)
+        let m2 = MarcaMancha { id: Some(r.id.clone()), ..marca(segundos(pts[40], tb), 100.0, 80.0, 40.0, 60.0, "frente", EscolhaMotor::Mancha) };
+        seguir_mancha_em(&ws, &d.path().join("cache"), &AiSettings::default(), &sha, &m2, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let p = repo::list(&banco(&ws), &occ, &sha).unwrap().into_iter().find(|p| p.id == r.id).unwrap();
+        assert!(p.estado == "conferido" && revisada(&p), "{}", p.estado);
+        assert_eq!(ultimo_log(&ws)["continuacao"], json!(true));
     }
 
     /// Cancelada pelo perito: erro "cancelado" (a tela não mostra) e nada gravado no caso.
@@ -1892,12 +2149,98 @@ mod testes {
         assert!(repo::get_run(&conn, &occ, &sha).unwrap().is_none(), "análise criada depois de cancelar");
     }
 
-    // ---------------------------------------------------------------- fecho da Fase 2
+    /// Primeira mancha de uma mídia sem a tabela do decodificador: a preparação dá progresso (0..1, até 1, antes de
+    /// seguir) e cancela; na segunda vez a tabela vem do cache e não há preparação.
+    #[test]
+    fn primeira_mancha_prepara_com_progresso_e_cancela() {
+        let (d, ws, occ) = caso();
+        let cache = d.path().join("cache");
+        let Some(src) = bloco_unico(d.path(), true) else { return };
+        let (video, sha) = midia_no_caso(&ws, &occ, &src, "bloco.ts");
+        let cap = fontes::cap().unwrap();
+        assert_eq!(TabelaQuadros::obter_com(&cap, &cache, &sha, &video).unwrap().origem, OrigemTabela::Pacotes);
+        let pts = medir::pts(&cap, &video).unwrap();
+        let tb = TabelaQuadros::de_pacotes(&cap, &video).unwrap().tb;
+        let m = marca(t6(segundos(pts[30], tb)), 80.0, 80.0, 40.0, 60.0, "frente", EscolhaMotor::Mancha);
+        // cancelada no primeiro aviso da preparação: nada gravado
+        let parar = AtomicBool::new(false);
+        let r = seguir_mancha_em(&ws, &cache, &AiSettings::default(), &sha, &m, &parar, &mut |a| {
+            if matches!(a, AndamentoMancha::Preparar(_)) {
+                parar.store(true, Ordering::SeqCst);
+            }
+        });
+        assert!(matches!(&r, Err(SicroError::Validation(e)) if e == "cancelado"), "{:?}", r.map(|x| x.id));
+        assert!(repo::list(&banco(&ws), &occ, &sha).unwrap().is_empty());
+        // de novo (outra mídia nova): preparar com progresso e depois seguir
+        let d2 = tempfile::Builder::new().prefix("p2.5-bloco-").tempdir().unwrap();
+        let src = bloco_unico(d2.path(), true).unwrap();
+        let (video, sha) = midia_no_caso(&ws, &occ, &src, "bloco2.ts");
+        let mut avisos = Vec::new();
+        seguir_mancha_em(&ws, &cache, &AiSettings::default(), &sha, &m, &AtomicBool::new(false), &mut |a| avisos.push(a)).unwrap();
+        let preparar: Vec<f32> = avisos.iter().filter_map(|a| if let AndamentoMancha::Preparar(f) = a { Some(*f) } else { None }).collect();
+        let primeiro_seguir = avisos.iter().position(|a| matches!(a, AndamentoMancha::Seguir(_))).expect("seguir");
+        assert!(!preparar.is_empty() && avisos[..primeiro_seguir].iter().all(|a| matches!(a, AndamentoMancha::Preparar(_))), "{avisos:?}");
+        assert!(preparar.windows(2).all(|w| w[0] <= w[1]) && preparar.last() == Some(&1.0), "{preparar:?}");
+        assert_eq!(TabelaQuadros::obter_com(&cap, &cache, &sha, &video).unwrap().origem, OrigemTabela::Decodificador);
+        let mut avisos = Vec::new();
+        seguir_mancha_em(&ws, &cache, &AiSettings::default(), &sha, &m, &AtomicBool::new(false), &mut |a| avisos.push(a)).unwrap();
+        assert!(avisos.iter().all(|a| matches!(a, AndamentoMancha::Seguir(_))), "{avisos:?}");
+    }
+
+    /// "Da análise" de uma mídia sem a tabela do decodificador pede a tabela à fila de fundo (o progresso dela chega
+    /// à Edição pelo `edicao:fundo`) e a espera cancela: `cancelado`, nada no projeto. Pronta a tabela, copia.
+    #[test]
+    fn da_analise_pede_a_tabela_a_fila_e_cancela() {
+        let Some(cap) = fontes::cap() else { return };
+        let (d, ws, occ) = caso();
+        let cache = d.path().join("cache");
+        let src = bloco_unico(d.path(), true).expect("bloco");
+        let (video, sha) = midia_no_caso(&ws, &occ, &src, "camera.ts");
+        let pts = medir::pts(&cap, &video).unwrap();
+        let tb = TabelaQuadros::de_pacotes(&cap, &video).unwrap().tb;
+        let amostras: Vec<Amostra> = pts[10..40].iter().map(|&p| Amostra { t: t6(segundos(p, tb)), x: 50.0, y: 60.0, w: 30.0, h: 40.0 }).collect();
+        let conn = banco(&ws);
+        repo::insert(&conn, &occ, &pessoa("pa", &sha, "auto", amostras)).unwrap();
+        repo::replace_run(&conn, &occ, &Run { media_hash: sha.clone(), ..run(320, 240, 1, 0.04) }).unwrap();
+        let chave = fundo::chave(TipoFundo::Tabela, &sha);
+        assert!(fundo::estado(&chave).is_none());
+        let r = rastreio_da_pessoa_com(&ws, &cache, "proj-1", "m1", &sha, "pa", &AtomicBool::new(true), &mut |_| {});
+        assert!(matches!(&r, Err(SicroError::Validation(e)) if e == "cancelado"), "{r:?}");
+        assert!(!armazem::pasta_projeto(&ws, "proj-1").join("rastreios").exists(), "denso gravado depois de cancelar");
+        assert!(fundo::estado(&chave).is_some(), "a tabela não foi pedida à fila de fundo");
+        // a fila segue com a tabela (grava no cache deste caso): espera antes de a pasta sair
+        let t0 = std::time::Instant::now();
+        while fundo::estado(&chave).is_some_and(|t| matches!(t.estado, EstadoFundo::NaFila | EstadoFundo::Rodando)) {
+            assert!(t0.elapsed() < Duration::from_secs(300), "tabela de fundo presa");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        let r = rastreio_da_pessoa_com(&ws, &cache, "proj-1", "m1", &sha, "pa", &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let den = r.denso.expect("denso");
+        let lido = arquivo::ler(&armazem::pasta_projeto(&ws, "proj-1"), &r.id, &den.sha256).unwrap();
+        assert_eq!(lido.pts, pts[10..40].to_vec(), "linhas = quadros decodificados");
+    }
+
+    /// `pessoas_cancelar` com `da_analise` corta as esperas registradas e nada mais; a espera sai do registro ao acabar.
+    #[test]
+    fn cancelar_da_analise_corta_so_as_esperas() {
+        let lista: Mutex<Vec<Arc<AtomicBool>>> = Mutex::new(Vec::new());
+        let (a, b) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicBool::new(false)));
+        lista.lock().unwrap().extend([a.clone(), b.clone()]);
+        cancelar_todas(&lista);
+        assert!(a.load(Ordering::SeqCst) && b.load(Ordering::SeqCst));
+        let e = EsperaDaAnalise::nova();
+        let f = e.0.clone();
+        assert!(DA_ANALISE.lock().unwrap().iter().any(|x| Arc::ptr_eq(x, &f)));
+        drop(e);
+        assert!(!DA_ANALISE.lock().unwrap().iter().any(|x| Arc::ptr_eq(x, &f)));
+        assert!(!f.load(Ordering::SeqCst));
+    }
+
+    // ---------------------------------------------------------------- com o núcleo do rastreio e os motores (fecho da Fase 2)
 
     /// "Da análise" grava o denso na pasta do projeto, com o SHA-256 do ponteiro; renomear a trilha não a desatualiza,
     /// corrigir a caixa sim.
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn rastreio_da_pessoa_grava_no_projeto() {
         let Some(cap) = fontes::cap() else { return };
         let (d, ws, occ) = caso();
@@ -1906,7 +2249,7 @@ mod testes {
         let pacotes = decode::frame_times(&video).unwrap();
         let amostras: Vec<Amostra> = pacotes.iter().skip(5).take(40).map(|&t| Amostra { t, x: 50.0, y: 60.0, w: 30.0, h: 40.0 }).collect();
         let conn = banco(&ws);
-        let mut a = pessoa("pa", &sha, "editado", amostras);
+        let mut a = pessoa("pa", &sha, "conferido", amostras);
         repo::insert(&conn, &occ, &a).unwrap();
         repo::replace_run(&conn, &occ, &Run { media_hash: sha.clone(), ..run(320, 180, 1, decode::frame_dur(&pacotes)) }).unwrap();
         let cache = d.path().join("cache");
@@ -1938,7 +2281,6 @@ mod testes {
     /// A mancha pelo motor novo num MPEG-TS marcado no meio do GOP: parte do quadro marcado (o seguidor de antes
     /// partia do quadro-chave seguinte) e grava a corrida no registro.
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn seguir_mancha_pelo_motor_novo() {
         let (d, ws, occ) = caso();
         let Some(src) = bloco(d.path(), true) else { return };
@@ -1961,7 +2303,6 @@ mod testes {
     /// O9: VitTrack e EdgeTAM pela aba Rastreio da análise, em 2 sequências de `p3a`, com os limiares do motor
     /// (os mesmos da Edição) e o IoU do aceite do P2.3 (≥ 0,75 e ≥ 0,85).
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2 e P2.3"]
     fn dois_motores_neurais_em_2_sequencias() {
         use crate::ia::testes as ia;
         let Some(cap) = fontes::cap() else { return };
@@ -2000,6 +2341,7 @@ mod testes {
                     n += 1;
                 }
                 let media = soma / n as f64;
+                eprintln!("O9 {nome} {motor:?}: IoU médio {media:.3} ({n} quadros com o alvo; aceite ≥ {minimo})");
                 assert!(media >= minimo, "{nome} {motor:?}: IoU médio {media:.3} < {minimo}");
                 // limiares gravados = os do motor na taxa da mídia (os mesmos da Edição)
                 let log = ultimo_log(&ws);

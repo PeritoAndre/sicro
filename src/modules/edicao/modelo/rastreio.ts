@@ -4,7 +4,8 @@
  * segura a última (só origem manual) → antes da primeira, nada. Fixtures `rastreio-*.json`.
  */
 
-import { ESTADO_INCERTO, ESTADO_OK, TIPO_MEDIDO, type ArquivoDenso, type Caixa, type Chave, type Pts, type Rastreio, type Seg } from "@domain/edicao";
+import type { Draft } from "immer";
+import { ESTADO_INCERTO, ESTADO_OK, TIPO_MEDIDO, type ArquivoDenso, type Caixa, type Chave, type ProjetoEdicao, type Pts, type Rastreio, type Seg } from "@domain/edicao";
 import { contarAte, entre } from "./curva";
 
 /** Tempo (s) na base do rastreio e, quando há mídia, o pts do quadro. */
@@ -74,4 +75,66 @@ export function avaliar(r: Rastreio, em: Instante, denso?: ArquivoDenso | null):
 /** O instante cai numa ausência aceita? Intervalo fechado. */
 export function emAusencia(r: Rastreio, t: Seg): boolean {
   return r.ausencias.some((a) => a.de_s <= t && t <= a.ate_s);
+}
+
+// ---- âncoras do programa ("Simplificar") ----
+
+const mesmaCaixa = (a: Caixa, b: Caixa) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+const mesmaAncora = (a: Chave<Caixa>, b: Chave<Caixa>) =>
+  a.t === b.t && (a.pts ?? null) === (b.pts ?? null) && (a.interp ?? "linear") === (b.interp ?? "linear") && mesmaCaixa(a.v, b.v);
+
+/** `ancoras_do_programa` depois do "Simplificar": os `t` das âncoras devolvidas que não coincidem com âncora do perito
+ *  (mesmo `t` e mesma caixa). Âncora do programa de antes que o perito não mexeu continua do programa. */
+export function ancorasDoSimplificar(r: Rastreio, devolvidas: readonly Chave<Caixa>[]): Seg[] {
+  const programa = new Set(r.ancoras_do_programa ?? []);
+  const doPerito = porT(r.ancoras.filter((k) => !programa.has(k.t)));
+  return devolvidas.filter((k) => !(doPerito.get(k.t) ?? []).some((a) => mesmaCaixa(a.v, k.v))).map((k) => k.t);
+}
+
+/** Âncoras por `t` (uma passada: a lista do Simplificar de um efeito longo tem milhares). */
+function porT(ks: readonly Chave<Caixa>[]): Map<Seg, Chave<Caixa>[]> {
+  const m = new Map<Seg, Chave<Caixa>[]>();
+  for (const k of ks) {
+    const v = m.get(k.t);
+    if (v) v.push(k);
+    else m.set(k.t, [k]);
+  }
+  return m;
+}
+
+/** Toda mudança do documento passa por aqui (`produzir` da store): âncora do programa acrescentada por cima, movida,
+ *  apagada ou ajustada à mão sai de `ancoras_do_programa` (vira marcação do perito). A lista trocada na mesma mudança
+ *  (o "Simplificar") fica como veio. Desfazer e refazer levam a lista com o documento. */
+export function podarAncorasDoPrograma(
+  antes: ProjetoEdicao,
+  depois: ProjetoEdicao,
+  mudar: (base: ProjetoEdicao, f: (d: Draft<ProjetoEdicao>) => void) => ProjetoEdicao,
+): ProjetoEdicao {
+  if (antes.rastreios === depois.rastreios) return depois;
+  const podas = new Map<string, Seg[]>();
+  for (const r of depois.rastreios) {
+    const lista = r.ancoras_do_programa;
+    if (!lista || lista.length === 0) continue;
+    const velho = antes.rastreios.find((x) => x.id === r.id);
+    if (!velho || velho.ancoras === r.ancoras || velho.ancoras_do_programa !== lista) continue;
+    // por `t` numa passada: a cada passo do arrasto de uma alça (lista por âncora custava segundos com milhares)
+    const va = porT(velho.ancoras as Chave<Caixa>[]);
+    const vb = porT(r.ancoras as Chave<Caixa>[]);
+    const intocada = (t: Seg) => {
+      const a = va.get(t);
+      const b = vb.get(t);
+      return a?.length === 1 && b?.length === 1 && mesmaAncora(a[0] as Chave<Caixa>, b[0] as Chave<Caixa>);
+    };
+    const fica = lista.filter(intocada);
+    if (fica.length !== lista.length) podas.set(r.id, fica);
+  }
+  if (podas.size === 0) return depois;
+  return mudar(depois, (d) => {
+    for (const r of d.rastreios) {
+      const fica = podas.get(r.id);
+      if (!fica) continue;
+      if (fica.length > 0) r.ancoras_do_programa = fica;
+      else delete r.ancoras_do_programa;
+    }
+  });
 }

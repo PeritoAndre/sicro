@@ -12,10 +12,10 @@ use super::ffmpeg::args as ffmpeg_args;
 use super::ffmpeg::sonda::Capacidades;
 use super::modelo::{
     ClipeBase, ClipePrincipal, ClipeSobreposto, CorMidia, Efeito, EstadoMidia, Exportacao, Faixa, Fundo, LinhaResolvida, Matriz, ModoLegendas, Nivel,
-    OrdemCampos, OrigemLegenda, Posicao, ProjetoEdicao, Racional, Tolerante,
+    OrdemCampos, OrigemLegenda, Posicao, ProjetoEdicao, Racional, Rastreio, Tolerante,
 };
 use super::quadros::TabelaQuadros;
-use super::rastreio::avaliar::Como;
+use super::rastreio::avaliar::{Avaliado, Como};
 use super::rastreio::{ArquivoDenso, ArquivoSilhuetas};
 use super::{tempo, validar};
 use crate::error::{Result, SicroError};
@@ -368,6 +368,47 @@ fn unir_faixas(mut v: Vec<(f64, f64)>) -> (Vec<ProvFaixa>, f64) {
     (u, total)
 }
 
+/// Âncora escolhida pelo "Simplificar" e não mexida pelo perito (`Rastreio.ancoras_do_programa`, pelo `t`).
+fn do_programa(r: &Rastreio, t: f64) -> bool {
+    r.ancoras_do_programa.iter().any(|x| (x - t).abs() <= 1e-6)
+}
+
+/// Conta um quadro coberto em `n` pelo `como` da avaliação: âncora do perito ou do "Simplificar"; interpolado entre
+/// duas âncoras do perito, entre âncoras com alguma do "Simplificar", ou linha interpolada do denso.
+fn contar_quadro(n: &mut ProvQuadrosOcultos, r: &Rastreio, denso: Option<&ArquivoDenso>, a: Avaliado, t: f64, pts: i64) {
+    let ks = &r.ancoras;
+    match a.como {
+        Como::Ancora => {
+            // a âncora do quadro, como `avaliar` acha (pts quando os dois têm, senão o `t`)
+            let k = ks.iter().rev().find(|k| match k.pts {
+                Some(p) => p == pts,
+                None => k.t == t,
+            });
+            if k.is_some_and(|k| do_programa(r, k.t)) {
+                n.ancora_do_programa += 1;
+            } else {
+                n.ancora += 1;
+            }
+        }
+        Como::Segurado => n.segurado += 1,
+        Como::Denso => n.medido += 1,
+        Como::Interpolado => {
+            n.interpolado += 1;
+            // linha interpolada do denso, ou entre as âncoras vizinhas (a regra do `avaliar`)
+            let do_denso = denso.is_some_and(|d| d.pts.binary_search(&pts).is_ok());
+            let i = ks.partition_point(|k| k.t <= t);
+            if !do_denso && i > 0 && i < ks.len() {
+                if do_programa(r, ks[i - 1].t) || do_programa(r, ks[i].t) {
+                    n.interpolado_do_programa += 1;
+                } else {
+                    n.interpolado_entre_marcacoes += 1;
+                }
+            }
+        }
+    }
+    n.incerto += u32::from(a.incerto);
+}
+
 /// O `feito` do `tecnico.json` que sai do projeto e das tabelas: sempre do programa inteiro, qualquer que seja o alvo
 /// (prévia e quadro final dão a mesma da exportação com a exportação do projeto).
 fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo: &Alvo) -> Result<Proveniencia> {
@@ -445,20 +486,26 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             };
             for o in clipe::ocultacoes_de(midia_ref, &efeitos_oc) {
                 rastreios_usados.insert(o.alvo.rastreio.clone());
-                let (mut n, mut de, mut ate) = (ProvQuadrosOcultos { ancora: 0, medido: 0, interpolado: 0, incerto: 0 }, f64::INFINITY, f64::NEG_INFINITY);
+                let (mut n, mut de, mut ate) = (ProvQuadrosOcultos::default(), f64::INFINITY, f64::NEG_INFINITY);
                 // a máscara entra por quadro LIDO da fonte (`clipe::ocultar`): por campo o mapa conta campos, dois
                 // por quadro, e contados na tabela de campos os segundos saíam como "interpolados" que não houve
                 let da_fonte: &TabelaQuadros = &fonte.quadros;
                 let (fa, fb) = if tab.pts.len() != da_fonte.pts.len() { (j_in / 2, j_out.div_ceil(2).min(da_fonte.pts.len())) } else { (j_in, j_out) };
+                let r = rs.achar(&o.alvo.rastreio)?;
+                let denso = match &r.denso {
+                    Some(d) => Some(ctx.rastreios.denso(&r.id, &d.sha256)?),
+                    None => None,
+                };
                 for j in fa..fb {
-                    let Some(a) = clipe::caixa_da_ocultacao(&mut rs, o, da_fonte, j)? else { continue };
-                    match a.como {
-                        Como::Ancora | Como::Segurado => n.ancora += 1,
-                        Como::Denso => n.medido += 1,
-                        Como::Interpolado => n.interpolado += 1,
+                    let t = da_fonte.tempo(j);
+                    match clipe::caixa_da_ocultacao(&mut rs, o, da_fonte, j)? {
+                        Some(a) => contar_quadro(&mut n, r, denso.as_deref(), a, t, da_fonte.pts[j]),
+                        // sem região dentro do `ativo` só numa ausência aceita (fora dela, `sem_cobertura`): conta e
+                        // entra no intervalo, mesmo sem nenhum quadro coberto (a conferência tem de levar até lá)
+                        None if efeitos::base_ativa(&o.base, t) => n.ausente += 1,
+                        None => continue,
                     }
-                    n.incerto += u32::from(a.incerto);
-                    (de, ate) = (de.min(da_fonte.tempo(j)), ate.max(da_fonte.tempo(j)));
+                    (de, ate) = (de.min(t), ate.max(t));
                 }
                 if de > ate {
                     continue;
@@ -469,12 +516,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
                     Some(x) => {
                         x.clipes.push(res.id.clone());
                         (x.de_s, x.ate_s) = (x.de_s.min(de), x.ate_s.max(ate));
-                        x.quadros = ProvQuadrosOcultos {
-                            ancora: x.quadros.ancora + n.ancora,
-                            medido: x.quadros.medido + n.medido,
-                            interpolado: x.quadros.interpolado + n.interpolado,
-                            incerto: x.quadros.incerto + n.incerto,
-                        };
+                        x.quadros.somar(&n);
                     }
                     None => {
                         ids_das_ocultacoes.push((midia.to_string(), o.base.id.clone()));
@@ -693,7 +735,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
         rastreios.push(ProvRastreio {
             id: r.id.clone(),
             origem: r.origem.clone(),
-            ancoras: r.ancoras.len() as u32,
+            ancoras: r.ancoras.iter().filter(|k| !do_programa(r, k.t)).count() as u32,
             denso_sha256: r.denso.as_ref().map(|d| d.sha256.clone()),
             silhuetas_sha256: r.silhuetas.as_ref().map(|s| s.sha256.clone()),
             corridas,
@@ -737,6 +779,126 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
 mod testes {
     use super::*;
     use serde_json::json;
+
+    /// Fecho da Fase 2: `feito.ocultacoes[].quadros` separa a marcação do perito, a âncora do "Simplificar"
+    /// (`Rastreio.ancoras_do_programa`), o quadro que segura a última âncora manual, o interpolado entre duas marcações
+    /// do perito, o interpolado com ponta do programa, a linha do denso e o quadro sem região na ausência aceita;
+    /// `feito.rastreios[].ancoras` conta só as do perito. Cena sintética, sem ffmpeg; denso pelo formato do P2.2.
+    #[test]
+    fn proveniencia_separa_o_perito_do_programa() {
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, gravado};
+        use crate::edicao::quadros::apoio;
+        use crate::edicao::rastreio::{ArquivoDenso, ESTADO_AUSENTE, ESTADO_INCERTO, ESTADO_OK, TIPO_INTERPOLADO, TIPO_MEDIDO};
+        use crate::edicao::testes::aceite::{alvo_final, ancora, midia, ocultar, projeto, rastreio, trecho};
+        let tb = (1, 15360);
+        let tab = apoio::tabela(tb, apoio::pts_regulares(300, (1, 30), tb, 0));
+        let cx = [0.4, 0.4, 0.2, 0.2];
+        // denso nos quadros 95..108: medido (o 100 incerto), linha interpolada (101..105), ausente (106..108)
+        let (a, b) = (95usize, 109usize);
+        let d = ArquivoDenso {
+            esquema: 2,
+            rastreio: "r1".into(),
+            midia_sha256: "0".repeat(64),
+            espaco: "original".into(),
+            pixel: crate::edicao::modelo::TamanhoPx { w: 320, h: 180 },
+            pts: tab.pts[a..b].to_vec(),
+            x: vec![0.4; b - a],
+            y: vec![0.4; b - a],
+            w: vec![0.2; b - a],
+            h: vec![0.2; b - a],
+            conf: vec![0.9; b - a],
+            estado: (a..b).map(|j| match j { 100 => ESTADO_INCERTO, 106.. => ESTADO_AUSENTE, _ => ESTADO_OK }).collect(),
+            tipo: (a..b).map(|j| if (101..=105).contains(&j) { TIPO_INTERPOLADO } else { TIPO_MEDIDO }).collect(),
+            corrida: vec![0; b - a],
+            corridas: vec![],
+        };
+        let (sha, leitor) = gravado(&d, tab.tb);
+        // r1: do perito nos quadros 30, 90 e 115; do "Simplificar" no 50 e no 70; ausências aceitas 106..108 e 116..119
+        let ks: Vec<serde_json::Value> = [30usize, 50, 70, 90, 115].iter().map(|&j| ancora(tab.tempo(j), Some(tab.pts[j]), cx)).collect();
+        let mut r1 = rastreio("r1", Some("m1"), "fonte", ks);
+        r1["origem"] = json!({ "tipo": "assistido" });
+        r1["ancoras_do_programa"] = json!([tab.tempo(50), tab.tempo(70)]);
+        r1["denso"] = json!({ "sha256": sha, "n": b - a, "de_s": tab.tempo(a), "ate_s": tab.tempo(b - 1), "ok": 10, "incertos": 1, "ausentes": 3 });
+        let aus = |x: usize, y: usize| json!({ "de_s": tab.tempo(x), "ate_s": tab.tempo(y), "motivo": "oculto", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito" });
+        r1["ausencias"] = json!([aus(106, 108), aus(116, 119)]);
+        // r2: manual, uma âncora no 30: segura até o 39
+        let r2 = rastreio("r2", Some("m1"), "fonte", vec![ancora(tab.tempo(30), Some(tab.pts[30]), cx)]);
+        let o1 = ocultar("o1", "r1", "solido", json!({ "ativo": { "de": tab.tempo(30), "ate": tab.tempo(119) } }));
+        let o2 = ocultar("o2", "r2", "solido", json!({ "ativo": { "de": tab.tempo(30), "ate": tab.tempo(39) } }));
+        let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([o1, o2]))], vec![trecho("c1", "m1", &tab, 30, 120, 1.0, json!([]))], json!({ "rastreios": [r1, r2] }));
+        let cap = apoio::cap_falsa();
+        let plano = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}"));
+        let pv = &plano.proveniencia;
+        let q1 = pv.ocultacoes.iter().find(|o| o.rastreio == "r1").unwrap().quadros;
+        assert_eq!(
+            q1,
+            ProvQuadrosOcultos {
+                ancora: 3,
+                ancora_do_programa: 2,
+                segurado: 0,
+                // 95..100 medidos (o 100 incerto)
+                medido: 6,
+                incerto: 1,
+                // 31..89 com ponta do programa (57), 91..94 e 109..114 entre o 90 e o 115 (10), linhas 101..105 (5)
+                interpolado: 72,
+                interpolado_do_programa: 57,
+                interpolado_entre_marcacoes: 10,
+                ausente: 7,
+            }
+        );
+        let cobertos = q1.ancora + q1.ancora_do_programa + q1.segurado + q1.medido + q1.interpolado;
+        assert_eq!(cobertos + q1.ausente, 90, "todo quadro ativo uma vez");
+        let q2 = pv.ocultacoes.iter().find(|o| o.rastreio == "r2").unwrap().quadros;
+        assert_eq!(q2, ProvQuadrosOcultos { ancora: 1, segurado: 9, ..Default::default() });
+        let ancoras: Vec<(&str, u32)> = pv.rastreios.iter().map(|r| (r.id.as_str(), r.ancoras)).collect();
+        assert_eq!(ancoras, [("r1", 3), ("r2", 1)]);
+        // em dois clipes (30..75 e 75..120) a soma (`somar`) dá o mesmo, campo a campo
+        let mut v = serde_json::to_value(&p).unwrap();
+        v["principal"] = json!([trecho("c1", "m1", &tab, 30, 75, 1.0, json!([])), trecho("c2", "m1", &tab, 75, 120, 1.0, json!([]))]);
+        let p3: ProjetoEdicao = serde_json::from_value(v).unwrap();
+        let pv3 = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p3, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}")).proveniencia;
+        let o = pv3.ocultacoes.iter().find(|o| o.rastreio == "r1").unwrap();
+        assert_eq!((o.clipes.clone(), o.quadros), (vec!["c1".to_string(), "c2".to_string()], q1));
+        // sem a lista, todas são do perito
+        let mut p2 = p.clone();
+        p2.rastreios[0].ancoras_do_programa.clear();
+        let q = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p2, &leitor, &alvo_final("cpu")).unwrap().proveniencia.ocultacoes[0].quadros;
+        assert_eq!((q.ancora, q.ancora_do_programa, q.interpolado_entre_marcacoes, q.interpolado_do_programa), (5, 0, 67, 0));
+    }
+
+    /// Ocultação ativa só em ausência aceita (nenhum quadro com região) entra no `feito`: sem isso a exportação não
+    /// parava em "A conferir" e o PDF não a listava, justo onde a ausência aceita por engano deixa o alvo à vista. Os
+    /// quadros sem região contam em todo clipe (com ou sem região nele) e entram no intervalo.
+    #[test]
+    fn ocultacao_so_em_ausencia_aceita_entra_no_feito() {
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, Duble};
+        use crate::edicao::quadros::apoio;
+        use crate::edicao::testes::aceite::{alvo_final, ancora, midia, ocultar, projeto, rastreio, trecho};
+        let tb = (1, 15360);
+        let tab = apoio::tabela(tb, apoio::pts_regulares(300, (1, 30), tb, 0));
+        // manual, âncora no 80 (segura até o 110); ausência aceita 40..79; ativo 40..110
+        let mut r1 = rastreio("r1", Some("m1"), "fonte", vec![ancora(tab.tempo(80), Some(tab.pts[80]), [0.4, 0.4, 0.2, 0.2])]);
+        r1["ausencias"] = json!([{ "de_s": tab.tempo(40), "ate_s": tab.tempo(79), "motivo": "fora_de_cena", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito" }]);
+        let o1 = ocultar("o1", "r1", "solido", json!({ "ativo": { "de": tab.tempo(40), "ate": tab.tempo(110) } }));
+        let leitor = Duble(Default::default());
+        let cap = apoio::cap_falsa();
+        let plano = |clipes: Vec<serde_json::Value>| {
+            let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([o1.clone()]))], clipes, json!({ "rastreios": [r1.clone()] }));
+            compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}"))
+        };
+        // só o trecho 40..60: nenhum quadro com região
+        let pv = plano(vec![trecho("c1", "m1", &tab, 40, 60, 1.0, json!([]))]).proveniencia;
+        assert_eq!(pv.ocultacoes.len(), 1, "a exportação tem de parar em \"A conferir\"");
+        let o = &pv.ocultacoes[0];
+        assert_eq!((o.clipes.clone(), o.de_s, o.ate_s, o.quadros), (vec!["c1".to_string()], tab.tempo(40), tab.tempo(59), ProvQuadrosOcultos { ausente: 20, ..Default::default() }));
+        // 40..60 e 60..120: os sem região do primeiro clipe contam e entram no intervalo
+        let pv = plano(vec![trecho("c1", "m1", &tab, 40, 60, 1.0, json!([])), trecho("c2", "m1", &tab, 60, 120, 1.0, json!([]))]).proveniencia;
+        let o = &pv.ocultacoes[0];
+        assert_eq!(
+            (o.clipes.clone(), o.de_s, o.ate_s, o.quadros),
+            (vec!["c1".to_string(), "c2".to_string()], tab.tempo(40), tab.tempo(110), ProvQuadrosOcultos { ancora: 1, segurado: 30, ausente: 40, ..Default::default() })
+        );
+    }
 
     /// `feito.roteiro[].processamentos` na ordem da cadeia (contratos (i) 8): os de origem na ordem dos filtros do grafo,
     /// qualquer que seja a da lista do clipe (antes saíam na da lista: média antes do desentrelace, que o grafo faz depois).

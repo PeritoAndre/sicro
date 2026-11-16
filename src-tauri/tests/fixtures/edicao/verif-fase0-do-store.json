@@ -69,7 +69,7 @@
             "ate": 4
           },
           "tipo": "ocultar",
-          "modo": "solido",
+          "modo": "desfoque",
           "alvo": {
             "rastreio": "00000000-0000-4000-8000-000000000008",
             "forma": "retangulo",

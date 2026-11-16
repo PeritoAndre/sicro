@@ -51,6 +51,7 @@ import { garantirMidia as garantirRecurso, recursoDe } from "../palco/recursos";
 import { garantirMidia } from "../modelo/projeto";
 import { midiaDoCaso } from "./coleta";
 import { pontas } from "../sequencia/NovoClipe";
+import { comConteudo } from "../inspetor/secoes/ocultarPadrao";
 import { congelar, inserir, inserirTrechos, moverPara, selecionarClipe } from "../sequencia/acoes";
 import { novoClipeImagem, novoClipeTitulo, tituloDaFase0 as novoTitulo, prenderImagem, prenderNarracao, prenderTitulo } from "../sequencia/novos";
 import {
@@ -236,7 +237,7 @@ beforeAll(async () => {
   const ocM = adicionarEfeito(c1.id, "ocultar", "Ocultar")!;
   mudar("Forma", noEfeito<EfOcultar>(ocM, (x) => void (x.alvo.forma = "elipse")));
   mudar("Borda suave", noEfeito<EfOcultar>(ocM, (x) => void (x.alvo.borda_suave = 0.1)));
-  mudar("Conteúdo", noEfeito<EfOcultar>(ocM, (x) => void ((x.conteudo = "placa"), (x.motivo = "Placa de terceiro"))));
+  mudar("Conteúdo", noEfeito<EfOcultar>(ocM, (x) => void (comConteudo(x, "placa"), (x.motivo = "Placa de terceiro"))));
   marcarAncora(st().doc!.rastreios.at(-1)!.id, { t: 2.0, pts: 60 * 512, v: { x: 0.1, y: 0.6, w: 0.2, h: 0.15 } }, "Marcar");
   const texto = adicionarEfeito(c1.id, "texto", "Texto")!;
   mudar("Texto", noEfeito<EfTexto>(texto, (x) => void (x.conteudo = "Veículo branco")));

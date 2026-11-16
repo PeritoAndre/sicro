@@ -14,7 +14,7 @@ import type { EditorEfeitoProps } from "../registro";
 import { FormaIcone } from "./DestaqueEditor";
 import { VERTICES_PADRAO } from "./alvoRegiao";
 import { round } from "./comum";
-import { padraoDoConteudo } from "./ocultarPadrao";
+import { comConteudo } from "./ocultarPadrao";
 import styles from "../Inspetor.module.css";
 
 const CONTEUDOS: { v: EfOcultar["conteudo"]; r: string }[] = [
@@ -26,11 +26,7 @@ const CONTEUDOS: { v: EfOcultar["conteudo"]; r: string }[] = [
   { v: "outro", r: "Outro" },
 ];
 
-/** Modo e intensidade ainda no padrão do conteúdo (no sólido a intensidade não conta). */
-export function noPadrao(o: Pick<EfOcultar, "conteudo" | "modo" | "intensidade">): boolean {
-  const p = padraoDoConteudo(o.conteudo);
-  return o.modo === p.modo && (o.modo === "solido" || o.intensidade === p.intensidade);
-}
+export { noPadrao } from "./ocultarPadrao";
 
 export function OcultarEditor({ valor: e, ctx }: EditorEfeitoProps<EfOcultar>) {
   const id = e.id;
@@ -46,14 +42,7 @@ export function OcultarEditor({ valor: e, ctx }: EditorEfeitoProps<EfOcultar>) {
         rotulo="Conteúdo"
         valor={e.conteudo}
         opcoes={CONTEUDOS}
-        aplicar={(v) =>
-          em((x) => {
-            // o padrão do novo conteúdo entra só se o modo ainda era o do anterior (escolha do perito fica)
-            const segue = noPadrao(x);
-            x.conteudo = v;
-            if (segue) Object.assign(x, padraoDoConteudo(v));
-          })
-        }
+        aplicar={(v) => em((x) => comConteudo(x, v))}
       />
       <Escolha
         rotulo="Forma"

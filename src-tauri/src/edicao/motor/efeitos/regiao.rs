@@ -90,15 +90,16 @@ pub(crate) fn reversivel(o: &EfOcultar) -> bool {
     o.modo != ModoOcultar::Solido && de_texto(o.conteudo)
 }
 
-/// Padrão por conteúdo (§6.6 (1)): texto → sólido; rosto, corpo e outro → mosaico 0,75 (4 células). Quem aplica é a
-/// tela (`inspetor/secoes/ocultarPadrao.ts::padraoDoConteudo`); aqui é a referência do ataque e da fixture
+/// Padrão por conteúdo (§6.6 (1)): texto → sólido; rosto, corpo e outro → desfoque 1,0. Nenhum padrão pede ciência
+/// (decisão do fecho da Fase 2): com os limiares medidos, o mosaico 0,75 de antes era `fraca`. Quem aplica é a tela
+/// (`inspetor/secoes/ocultarPadrao.ts::padraoDoConteudo`); aqui é a referência do ataque e da fixture
 /// `conferencia-padrao.json`, que o espelho confere.
 #[cfg(test)]
 pub(crate) fn padrao(c: ConteudoOculto) -> (ModoOcultar, f64) {
     if de_texto(c) {
         (ModoOcultar::Solido, 1.0)
     } else {
-        (ModoOcultar::Mosaico, 0.75)
+        (ModoOcultar::Desfoque, DESFOQUE_MIN)
     }
 }
 
@@ -211,14 +212,18 @@ pub(crate) mod testes {
         assert!(fraca(&com("desfoque", 0.99, "rosto")));
         assert!(fraca(&com("desfoque", 0.6, "rosto")));
         assert!(!fraca(&com("desfoque", 1.0, "rosto")));
-        // mosaico: round(12 − 11·i) células; 0,95 → 2 (fraca), 1,0 → 1; o padrão de rosto (0,75: 4 células) é fraco
+        // mosaico: round(12 − 11·i) células; 0,95 → 2 (fraca), 1,0 → 1; o 0,75 (4 células) é fraco
         assert!(fraca(&com("mosaico", 0.95, "rosto")));
         assert!(!fraca(&com("mosaico", 1.0, "rosto")));
-        let (modo, i) = padrao(ConteudoOculto::Rosto);
-        let mut o = com("mosaico", i, "rosto");
-        o.modo = modo;
-        assert!(fraca(&o));
+        assert!(fraca(&com("mosaico", 0.75, "rosto")));
         assert!(!fraca(&com("solido", 0.0, "placa")));
+        // nenhum padrão de conteúdo é fraco nem reversível (não nasce pedindo ciência)
+        for c in ["rosto", "placa", "corpo", "tela", "documento", "outro"] {
+            let (modo, i) = padrao(serde_json::from_value(json!(c)).unwrap());
+            let mut o = com("solido", i, c);
+            o.modo = modo;
+            assert!(!fraca(&o) && !reversivel(&o), "padrão de {c}: {modo:?} {i}");
+        }
     }
 
     /// Padrão por conteúdo: a fixture que o espelho do front (`ocultarPadrao.ts`) confere.
@@ -533,6 +538,59 @@ pub(crate) mod testes {
         eprintln!("ocultação em pixel ({}): {casos} casos × 6 quadros", cap.versao);
     }
 
+    /// Invertida numa ausência aceita: sem o alvo, tudo está fora da forma e o quadro INTEIRO sai coberto (antes saía
+    /// intacto). Ausência numa parte do clipe (quadros 0..2, âncora no 3) e no clipe inteiro; raio e célula pela região
+    /// inteira; nos quadros com caixa, o lado de fora coberto e o de dentro intacto. Nos dois binários.
+    #[test]
+    fn invertida_em_ausencia_aceita_cobre_o_quadro_inteiro() {
+        use crate::edicao::testes::aceite::{alvo_final, ancora, midia, projeto, rastreio, trecho, Mundo};
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = crate::edicao::testes::fontes::cap() else { return };
+        let (w, h) = (pixel::W, pixel::H);
+        let f = pixel::textura(&cap);
+        let (_, sem) = pixel::plano(&cap, &f, json!([]), json!([]));
+        let original = pixel::render(&cap, &sem, "p26-aus-sem");
+        let pasta = crate::edicao::testes::fontes::pasta_temporaria("p26-aus-variante");
+        let tab = &f.quadros;
+        let fm = pixel::Forma::nova("retangulo");
+        let fora: Vec<bool> = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| fm.dentro_do_pixel(x, y) < 64).collect();
+        let (coberto, longe) = (pixel::blocos(&fora), pixel::dilatar(&fora, 3.0).iter().map(|v| !v).collect::<Vec<bool>>());
+        let todos = vec![true; (w * h) as usize];
+        // (caso, quadro da âncora, ausência aceita [a, b], quadros do clipe)
+        for (caso, k_ancora, (a, b), n) in [("ausência em 0..2", 3usize, (0usize, 2usize), 6usize), ("ausência no clipe inteiro", 5, (0, 4), 3)] {
+            for modo in ["solido", "mosaico", "desfoque"] {
+                let rotulo = format!("{caso}, {modo} ({})", cap.versao);
+                let oc = ocultar_json("o1", "r1", modo, json!({ "intensidade": 0.5, "cor": "#204060ff", "alvo": pixel::alvo("retangulo", 0.0, true) }));
+                let mut r = rastreio("r1", Some("m1"), "fonte", vec![ancora(tab.tempo(k_ancora), Some(tab.pts[k_ancora]), pixel::CAIXA)]);
+                r["ausencias"] = json!([{ "de_s": tab.tempo(a), "ate_s": tab.tempo(b), "motivo": "fora_de_cena", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito" }]);
+                let p = projeto(w, h, (30, 1), vec![midia("m1", "video", json!([oc]))], vec![trecho("c1", "m1", tab, 0, n, 1.0, json!([]))], json!({ "rastreios": [r] }));
+                let pl = Mundo::novo(&cap).com("m1", &f).compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{rotulo}: {e}"));
+                let saida = pixel::render(&cap, &pl, "p26-aus");
+                let (rec, var_grafo) = recorte_e_variante(&pl.blocos[0].grafo);
+                assert_eq!(rec, [0, 0, w, h], "{rotulo}");
+                // raio e célula da região inteira (o lado menor do quadro), não os de uma caixa de 2 px
+                let o = &p.midias[0].ocultacoes[0];
+                assert_eq!(var_grafo, variante(o, rec, w.min(h)).unwrap().join(","), "{rotulo}");
+                let filtro = format!("crop={w}:{h}:0:0:exact=1,{var_grafo}");
+                let var = filtrar(&cap, &pasta, "var", &original[..n], (w, h), &filtro, (w, h));
+                for (k, q) in saida.iter().enumerate() {
+                    let trocado = pixel::com_recorte(&original[k], rec, &var[k]);
+                    if k <= b {
+                        let d = pixel::diferentes(q, &trocado, &todos);
+                        assert!(d.is_empty(), "{rotulo}: quadro {k} sem o alvo, {} px fora da variante, ex. {:?}", d.len(), &d[..d.len().min(5)]);
+                        let mudou = pixel::diferentes(&trocado, &original[k], &todos).len();
+                        assert!(mudou > (w * h) as usize * 3 / 4, "{rotulo}: quadro {k}, a variante muda só {mudou} px");
+                    } else {
+                        let d = pixel::diferentes(q, &trocado, &coberto);
+                        assert!(d.is_empty(), "{rotulo}: quadro {k}, {} px de fora da forma descobertos", d.len());
+                        let d = pixel::diferentes(q, &original[k], &longe);
+                        assert!(d.is_empty(), "{rotulo}: quadro {k}, {} px dentro da forma alterados", d.len());
+                    }
+                }
+            }
+        }
+    }
+
     /// §11 (P2.6): holofote: fora da região (além de borda + 3 px) escurecido e dessaturado exatamente como o
     /// `lutyuv` do grafo e como "Escurecer"/"Dessaturar" pedem (conta feita aqui); dentro (todo bloco que toca a
     /// forma) intacto. Invertido, ao contrário. Só "Dessaturar": a luma fica, o croma vai ao neutro.
@@ -775,6 +833,18 @@ pub(crate) mod testes {
             }
         }
 
+        /// O denso pelo formato do P2.2: `arquivo::gravar` e relido por `arquivo::ler` (teto, SHA-256, colunas). O
+        /// leitor falso devolve o que o disco devolveu; o SHA-256 é o do ponteiro.
+        pub fn gravado(d: &ArquivoDenso, tb: crate::edicao::modelo::Racional) -> (String, Duble) {
+            use crate::edicao::rastreio::arquivo;
+            let pasta = fontes::pasta_temporaria("p26-denso");
+            let ponteiro = arquivo::gravar(&pasta, d, tb).unwrap_or_else(|e| panic!("gravar o denso: {e}"));
+            let lido = arquivo::ler(&pasta, &d.rastreio, &ponteiro.sha256).unwrap_or_else(|e| panic!("ler o denso: {e}"));
+            assert_eq!(&lido, d, "o denso volta igual do disco");
+            let _ = std::fs::remove_dir_all(&pasta);
+            (ponteiro.sha256.clone(), Duble([(ponteiro.sha256, Arc::new(lido))].into()))
+        }
+
         /// Rastreio assistido da marca com o denso `sha`, a âncora do perito no quadro `a` e as `ausencias`.
         pub fn rastreio(m: &Medida, d: &ArquivoDenso, sha: &str, a: usize, ausencias: serde_json::Value) -> serde_json::Value {
             let tab = &m.info.quadros;
@@ -803,7 +873,6 @@ pub(crate) mod testes {
     /// incerto cobertos (o incerto acende `ocultar_incerto` com a contagem), ausente dentro da ausência aceita sem
     /// ocultação (e sem erro), ausente fora dela = `sem_cobertura` (a validação acusa e o motor recusa).
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn ocultar_segue_denso_ok_incerto_e_ausencia() {
         use crate::edicao::quadros::apoio;
         use crate::edicao::testes::aceite::{alvo_final, midia, projeto, trecho};
@@ -820,8 +889,7 @@ pub(crate) mod testes {
             _ => crate::edicao::rastreio::ESTADO_OK,
         };
         let d = denso::da_marca(&m, (a, b), estado, |_| crate::edicao::rastreio::TIPO_MEDIDO);
-        let sha = "d".repeat(64);
-        let leitor = denso::Duble([(sha.clone(), Arc::new(d.clone()))].into());
+        let (sha, leitor) = denso::gravado(&d, tab.tb);
         let aceita = json!([{ "de_s": tab.tempo(70), "ate_s": tab.tempo(79), "motivo": "oculto", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito" }]);
         let montar = |ausencias: serde_json::Value| {
             let oc = ocultar_json("o1", "r1", "solido", json!({ "ativo": { "de": tab.tempo(a), "ate": tab.tempo(b - 1) } }));
@@ -833,7 +901,7 @@ pub(crate) mod testes {
         assert!(!problemas.iter().any(|x| x.0 == "sem_cobertura"), "{problemas:?}");
         let plano = denso::compilar(&cap, &m.info, &p, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}"));
         let q = &plano.proveniencia.ocultacoes[0].quadros;
-        assert_eq!((q.ancora, q.medido, q.interpolado, q.incerto), (1, 49, 0, 10));
+        assert_eq!((q.ancora, q.medido, q.interpolado, q.incerto, q.ausente), (1, 49, 0, 10, 10));
         let quadros = render_rgb(&cap, &plano, "p26-denso");
         assert_eq!(quadros.len(), b - a);
         for (k, quadro) in quadros.iter().enumerate() {
@@ -856,7 +924,6 @@ pub(crate) mod testes {
 
     /// O9 (P2.6): destaque seguindo rastreio DENSO marca a até 2 px em 3 slots (moldura × alvo, pelo centro das caixas).
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn destaque_segue_denso_a_2_px_em_3_slots() {
         use crate::edicao::motor::efeitos::realce::testes::{caixa_da_cor, verde, vermelho};
         use crate::edicao::quadros::apoio;
@@ -868,8 +935,7 @@ pub(crate) mod testes {
         let tab = &m.info.quadros;
         let (a, b) = (40usize, 100usize);
         let d = denso::da_marca(&m, (a, b), |_| crate::edicao::rastreio::ESTADO_OK, |_| crate::edicao::rastreio::TIPO_MEDIDO);
-        let sha = "e".repeat(64);
-        let leitor = denso::Duble([(sha.clone(), Arc::new(d.clone()))].into());
+        let (sha, leitor) = denso::gravado(&d, tab.tb);
         let destaque = efeito("destaque", "d1", json!({ "forma": "retangulo", "rastreio": "r1", "traco": { "cor": "#00ff00", "espessura": 0.02, "contorno": false },
             "tamanho": 0.1, "angulo_graus": 0.0, "margem": 0.4, "rotulo": null }));
         let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", tab, a, b, 1.0, json!([destaque]))], json!({ "rastreios": [denso::rastreio(&m, &d, &sha, a, json!([]))] }));
@@ -1136,7 +1202,7 @@ pub(crate) mod testes {
     const RECUPERA_MAX: f64 = 0.10;
 
     /// §11 (P2.6): o ataque do E7b recupera menos de 10 % no padrão de cada conteúdo de texto, nos dois binários
-    /// (`SICRO_FFMPEG`). Controle: com o padrão de rosto (mosaico 0,75) a mesma placa sai legível, e o ataque acha.
+    /// (`SICRO_FFMPEG`). Controle: em mosaico 0,75 (4 células) a mesma placa sai legível, e o ataque acha.
     #[test]
     fn ataque_menos_de_10_por_cento() {
         let Some(cap) = crate::edicao::testes::fontes::cap() else { return };
@@ -1150,9 +1216,8 @@ pub(crate) mod testes {
             eprintln!("ataque ({}): {nome} no padrão ({modo_s} {i}, {}): {}/{} ({:.0} %) {}", cap.versao, r.variante, r.certos, r.total, 100.0 * f, r.exemplos.join(" "));
             assert!(f < RECUPERA_MAX, "{nome} no padrão: o ataque recuperou {}/{} ({})", r.certos, r.total, cap.versao);
         }
-        let (modo, i) = padrao(ConteudoOculto::Rosto);
-        let r = ataque::rodada(&cap, &p, serde_json::to_value(modo).unwrap().as_str().unwrap(), i, "placa", 8, 20261113);
-        eprintln!("controle ({}): placa com o padrão de rosto ({}): {}/{} {}", cap.versao, r.variante, r.certos, r.total, r.exemplos.join(" "));
+        let r = ataque::rodada(&cap, &p, "mosaico", 0.75, "placa", 8, 20261113);
+        eprintln!("controle ({}): placa em mosaico 0,75 ({}): {}/{} {}", cap.versao, r.variante, r.certos, r.total, r.exemplos.join(" "));
         assert!(r.certos as f64 / r.total as f64 > 0.5, "controle: o ataque não lê a placa em mosaico 0,75 ({}/{})", r.certos, r.total);
     }
 

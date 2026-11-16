@@ -22,6 +22,7 @@ import { useSettingsStore } from "@stores/settingsStore";
 import { clampUiZoom } from "@core/uiZoom";
 import { MUNICIPIOS_POR_UF, UFS } from "@domain/pericia";
 import { AiManagerCard } from "./AiManagerCard";
+import { CampoFfmpeg } from "./CampoFfmpeg";
 import { DiagnosticoVideo } from "./DiagnosticoVideo";
 import { GlobalBackupCard } from "./GlobalBackupCard";
 import type {
@@ -409,7 +410,12 @@ export function ConfiguracoesModule() {
           {/* IA de degravação */}
           {activeCat === "iaocr" && <AiManagerCard />}
 
-          {activeCat === "video" && <DiagnosticoVideo />}
+          {activeCat === "video" && (
+            <>
+              <CampoFfmpeg />
+              <DiagnosticoVideo />
+            </>
+          )}
 
           {/* Atalhos de teclado */}
           {activeCat === "atalhos" && (

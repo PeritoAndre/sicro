@@ -11,7 +11,7 @@ use super::{ArquivoModelo, Busca, CaixaPx, Imagem, Laco, Limiares, ModeloCorrida
 use crate::commands::settings_commands::AiSettings;
 use crate::edicao::mensagens::codigo;
 use crate::error::{Result, SicroError};
-use crate::ia::{self, Opcoes, SessaoIa};
+use crate::ia::{self, Opcoes, Provedor, SessaoIa};
 
 /// `object_tracking_vittrack_2023sep.onnx` (o instalador leva; nada a baixar).
 pub const MODELO: &[u8] = include_bytes!("vittrack_2023sep.onnx");
@@ -66,15 +66,16 @@ impl Rastreador for VitTrack {
             return Err(SicroError::Validation(format!("{}: vittrack sem iniciar", codigo::ITEM_INVALIDO)));
         }
         let (busca_t, x0, y0, lado) = recorte(quadro, &busca.caixa, FATOR_BUSCA, LADO_BUSCA);
-        let template = TensorRef::from_array_view(([1usize, 3, LADO_TEMPLATE, LADO_TEMPLATE], &self.template[..])).map_err(erro_ort)?;
-        let busca_t = Tensor::from_array(([1usize, 3, LADO_BUSCA, LADO_BUSCA], busca_t)).map_err(erro_ort)?;
-        let saida = self.sessao.session.run(ort::inputs!["template" => template, "search" => busca_t]).map_err(erro_ort)?;
-        let conf = saida["output1"].try_extract_tensor::<f32>().map_err(erro_ort)?.1;
-        let tam = saida["output2"].try_extract_tensor::<f32>().map_err(erro_ort)?.1;
-        let des = saida["output3"].try_extract_tensor::<f32>().map_err(erro_ort)?.1;
+        let pv = self.sessao.provedor;
+        let template = TensorRef::from_array_view(([1usize, 3, LADO_TEMPLATE, LADO_TEMPLATE], &self.template[..])).map_err(erro_ort(pv))?;
+        let busca_t = Tensor::from_array(([1usize, 3, LADO_BUSCA, LADO_BUSCA], busca_t)).map_err(erro_ort(pv))?;
+        let saida = self.sessao.session.run(ort::inputs!["template" => template, "search" => busca_t]).map_err(erro_ort(pv))?;
+        let conf = saida["output1"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?.1;
+        let tam = saida["output2"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?.1;
+        let des = saida["output3"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?.1;
         let n = GRADE * GRADE;
         if conf.len() != n || tam.len() != 2 * n || des.len() != 2 * n {
-            return Err(SicroError::Validation("onnxruntime: saída do vittrack com forma inesperada".into()));
+            return Err(falha_do_motor(Provedor::Cpu, "saída do vittrack com forma inesperada"));
         }
         // argmax devolve o primeiro máximo, como o numpy
         let (mut k, mut melhor) = (0usize, f32::NEG_INFINITY);
@@ -122,8 +123,20 @@ impl Rastreador for VitTrack {
 const MEDIA: [f32; 3] = [0.485, 0.456, 0.406];
 const DESVIO: [f32; 3] = [0.229, 0.224, 0.225];
 
-pub(super) fn erro_ort(e: impl std::fmt::Display) -> SicroError {
-    SicroError::Validation(format!("onnxruntime: {e}"))
+/// Falha do motor no meio da corrida: o código do catálogo vai para a tela (na GPU, `gpu_*` pela regra única do P2.1;
+/// em CPU, `panico`) e o texto do onnxruntime, que chega em inglês e com vários kB, vai para o log.
+pub(super) fn falha_do_motor(provedor: Provedor, texto: &str) -> SicroError {
+    let cod = match provedor {
+        Provedor::Cuda => ia::gpu::motivo(texto),
+        Provedor::Cpu => codigo::PANICO,
+    };
+    tracing::warn!(target: "rastreio", "onnxruntime ({}): {cod}: {texto}", provedor.fio());
+    SicroError::Validation(cod.into())
+}
+
+/// `map_err` das chamadas ao onnxruntime de uma sessão no `provedor`.
+pub(super) fn erro_ort<E: std::fmt::Display>(provedor: Provedor) -> impl Fn(E) -> SicroError {
+    move |e| falha_do_motor(provedor, &e.to_string())
 }
 
 /// Quadro com o tamanho que diz ter (o leitor entrega rgb24 sem folga).
@@ -256,7 +269,7 @@ pub(super) fn normalizar(v: f32, c: usize) -> f32 {
 pub(super) mod banco;
 
 #[cfg(test)]
-mod testes {
+pub(crate) mod testes {
     use super::banco::{self, Quadros};
     use super::*;
     use crate::edicao::testes::fontes;
@@ -365,13 +378,9 @@ mod testes {
         assert_eq!(v.laco(), Laco::Reprocura);
         assert_eq!(v.limiares(30.0), Limiares { ok: 0.45, perdido: 0.30, paciencia: 60 });
         assert_eq!((v.limiares(25.0).paciencia, v.limiares(29.97).paciencia, v.limiares(0.0).paciencia), (50, 60, 60));
-        // pela fábrica: na onda o corpo do P2.1 recusa; depois dele, CPU
+        // pela fábrica (P2.1): CPU
         if let Some(ai) = crate::ia::testes::ambiente() {
-            match VitTrack::novo(&ai) {
-                Ok(v) => assert_eq!(v.corrida().provedor, "cpu"),
-                Err(SicroError::Validation(m)) => assert_eq!(m, "nao_suportado: ia"),
-                Err(e) => panic!("{e}"),
-            }
+            assert_eq!(VitTrack::novo(&ai).unwrap().corrida().provedor, "cpu");
         }
     }
 
@@ -398,6 +407,37 @@ mod testes {
         }
     }
 
+    /// Quadro sintético de teste: textura que anda com `k`.
+    pub(crate) fn quadro_sintetico(k: u32, w: u32, h: u32) -> Vec<u8> {
+        (0..w * h).flat_map(|i| {
+            let (x, y) = (i % w + 2 * k, i / w + k);
+            let v = (x.wrapping_mul(2654435761) ^ y.wrapping_mul(40503)).rotate_left(k % 7) >> 24;
+            [v as u8, (v as u8).wrapping_mul(3), 255 - v as u8]
+        }).collect()
+    }
+
+    /// O mesmo motor nos dois lados de "ambos" (corrida.rs): o `iniciar` recomeça o estado, e a segunda corrida dá o
+    /// mesmo que um motor novo.
+    #[test]
+    fn iniciar_de_novo_e_motor_novo() {
+        const T: &str = "iniciar_de_novo_e_motor_novo";
+        let (Some(mut usado), Some(mut novo)) = (motor(T), motor(T)) else { return };
+        let (w, h) = (128, 96);
+        let q: Vec<Vec<u8>> = (0..6).map(|k| quadro_sintetico(k, w, h)).collect();
+        let im = |k: usize| Imagem { rgb: &q[k], w, h };
+        let c = CaixaPx { x: 40.0, y: 30.0, w: 24.0, h: 20.0 };
+        usado.iniciar(&im(0), CaixaPx { x: 10.0, ..c }).unwrap();
+        for k in 1..3 {
+            usado.seguir(&im(k), &Busca { caixa: c, janela: true }).unwrap();
+        }
+        let corre = |m: &mut VitTrack| -> Vec<Passo> {
+            let mut v = vec![m.iniciar(&im(3), c).unwrap()];
+            v.extend((4..6).map(|k| m.seguir(&im(k), &Busca { caixa: c, janela: k == 4 }).unwrap()));
+            v
+        };
+        assert_eq!(corre(&mut usado), corre(&mut novo));
+    }
+
     /// Borda do quadro (o passo a passo não chega nela): valores de `comum.limitar_caixa(c, 64, 48)`.
     #[test]
     fn limitar_caixa_como_a_referencia() {
@@ -412,29 +452,18 @@ mod testes {
         }
     }
 
-    fn trinta_e_oito(teste: &str, laco: fn(&mut dyn Rastreador, &mut Quadros, usize, CaixaPx) -> Vec<banco::Amostra>) {
-        if motor(teste).is_none() {
+    /// Aceite do §11 nas 38 sequências pelo `rastreio::correr` (laço do P2.2); na mesma rodada, o laço de
+    /// `laco_sicro.py` portado roda sobre as MESMAS saídas do motor e tem de pedir as mesmas buscas e decidir igual
+    /// em cada quadro (banco).
+    #[test]
+    fn trinta_e_oito_sequencias_com_laco() {
+        const T: &str = "trinta_e_oito_sequencias_com_laco";
+        if motor(T).is_none() {
             return;
         }
-        let mut novo = || -> Box<dyn Rastreador> { Box::new(motor(teste).unwrap()) };
-        let Some((iou, m)) = banco::trinta_e_oito(teste, &mut novo, laco) else { return };
-        assert!(iou >= IOU_MIN_38, "{teste}: IoU médio {iou}");
-        assert!(m.errada <= ERRADAS_MAX_38, "{teste}: {} caixas erradas aceitas", m.errada);
-    }
-
-    /// Aceite do §11 com o laço de `laco_sicro.py` portado no banco (o do P2.2 chega no fecho).
-    #[test]
-    fn trinta_e_oito_sequencias_com_o_laco_da_referencia() {
-        trinta_e_oito("trinta_e_oito_sequencias_com_o_laco_da_referencia", |r, q, ini, c| {
-            let p = r.limiares(30.0).paciencia;
-            banco::laco_referencia(r, q, ini, c, p)
-        });
-    }
-
-    /// Aceite do §11 pelo `rastreio::correr` (laço do P2.2).
-    #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
-    fn trinta_e_oito_sequencias_com_laco() {
-        trinta_e_oito("trinta_e_oito_sequencias_com_laco", banco::laco_do_sicro);
+        let mut novo = || -> Box<dyn Rastreador> { Box::new(motor(T).unwrap()) };
+        let Some((iou, m)) = banco::trinta_e_oito(T, &mut novo, banco::laco_do_sicro) else { return };
+        assert!(iou >= IOU_MIN_38, "{T}: IoU médio {iou}");
+        assert!(m.errada <= ERRADAS_MAX_38, "{T}: {} caixas erradas aceitas", m.errada);
     }
 }

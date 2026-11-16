@@ -46,6 +46,7 @@ import {
   transicaoEm,
 } from "../inspetor/acoes";
 import { novoTitulo } from "../inspetor/novos";
+import { comConteudo } from "../inspetor/secoes/ocultarPadrao";
 import { escreverBloco } from "../inspetor/secoes/TituloSecao";
 import { useInspetorUi } from "../inspetor/ui";
 
@@ -185,8 +186,11 @@ beforeAll(async () => {
   g.alterar(noEfeito<EfTexto>(texto, (x) => void (x.conteudo = "Veículo branco")));
   g.concluir();
 
-  // ocultar sólido da mídia do trecho 1 (padrão); desfoque só no trecho 2
-  adicionarEfeito(c1.id, "ocultar", "Ocultar");
+  // ocultar da mídia do trecho 1: nasce no padrão de rosto (desfoque 1,0, B27) e "Conteúdo" placa o leva ao sólido;
+  // desfoque 0,6 só no trecho 2
+  const daMidia = adicionarEfeito(c1.id, "ocultar", "Ocultar")!;
+  expect(st().doc!.midias[0]!.ocultacoes.at(-1)).toMatchObject({ conteudo: "rosto", modo: "desfoque", intensidade: 1 });
+  mudar("Conteúdo", noEfeito<EfOcultar>(daMidia, (x) => comConteudo(x, "placa")));
   const desfoque = adicionarEfeito(c2.id, "ocultar", "Ocultar")!;
   soNesteClipe(desfoque, c2.id, true, "Só neste clipe");
   mudar("Modo", noEfeito<EfOcultar>(desfoque, (x) => void (x.modo = "desfoque")));
@@ -236,7 +240,7 @@ describe("projeto montado pelas portas da tela", () => {
     expect(Array.isArray(enq(c2).regiao) && (enq(c2).regiao as unknown[]).length).toBe(2);
     expect(c2.transicao_entrada).toEqual({ tipo: "escurecer", duracao_s: 0.5, audio: "acompanhar" });
     expect(d.midias[0]!.ocultacoes).toHaveLength(1);
-    expect(d.midias[0]!.ocultacoes[0]).toMatchObject({ modo: "solido", ativo: { de: 12, ate: 15.5 } });
+    expect(d.midias[0]!.ocultacoes[0]).toMatchObject({ conteudo: "placa", modo: "solido", intensidade: 1, ativo: { de: 12, ate: 15.5 } });
     expect(c2.efeitos.find((e) => (e as { tipo: string }).tipo === "ocultar")).toMatchObject({ modo: "desfoque", intensidade: 0.6 });
     const destaque = d.rastreios.find((r) => r.ancoras.length === 1 && r.midia === "m1");
     expect(destaque?.ancoras[0]).toEqual({ t: 12, pts: 12 * 30 * 512, v: { x: 0.3, y: 0.25, w: 0.12, h: 0.2 } });

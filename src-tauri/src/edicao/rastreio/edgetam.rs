@@ -12,7 +12,7 @@ use ort::value::{Tensor, TensorRef};
 use sha2::{Digest, Sha256};
 
 use super::laco::{PACIENCIA_MEMORIA_S, P_INCERTO, P_PRESENTE};
-use super::vittrack::{conferir_caixa, conferir_quadro, eixo_inteiro, erro_ort, limitar_caixa, normalizar, paciencia};
+use super::vittrack::{conferir_caixa, conferir_quadro, eixo_inteiro, erro_ort, falha_do_motor, limitar_caixa, normalizar, paciencia};
 use super::{ArquivoModelo, Busca, CaixaPx, Imagem, Laco, Limiares, Mascara, ModeloCorrida, MotorCorrida, MotorRastreio, Passo, Rastreador};
 use crate::commands::settings_commands::AiSettings;
 use crate::edicao::mensagens::codigo;
@@ -154,12 +154,13 @@ impl EdgeTam {
     }
 
     fn codificar(&mut self, q: &Imagem) -> Result<Codificado> {
-        let x = Tensor::from_array(([1usize, 3, LADO, LADO], para_1024(q))).map_err(erro_ort)?;
+        let pv = self.ve.provedor;
+        let x = Tensor::from_array(([1usize, 3, LADO, LADO], para_1024(q))).map_err(erro_ort(pv))?;
         // pos0 e pos1 (80 MB) não são usados
-        let op = RunOptions::new().map_err(erro_ort)?.with_outputs(OutputSelector::no_default().with("feats0").with("feats1").with("feats2").with("pos2"));
-        let s = self.ve.session.run_with_options(ort::inputs!["pixel_values" => x], &op).map_err(erro_ort)?;
+        let op = RunOptions::new().map_err(erro_ort(pv))?.with_outputs(OutputSelector::no_default().with("feats0").with("feats1").with("feats2").with("pos2"));
+        let s = self.ve.session.run_with_options(ort::inputs!["pixel_values" => x], &op).map_err(erro_ort(pv))?;
         let tira = |nome: &str, n: usize| -> Result<Vec<f32>> {
-            let (_, v) = s[nome].try_extract_tensor::<f32>().map_err(erro_ort)?;
+            let (_, v) = s[nome].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
             forma(v.len() == n, nome)?;
             Ok(v.to_vec())
         };
@@ -168,27 +169,28 @@ impl EdgeTam {
 
     /// Decodificador de máscara: guarda os logits 1024×1024 e devolve (ponteiro, logit da presença).
     fn decodificar(&mut self, c: &Codificado, feats2: &[f32], pontos: &[f32], rotulos: &[i32]) -> Result<(Vec<f32>, f32)> {
+        let pv = self.ve.provedor;
         let n = rotulos.len();
         let op = RunOptions::new()
-            .map_err(erro_ort)?
+            .map_err(erro_ort(pv))?
             .with_outputs(OutputSelector::no_default().with("high_res_masks").with("object_pointer").with("object_score_logits"));
         let s = self
             .md
             .session
             .run_with_options(
                 ort::inputs![
-                    "feats0" => TensorRef::from_array_view(([1usize, 32, 256, 256], &c.f0[..])).map_err(erro_ort)?,
-                    "feats1" => TensorRef::from_array_view(([1usize, 64, 128, 128], &c.f1[..])).map_err(erro_ort)?,
-                    "feats2" => TensorRef::from_array_view(([1usize, 256, 64, 64], feats2)).map_err(erro_ort)?,
-                    "input_points" => TensorRef::from_array_view(([1usize, 1, n, 2], pontos)).map_err(erro_ort)?,
-                    "input_labels" => TensorRef::from_array_view(([1usize, 1, n], rotulos)).map_err(erro_ort)?,
+                    "feats0" => TensorRef::from_array_view(([1usize, 32, 256, 256], &c.f0[..])).map_err(erro_ort(pv))?,
+                    "feats1" => TensorRef::from_array_view(([1usize, 64, 128, 128], &c.f1[..])).map_err(erro_ort(pv))?,
+                    "feats2" => TensorRef::from_array_view(([1usize, 256, 64, 64], feats2)).map_err(erro_ort(pv))?,
+                    "input_points" => TensorRef::from_array_view(([1usize, 1, n, 2], pontos)).map_err(erro_ort(pv))?,
+                    "input_labels" => TensorRef::from_array_view(([1usize, 1, n], rotulos)).map_err(erro_ort(pv))?,
                 ],
                 &op,
             )
-            .map_err(erro_ort)?;
-        let (_, hr) = s["high_res_masks"].try_extract_tensor::<f32>().map_err(erro_ort)?;
-        let (_, ptr) = s["object_pointer"].try_extract_tensor::<f32>().map_err(erro_ort)?;
-        let (_, obj) = s["object_score_logits"].try_extract_tensor::<f32>().map_err(erro_ort)?;
+            .map_err(erro_ort(pv))?;
+        let (_, hr) = s["high_res_masks"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
+        let (_, ptr) = s["object_pointer"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
+        let (_, obj) = s["object_score_logits"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
         forma(hr.len() == LADO * LADO && ptr.len() == 256 && obj.len() == 1, "mask_decoder")?;
         self.logits.clear();
         self.logits.extend_from_slice(hr);
@@ -197,23 +199,25 @@ impl EdgeTam {
 
     /// Codificador de memória sobre os logits guardados: (tokens, posição), 512×64 cada.
     fn memorizar(&mut self, f2: &[f32], de_prompt: bool) -> Result<(Vec<f32>, Vec<f32>)> {
+        let pv = self.ve.provedor;
         let s = self
             .me
             .session
             .run(ort::inputs![
-                "vision_features" => TensorRef::from_array_view(([1usize, 256, 64, 64], f2)).map_err(erro_ort)?,
-                "pred_masks_high_res" => TensorRef::from_array_view(([1usize, 1, LADO, LADO], &self.logits[..])).map_err(erro_ort)?,
-                "is_mask_from_pts" => Tensor::from_array(([1usize], vec![de_prompt])).map_err(erro_ort)?,
+                "vision_features" => TensorRef::from_array_view(([1usize, 256, 64, 64], f2)).map_err(erro_ort(pv))?,
+                "pred_masks_high_res" => TensorRef::from_array_view(([1usize, 1, LADO, LADO], &self.logits[..])).map_err(erro_ort(pv))?,
+                "is_mask_from_pts" => Tensor::from_array(([1usize], vec![de_prompt])).map_err(erro_ort(pv))?,
             ])
-            .map_err(erro_ort)?;
-        let (_, tok) = s["memory_tokens"].try_extract_tensor::<f32>().map_err(erro_ort)?;
-        let (_, pos) = s["memory_pos_enc"].try_extract_tensor::<f32>().map_err(erro_ort)?;
+            .map_err(erro_ort(pv))?;
+        let (_, tok) = s["memory_tokens"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
+        let (_, pos) = s["memory_pos_enc"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
         forma(tok.len() == TOKENS && pos.len() == TOKENS, "memory_encoder")?;
         Ok((tok.to_vec(), pos.to_vec()))
     }
 
     /// Atenção sobre o banco (`_prepare_memory_conditioned_features` do SAM 2): devolve as feições 1×256×64×64.
     fn atencao(&mut self, c: &Codificado) -> Result<Vec<f32>> {
+        let pv = self.ve.provedor;
         let cond = self.cond.as_ref().ok_or_else(|| SicroError::Validation(format!("{}: edgetam sem iniciar", codigo::ITEM_INVALIDO)))?;
         let ultimas: Vec<&Memoria> = self.recentes.iter().skip(self.recentes.len().saturating_sub(N_MEM - 1)).collect();
         let mut mem = Vec::with_capacity(TOKENS * (1 + ultimas.len()));
@@ -235,15 +239,15 @@ impl EdgeTam {
             .ma
             .session
             .run(ort::inputs![
-                "current_vision_features" => Tensor::from_array(([4096usize, 1, 256], transpor(&c.f2, 256, 4096))).map_err(erro_ort)?,
-                "current_vision_position_embeddings" => Tensor::from_array(([4096usize, 1, 256], transpor(&c.p2, 256, 4096))).map_err(erro_ort)?,
-                "spatial_memory" => TensorRef::from_array_view(([l, 1, 64], &mem[..])).map_err(erro_ort)?,
-                "spatial_memory_position_embeddings" => TensorRef::from_array_view(([l, 1, 64], &mpos[..])).map_err(erro_ort)?,
-                "pointer_memory" => TensorRef::from_array_view(([p, 1, 64], &ptrs[..])).map_err(erro_ort)?,
-                "pointer_memory_position_embeddings" => TensorRef::from_array_view(([p, 1, 64], &zeros[..])).map_err(erro_ort)?,
+                "current_vision_features" => Tensor::from_array(([4096usize, 1, 256], transpor(&c.f2, 256, 4096))).map_err(erro_ort(pv))?,
+                "current_vision_position_embeddings" => Tensor::from_array(([4096usize, 1, 256], transpor(&c.p2, 256, 4096))).map_err(erro_ort(pv))?,
+                "spatial_memory" => TensorRef::from_array_view(([l, 1, 64], &mem[..])).map_err(erro_ort(pv))?,
+                "spatial_memory_position_embeddings" => TensorRef::from_array_view(([l, 1, 64], &mpos[..])).map_err(erro_ort(pv))?,
+                "pointer_memory" => TensorRef::from_array_view(([p, 1, 64], &ptrs[..])).map_err(erro_ort(pv))?,
+                "pointer_memory_position_embeddings" => TensorRef::from_array_view(([p, 1, 64], &zeros[..])).map_err(erro_ort(pv))?,
             ])
-            .map_err(erro_ort)?;
-        let (_, out) = s["conditioned_features"].try_extract_tensor::<f32>().map_err(erro_ort)?;
+            .map_err(erro_ort(pv))?;
+        let (_, out) = s["conditioned_features"].try_extract_tensor::<f32>().map_err(erro_ort(pv))?;
         forma(out.len() == 4096 * 256, "memory_attention")?;
         // (1, 4096, 256) por posição → (1, 256, 64, 64)
         Ok(transpor(out, 4096, 256))
@@ -327,7 +331,7 @@ fn forma(ok: bool, grafo: &str) -> Result<()> {
     if ok {
         Ok(())
     } else {
-        Err(SicroError::Validation(format!("onnxruntime: saída de {grafo} com forma inesperada")))
+        Err(falha_do_motor(Provedor::Cpu, &format!("saída de {grafo} com forma inesperada")))
     }
 }
 
@@ -642,12 +646,11 @@ mod testes {
         std::fs::write(pasta.join(ARQUIVOS[3].nome), &b).unwrap();
         assert!(EdgeTam::instalado(&ai));
         assert_eq!(codigo_de(EdgeTam::novo(&ai, &Opcoes::default())), "modelo_ausente: edgetam");
-        // os 4 certos: passa da conferência (na onda a fábrica do P2.1 ainda recusa)
+        // os 4 certos: abre as sessões (CPU, a lib dos testes)
         std::fs::remove_file(pasta.join(ARQUIVOS[3].nome)).unwrap();
         ligar(&g[3], &pasta.join(ARQUIVOS[3].nome));
         assert!(EdgeTam::instalado(&ai));
-        let r = codigo_de(EdgeTam::novo(&ai, &Opcoes::so_cpu()));
-        assert!(r == "ok" || r == "nao_suportado: ia", "{r}");
+        assert_eq!(codigo_de(EdgeTam::novo(&ai, &Opcoes::so_cpu())), "ok");
         // interruptor desligado: nem lê os arquivos
         assert_eq!(codigo_de(EdgeTam::novo(&AiSettings { modelos_desligados: true, ..ai.clone() }, &Opcoes::default())), "ia_desligada");
         std::fs::remove_dir_all(&pasta).unwrap();
@@ -668,9 +671,65 @@ mod testes {
         assert!(c.com_alvo >= 25 && c.quadros - c.com_alvo >= 40, "{c:?}");
     }
 
+    /// Falha do onnxruntime no meio da corrida (aqui: um grafo errado no lugar do codificador) sai com código do
+    /// catálogo, nunca com o texto do onnxruntime: `panico` em CPU, `gpu_*` (regra do P2.1) na GPU. A frase que a
+    /// tela mostra é a do catálogo.
+    #[test]
+    fn erro_de_inferencia_pelo_catalogo() {
+        const T: &str = "erro_de_inferencia_pelo_catalogo";
+        let q = vec![90u8; 64 * 48 * 3];
+        let quadro = Imagem { rgb: &q, w: 64, h: 48 };
+        let caixa = CaixaPx { x: 10.0, y: 10.0, w: 20.0, h: 20.0 };
+        let mensagem = |r: Result<Passo>| match r {
+            Err(SicroError::Validation(m)) => m,
+            outro => panic!("{outro:?}"),
+        };
+        assert_eq!(super::super::vittrack::falha_do_motor(Provedor::Cuda, "CUDA failure 2: out of memory").to_string(), SicroError::Validation(codigo::GPU_SEM_MEMORIA.into()).to_string());
+        assert_eq!(
+            crate::edicao::mensagens::erro_de_comando(super::super::vittrack::falha_do_motor(Provedor::Cuda, "CUDA failure 2: out of memory")).to_string(),
+            SicroError::Validation("gpu_sem_memoria: Memória de vídeo insuficiente".into()).to_string()
+        );
+        let Some(g) = grafos(T) else { return };
+        let Some(vit) = t::modelo("rastreio/vittrack/object_tracking_vittrack_2023sep.onnx", super::super::vittrack::SHA256) else {
+            t::ou_dispensa::<()>(None, T, "o VitTrack em arquivo");
+            return;
+        };
+        let cpu = |p: &Path| banco::cpu(Modelo::Arquivo(p), T);
+        let (Some(ve), Some(md), Some(ma), Some(me)) = (cpu(&vit), cpu(&g[1]), cpu(&g[2]), cpu(&g[3])) else { return };
+        let m = mensagem(EdgeTam::de_sessoes(ve, md, ma, me).iniciar(&quadro, caixa));
+        assert_eq!(m, codigo::PANICO);
+        let _trava = t::trava_gpu();
+        let Some(ve) = banco::gpu(&vit, None, T) else { return };
+        let (Some(md), Some(ma), Some(me)) = (banco::gpu(&g[1], None, T), banco::gpu(&g[2], None, T), banco::gpu(&g[3], None, T)) else { return };
+        let m = mensagem(EdgeTam::de_sessoes(ve, md, ma, me).iniciar(&quadro, caixa));
+        assert!(m.starts_with("gpu_") && !m.contains(':') && crate::edicao::mensagens::nivel(&m).is_some(), "{m}");
+    }
+
+    /// O mesmo motor nos dois lados de "ambos" (corrida.rs): o `iniciar` recomeça o banco de memória, e a segunda
+    /// corrida dá o mesmo que um motor novo (CPU).
+    #[test]
+    fn iniciar_de_novo_e_motor_novo() {
+        const T: &str = "iniciar_de_novo_e_motor_novo";
+        let (Some(mut usado), Some(mut novo)) = (motor_cpu(T), motor_cpu(T)) else { return };
+        let (w, h) = (128, 96);
+        let q: Vec<Vec<u8>> = (0..6).map(|k| super::super::vittrack::testes::quadro_sintetico(k, w, h)).collect();
+        let im = |k: usize| Imagem { rgb: &q[k], w, h };
+        let c = CaixaPx { x: 40.0, y: 30.0, w: 24.0, h: 20.0 };
+        let b = Busca { caixa: c, janela: true };
+        usado.iniciar(&im(0), CaixaPx { x: 10.0, ..c }).unwrap();
+        for k in 1..3 {
+            usado.seguir(&im(k), &b).unwrap();
+        }
+        let corre = |m: &mut EdgeTam| -> Vec<Passo> {
+            let mut v = vec![m.iniciar(&im(3), c).unwrap()];
+            v.extend((4..6).map(|k| m.seguir(&im(k), &b).unwrap()));
+            v
+        };
+        assert_eq!(corre(&mut usado), corre(&mut novo));
+    }
+
     /// `runtime` da corrida pela lib carregada (P2.1).
     #[test]
-    #[ignore = "fecho da Fase 2: P2.1"]
     fn runtime_gravado() {
         let Some(m) = motor_cpu("runtime_gravado") else { return };
         assert_eq!(m.corrida().runtime, "onnxruntime 1.31.1");
@@ -678,32 +737,18 @@ mod testes {
         assert_eq!(super::super::vittrack::VitTrack::de_sessao(v).corrida().runtime, "onnxruntime 1.31.1");
     }
 
-    fn trinta_e_oito(teste: &str, laco: fn(&mut dyn Rastreador, &mut Quadros, usize, CaixaPx) -> Vec<banco::Amostra>) {
+    /// Aceite do §11 nas 38 sequências, em GPU, pelo `rastreio::correr` (laço do P2.2); na mesma rodada, o laço de
+    /// `laco_sicro.py` portado roda sobre as MESMAS saídas do motor e tem de decidir igual em cada quadro (banco).
+    #[test]
+    fn trinta_e_oito_sequencias_com_laco() {
+        const T: &str = "trinta_e_oito_sequencias_com_laco";
         let _trava = t::trava_gpu();
-        if motor_gpu(teste).is_none() {
+        if motor_gpu(T).is_none() {
             return;
         }
-        let mut novo = || -> Box<dyn Rastreador> { Box::new(motor_gpu(teste).unwrap()) };
-        let Some((iou, m)) = banco::trinta_e_oito(teste, &mut novo, laco) else { return };
-        assert!(iou >= IOU_MIN_38, "{teste}: IoU médio {iou}");
-        assert!(m.errada <= ERRADAS_MAX_38, "{teste}: {} caixas erradas aceitas", m.errada);
-    }
-
-    /// Aceite do §11 em GPU com o laço de `laco_sicro.py` portado no banco (o do P2.2 chega no fecho). Cerca de
-    /// 10 min na placa: roda à parte, `--ignored`.
-    #[test]
-    #[ignore = "longo: 38 sequências na GPU, rodar com --ignored"]
-    fn trinta_e_oito_sequencias_com_o_laco_da_referencia() {
-        trinta_e_oito("trinta_e_oito_sequencias_com_o_laco_da_referencia", |r, q, ini, c| {
-            let p = r.limiares(30.0).paciencia;
-            banco::laco_referencia(r, q, ini, c, p)
-        });
-    }
-
-    /// Aceite do §11 pelo `rastreio::correr` (laço do P2.2), em GPU.
-    #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
-    fn trinta_e_oito_sequencias_com_laco() {
-        trinta_e_oito("trinta_e_oito_sequencias_com_laco", banco::laco_do_sicro);
+        let mut novo = || -> Box<dyn Rastreador> { Box::new(motor_gpu(T).unwrap()) };
+        let Some((iou, m)) = banco::trinta_e_oito(T, &mut novo, banco::laco_do_sicro) else { return };
+        assert!(iou >= IOU_MIN_38, "{T}: IoU médio {iou}");
+        assert!(m.errada <= ERRADAS_MAX_38, "{T}: {} caixas erradas aceitas", m.errada);
     }
 }

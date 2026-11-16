@@ -302,6 +302,22 @@ describe("atalhos e Da análise", () => {
   });
 });
 
+describe("linha do efeito sem mídia a seguir", () => {
+  it("o painel some sem deixar célula vazia na grade (e volta quando o rastreio é da mídia do trecho)", async () => {
+    const grade = () => acao(editor.raiz, "marcar")!.parentElement!.parentElement!;
+    const vazias = () => [...grade().children].filter((c) => c.tagName === "DIV" && c.childElementCount === 0 && !c.textContent?.trim());
+    expect(painel()).not.toBeNull();
+    expect(painel()!.parentElement).toBe(grade());
+    // rastreio de base local (desenho sobre imagem parada): não há mídia a seguir
+    await act(async () => st().alterar("Base", (d) => void (d.rastreios[0]!.base = "local")));
+    expect(painel()).toBeNull();
+    expect(acao(editor.raiz, "marcar")).not.toBeNull();
+    expect(vazias()).toEqual([]);
+    await act(async () => st().desfazer());
+    expect(painel()).not.toBeNull();
+  });
+});
+
 describe("botões da linha do efeito e do palco", () => {
   it("Parar pelo palco e pelo painel cancela pela tarefa", async () => {
     cmd.edicaoRastreioSeguir.mockResolvedValueOnce("t5");

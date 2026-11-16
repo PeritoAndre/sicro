@@ -2886,7 +2886,6 @@ mod testes {
     /// densas pela regra B24: linha incerta = incerto; `tipo` interpolado ou estendido = interpolado; ausente = sem
     /// região, salvo dentro de ausência aceita. Na ocultação do clipe e na da mídia.
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn ocultar_incerto_conta_incertos() {
         let sha = "3".repeat(64);
         // corrida a partir da âncora no quadro 0 até o 299; o trecho usa 30..89
@@ -3223,6 +3222,31 @@ mod testes {
                     }
                     c.so(&esperado);
                 }
+            }
+        }
+    }
+
+    /// B27 (fecho da Fase 2): nenhum padrão de conteúdo nasce pedindo ciência. Os padrões são os da fixture que o
+    /// espelho do front (`ocultarPadrao.ts::padraoDoConteudo`, que o `novoOcultar` usa) confere: na ocultação do clipe
+    /// e na da mídia, nenhum problema e nada a ciência.
+    #[test]
+    fn padrao_de_cada_conteudo_valida_sem_ciencia() {
+        let casos: Vec<Value> = serde_json::from_str(include_str!("../../tests/fixtures/edicao/conferencia-padrao.json")).unwrap();
+        assert_eq!(casos.len(), 6);
+        for caso in &casos {
+            for da_midia in [false, true] {
+                let mut c = cena();
+                c.p["rastreios"] = json!([rastreio(&[30])]);
+                let mut o = ocultar("r1");
+                (o["modo"], o["intensidade"], o["conteudo"]) = (caso["saida"]["modo"].clone(), caso["saida"]["intensidade"].clone(), caso["entrada"].clone());
+                if da_midia {
+                    o["ativo"] = json!({ "de": 0.0, "ate": 10.0 });
+                    c.p["midias"][0]["ocultacoes"] = json!([o]);
+                } else {
+                    efeito(&mut c, o);
+                }
+                c.so(&[]);
+                assert!(sem_ciencia(&c.problemas(), &[]).is_empty(), "{caso}");
             }
         }
     }

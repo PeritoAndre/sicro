@@ -5,8 +5,8 @@
  */
 
 import { useMemo } from "react";
-import type { MarcaQuadro } from "../store/rastreioStore";
-import type { Seg } from "@domain/edicao";
+import type { MarcaQuadro, MarcasDoAlvo } from "../store/rastreioStore";
+import type { Seg, TabelaQuadros } from "@domain/edicao";
 import { useEdicaoStore } from "../store/edicaoStore";
 import { useInspetorUi } from "../inspetor/ui";
 import { useRecursos } from "./recursos";
@@ -73,28 +73,30 @@ export function pedacos(marcas: readonly MarcaQuadro[], tempos: readonly Seg[], 
 
 const ALTURA = 22;
 
+/** Tempo de cada quadro das marcas (guardado por marcas). */
+const tempos = new WeakMap<MarcasDoAlvo, Seg[]>();
+function temposDe(mm: MarcasDoAlvo, tab: TabelaQuadros): Seg[] {
+  let t = tempos.get(mm);
+  if (!t) tempos.set(mm, (t = mm.m.map((_, i) => tempoDoQuadro(tab, mm.j0 + i))));
+  return t;
+}
+
 export function FaixaRastreio({ de, ate, largura }: FaixaRastreioProps) {
   const doc = useEdicaoStore((s) => s.doc);
   const efeitoAberto = useEdicaoStore((s) => s.selecao.efeito);
   const cursor = useEdicaoStore((s) => s.cursor);
   const daFerramenta = useInspetorUi((s) => s.ferramenta?.efeito ?? null);
-  const densos = useRastreioStore((s) => s.densos);
+  // o denso que chega e a tabela lida redesenham; as marcas são guardadas no store (o arrasto de uma alça não as refaz)
+  useRastreioStore((s) => s.densos);
+  useRecursos((s) => s.versao);
   const corrida = useRastreioStore((s) => s.corrida);
-  const versao = useRecursos((s) => s.versao);
   const ef = efeitoAberto ?? daFerramenta;
   const clipe = cursor.modo === "clipe" ? cursor.clipe : null;
   const x = RASTREIO_PRONTO && doc && ef ? alvoDoEfeito(doc, ef, clipe) : null;
-  const r = x?.rastreio ?? null;
-  const denso = r?.denso ? (densos[r.denso.sha256] ?? null) : null;
   const tab = x?.tabela ?? null;
-  const chave = x ? `${x.de}|${x.ate}|${x.ateExclusivo}` : "";
-  const desenho = useMemo(() => {
-    if (!x || !tab) return null;
-    const mm = marcasDoAlvo(x);
-    if (!mm) return null;
-    const tempos = mm.m.map((_, i) => tempoDoQuadro(tab, mm.j0 + i));
-    return { pedacos: pedacos(mm.m, tempos, de, ate, largura), ancoras: x.rastreio.ancoras.map((k) => k.t) };
-  }, [r, denso, tab, chave, de, ate, largura, versao]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mm = x ? marcasDoAlvo(x) : null;
+  const tiras = useMemo(() => (mm && tab ? pedacos(mm.m, temposDe(mm, tab), de, ate, largura) : null), [mm, tab, de, ate, largura]);
+  const desenho = tiras && x ? { pedacos: tiras, ancoras: x.rastreio.ancoras.map((k) => k.t) } : null;
   if (!x || !desenho || largura <= 0 || !(ate > de)) return null;
   const w = Math.max(1, Math.floor(largura));
   const px = (t: Seg) => ((t - de) / (ate - de)) * w;

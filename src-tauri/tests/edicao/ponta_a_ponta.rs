@@ -1661,3 +1661,237 @@ fn caso_e_cache_em_pastas_com_caracteres_especiais() {
     assert_eq!((pronto.tipo, pronto.pronta), (TipoPrevia::Origem, true), "{v}");
     assert_eq!(pts(&cache.join(&pronto.relativo)).len(), 30, "{v}: quadros do intermediário");
 }
+
+// ------------------------------------------------------------------ fecho da Fase 2: rastreio de ponta a ponta
+
+/// Fonte do rastreio: a TS de 59,94 qps com início fora de zero; o alvo é o quadrado vermelho da matriz, que anda na
+/// horizontal (`fontes::marca_esperada`) sobre faixas cinza: nenhum outro pixel vermelho no quadro.
+const R_FONTE: Fonte = Fonte::Ts5994;
+/// Trecho `[j_in, j_out)`, âncora do perito, até onde a corrida segue e a segunda âncora: entre o fim da corrida e a
+/// segunda âncora a caixa sai da interpolação (trecho fraco). A ocultação vale da primeira à segunda âncora.
+const R_TRECHO: (usize, usize) = (4, 70);
+const R_ANCORA: usize = 8;
+const R_ATE: usize = 40;
+const R_SEGUNDA: usize = 56;
+/// Contexto em volta do quadrado na caixa marcada (fração do quadro).
+const R_FOLGA: f64 = 0.02;
+
+/// Caixa marcada pelo perito no quadro desenhado `n`: o quadrado com a folga.
+fn caixa_do_alvo(n: u32) -> [f64; 4] {
+    let [x, y, w, h] = fontes::marca_esperada(R_FONTE, n);
+    [x - R_FOLGA, y - R_FOLGA, w + 2.0 * R_FOLGA, h + 2.0 * R_FOLGA]
+}
+
+fn iou(a: [f64; 4], b: [f64; 4]) -> f64 {
+    let ix = ((a[0] + a[2]).min(b[0] + b[2]) - a[0].max(b[0])).max(0.0);
+    let iy = ((a[1] + a[3]).min(b[1] + b[3]) - a[1].max(b[1])).max(0.0);
+    ix * iy / (a[2] * a[3] + b[2] * b[3] - ix * iy)
+}
+
+/// Projeto do rastreio: o trecho, o rastreio manual com a âncora do perito e a ocultação da mídia (sólido) seguindo-o.
+fn projeto_do_rastreio(f: &Fonte1) -> Value {
+    let tab = &f.tab;
+    let fps = tab.taxa_nominal();
+    let ancora = crate::edicao::testes::aceite::ancora(tab.tempo(R_ANCORA), Some(tab.pts[R_ANCORA]), caixa_do_alvo(f.numeros[R_ANCORA]));
+    let oc = crate::edicao::testes::aceite::ocultar("o1", "r1", "solido", json!({ "ativo": { "de": tab.tempo(R_ANCORA), "ate": tab.tempo(R_SEGUNDA) } }));
+    let p = crate::edicao::testes::aceite::projeto(
+        f.vm.width.unwrap() as u32,
+        f.vm.height.unwrap() as u32,
+        (fps.num, fps.den),
+        vec![midia_ref("m1", f, json!([oc]))],
+        vec![crate::edicao::testes::aceite::trecho("c1", "m1", tab, R_TRECHO.0, R_TRECHO.1, 1.0, json!([]))],
+        json!({ "rastreios": [crate::edicao::testes::aceite::rastreio("r1", Some("m1"), "fonte", vec![ancora])] }),
+    );
+    let mut p = serde_json::to_value(&p).unwrap();
+    p["id"] = json!(uuid::Uuid::new_v4().to_string());
+    p["titulo"] = json!("Rastreio");
+    p
+}
+
+/// O que a tela faz: pede "Seguir" pelo corpo do comando (`iniciar`), espera o evento final e aplica o fim por
+/// `alterar()` (ponteiro do denso e das silhuetas, origem assistida); depois o perito marca a segunda âncora.
+fn seguir_e_aplicar(
+    c: &Caso,
+    doc: &mut Value,
+    f: &Fonte1,
+    iniciar: &mut dyn FnMut(&Path, &Value, &crate::edicao::rastreio::corrida::PedidoSeguir, crate::edicao::rastreio::corrida::Emissor) -> crate::error::Result<String>,
+) -> crate::edicao::rastreio::corrida::FimRastreio {
+    use crate::edicao::rastreio::corrida::{EventoRastreio, PedidoSeguir};
+    use crate::edicao::rastreio::{EscolhaMotor, SentidoPedido};
+    let tab = &f.tab;
+    let ancora = serde_json::from_value(rastreio_mut(doc, "r1")["ancoras"][0].clone()).unwrap();
+    let pedido = PedidoSeguir { rastreio_id: "r1".into(), clipe_id: "c1".into(), ancora, sentido: SentidoPedido::Frente, ate_s: Some(tab.tempo(R_ATE)), motor: EscolhaMotor::Auto };
+    let eventos: Arc<std::sync::Mutex<Vec<EventoRastreio>>> = Arc::default();
+    let e2 = eventos.clone();
+    let _tarefa = iniciar(&c.cache(), doc, &pedido, Box::new(move |e| e2.lock().unwrap().push(e))).expect("edicao_rastreio_seguir");
+    let t = Instant::now();
+    let fim = loop {
+        if let Some(e) = eventos.lock().unwrap().iter().find(|e| !matches!(e, EventoRastreio::Avanco(_))) {
+            break e.clone();
+        }
+        assert!(t.elapsed() < Duration::from_secs(900), "a corrida não acabou");
+        std::thread::sleep(Duration::from_millis(10));
+    };
+    let EventoRastreio::Fim(fim) = fim else { panic!("{fim:?}") };
+    let r = rastreio_mut(doc, "r1");
+    r["denso"] = serde_json::to_value(fim.denso.as_ref().expect("denso novo")).unwrap();
+    r["silhuetas"] = serde_json::to_value(&fim.silhuetas).unwrap();
+    r["origem"] = json!({ "tipo": "assistido" });
+    r["ancoras"].as_array_mut().unwrap().push(crate::edicao::testes::aceite::ancora(tab.tempo(R_SEGUNDA), Some(tab.pts[R_SEGUNDA]), caixa_do_alvo(f.numeros[R_SEGUNDA])));
+    fim
+}
+
+/// Quadros fracos esperados (slot do trecho → como), pela avaliação do rastreio do documento sobre o denso (B24).
+fn fracos_esperados(doc: &Value, d: &crate::edicao::rastreio::ArquivoDenso, tab: &TabelaQuadros) -> std::collections::BTreeMap<usize, crate::edicao::conferencia::ComoFraco> {
+    use crate::edicao::conferencia::ComoFraco;
+    use crate::edicao::rastreio::avaliar::{avaliar, Como, Instante};
+    let p = armazem::tipado(doc).unwrap();
+    let r = p.rastreios.iter().find(|r| r.id == "r1").unwrap();
+    (R_ANCORA..=R_SEGUNDA)
+        .filter_map(|j| {
+            let a = avaliar(r, Some(d), Instante { t: tab.tempo(j), pts: Some(tab.pts[j]) }).expect("quadro coberto");
+            let como = if a.incerto { Some(ComoFraco::Incerto) } else if a.como == Como::Interpolado { Some(ComoFraco::Interpolado) } else { None };
+            como.map(|c| (j - R_TRECHO.0, c))
+        })
+        .collect()
+}
+
+/// Rastreio de ponta a ponta (fecho da Fase 2), nos dois ffmpeg: marcar uma caixa na TS que começa fora de zero,
+/// seguir pelo corpo do comando real (`edicao_rastreio_seguir`) com a mancha, com o VitTrack (o `auto` sem GPU) e, com
+/// a placa livre, com o EdgeTAM na GPU; ocultar seguindo o denso; exportar pela fila; conferir. No arquivo exportado:
+/// o quadrado vermelho coberto em cada quadro em que a ocultação vale (0 pixel vermelho; antes e depois dela, à
+/// vista); o `tecnico.json` com a corrida (motor, modelo, provedor) e o SHA-256 do denso; a conferência
+/// (`edicao_conferencia_trechos`) com o intervalo da ocultação e os trechos fracos certos.
+#[test]
+fn rastreio_seguir_ocultar_exportar_conferir() {
+    use crate::commands::edicao_rastreio_commands as rcmd;
+    use crate::commands::settings_commands::AiSettings;
+    use crate::edicao::conferencia::ComoFraco;
+    use crate::edicao::rastreio::{arquivo, corrida, EscolhaMotor, Rastreador};
+    let Some(cap) = fontes::cap() else { return };
+    let cap_app = sonda_do_app();
+    assert_eq!(cap_app.sha256, cap.sha256, "o ffmpeg do app é o dos testes");
+    let v = cap.versao.clone();
+    let c = Caso::novo("rastreio");
+    let f = registrar(&cap, &c.ws, &fontes::gerar(R_FONTE).unwrap());
+    assert!(f.tab.pts[0] > 0, "{v}: a fonte começa fora de zero");
+    let ai_ia = crate::ia::testes::ambiente();
+    let mut motores: Vec<(&str, Box<dyn FnMut(&Path, &Value, &corrida::PedidoSeguir, corrida::Emissor) -> crate::error::Result<String>>)> = Vec::new();
+    // a mancha (pedida explícita: os modelos podem estar desligados)
+    let ws = c.ws.clone();
+    motores.push(("mancha", Box::new(move |cache, doc, p, emitir| rcmd::seguir(&ws, cache, &AiSettings::default(), doc, &corrida::PedidoSeguir { motor: EscolhaMotor::Mancha, ..p.clone() }, emitir))));
+    // o `auto` com o onnxruntime dos testes e sem GPU pronta = VitTrack
+    if let Some(ai) = crate::ia::testes::ou_dispensa(ai_ia.clone(), "rastreio_seguir_ocultar_exportar_conferir", "a lib dos testes") {
+        let ws = c.ws.clone();
+        motores.push(("vittrack", Box::new(move |cache, doc, p, emitir| rcmd::seguir(&ws, cache, &ai, doc, p, emitir))));
+    }
+    // EdgeTAM na GPU: o motor do `auto` com a GPU pronta, criado com as sessões de GPU dos testes
+    let gpu = crate::ia::testes::ou_dispensa_gpu(crate::ia::gpu::placa(), "rastreio_seguir_ocultar_exportar_conferir", "placa NVIDIA")
+        .and_then(|_| crate::ia::testes::ou_dispensa_gpu(crate::ia::testes::pacote_gpu(), "rastreio_seguir_ocultar_exportar_conferir", "o pacote de GPU dos testes"));
+    let grafos: Option<Vec<PathBuf>> = crate::edicao::rastreio::edgetam::ARQUIVOS.iter().map(|a| crate::ia::testes::modelo(&format!("rastreio/edgetam_video/{}", a.nome), a.sha256)).collect();
+    let grafos = crate::ia::testes::ou_dispensa(grafos, "rastreio_seguir_ocultar_exportar_conferir", "os grafos do EdgeTAM");
+    let _trava_gpu = gpu.as_ref().map(|_| crate::ia::testes::trava_gpu());
+    if let (Some(pacote), Some(g), Some(ai)) = (gpu, grafos, ai_ia) {
+        let ws = c.ws.clone();
+        motores.push((
+            "edgetam",
+            Box::new(move |cache, doc, p, emitir| {
+                let mut criar = |_: &AiSettings, _: EscolhaMotor| -> crate::error::Result<Box<dyn Rastreador>> {
+                    let s = |i: usize, aquecer| {
+                        let op = crate::ia::Opcoes { preferencia: crate::ia::Preferencia::Gpu, aquecer, ..Default::default() };
+                        crate::ia::criar_sessao_com(&pacote.lib, Some(&pacote), crate::ia::Modelo::Arquivo(&g[i]), &op)
+                    };
+                    Ok(Box::new(crate::edicao::rastreio::edgetam::EdgeTam::de_sessoes(s(0, Some([1, 3, 1024, 1024]))?, s(1, None)?, s(2, None)?, s(3, None)?)))
+                };
+                corrida::pedir_com(&ws, cache, &ai, doc, p, emitir, &mut criar)
+            }),
+        ));
+    }
+    let _vez = corrida::testes::vez();
+    let tab = f.tab.clone();
+    let fps = tab.taxa_nominal();
+    let slot_s = |k: usize| k as f64 * fps.den as f64 / fps.num as f64;
+    for (nome, iniciar) in motores.iter_mut() {
+        let onde = format!("{v} {nome}");
+        let mut doc = projeto_do_rastreio(&f);
+        let fim = seguir_e_aplicar(&c, &mut doc, &f, iniciar.as_mut());
+        // o denso, pelo corpo de `edicao_rastreio_ler`: a corrida da âncora até onde o perito pediu, no alvo
+        let ptr = fim.denso.clone().unwrap();
+        let pasta = armazem::pasta_projeto(&c.ws, doc["id"].as_str().unwrap());
+        let d = arquivo::ler(&pasta, "r1", &ptr.sha256).unwrap();
+        let cs = arquivo::corridas(&d).unwrap();
+        assert_eq!((cs.len(), serde_json::to_value(cs[0].motor.motor).unwrap()), (1, json!(nome)), "{onde}");
+        assert_eq!((d.pts.first(), d.pts.last() <= Some(&tab.pts[R_ATE])), (Some(&tab.pts[R_ANCORA]), true), "{onde}");
+        let (mut seguidos, mut pior) = (0, 1.0f64);
+        for (i, &p) in d.pts.iter().enumerate() {
+            if d.estado[i] == crate::edicao::rastreio::ESTADO_AUSENTE {
+                continue;
+            }
+            let j = tab.indice_do_pts(p).unwrap();
+            let [x, y, w, h] = fontes::marca_esperada(R_FONTE, f.numeros[j]);
+            let alvo = iou([d.x[i], d.y[i], d.w[i], d.h[i]], caixa_do_alvo(f.numeros[j])).max(iou([d.x[i], d.y[i], d.w[i], d.h[i]], [x, y, w, h]));
+            pior = pior.min(alvo);
+            seguidos += 1;
+        }
+        eprintln!("{onde}: {} linhas, {seguidos} com o alvo, parou {:?}, pior IoU {pior:.3}", d.pts.len(), fim.parou);
+        assert!(seguidos >= 10 && pior >= 0.5, "{onde}: {seguidos} quadros seguidos, pior IoU {pior:.3}");
+
+        // exportar pela fila e conferir
+        let (doc, analise, estado) = exportar(&c, &doc, "cpu");
+        let erros: Vec<_> = analise.problemas.iter().filter(|p| p.nivel == Nivel::Erro && p.codigo != mensagens::codigo::TABELA_PENDENTE).collect();
+        assert!(erros.is_empty(), "{onde}: {erros:?}");
+        let Estado::AConferir { saida_id } = estado else { panic!("{onde}: esperava a conferir, veio {estado:?}") };
+        let trechos = rcmd::conferencia_trechos(&c.ws, &c.cache(), &saida_id).expect("edicao_conferencia_trechos");
+        let s = cmd::conferir(&c.ws, &saida_id, true).expect("edicao_conferir");
+        let mp4 = c.ws.join(&s.arquivo);
+
+        // o quadrado coberto em cada quadro da ocultação; à vista antes e depois
+        let lidos = medir::quadros_de_origem(&cap, &mp4).unwrap();
+        let quadros = medir::quadros(&cap, &mp4).unwrap();
+        assert_eq!(lidos.len(), R_TRECHO.1 - R_TRECHO.0, "{onde}");
+        for (k, q) in quadros.iter().enumerate() {
+            let j = R_TRECHO.0 + k;
+            assert_eq!(lidos[k], f.numeros[j], "{onde}: slot {k}");
+            let vermelhos = crate::edicao::testes::aceite::vermelho(q);
+            if (R_ANCORA..=R_SEGUNDA).contains(&j) {
+                assert_eq!(vermelhos, 0, "{onde}: quadro {j}: {vermelhos} pixels do alvo à vista");
+            } else {
+                assert!(vermelhos > 300, "{onde}: quadro {j} fora da ocultação: {vermelhos} pixels vermelhos");
+            }
+        }
+
+        // o `tecnico.json`: a corrida (motor, modelo, provedor) e o SHA-256 do denso
+        let tecnico = ler_json(&c.ws.join(s.tecnico_rel.as_ref().unwrap()));
+        let r = tecnico["feito"]["rastreios"].as_array().unwrap().iter().find(|r| r["id"] == "r1").unwrap_or_else(|| panic!("{onde}: {}", tecnico["feito"]["rastreios"]));
+        assert_eq!(r["denso_sha256"], json!(ptr.sha256), "{onde}");
+        let corrida_tec = &r["corridas"][0];
+        assert_eq!((&corrida_tec["motor"], &corrida_tec["provedor"]), (&json!(nome), &json!(if *nome == "edgetam" { "cuda" } else { "cpu" })), "{onde}");
+        assert_eq!(corrida_tec["modelo"], serde_json::to_value(&cs[0].motor.modelo).unwrap(), "{onde}");
+        let ia = tecnico["feito"]["ia"].as_array().unwrap();
+        if *nome == "mancha" {
+            assert!(ia.is_empty(), "{onde}: a correlação não é modelo de IA: {ia:?}");
+        } else {
+            let m = ia.iter().find(|m| m["modelo"] == json!(cs[0].motor.modelo.nome)).unwrap_or_else(|| panic!("{onde}: {ia:?}"));
+            assert_eq!(m["provedor"], corrida_tec["provedor"], "{onde}");
+            assert_eq!(m["arquivos"].as_array().unwrap().len(), cs[0].motor.modelo.arquivos.len(), "{onde}");
+        }
+
+        // a conferência: o intervalo da ocultação no arquivo e os fracos certos
+        assert_eq!(trechos.len(), 1, "{onde}: {trechos:?}");
+        let t = &trechos[0];
+        let (k0, k1) = (R_ANCORA - R_TRECHO.0, R_SEGUNDA - R_TRECHO.0);
+        assert!((t.efeito.as_str(), (t.de_s - slot_s(k0)).abs() < 1e-6, (t.ate_s - slot_s(k1 + 1)).abs() < 1e-6) == ("o1", true, true), "{onde}: {t:?}");
+        let esperado = fracos_esperados(&doc, &d, &tab);
+        assert!(esperado.values().any(|c| *c == ComoFraco::Interpolado), "{onde}: sem trecho interpolado");
+        let mut achado = std::collections::BTreeMap::new();
+        for fr in &t.fracos {
+            for k in k0..=k1 {
+                let ts = slot_s(k);
+                if ts >= fr.de_s - 1e-6 && ts < fr.ate_s - 1e-6 {
+                    assert!(achado.insert(k, fr.como).is_none(), "{onde}: slot {k} em dois trechos fracos");
+                }
+            }
+        }
+        assert_eq!(achado, esperado, "{onde}: fracos {:?}", t.fracos);
+    }
+}

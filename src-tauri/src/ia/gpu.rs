@@ -58,7 +58,8 @@ impl PacoteGpu {
     }
 }
 
-/// Placa pelo `nvidia-smi --query-gpu=name,driver_version,compute_cap,memory.total`.
+/// Placa pelo `nvidia-smi --query-gpu=name,driver_version,memory.total` e, à parte, `--query-gpu=compute_cap`
+/// (vazio = o driver não conhece a consulta).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Placa {
     pub nome: String,
@@ -115,18 +116,35 @@ pub struct EstadoGpu {
 // ---------------------------------------------------------------------------
 // Placa
 
-fn ler_placa(saida: &str) -> Option<Placa> {
-    let l = saida.lines().map(str::trim).find(|l| !l.is_empty())?;
-    let c: Vec<&str> = l.split(',').map(str::trim).collect();
-    if c.len() < 4 || c[1].is_empty() {
+/// Campos que todo `nvidia-smi` conhece. O `compute_cap` só existe a partir do driver 510: pedido junto, um driver
+/// antigo reprovaria a consulta inteira e a tela diria "Nenhuma placa NVIDIA" em vez de "Driver da NVIDIA antigo".
+const CONSULTA_PLACA: &str = "--query-gpu=name,driver_version,memory.total";
+const CONSULTA_CC: &str = "--query-gpu=compute_cap";
+
+fn primeira_linha(s: &str) -> Option<&str> {
+    s.lines().map(str::trim).find(|l| !l.is_empty())
+}
+
+/// `base` = saída de `CONSULTA_PLACA`; `cc` = a de `CONSULTA_CC` (None = a consulta falhou).
+fn ler_placa(base: &str, cc: Option<&str>) -> Option<Placa> {
+    let c: Vec<&str> = primeira_linha(base)?.split(',').map(str::trim).collect();
+    if c.len() < 3 || c[1].is_empty() {
         return None;
     }
+    // "[N/A]" e afins também contam como desconhecido
+    let cc = cc.and_then(primeira_linha).filter(|v| cc_de(v).is_some()).unwrap_or_default();
     Some(Placa {
         nome: c[0].to_string(),
         driver: c[1].to_string(),
-        compute_cap: c[2].to_string(),
-        memoria_mb: c[3].trim_end_matches("MiB").trim().parse().unwrap_or(0),
+        compute_cap: cc.to_string(),
+        memoria_mb: c[2].trim_end_matches("MiB").trim().parse().unwrap_or(0),
     })
+}
+
+/// "8.9" → (8, 9).
+fn cc_de(v: &str) -> Option<(u32, u32)> {
+    let (a, b) = v.trim().split_once('.')?;
+    Some((a.trim().parse().ok()?, b.trim().parse().ok()?))
 }
 
 /// Saída de um programa curto, com teto de tempo (mata só o próprio filho).
@@ -155,19 +173,24 @@ fn saida_de(mut cmd: std::process::Command, teto: Duration) -> Option<String> {
 /// Placa NVIDIA desta máquina; None = sem `nvidia-smi` ou sem placa. Uma consulta por processo.
 pub fn placa() -> Option<Placa> {
     static P: OnceLock<Option<Placa>> = OnceLock::new();
-    P.get_or_init(|| {
-        let exe = which::which("nvidia-smi").ok()?;
-        let mut cmd = crate::tools::command(exe);
-        cmd.args(["--query-gpu=name,driver_version,compute_cap,memory.total", "--format=csv,noheader,nounits"]);
-        ler_placa(&saida_de(cmd, Duration::from_secs(15))?)
-    })
-    .clone()
+    P.get_or_init(|| placa_pelo(&which::which("nvidia-smi").ok()?)).clone()
 }
 
-/// Código do catálogo quando a placa não atende (`gpu_placa_antiga`, `gpu_driver_antigo`); None = atende.
+/// A placa pelo `nvidia-smi` dado, em duas consultas.
+fn placa_pelo(exe: &Path) -> Option<Placa> {
+    let consulta = |q: &str| {
+        let mut cmd = crate::tools::command(exe);
+        cmd.args([q, "--format=csv,noheader,nounits"]);
+        saida_de(cmd, Duration::from_secs(15))
+    };
+    let base = consulta(CONSULTA_PLACA)?;
+    ler_placa(&base, consulta(CONSULTA_CC).as_deref())
+}
+
+/// Código do catálogo quando a placa não atende (`gpu_placa_antiga`, `gpu_driver_antigo`); None = atende. Sem
+/// `compute_cap` (driver anterior à consulta, abaixo do mínimo de qualquer jeito): driver antigo.
 pub fn requisito(p: &Placa) -> Option<&'static str> {
-    let mut cc = p.compute_cap.split('.').map(|x| x.trim().parse::<u32>().unwrap_or(0));
-    let cap = (cc.next().unwrap_or(0), cc.next().unwrap_or(0));
+    let Some(cap) = cc_de(&p.compute_cap) else { return Some(codigo::GPU_DRIVER_ANTIGO) };
     if cap < COMPUTE_CAP_MIN {
         return Some(codigo::GPU_PLACA_ANTIGA);
     }
@@ -866,15 +889,61 @@ pub(crate) mod testes {
 
     #[test]
     fn placa_e_requisito() {
-        let p = ler_placa("NVIDIA GeForce RTX 4060 Ti, 610.57.04, 8.9, 16380\n").unwrap();
+        let p = ler_placa("NVIDIA GeForce RTX 4060 Ti, 610.57.04, 16380\n", Some("8.9\n")).unwrap();
         assert_eq!(p, placa_de("610.57.04"));
-        assert_eq!(ler_placa("NVIDIA A, 610.57.04, 8.9, 8188 MiB\nNVIDIA B, 610.57.04, 7.5, 4096").unwrap().memoria_mb, 8188);
-        assert_eq!(ler_placa(""), None);
+        assert_eq!(ler_placa("NVIDIA A, 610.57.04, 8188 MiB\nNVIDIA B, 610.57.04, 4096", Some("8.9\n7.5")).unwrap().memoria_mb, 8188);
+        assert_eq!(ler_placa("", Some("8.9")), None);
+        assert_eq!(ler_placa("NVIDIA A, 470.82.01, 8192", Some("[N/A]")).unwrap().compute_cap, "");
         assert_eq!(requisito(&p), None);
+        assert_eq!(requisito(&Placa { compute_cap: String::new(), driver: "470.82.01".into(), ..p.clone() }), Some(codigo::GPU_DRIVER_ANTIGO));
         assert_eq!(requisito(&Placa { compute_cap: "6.1".into(), ..p.clone() }), Some(codigo::GPU_PLACA_ANTIGA));
         assert_eq!(requisito(&Placa { compute_cap: "7.5".into(), ..p.clone() }), None);
         assert_eq!(requisito(&Placa { driver: "579.99".into(), ..p.clone() }), Some(codigo::GPU_DRIVER_ANTIGO));
         assert_eq!(requisito(&Placa { driver: "580.00".into(), ..p.clone() }), None);
+    }
+
+    /// `nvidia-smi` falso que devolve as saídas gravadas do `nvidia-smi` desta máquina (610.57.04): a consulta normal e,
+    /// para o driver antigo, a recusa de um campo que ele não conhece (texto e código 2 gravados com um campo
+    /// inexistente: `Field "campo_inexistente" is not a valid field to query.`). Driver anterior ao `compute_cap`: a
+    /// placa aparece, com "Driver da NVIDIA antigo"; a consulta numa vez só a perdia ("Nenhuma placa NVIDIA").
+    #[cfg(unix)]
+    #[test]
+    fn driver_sem_compute_cap_e_driver_antigo() {
+        use std::os::unix::fs::PermissionsExt;
+        let d = tempfile::tempdir().unwrap();
+        let falso = |nome: &str, driver: &str, conhece_cc: bool| {
+            let p = d.path().join(nome);
+            let cc = if conhece_cc {
+                "echo '8.9'; exit 0".to_string()
+            } else {
+                r#"echo 'Field "compute_cap" is not a valid field to query.'; echo; exit 2"#.to_string()
+            };
+            let base = format!("echo 'NVIDIA GeForce RTX 4060 Ti, {driver}, 16380'; exit 0");
+            let junto = if conhece_cc { format!("echo 'NVIDIA GeForce RTX 4060 Ti, {driver}, 8.9, 16380'; exit 0") } else { cc.clone() };
+            let script = format!(
+                "#!/bin/sh\ncase \"$1\" in\n  {CONSULTA_PLACA}) {base};;\n  {CONSULTA_CC}) {cc};;\n  --query-gpu=name,driver_version,compute_cap,memory.total) {junto};;\nesac\nexit 9\n"
+            );
+            std::fs::write(&p, script).unwrap();
+            std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+            p
+        };
+        let novo = placa_pelo(&falso("novo", "610.57.04", true)).expect("placa");
+        assert_eq!((novo.compute_cap.as_str(), requisito(&novo)), ("8.9", None));
+        let velho = placa_pelo(&falso("velho", "470.82.01", false)).expect("a placa tem de aparecer");
+        assert_eq!((velho.driver.as_str(), velho.compute_cap.as_str()), ("470.82.01", ""));
+        assert_eq!(requisito(&velho), Some(codigo::GPU_DRIVER_ANTIGO));
+        // a frase da tela
+        assert_eq!(crate::edicao::mensagens::frase(requisito(&velho).unwrap(), None, None), "Driver da NVIDIA antigo");
+        // o nvidia-smi de verdade, quando há placa: a consulta em duas vezes dá o mesmo que a de uma vez
+        if let Ok(exe) = which::which("nvidia-smi") {
+            let mut cmd = crate::tools::command(&exe);
+            cmd.args(["--query-gpu=name,driver_version,compute_cap,memory.total", "--format=csv,noheader,nounits"]);
+            if let Some(junto) = saida_de(cmd, Duration::from_secs(15)) {
+                let c: Vec<&str> = primeira_linha(&junto).unwrap().split(',').map(str::trim).collect();
+                let p = placa_pelo(&exe).unwrap();
+                assert_eq!((p.nome.as_str(), p.driver.as_str(), p.compute_cap.as_str()), (c[0], c[1], c[2]));
+            }
+        }
     }
 
     /// "Pronta" exige o driver do autoteste; driver novo refaz o autoteste no filho e grava a placa de agora.

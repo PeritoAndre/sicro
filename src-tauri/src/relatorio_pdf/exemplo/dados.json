@@ -441,7 +441,7 @@
       "forma": "elipse, margem 10 %",
       "filtro": "mosaico, intensidade 0,75",
       "motivo": "pessoa sem relação com o fato (exemplo)",
-      "quadros": "quadros: 2 pela marcação do perito, 104 medidos, 0 interpolados, 3 incertos",
+      "quadros": "quadros — na marcação do perito: 2 · medidos: 104 · interpolados: 0 · dos medidos e interpolados, incertos: 3",
       "regiao": "detecção automática (rosto) · marcações do perito: 2 · confirmado por Fulano de Tal (exemplo) em 13/11/2026, 20h31 (Brasília), de 0:04,120 a 0:08,360 · R1 (anexo H)"
     },
     {

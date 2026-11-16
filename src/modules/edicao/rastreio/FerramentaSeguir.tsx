@@ -17,7 +17,7 @@ import { alvoDoEfeito, pedidoDe, RASTREIO_PRONTO, seguirEfeito, seguirParado, us
 import { IconeEstado } from "./PainelRastreio";
 
 export interface FerramentaSeguirProps {
-  /** Retângulo do quadro no palco (px da caixa do palco). */
+  /** Parte visível do quadro no palco (px da caixa do palco; com zoom, só o que cabe na caixa). */
   area: { x: number; y: number; w: number; h: number };
 }
 

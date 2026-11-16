@@ -206,8 +206,12 @@ static FFMPEG: std::sync::RwLock<Option<std::path::PathBuf>> = std::sync::RwLock
 /// Guarda o que vale no processo: a IA (interruptor e GPU, para a análise) e o ffmpeg escolhido.
 fn lembrar(s: &AppSettings) {
     crate::ia::sessao::lembrar(&s.ai);
-    let f = Some(s.paths.ffmpeg_path.trim()).filter(|p| !p.is_empty()).map(std::path::PathBuf::from);
-    *FFMPEG.write().unwrap_or_else(|e| e.into_inner()) = f;
+    *FFMPEG.write().unwrap_or_else(|e| e.into_inner()) = ffmpeg_de(&s.paths);
+}
+
+/// O campo "ffmpeg" como vale: vazio ou só espaço = automático.
+fn ffmpeg_de(p: &PathsSettings) -> Option<std::path::PathBuf> {
+    Some(p.ffmpeg_path.trim()).filter(|p| !p.is_empty()).map(std::path::PathBuf::from)
 }
 
 /// ffmpeg escolhido nas Configurações (None = automático). Quem escolhe o binário (`sonda::escolher`) põe este
@@ -337,16 +341,48 @@ mod tests {
         let volta: AppSettings = serde_json::from_slice(&serde_json::to_vec(&c).unwrap()).unwrap();
         assert_eq!(volta.paths.ffmpeg_path, "/opt/ff/ffmpeg");
         assert!(volta.ai.modelos_desligados);
-        let antes = ffmpeg_configurado();
-        // a IA em vigor é do processo inteiro: aqui só o ffmpeg muda
-        c.ai = AiSettings::default();
-        lembrar(&c);
-        assert_eq!(ffmpeg_configurado(), Some(std::path::PathBuf::from("/opt/ff/ffmpeg")));
+        // o global do processo não muda aqui (a escolha do ffmpeg dos outros testes o lê): vale no filho abaixo
+        assert_eq!(ffmpeg_de(&c.paths), Some(std::path::PathBuf::from("/opt/ff/ffmpeg")));
         c.paths.ffmpeg_path = "  ".into();
+        assert_eq!(ffmpeg_de(&c.paths), None);
+    }
+
+    /// No filho: grava as Configurações em vigor com o campo apontando para `SICRO_TESTE_CAMPO_FFMPEG` e imprime o
+    /// binário que a Edição escolhe.
+    #[test]
+    fn filho_campo_ffmpeg() {
+        let Some(campo) = std::env::var_os("SICRO_TESTE_CAMPO_FFMPEG") else { return };
+        let mut c = AppSettings::default();
+        c.paths.ffmpeg_path = campo.to_string_lossy().into_owned();
         lembrar(&c);
-        assert_eq!(ffmpeg_configurado(), None);
-        lembrar(&AppSettings::default());
-        *FFMPEG.write().unwrap() = antes;
+        let r = crate::edicao::ffmpeg::sonda::escolher().map(|(p, o)| format!("{}|{o:?}", p.display()));
+        println!("ESCOLHIDO {}", r.unwrap_or_else(|e| format!("erro|{e}")));
+    }
+
+    /// O campo das Configurações vale de fato na escolha do binário da Edição (processo filho: o global é do
+    /// processo), e `SICRO_FFMPEG` definido vence sempre.
+    #[test]
+    fn campo_do_ffmpeg_vale_na_edicao() {
+        let d = tempfile::tempdir().unwrap();
+        let (campo, var) = (d.path().join("ffmpeg do campo"), d.path().join("ffmpeg da variável"));
+        for f in [&campo, &var] {
+            std::fs::write(f, "x").unwrap();
+        }
+        let filho = |sicro_ffmpeg: Option<&std::path::Path>| {
+            let mut cmd = std::process::Command::new(std::env::current_exe().unwrap());
+            cmd.args(["--exact", "commands::settings_commands::tests::filho_campo_ffmpeg", "--nocapture", "--test-threads", "1"])
+                .env("SICRO_TESTE_CAMPO_FFMPEG", &campo);
+            match sicro_ffmpeg {
+                Some(v) => cmd.env("SICRO_FFMPEG", v),
+                None => cmd.env_remove("SICRO_FFMPEG"),
+            };
+            let o = cmd.output().unwrap();
+            let out = String::from_utf8_lossy(&o.stdout).into_owned();
+            assert!(o.status.success(), "{out}");
+            out.lines().find_map(|l| l.split_once("ESCOLHIDO ").map(|x| x.1.to_string())).unwrap_or_else(|| panic!("{out}"))
+        };
+        assert_eq!(filho(None), format!("{}|Configurado", campo.display()));
+        assert_eq!(filho(Some(&var)), format!("{}|Configurado", var.display()));
     }
 
     #[test]

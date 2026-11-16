@@ -3,7 +3,7 @@
 //! O interruptor "Usar modelos de IA" grava `AiSettings.modelos_desligados` pelas Configurações. Progresso dos
 //! downloads pelo evento `ai-download-progress` (`id` = "gpu" | "rastreador"). Dono: P2.1.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 
 use serde::{Deserialize, Serialize};
@@ -69,10 +69,10 @@ fn codigo_erro(c: &str) -> SicroError {
     erro(SicroError::Validation(c.to_string()))
 }
 
-/// Os 4 grafos do EdgeTAM com o tamanho certo em `ai.rastreio_dir` (o SHA-256 é conferido ao abrir a sessão).
+/// Item "Rastreador" instalado: a mesma regra do motor (`EdgeTam::instalado`, que o `corrida::escolher` usa): os 4
+/// grafos com o tamanho certo em `ai.rastreio_dir` (o SHA-256 é conferido ao abrir a sessão).
 pub(crate) fn rastreador_instalado(ai: &AiSettings) -> bool {
-    !ai.rastreio_dir.is_empty()
-        && edgetam::ARQUIVOS.iter().all(|a| std::fs::metadata(Path::new(&ai.rastreio_dir).join(a.nome)).is_ok_and(|m| m.is_file() && m.len() == a.bytes))
+    edgetam::EdgeTam::instalado(ai)
 }
 
 fn rastreador_mb() -> u32 {

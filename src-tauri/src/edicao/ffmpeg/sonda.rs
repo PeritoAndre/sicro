@@ -264,20 +264,29 @@ fn exigir(cap: &Capacidades) -> Result<()> {
     Ok(())
 }
 
-/// O binário: `SICRO_FFMPEG` vence sempre; senão o embutido; senão o PATH.
+/// O binário: `SICRO_FFMPEG` vence sempre; senão o campo "ffmpeg" das Configurações; senão o embutido; senão o PATH.
+/// Os dois primeiros, definidos e ausentes, são erro (nunca cai calado para outro).
 pub(crate) fn escolher() -> Result<(PathBuf, Origem)> {
     escolher_com(
         std::env::var_os("SICRO_FFMPEG"),
+        crate::commands::settings_commands::ffmpeg_configurado(),
         crate::tools::bundled_ffmpeg_tool("ffmpeg"),
         which::which("ffmpeg").ok(),
     )
 }
 
-fn escolher_com(var: Option<OsString>, embutido: Option<PathBuf>, path: Option<PathBuf>) -> Result<(PathBuf, Origem)> {
+fn escolher_com(var: Option<OsString>, campo: Option<PathBuf>, embutido: Option<PathBuf>, path: Option<PathBuf>) -> Result<(PathBuf, Origem)> {
     if let Some(v) = var.filter(|v| !v.is_empty()) {
         let p = std::path::absolute(PathBuf::from(&v)).unwrap_or_else(|_| PathBuf::from(&v));
         if !p.is_file() {
             return Err(SicroError::Validation(format!("ffmpeg_ausente: SICRO_FFMPEG={}", p.display())));
+        }
+        return Ok((p, Origem::Configurado));
+    }
+    if let Some(c) = campo.filter(|c| !c.as_os_str().is_empty()) {
+        let p = std::path::absolute(&c).unwrap_or(c);
+        if !p.is_file() {
+            return Err(SicroError::Validation(format!("ffmpeg_ausente: {}", p.display())));
         }
         return Ok((p, Origem::Configurado));
     }
@@ -1193,12 +1202,26 @@ mod testes {
             std::fs::write(p, "x").unwrap();
         }
         let var = Some(OsString::from(&a));
-        assert_eq!(escolher_com(var.clone(), Some(b.clone()), Some(c.clone())).unwrap(), (a.clone(), Origem::Configurado));
-        assert_eq!(escolher_com(None, Some(b.clone()), Some(c.clone())).unwrap(), (b.clone(), Origem::Embutido));
-        assert_eq!(escolher_com(Some(OsString::new()), None, Some(c.clone())).unwrap(), (c.clone(), Origem::Path));
+        assert_eq!(escolher_com(var.clone(), None, Some(b.clone()), Some(c.clone())).unwrap(), (a.clone(), Origem::Configurado));
+        assert_eq!(escolher_com(None, None, Some(b.clone()), Some(c.clone())).unwrap(), (b.clone(), Origem::Embutido));
+        assert_eq!(escolher_com(Some(OsString::new()), None, None, Some(c.clone())).unwrap(), (c.clone(), Origem::Path));
         // definido e ausente: erro, nunca cai para o embutido nem para o PATH
-        assert!(escolher_com(Some(d.path().join("nao").into()), Some(b), Some(c)).is_err());
-        assert!(escolher_com(None, None, None).is_err());
+        assert!(escolher_com(Some(d.path().join("nao").into()), None, Some(b.clone()), Some(c.clone())).is_err());
+        assert!(escolher_com(None, None, None, None).is_err());
+
+        // o campo das Configurações: depois de `SICRO_FFMPEG`, antes do embutido; ausente é erro com o caminho
+        let campo = d.path().join("campo");
+        std::fs::write(&campo, "x").unwrap();
+        assert_eq!(escolher_com(None, Some(campo.clone()), Some(b.clone()), Some(c.clone())).unwrap(), (campo.clone(), Origem::Configurado));
+        assert_eq!(escolher_com(var.clone(), Some(campo.clone()), Some(b.clone()), None).unwrap(), (a.clone(), Origem::Configurado));
+        assert_eq!(escolher_com(None, Some(PathBuf::new()), Some(b.clone()), None).unwrap(), (b.clone(), Origem::Embutido));
+        let sumido = d.path().join("sumido");
+        match escolher_com(None, Some(sumido.clone()), Some(b.clone()), Some(c.clone())) {
+            Err(SicroError::Validation(m)) => assert_eq!(m, format!("ffmpeg_ausente: {}", sumido.display())),
+            outro => panic!("{outro:?}"),
+        }
+        // `SICRO_FFMPEG` ausente vence o campo presente (erro, não o campo)
+        assert!(escolher_com(Some(d.path().join("nao").into()), Some(campo), Some(b), Some(c)).is_err());
     }
 
     #[test]

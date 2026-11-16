@@ -7,14 +7,16 @@ use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 
+use crate::edicao::ffmpeg::sonda;
+use crate::edicao::quadros::TabelaQuadros;
 use crate::error::{Result, SicroError};
 use crate::video::frame_export::detect_ffmpeg;
 
 use super::bytetrack::{ByteTrack, Params};
-use super::decode::{display_size, frame_dur, frame_times, FrameReader};
+use super::decode::{display_size, frame_dur, LeitorDatado};
 use super::render::{desenhar_pessoa, Opcoes, Tela};
-use super::classes::mascara;
-use super::yolox::{recortar_ao_quadro, scaled_size, Yolox};
+use super::classes::{mascara, N_CLASSES};
+use super::yolox::{recortar_ao_quadro, scaled_size, Det, Yolox};
 use super::{cor_padrao, Amostra, Cadencia, Pessoa};
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
@@ -56,6 +58,8 @@ pub struct Meta {
     pub quadros_analisados: u32,
     pub tempo_s: f64,
     pub ms_por_quadro: f64,
+    /// Onde o detector rodou (`cpu` | `cuda`): a saída da GPU não é bit a bit a da CPU (§6.6).
+    pub provedor: String,
 }
 
 pub struct Rastreio {
@@ -67,6 +71,9 @@ fn cancelado() -> SicroError {
     SicroError::Validation("cancelado".into())
 }
 
+/// Detector de um quadro reduzido: (rgb, largura, altura, reduzido/original, classes) → detecções em px do original.
+pub(crate) type Detector<'a> = dyn FnMut(&[u8], usize, usize, f32, &[bool; N_CLASSES]) -> Result<Vec<Det>> + 'a;
+
 pub fn rastrear(
     video: &Path,
     media_hash: &str,
@@ -76,16 +83,34 @@ pub fn rastrear(
     cancel: &AtomicBool,
     progresso: &mut dyn FnMut(Andamento),
 ) -> Result<Rastreio> {
+    let mut yolox = Yolox::load(lib, modelo)?;
+    let (side, provedor) = (yolox.side as u32, yolox.provedor.fio());
+    let mut r = rastrear_com(video, media_hash, op, side, cancel, progresso, &mut |rgb, sw, sh, ratio, mask| yolox.detect(rgb, sw, sh, ratio, 0.1, mask))?;
+    r.meta.provedor = provedor.into();
+    Ok(r)
+}
+
+/// `rastrear` com o detector dado (`side` = lado do modelo).
+pub(crate) fn rastrear_com(
+    video: &Path,
+    media_hash: &str,
+    op: OpcoesRastreio,
+    side: u32,
+    cancel: &AtomicBool,
+    progresso: &mut dyn FnMut(Andamento),
+    detectar: &mut Detector,
+) -> Result<Rastreio> {
     let passo = op.passo.max(1);
     let t0 = Instant::now();
-    let times = frame_times(video)?;
+    let cap = sonda::capacidades()?;
+    // os pacotes só dão a barra e a paciência do ByteTrack; o tempo de cada quadro vem do decodificador
+    let pacotes = TabelaQuadros::de_pacotes(&cap, video)?;
+    let fdur = Some(pacotes.passo_mediano as f64 * pacotes.tb.num as f64 / pacotes.tb.den as f64).filter(|d| *d > 0.0).unwrap_or(1.0 / 30.0);
     let (dw, dh) = display_size(video)?;
-    let fdur = frame_dur(&times);
-    let mut yolox = Yolox::load(lib, modelo)?;
-    let (sw, sh) = scaled_size(dw, dh, yolox.side as u32);
+    let (sw, sh) = scaled_size(dw, dh, side);
     let (rx, ry) = (sw as f32 / dw as f32, sh as f32 / dh as f32);
-    let mut reader = FrameReader::open(video, passo, sw, sh)?;
-    let analisados_esperados = (times.len() as u32).div_ceil(passo);
+    let mut reader = LeitorDatado::abrir(&cap.binario, video, passo, sw, sh)?;
+    let analisados_esperados = (pacotes.pts.len() as u32).div_ceil(passo);
     // 1 s de oclusão tolerada, em quadros analisados
     let max_lost = ((1.0 / (fdur * passo as f64)).round() as u32).clamp(4, 120);
     // um ByteTrack por classe (a associação por IoU não mistura carro com pessoa);
@@ -101,14 +126,14 @@ pub fn rastrear(
 
     let mut n = 0u32;
     let mut ativos = 0u32;
-    while let Some(rgb) = reader.next()? {
+    // tempo de cada quadro analisado (`Sample.frame` − 1)
+    let mut tempos: Vec<f64> = Vec::new();
+    while let Some((rgb, t)) = reader.proximo()? {
         if cancel.load(Ordering::Relaxed) {
             return Err(cancelado());
         }
-        if (n * passo) as usize >= times.len() {
-            break;
-        }
-        let dets = yolox.detect(rgb, sw as usize, sh as usize, (rx + ry) / 2.0, 0.1, &mask)?;
+        tempos.push(t);
+        let dets = detectar(rgb, sw as usize, sh as usize, (rx + ry) / 2.0, &mask)?;
         let dets = recortar_ao_quadro(dets, dw as f32, dh as f32);
         ativos = 0;
         for (c, bt) in &mut bts {
@@ -120,11 +145,11 @@ pub fn rastrear(
             progresso(Andamento { feitos: n, total: analisados_esperados, pessoas: ativos });
         }
     }
-    drop(reader);
-    progresso(Andamento { feitos: n, total: analisados_esperados.max(n), pessoas: ativos });
     if n == 0 {
         return Err(SicroError::Validation("não foi possível decodificar quadros do vídeo".into()));
     }
+    let decodificados = reader.fim()?.tempos;
+    progresso(Andamento { feitos: n, total: analisados_esperados.max(n), pessoas: ativos });
 
     // Trilhas -> pessoas, numeradas pela ordem de entrada em cena; descarta as muito curtas.
     let min_amostras = if passo > 1 { 3 } else { 5 };
@@ -152,8 +177,7 @@ pub fn rastrear(
                 amostras: s
                     .iter()
                     .filter_map(|p| {
-                        let idx = ((p.frame - 1) * passo) as usize;
-                        let t = *times.get(idx)?;
+                        let t = *tempos.get(p.frame as usize - 1)?;
                         let (x0, y0) = (p.x.clamp(0.0, fw), p.y.clamp(0.0, fh));
                         let (x1, y1) = ((p.x + p.w).clamp(0.0, fw), (p.y + p.h).clamp(0.0, fh));
                         Some(Amostra { t, x: x0, y: y0, w: (x1 - x0).max(2.0), h: (y1 - y0).max(2.0) })
@@ -169,13 +193,14 @@ pub fn rastrear(
         meta: Meta {
             largura: dw,
             altura: dh,
-            frame_dur_s: fdur,
+            frame_dur_s: if decodificados.len() > 1 { frame_dur(&decodificados) } else { fdur },
             passo,
             limiar: op.limiar,
-            quadros_total: times.len() as u32,
+            quadros_total: decodificados.len() as u32,
             quadros_analisados: n,
             tempo_s: tempo,
             ms_por_quadro: tempo * 1000.0 / n as f64,
+            provedor: String::new(),
         },
     })
 }
@@ -222,11 +247,17 @@ pub fn exportar_video(
     cancel: &AtomicBool,
     progresso: &mut dyn FnMut(Andamento),
 ) -> Result<u32> {
-    let times = frame_times(video)?;
+    let cap = sonda::capacidades()?;
+    // os pacotes dão a taxa do codificador e a barra; o tempo de cada quadro (o que se desenha) vem do decodificador
+    let pacotes = TabelaQuadros::de_pacotes(&cap, video)?;
+    let times: Vec<f64> = (0..pacotes.pts.len()).map(|j| pacotes.tempo(j)).collect();
+    if times.is_empty() {
+        return Err(SicroError::Validation("nenhum quadro de vídeo encontrado".into()));
+    }
     let (w, h) = display_size(video)?;
     let fdur = frame_dur(&times);
     let ffmpeg = detect_ffmpeg()?;
-    let mut reader = FrameReader::open(video, 1, w, h)?;
+    let mut reader = LeitorDatado::abrir(&cap.binario, video, 1, w, h)?;
     let mut cmd = crate::tools::command(&ffmpeg);
     cmd.args(["-v", "error", "-nostdin", "-y", "-f", "rawvideo", "-pix_fmt", "rgb24"])
         .args(["-s", &format!("{w}x{h}"), "-framerate", &taxa(video, &times, fdur), "-i", "-"]);
@@ -247,14 +278,14 @@ pub fn exportar_video(
     let mut buf = vec![0u8; (w * h * 3) as usize];
     let mut n = 0u32;
     let mut erro: Option<SicroError> = None;
+    let mut acabou = false;
     loop {
         if cancel.load(Ordering::Relaxed) {
             erro = Some(cancelado());
             break;
         }
-        match reader.next() {
-            Ok(Some(frame)) => {
-                let Some(&t) = times.get(n as usize) else { break };
+        match reader.proximo() {
+            Ok(Some((frame, t))) => {
                 buf.copy_from_slice(frame);
                 desenhar_quadro(&mut buf, w as i32, h as i32, t, pessoas, cad, op);
                 if stdin.write_all(&buf).is_err() {
@@ -265,7 +296,10 @@ pub fn exportar_video(
                     progresso(Andamento { feitos: n, total, pessoas: 0 });
                 }
             }
-            Ok(None) => break,
+            Ok(None) => {
+                acabou = true;
+                break;
+            }
             Err(e) => {
                 erro = Some(e);
                 break;
@@ -273,7 +307,14 @@ pub fn exportar_video(
         }
     }
     drop(stdin);
-    drop(reader);
+    // decodificador que morreu no meio não vira vídeo cortado (sem quadro nenhum, o erro de sempre, abaixo)
+    if acabou && n > 0 {
+        if let Err(e) = reader.fim() {
+            erro = Some(e);
+        }
+    } else {
+        drop(reader);
+    }
     if erro.is_some() {
         let _ = enc.kill();
     }
@@ -311,6 +352,132 @@ pub fn sobrepor_png(png: &Path, t: f64, pessoas: &[Pessoa], cad: Cadencia, op: O
 #[cfg(test)]
 mod testes {
     use super::*;
+    use crate::edicao::testes::fontes::{self, Fonte};
+    use crate::video::pessoas::decode::frame_times;
+    use crate::edicao::testes::medir::{self, NAO_IDENTIFICADO};
+
+    /// Número desenhado (faixas da matriz) num quadro RGB, pelo canal verde (o vermelho da marca não pesa).
+    fn numero(rgb: &[u8], w: usize, h: usize) -> u32 {
+        let g: Vec<u8> = rgb.chunks_exact(3).map(|p| p[1]).collect();
+        medir::identificar(&g, w, h)
+    }
+
+    /// Detector falso: uma caixa fixa por quadro e o número do quadro que ele recebeu.
+    fn analisar(video: &Path, passo: u32) -> Result<(Rastreio, Vec<u32>)> {
+        let mut vistos = Vec::new();
+        let op = OpcoesRastreio { limiar: 0.5, passo, classes: vec![0] };
+        let r = rastrear_com(video, "h", op, 320, &AtomicBool::new(false), &mut |_| {}, &mut |rgb, w, h, _, _| {
+            vistos.push(numero(rgb, w, h));
+            Ok(vec![Det { x: 8.0, y: 8.0, w: 40.0, h: 40.0, score: 0.95, classe: 0 }])
+        })?;
+        Ok((r, vistos))
+    }
+
+    /// Item do fecho (P2.5, `pipeline.rs:155`): cada quadro analisado leva o tempo do decodificador (pts do quadro que
+    /// o detector recebeu, identificado pelo número desenhado), nunca o do pacote de mesmo índice. Nas fontes da
+    /// matriz, nos dois ffmpeg, com passo 1 e 3. Imprime quantos quadros a regra antiga (pacote n-ésimo) datava errado.
+    #[test]
+    fn quadro_analisado_leva_o_tempo_do_decodificador() {
+        let Some(cap) = fontes::cap() else { return };
+        let (mut resumo, mut falhas) = (Vec::new(), Vec::new());
+        for &f in fontes::MATRIZ {
+            let video = fontes::gerar(f).expect("fonte");
+            let tab = TabelaQuadros::do_decodificador(&cap, &video, &AtomicBool::new(false), &mut |_| {}).unwrap();
+            let numeros = medir::quadros_de_origem(&cap, &video).unwrap();
+            assert_eq!(numeros.len(), tab.pts.len(), "{f:?}");
+            let pacotes = frame_times(&video).unwrap_or_default();
+            for passo in [1u32, 3] {
+                let (r, vistos) = match analisar(&video, passo) {
+                    Ok(x) => x,
+                    Err(e) => {
+                        falhas.push(format!("{f:?} passo {passo}: {e}"));
+                        continue;
+                    }
+                };
+                assert_eq!(r.pessoas.len(), 1, "{f:?} passo {passo}");
+                let am = &r.pessoas[0].amostras;
+                assert_eq!(am.len(), vistos.len(), "{f:?} passo {passo}: uma amostra por quadro analisado");
+                if vistos.len() != tab.pts.len().div_ceil(passo as usize) {
+                    falhas.push(format!("{f:?} passo {passo}: {} quadros analisados, {} decodificados", vistos.len(), tab.pts.len()));
+                }
+                let (mut conferidos, mut errados, mut antigos_errados) = (0, 0, 0);
+                for (k, (a, &num)) in am.iter().zip(&vistos).enumerate() {
+                    if num == NAO_IDENTIFICADO {
+                        continue;
+                    }
+                    let j = numeros.iter().position(|&x| x == num).unwrap_or_else(|| panic!("{f:?}: quadro {num} fora do decodificado"));
+                    assert_eq!(numeros.iter().filter(|&&x| x == num).count(), 1, "{f:?}: número {num} repetido");
+                    let esperado = tab.tempo(j);
+                    if (a.t - esperado).abs() >= 1e-6 {
+                        if errados == 0 {
+                            falhas.push(format!("{f:?} passo {passo}, analisado {k} (quadro {num}): t {} ≠ {esperado}", a.t));
+                        }
+                        errados += 1;
+                    }
+                    conferidos += 1;
+                    let antigo = pacotes.get(k * passo as usize).copied().unwrap_or(f64::NAN);
+                    if !((antigo - esperado).abs() < 0.5 * tab.duracao(j)) {
+                        antigos_errados += 1;
+                    }
+                }
+                assert!(conferidos * 10 >= am.len() * 9, "{f:?} passo {passo}: só {conferidos} de {} identificados", am.len());
+                if r.meta.quadros_total as usize != tab.pts.len() {
+                    falhas.push(format!("{f:?} passo {passo}: quadros_total {} ≠ {}", r.meta.quadros_total, tab.pts.len()));
+                }
+                if passo == 1 {
+                    resumo.push(format!(
+                        "{f:?}: pacotes {}, decodificados {}, datados errado: agora {errados}, pela regra antiga {antigos_errados}, de {conferidos}",
+                        pacotes.len(),
+                        tab.pts.len()
+                    ));
+                }
+            }
+        }
+        eprintln!("datas da análise ({}):\n{}", cap.versao, resumo.join("\n"));
+        assert!(falhas.is_empty(), "{}:\n{}", cap.versao, falhas.join("\n"));
+        let ts = resumo.iter().find(|l| l.starts_with("TsMeioDoGop")).unwrap();
+        assert!(!ts.contains("antiga 0,"), "a fonte TsMeioDoGop deixou de exercitar o defeito: {ts}");
+    }
+
+    /// O MP4 com a sobreposição desenha a caixa no quadro do tempo dela (pts do decodificador): uma amostra no tempo
+    /// do quadro 200 aparece nos quadros 200 e 201 (folga de 1,5 quadro) e em nenhum outro. Pela regra antiga
+    /// (n-ésimo pacote) ela caía 30 quadros depois no TS cortado e 15 na lista de edição.
+    #[test]
+    fn video_exportado_desenha_no_quadro_do_tempo() {
+        let Some(cap) = fontes::cap() else { return };
+        for f in [Fonte::TsMeioDoGop, Fonte::Mp4ListaDeEdicao] {
+            let video = fontes::gerar(f).expect("fonte");
+            let tab = TabelaQuadros::do_decodificador(&cap, &video, &AtomicBool::new(false), &mut |_| {}).unwrap();
+            let numeros = medir::quadros_de_origem(&cap, &video).unwrap();
+            let j = numeros.iter().position(|&n| n == 200).expect("quadro 200");
+            let p = Pessoa {
+                id: "p".into(),
+                media_hash: "h".into(),
+                numero: 1,
+                nome: String::new(),
+                cor: "#00ff00".into(),
+                estado: "auto".into(),
+                classe: 0,
+                origem: "auto".into(),
+                amostras: vec![Amostra { t: tab.tempo(j), x: 120.0, y: 60.0, w: 60.0, h: 60.0 }],
+                ajustes: vec![],
+            };
+            let saida = fontes::pasta_temporaria("pessoas-exportar").join("saida.mp4");
+            let cad = Cadencia { frame_dur: tab.duracao(j), passo: 1 };
+            let n = exportar_video(&video, &saida, &[p], cad, Opcoes::default(), false, &AtomicBool::new(false), &mut |_| {}).unwrap();
+            assert_eq!(n as usize, tab.pts.len(), "{f:?}: um quadro de saída por quadro decodificado");
+            let quadros = medir::quadros(&cap, &saida).unwrap();
+            let nums = medir::quadros_de_origem(&cap, &saida).unwrap();
+            assert_eq!((quadros.len(), nums.len()), (tab.pts.len(), tab.pts.len()), "{f:?}");
+            let com_caixa: Vec<u32> = quadros
+                .iter()
+                .zip(&nums)
+                .filter(|(q, _)| q.px.chunks_exact(3).filter(|c| c[1] as i32 - c[0] as i32 > 120 && c[1] as i32 - c[2] as i32 > 120).count() > 40)
+                .map(|(_, &n)| n)
+                .collect();
+            assert_eq!(com_caixa, vec![200, 201], "{f:?} ({})", cap.versao);
+        }
+    }
 
     /// Teste manual com arquivos reais:
     /// PESSOAS_LIB=.../libonnxruntime.so PESSOAS_MODEL=yolox_s.onnx PESSOAS_VIDEO=v.webm

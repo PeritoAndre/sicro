@@ -6,7 +6,9 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { EventoRastreio, ProjetoAberto, Rastreio } from "@domain/edicao";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import type { EventoRastreio, ProjetoAberto, ProjetoEdicao, Rastreio } from "@domain/edicao";
 
 const cmd = vi.hoisted(() => ({
   edicaoAbrir: vi.fn(),
@@ -47,6 +49,7 @@ import {
   desatualizado,
   editarRastreio,
   esquecerRastreios,
+  FRASE_PERITO_AUSENTE,
   irAoProximoFraco,
   marcas,
   pararCorrida,
@@ -62,6 +65,7 @@ import {
   useRastreioStore,
 } from "./rastreioStore";
 import { quadroDaCena } from "../palco/cena";
+import { aplicarMudanca } from "../modelo/projeto";
 import { FerramentaSeguir } from "../rastreio/FerramentaSeguir";
 import { CAIXA, densoDe, faixa, info, PASSO, ponteiro, projeto, q, SHA, tab, WS } from "../rastreio/cenario.teste";
 
@@ -216,6 +220,21 @@ describe("Seguir: pedido e eventos", () => {
     expect(rs().corrida).toBeNull();
     expect(useToastStore.getState().toasts.at(-1)?.message).toBe("Outro rastreio em andamento");
     expect(r1().denso).toBeNull();
+  });
+
+  it("ambos com o segundo lado em falha: o fim aplica o que foi seguido e a falha que vem depois vai para o aviso, uma vez", async () => {
+    cmd.edicaoRastreioSeguir.mockResolvedValue("t1");
+    await seguirEfeito("e1", "c", "frente");
+    rs().receber(fimA());
+    expect(r1().denso?.sha256).toBe(SHA_A);
+    const n = useToastStore.getState().toasts.length;
+    const falha: EventoRastreio = { tipo: "falhou", tarefa_id: "t1", rastreio_id: "r1", mensagem: "gpu_sem_memoria: Memória de vídeo insuficiente" };
+    rs().receber(falha);
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ kind: "error", message: "Memória de vídeo insuficiente" });
+    rs().receber(falha);
+    expect(useToastStore.getState().toasts.length).toBe(n + 1);
+    expect(rs().corrida).toBeNull();
+    expect(r1().denso?.sha256).toBe(SHA_A);
   });
 
   it("Parar (e Esc): cancela pela tarefa; antes da resposta, cancela quando o id chega; tarefa que já acabou solta a tela", async () => {
@@ -493,6 +512,39 @@ describe("ações da linha do efeito", () => {
     expect(desatualizado(r1(), "e1", [p("r1", null)])).toBe(false);
   });
 
+  it("Aceitar ausência sem o nome do perito nas Configurações: nada gravado, a frase do perito ausente (Fase 1)", async () => {
+    await primeiraCorrida();
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings, profile: { ...s.settings.profile, full_name: "  " } } }));
+    const passos = st().passado.length;
+    aceitarAusencia("r1", q(80).t, q(199).t, "oculto");
+    expect(r1().ausencias).toEqual([]);
+    expect(st().passado.length).toBe(passos);
+    expect(useToastStore.getState().toasts.at(-1)).toMatchObject({ kind: "error", message: FRASE_PERITO_AUSENTE });
+  });
+
+  it("a frase do perito ausente é a do catálogo (`edicao/mensagens.rs`)", () => {
+    const fonte = readFileSync(join(process.cwd(), "src-tauri/src/edicao/mensagens.rs"), "utf8");
+    expect(fonte).toContain(`e(PERITO_AUSENTE, Erro, "${FRASE_PERITO_AUSENTE}")`);
+    expect(fonte).toContain('pub const PERITO_AUSENTE: &str = "perito_ausente";');
+  });
+
+  it("Da análise de trilha revisada: a confirmação leva o perito das Configurações; sem nome, nada entra", async () => {
+    const revisada: Rastreio = {
+      ...r1(), id: "r9", origem: { tipo: "pessoas", pessoa_id: "p3", estado: "revisada", copiado_em: "2026-11-15T09:00:00Z" }, denso: ponteiro(SHA_A, A), ancoras: [],
+      confirmacao: { por: "", em: "2026-11-15T08:00:00Z", denso_sha256: SHA_A, de_s: q(30).t, ate_s: q(79).t },
+    };
+    cmd.edicaoRastreioDePessoas.mockResolvedValue(revisada);
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings, profile: { ...s.settings.profile, full_name: "" } } }));
+    const passos = st().passado.length;
+    await trazerDaAnalise("e1", "m", SHA, "p3", "Da análise");
+    expect(st().doc!.rastreios.map((r) => r.id)).toEqual(["r1"]);
+    expect(st().passado.length).toBe(passos);
+    expect(useToastStore.getState().toasts.at(-1)?.message).toBe(FRASE_PERITO_AUSENTE);
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings, profile: { ...s.settings.profile, full_name: "Perito Teste" } } }));
+    await trazerDaAnalise("e1", "m", SHA, "p3", "Da análise");
+    expect(st().doc!.rastreios.find((r) => r.id === "r9")?.confirmacao).toEqual({ ...revisada.confirmacao, por: "Perito Teste" });
+  });
+
   it("Da análise: o efeito passa ao rastreio novo; o antigo, sem outro uso, sai; um passo", async () => {
     const novo: Rastreio = { ...r1(), id: "r9", origem: { tipo: "pessoas", pessoa_id: "p3", estado: "auto", copiado_em: "2026-11-15T09:00:00Z" }, denso: ponteiro(SHA_A, A), ancoras: [] };
     cmd.edicaoRastreioDePessoas.mockResolvedValue(novo);
@@ -507,9 +559,61 @@ describe("ações da linha do efeito", () => {
 });
 
 
+describe("âncoras do programa (Simplificar)", () => {
+  const k = (j: number, x = 0.4) => ({ ...q(j), v: { ...CAIXA, x } });
+  const programa = () => r1().ancoras_do_programa;
+
+  /** Corrida, depois "Simplificar" devolvendo a âncora do perito (30) e as do programa. */
+  async function simplificar(devolvidas: ReturnType<typeof k>[]) {
+    cmd.edicaoRastreioEditar.mockResolvedValueOnce({ ancoras: devolvidas, denso: null });
+    await editarRastreio("r1", { tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR }, "Simplificar");
+  }
+
+  it("o Simplificar grava os t das âncoras dele (não as do perito); mexer à mão tira; Ctrl+Z e Ctrl+Y levam a lista", async () => {
+    await simplificar([k(30), k(45, 0.45), k(60, 0.5), k(79, 0.6)]);
+    expect(r1().ancoras.map((a) => a.pts)).toEqual([30, 45, 60, 79].map((j) => j * PASSO));
+    expect(programa()).toEqual([q(45).t, q(60).t, q(79).t]);
+    // acrescentar uma âncora noutro quadro: a lista fica
+    st().alterar("Marcar", (d) => void d.rastreios[0]!.ancoras.push(k(90)));
+    expect(programa()).toEqual([q(45).t, q(60).t, q(79).t]);
+    // ajustar a caixa de uma âncora do programa (alça do palco): sai
+    st().alterar("Mover", (d) => void aplicarMudanca(d as ProjetoEdicao, { rastreio: "r1", ancora: k(60, 0.52) }));
+    expect(programa()).toEqual([q(45).t, q(79).t]);
+    // marcar por cima, no mesmo quadro: sai
+    st().alterar("Marcar", (d) => void aplicarMudanca(d as ProjetoEdicao, { rastreio: "r1", ancora: k(79, 0.7) }));
+    expect(programa()).toEqual([q(45).t]);
+    // mover (outro quadro): sai; a lista vazia some do documento
+    st().alterar("Mover", (d) => void (d.rastreios[0]!.ancoras[1] = k(46, 0.45)));
+    expect(programa()).toBeUndefined();
+    expect("ancoras_do_programa" in r1()).toBe(false);
+    st().desfazer();
+    expect(programa()).toEqual([q(45).t]);
+    st().desfazer();
+    st().desfazer();
+    expect(programa()).toEqual([q(45).t, q(60).t, q(79).t]);
+    st().refazer();
+    expect(programa()).toEqual([q(45).t, q(79).t]);
+    // apagar à mão (e o "Apagar daqui em diante", que tira as âncoras da faixa): sai
+    cmd.edicaoRastreioEditar.mockResolvedValueOnce({ ancoras: [k(30), k(45, 0.45)], denso: null });
+    await editarRastreio("r1", { tipo: "apagar_faixa", de_pts: 70 * PASSO, ate_pts: null }, "Apagar daqui em diante");
+    expect(programa()).toEqual([q(45).t]);
+  });
+
+  it("âncora do programa intocada continua do programa num Simplificar seguinte; a do perito, nunca", async () => {
+    await simplificar([k(30), k(45, 0.45)]);
+    expect(programa()).toEqual([q(45).t]);
+    // o perito marca no 60; o Simplificar seguinte devolve as de antes e uma nova no 70
+    st().alterar("Marcar", (d) => void d.rastreios[0]!.ancoras.push(k(60, 0.5)));
+    await simplificar([k(30), k(45, 0.45), k(60, 0.5), k(70, 0.55)]);
+    expect(programa()).toEqual([q(45).t, q(70).t]);
+    // devolvida no quadro do perito com outra caixa: é do programa (a do perito foi trocada)
+    await simplificar([k(30, 0.31), k(45, 0.45), k(60, 0.5), k(70, 0.55)]);
+    expect(programa()).toEqual([q(30).t, q(45).t, q(70).t]);
+  });
+});
+
 describe("palco com o denso", () => {
-  // depende do `doDenso` do P2.2 (regra 5): o palco já pergunta por `densoEmCache`, o espelho ainda segue pelas âncoras
-  it.skip("fecho da Fase 2: P2.2 · o palco usa a caixa do denso em cache (medida e incerta; ausente = nada)", () => {
+  it("o palco usa a caixa do denso em cache (medida e incerta; ausente = nada)", () => {
     const caixa = (j: number) => ({ x: 0.1 + j / 1000, y: 0.2, w: 0.1, h: 0.2 });
     const linhas = Array.from({ length: 50 }, (_, i) => 30 + i).map((j) => ({ j, caixa: caixa(j), estado: j >= 60 && j <= 64 ? 1 : j === 70 ? 2 : 0 }));
     const D = densoDe("r1", linhas);

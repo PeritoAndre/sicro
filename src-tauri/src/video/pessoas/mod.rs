@@ -68,7 +68,8 @@ pub struct Pessoa {
     pub numero: i64,
     pub nome: String,
     pub cor: String,
-    /// "auto" | "editado"
+    /// "auto" | "editado" | "conferido" (editada com caixa conferida pelo perito: ajuste ou mancha refeita; a tabela
+    /// mostra as duas como editada)
     pub estado: String,
     /// Classe COCO (0 = pessoa); -1 = mancha marcada à mão.
     #[serde(default)]
@@ -81,6 +82,17 @@ pub struct Pessoa {
 }
 
 impl Pessoa {
+    /// Mexida pelo perito (o que a tabela e a lista chamam de "editada").
+    pub fn editada(&self) -> bool {
+        self.estado != "auto"
+    }
+
+    /// Caixa conferida pelo perito (ajuste ou mancha refeita): a "revisada" da Edição (§6.4). Renumerar, trocar a cor,
+    /// juntar e separar não conferem nada. Correção ainda gravada também conta (trilhas de antes do "conferido").
+    pub fn conferida(&self) -> bool {
+        self.estado == "conferido" || !self.ajustes.is_empty()
+    }
+
     /// Texto da etiqueta de classe: o nome da classe; na mancha, o nome dado pelo perito.
     pub fn rotulo(&self) -> String {
         if self.classe == classes::CLASSE_MANUAL && !self.nome.trim().is_empty() {
@@ -180,17 +192,21 @@ impl Pessoa {
                 self.ajustes.sort_by(|a, b| a.t.total_cmp(&b.t));
             }
         }
-        self.estado = "editado".into();
+        self.estado = "conferido".into();
         true
     }
 
+    /// Desfaz a correção em `t`: o perito olhou a caixa desse quadro (conta como conferida).
     pub fn limpar_ajuste(&mut self, t: f64) {
         self.ajustes.retain(|j| (j.t - t).abs() > 1e-6);
-        self.estado = "editado".into();
+        self.estado = "conferido".into();
     }
 
     /// Junta `outra` nesta (mesma pessoa): onde as duas têm caixa no mesmo instante, vale a desta.
     pub fn juntar(&mut self, outra: &Pessoa) {
+        // as correções viram caixa e saem: a conferência fica no estado, só se as duas eram conferidas (juntar não
+        // confere as caixas que ninguém olhou)
+        let conferida = self.conferida() && outra.conferida();
         // As correções de cada uma viram a própria caixa antes de misturar.
         let mut todas: Vec<Amostra> = self.caixas();
         for e in outra.caixas() {
@@ -204,7 +220,7 @@ impl Pessoa {
         if self.nome.trim().is_empty() {
             self.nome = outra.nome.clone();
         }
-        self.estado = "editado".into();
+        self.estado = if conferida { "conferido" } else { "editado" }.into();
     }
 
     /// Separa a trilha em `t`: o que vem a partir daí vira outra pessoa (devolvida).
@@ -216,15 +232,17 @@ impl Pessoa {
         let depois_a = self.amostras.split_off(k);
         let (ajustes_antes, ajustes_depois): (Vec<Ajuste>, Vec<Ajuste>) =
             self.ajustes.iter().partition(|j| j.t < t - 1e-6);
+        // cada parte só fica conferida com correção dela (onde a conferência sem correção caiu não se sabe)
+        let estado = |a: &[Ajuste]| if a.is_empty() { "editado" } else { "conferido" }.to_string();
+        self.estado = estado(&ajustes_antes);
         self.ajustes = ajustes_antes;
-        self.estado = "editado".into();
         Some(Pessoa {
             id: novo_id,
             media_hash: self.media_hash.clone(),
             numero,
             nome: String::new(),
             cor: cor_padrao(numero),
-            estado: "editado".into(),
+            estado: estado(&ajustes_depois),
             classe: self.classe,
             origem: self.origem.clone(),
             amostras: depois_a,
@@ -280,7 +298,7 @@ mod tests {
         assert!((c[1].x - (20.0 + 15.0)).abs() < 1e-3); // auto 20 + 15 (meio de 10 e 20)
         assert_eq!(c[2].x, 50.0);
         assert_eq!(c[3].x, 40.0 + 20.0); // depois da última: segura +20
-        assert_eq!(p.estado, "editado");
+        assert_eq!(p.estado, "conferido");
         p.limpar_ajuste(3.0);
         assert_eq!(p.caixas()[3].x, 40.0 + 10.0);
     }
@@ -294,10 +312,56 @@ mod tests {
         assert_eq!(a.amostras.len(), 4);
         assert_eq!(a.nome, "Segunda");
         assert_eq!(a.estado, "editado");
+        assert!(a.editada() && !a.conferida());
         let c = a.separar(3.0, "n".into(), 7).unwrap();
         assert_eq!(a.amostras.len(), 2);
         assert_eq!(c.amostras.len(), 2);
         assert_eq!(c.numero, 7);
         assert!(a.separar(0.5, "x".into(), 8).is_none()); // nada antes
+    }
+
+    /// Só a caixa conferida (ajuste, ajuste desfeito) faz a trilha conferida; juntar só fica conferida se as duas
+    /// eram; separar deixa conferida só a parte com correção; trilha antiga "editado" com correção conta.
+    #[test]
+    fn conferida_so_com_caixa_do_perito() {
+        let mut a = pessoa(&[1.0, 2.0, 3.0, 4.0]);
+        assert!(!a.editada() && !a.conferida());
+        // juntar duas automáticas: editada, não conferida
+        let mut b = pessoa(&[5.0, 6.0]);
+        b.id = "b".into();
+        let mut j = a.clone();
+        j.juntar(&b);
+        assert!(j.editada() && !j.conferida());
+        // ajuste conferiu; juntada com uma que ninguém conferiu, as caixas dela não foram vistas (nos dois sentidos)
+        assert!(a.ajustar(2.0, 25.0, 5.0, 40.0, 100.0));
+        assert!(a.editada() && a.conferida());
+        let mut j = b.clone();
+        j.juntar(&a);
+        assert!(j.ajustes.is_empty() && j.editada() && !j.conferida());
+        let mut j = a.clone();
+        j.juntar(&b);
+        assert!(j.ajustes.is_empty() && j.editada() && !j.conferida());
+        // duas conferidas: a correção vira caixa no juntar e a conferência fica no estado
+        let mut c = b.clone();
+        assert!(c.ajustar(5.0, 50.0, 5.0, 40.0, 100.0));
+        c.juntar(&a);
+        assert!(c.ajustes.is_empty() && c.conferida());
+        // separar: só a parte com a correção (em 2,0) segue conferida
+        let mut s = a.clone();
+        let depois = s.separar(3.0, "n".into(), 9).unwrap();
+        assert!(s.conferida() && depois.editada() && !depois.conferida());
+        let mut s = a.clone();
+        let depois = s.separar(2.0, "n".into(), 9).unwrap();
+        assert!(!s.conferida() && depois.conferida());
+        // desfazer a correção também é olhar a caixa
+        let mut l = pessoa(&[1.0, 2.0]);
+        l.limpar_ajuste(1.0);
+        assert!(l.conferida());
+        // trilha gravada antes do "conferido": "editado" com correção
+        let mut antiga = pessoa(&[1.0, 2.0]);
+        antiga.estado = "editado".into();
+        assert!(!antiga.conferida());
+        antiga.ajustes = vec![Ajuste { t: 1.0, dx: 1.0, dy: 0.0, dw: 0.0, dh: 0.0 }];
+        assert!(antiga.conferida());
     }
 }

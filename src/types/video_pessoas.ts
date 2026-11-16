@@ -126,10 +126,11 @@ export interface TabelaGerada {
   html: ArquivoGerado;
 }
 
-/** Evento Tauri "pessoas-progress". */
+/** Evento Tauri "pessoas-progress". "preparar" = tabela de quadros da mídia antes da primeira mancha (feitos de 0 a
+ *  total = 1000). */
 export interface PessoasProgresso {
   media_hash: string;
-  fase: "rastrear" | "exportar" | "mancha";
+  fase: "rastrear" | "exportar" | "mancha" | "preparar";
   feitos: number;
   total: number;
   pessoas: number;

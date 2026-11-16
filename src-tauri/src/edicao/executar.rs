@@ -272,7 +272,7 @@ pub(crate) fn preparar_com(
     let mut fontes = HashMap::new();
     let mut midias = Vec::with_capacity(p.midias.len());
     for m in &p.midias {
-        let (estado, fonte) = preparar_midia(ws, m, cache, &cap, conferir_sha256, esperar, &mut banco)?;
+        let (estado, fonte) = preparar_midia(ws, m, cache, &cap, conferir_sha256, esperar, esperar.is_some(), &mut banco)?;
         if let Some(f) = fonte {
             fontes.insert(m.id.clone(), f);
         }
@@ -287,13 +287,32 @@ pub(crate) fn preparar_com(
     })
 }
 
+/// Uma mídia do projeto: preparada para a corrida do rastreio e para as edições do denso, sem tocar nas outras (o
+/// `preparar` do projeto inteiro calcula o SHA-256 da sessão de todas, sem olhar o cancelamento). `cancelar` é olhado
+/// a cada pedaço do SHA-256; a tabela do decodificador não é esperada (quem chama faz a dela, se precisar).
+/// Mídia ausente = `midia_ausente`; outro conteúdo no lugar = `midia_trocada`.
+pub(crate) fn preparar_uma(ws: &Path, p: &ProjetoEdicao, midia_id: &str, cache: &Path, cancelar: &AtomicBool) -> Result<(Arc<Capacidades>, FonteInfo)> {
+    let cap = sonda::capacidades()?;
+    let m = p.midias.iter().find(|m| m.id == midia_id).ok_or_else(|| erro(format!("{}: {midia_id}", codigo::MIDIA_AUSENTE)))?;
+    let (estado, fonte) = preparar_midia(ws, m, cache, &cap, false, Some(cancelar), false, &mut BancoMidias::Fechado)?;
+    match fonte {
+        Some(f) => Ok((cap, f)),
+        None if estado.estado == SituacaoMidia::Trocada => Err(erro(format!("{}: {midia_id}", codigo::MIDIA_TROCADA))),
+        None => Err(erro(format!("{}: {midia_id}", codigo::MIDIA_AUSENTE))),
+    }
+}
+
+/// `cancelar` = sinal olhado no SHA-256 da sessão; `esperar_tabela` = espera a tabela do decodificador na fila de
+/// fundo (exportação final), olhando o mesmo sinal.
+#[allow(clippy::too_many_arguments)]
 fn preparar_midia(
     ws: &Path,
     m: &MidiaRef,
     cache: &Path,
     cap: &Arc<Capacidades>,
     conferir_sha256: bool,
-    esperar: Option<&AtomicBool>,
+    cancelar: Option<&AtomicBool>,
+    esperar_tabela: bool,
     banco: &mut BancoMidias,
 ) -> Result<(EstadoMidia, Option<FonteInfo>)> {
     let estado = |s| EstadoMidia { id: m.id.clone(), estado: s, tabela: None, busca: None, erros: None };
@@ -301,7 +320,7 @@ fn preparar_midia(
         return Ok((estado(SituacaoMidia::Ausente), None));
     }
     let Some(caminho) = localizar(ws, m, banco) else { return Ok((estado(SituacaoMidia::Ausente), None)) };
-    match sha_da_sessao(&caminho, conferir_sha256, esperar) {
+    match sha_da_sessao(&caminho, conferir_sha256, cancelar) {
         Ok(sha) if sha == m.sha256 => {}
         Ok(_) => return Ok((estado(SituacaoMidia::Trocada), None)),
         Err(e) if codigo_de(&e) == Some(ERRO_CANCELADO) => return Err(e),
@@ -323,8 +342,8 @@ fn preparar_midia(
     };
     if info.quadros.origem == OrigemTabela::Pacotes {
         // a exportação espera por ela: não fica atrás dos proxies
-        let chave = pedir_tabela(cap, cache, &m.sha256, &caminho, &info.conteiner, esperar.is_some());
-        if let Some(cancelar) = esperar {
+        let chave = pedir_tabela(cap, cache, &m.sha256, &caminho, &info.conteiner, esperar_tabela);
+        if let Some(cancelar) = cancelar.filter(|_| esperar_tabela) {
             esperar_fundo(&chave, cancelar)?;
             tab = TabelaQuadros::obter_com(cap, cache, &m.sha256, &caminho)?;
             info = fonte_info_memo(cap, &caminho, &m.sha256, tab.clone(), m.cor.as_ref())?;
@@ -492,7 +511,8 @@ pub(crate) fn sha256_em_pedacos(caminho: &Path, cancelar: &AtomicBool, progresso
     Ok(format!("{:x}", h.finalize()))
 }
 
-/// Rastreios do disco: `rastreios/<id>/<sha256>.json`, conferido pelo SHA-256 e guardado em memória.
+/// Rastreios do disco: `rastreios/<id>/<sha256>.json` pela regra única do denso (`rastreio::arquivo::ler`: teto,
+/// SHA-256 e formato), guardado em memória.
 struct LeitorDisco {
     pasta: PathBuf,
     densos: Mutex<HashMap<(String, String), Arc<ArquivoDenso>>>,
@@ -500,20 +520,11 @@ struct LeitorDisco {
 
 impl LeitorRastreios for LeitorDisco {
     fn denso(&self, rastreio: &str, sha256: &str) -> Result<Arc<ArquivoDenso>> {
-        let ausente = || erro(format!("{}: {rastreio}", codigo::RASTREIO_AUSENTE));
-        if !armazem::id_valido(rastreio) || !sha_valido(sha256) {
-            return Err(ausente());
-        }
         let chave = (rastreio.to_string(), sha256.to_string());
         if let Some(d) = self.densos.lock().unwrap_or_else(|e| e.into_inner()).get(&chave) {
             return Ok(d.clone());
         }
-        let bytes = fs::read(self.pasta.join("rastreios").join(rastreio).join(format!("{sha256}.json"))).map_err(|_| ausente())?;
-        if sha256_bytes(&bytes) != sha256 {
-            return Err(ausente());
-        }
-        let d: ArquivoDenso = serde_json::from_slice(&bytes).map_err(|e| erro(format!("{}: {e}", codigo::RASTREIO_AUSENTE)))?;
-        let d = Arc::new(d);
+        let d = Arc::new(super::rastreio::arquivo::ler(&self.pasta, rastreio, sha256)?);
         self.densos.lock().unwrap_or_else(|e| e.into_inner()).insert(chave, d.clone());
         Ok(d)
     }
@@ -2477,6 +2488,16 @@ mod testes {
         assert!(leitor.denso("../r1", &sha).is_err());
         fs::write(d.path().join("rastreios/r1").join(format!("{}.json", "f".repeat(64))), &bytes).unwrap();
         assert!(leitor.denso("r1", &"f".repeat(64)).is_err(), "conteúdo que não bate com o nome");
+        // a regra única do denso (`arquivo::ler`): teto antes de ler, colunas conferidas
+        let grande = "c".repeat(64);
+        fs::File::create(d.path().join("rastreios/r1").join(format!("{grande}.json"))).unwrap().set_len(crate::edicao::rastreio::arquivo::MAX_BYTES_DENSO + 1).unwrap();
+        assert!(leitor.denso("r1", &grande).unwrap_err().to_string().contains("grande demais"));
+        let mut torto = denso.clone();
+        torto["x"] = serde_json::json!([0.1, 0.2]);
+        let b = serde_json::to_vec(&torto).unwrap();
+        let sha_torto = sha256_bytes(&b);
+        fs::write(d.path().join("rastreios/r1").join(format!("{sha_torto}.json")), &b).unwrap();
+        assert!(leitor.denso("r1", &sha_torto).unwrap_err().to_string().contains(codigo::RASTREIO_AUSENTE));
         assert!(leitor.silhuetas("r1", &sha).unwrap_err().to_string().contains("nao_suportado"));
     }
 

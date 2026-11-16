@@ -224,7 +224,7 @@
           "item": "2",
           "motivo": "terceiro sem relação",
           "n": "1",
-          "quadros": "quadros: 2 pela marcação do perito, 0 medidos, 0 interpolados, 0 incertos; trechos sem ocultação, aceitos pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)",
+          "quadros": "quadros — na marcação do perito: 2 · medidos: 0 · interpolados: 0; ausências do alvo aceitas pelo perito: 0:01,500 a 0:01,750 (alvo fora de cena)",
           "regiao": "detecção automática (rosto) · marcações do perito: 2 · confirmado por Perito Teste em 14/11/2026, 6h00 (Brasília), de 0:01,000 a 0:02,000 · R1 (anexo H)"
         },
         {
@@ -394,7 +394,7 @@
           "amostras": "db77fd01af957221a4989b64b3770a83a3c56068405b9f0e9408feae57fd17e4",
           "confirmacao": "—",
           "corridas": [
-            "VitTrack · onnxruntime 1.31.1 · CPU · para a frente, 0:03,333 a 0:03,367 (pts 51200 a 51712) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)",
+            "VitTrack · onnxruntime 1.31.1 · CPU · para a frente, 0:03,000 a 0:03,333 (pts 46080 a 51200) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)",
             "correlação, sem inteligência artificial · CPU · para trás, 0:03,000 a 0:03,333 (pts 46080 a 51200) · parada: fim do trecho · limiares 0,95 e 0,5, paciência de 90 quadros · 14/11/2026, 5h30 (Brasília)"
           ],
           "id": "R2",

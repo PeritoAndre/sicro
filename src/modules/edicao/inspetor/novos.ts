@@ -26,6 +26,7 @@ import type {
   TrilhaAudio,
 } from "@domain/edicao";
 import { novoId } from "../modelo/projeto";
+import { padraoDoConteudo } from "./secoes/ocultarPadrao";
 
 export const COR_DESENHO = "#ffd84a";
 /** v1: p 0,033 · m 0,052 · g 0,078. */
@@ -78,17 +79,20 @@ export const novoDestaque = (rastreio: Id): EfDestaque => ({
   rotulo: null,
 });
 
-/** Ocultação: sólido opaco é o padrão (D17). `ativo` em tempo de fonte quando é da mídia. */
-export const novoOcultar = (rastreio: Id, ativo: Intervalo | null = null): EfOcultar => ({
-  ...base(ativo),
-  tipo: "ocultar",
-  modo: "solido",
-  alvo: { rastreio, forma: "retangulo", vertices: null, margem: 0.1, borda_suave: 0, inverter: false },
-  intensidade: 1,
-  cor: "#000000",
-  conteudo: "rosto",
-  motivo: "",
-});
+/** Ocultação: nasce "rosto", com o modo e a intensidade do padrão do conteúdo (B27). `ativo` em tempo de fonte quando é da mídia. */
+export const novoOcultar = (rastreio: Id, ativo: Intervalo | null = null): EfOcultar => {
+  const { modo, intensidade } = padraoDoConteudo("rosto");
+  return {
+    ...base(ativo),
+    tipo: "ocultar",
+    modo,
+    alvo: { rastreio, forma: "retangulo", vertices: null, margem: 0.1, borda_suave: 0, inverter: false },
+    intensidade,
+    cor: "#000000",
+    conteudo: "rosto",
+    motivo: "",
+  };
+};
 
 export const novoTexto = (): EfTexto => ({
   ...base(),

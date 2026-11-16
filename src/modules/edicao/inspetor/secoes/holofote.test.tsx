@@ -191,16 +191,18 @@ describe("Ocultar", () => {
 
   it("Conteúdo põe o modo e a intensidade do padrão quando ainda estavam no padrão, num passo; Polígono aparece e nasce com os cantos", async () => {
     await adicionar("Ocultar");
+    // nasce no padrão de rosto (B27): nenhum padrão pede ciência
+    expect([ocultar().conteudo, ocultar().modo, ocultar().intensidade]).toEqual(["rosto", "desfoque", 1]);
     const l = () => linha("ocultar");
     await escolher(entradaDe(l(), "Conteúdo") as HTMLSelectElement, "placa");
     expect([ocultar().conteudo, ocultar().modo, ocultar().intensidade, ultimo()]).toEqual(["placa", "solido", 1, "Conteúdo"]);
     const n = passos();
     await escolher(entradaDe(l(), "Conteúdo") as HTMLSelectElement, "rosto");
-    expect([ocultar().conteudo, ocultar().modo, ocultar().intensidade, passos()]).toEqual(["rosto", "mosaico", 0.75, n + 1]);
+    expect([ocultar().conteudo, ocultar().modo, ocultar().intensidade, passos()]).toEqual(["rosto", "desfoque", 1, n + 1]);
     // escolha do perito fica: trocar o conteúdo depois de escolher o modo não volta ao padrão
-    await clicar(campo(l(), "Modo").querySelector<HTMLButtonElement>('[data-valor="desfoque"]')!);
+    await clicar(campo(l(), "Modo").querySelector<HTMLButtonElement>('[data-valor="mosaico"]')!);
     await escolher(entradaDe(l(), "Conteúdo") as HTMLSelectElement, "placa");
-    expect([ocultar().conteudo, ocultar().modo, ocultar().intensidade]).toEqual(["placa", "desfoque", 0.75]);
+    expect([ocultar().conteudo, ocultar().modo, ocultar().intensidade]).toEqual(["placa", "mosaico", 1]);
     const formas = [...campo(l(), "Forma").querySelectorAll<HTMLButtonElement>("button")].map((b) => b.dataset.valor);
     expect(formas).toEqual(["retangulo", "elipse", "poligono"]);
     await clicar(campo(l(), "Forma").querySelector<HTMLButtonElement>('[data-valor="poligono"]')!);

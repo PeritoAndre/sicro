@@ -209,11 +209,8 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
                 </Mini>
               </div>
             )}
-            {RASTREIO_PRONTO && rastreio && (
-              <div className={styles.larga}>
-                <PainelRastreio efeito={ef} rastreio={rastreio} clipe={clipe} ctx={ctx} parada={parada} tabela={fonte ? tabela : null} />
-              </div>
-            )}
+            {/* o painel ocupa a linha inteira e some (sem célula vazia) onde não há mídia a seguir */}
+            {RASTREIO_PRONTO && rastreio && <PainelRastreio efeito={ef} rastreio={rastreio} clipe={clipe} ctx={ctx} parada={parada} tabela={fonte ? tabela : null} />}
           </div>
           <d.Editor
             valor={ef}

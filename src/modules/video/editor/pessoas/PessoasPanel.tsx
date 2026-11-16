@@ -20,6 +20,7 @@ import { askConfirm } from "@components/Dialog/ask";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { revealExported } from "@core/reveal";
+import { useSettingsStore } from "@stores/settingsStore";
 import type { VideoEvent, VideoMedia } from "@domain/video";
 import type { ArquivoGerado, PessoaView } from "@domain/video_pessoas";
 import { useVideoStore } from "../../store/videoStore";
@@ -69,6 +70,8 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
   const [comAudio, setComAudio] = useState(true);
   const [saidas, setSaidas] = useState<{ rotulo: string; arq: ArquivoGerado }[]>([]);
   const [msg, setMsg] = useState<string | null>(null);
+  // "Usar modelos de IA" desligado: some o "Rastrear" (YOLOX); a mancha segue
+  const iaLigada = !useSettingsStore((s) => s.settings.ai.modelos_desligados);
   const hash = media.sha256;
 
   useEffect(() => {
@@ -191,56 +194,60 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
             <input type="checkbox" checked={st.mostrar} onChange={(e) => st.setMostrar(e.target.checked)} /> na imagem
           </label>
         </div>
-        <div className={styles.line}>
-          <span className={styles.dim}>Detectar</span>
-          <button type="button" className={styles.chip} disabled={ocupado} onClick={() => setAbrirClasses((v) => !v)} title="Escolher o que detectar">
-            {resumoClasses(st.catalogo, st.classes)} {abrirClasses ? "▴" : "▾"}
-          </button>
-        </div>
-        {abrirClasses && (
-          <ClassesSeletor catalogo={st.catalogo} selecionadas={st.classes} onChange={st.setClasses} disabled={ocupado} />
-        )}
-        <div className={styles.line}>
-          <label>
-            Quadros
-            <select value={st.passo} onChange={(e) => st.setPasso(Number(e.target.value))} disabled={ocupado}>
-              {PASSOS.map((p) => (
-                <option key={p.v} value={p.v}>
-                  {p.rotulo}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label title="Confiança mínima da detecção">
-            Confiança
-            <input
-              type="range"
-              min={0.15}
-              max={0.85}
-              step={0.05}
-              value={st.limiar}
-              disabled={ocupado}
-              onChange={(e) => st.setLimiar(Number(e.target.value))}
-            />
-            <code>{st.limiar.toFixed(2)}</code>
-          </label>
-        </div>
-        {tarefa?.fase === "rastrear" ? (
+        {iaLigada && (
           <>
-            <div className={styles.bar}>
-              <div className={styles.barFill} style={{ width: `${pct}%` }} />
-              <span className={styles.barTxt}>
-                {tarefa.feitos} / {tarefa.total || "…"} · {tarefa.pessoas} na cena
-              </span>
+            <div className={styles.line}>
+              <span className={styles.dim}>Detectar</span>
+              <button type="button" className={styles.chip} disabled={ocupado} onClick={() => setAbrirClasses((v) => !v)} title="Escolher o que detectar">
+                {resumoClasses(st.catalogo, st.classes)} {abrirClasses ? "▴" : "▾"}
+              </button>
             </div>
-            <Button variant="secondary" size="sm" leftIcon={<X size={13} />} onClick={st.cancelar}>
-              Cancelar
-            </Button>
+            {abrirClasses && (
+              <ClassesSeletor catalogo={st.catalogo} selecionadas={st.classes} onChange={st.setClasses} disabled={ocupado} />
+            )}
+            <div className={styles.line}>
+              <label>
+                Quadros
+                <select value={st.passo} onChange={(e) => st.setPasso(Number(e.target.value))} disabled={ocupado}>
+                  {PASSOS.map((p) => (
+                    <option key={p.v} value={p.v}>
+                      {p.rotulo}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label title="Confiança mínima da detecção">
+                Confiança
+                <input
+                  type="range"
+                  min={0.15}
+                  max={0.85}
+                  step={0.05}
+                  value={st.limiar}
+                  disabled={ocupado}
+                  onChange={(e) => st.setLimiar(Number(e.target.value))}
+                />
+                <code>{st.limiar.toFixed(2)}</code>
+              </label>
+            </div>
+            {tarefa?.fase === "rastrear" ? (
+              <>
+                <div className={styles.bar}>
+                  <div className={styles.barFill} style={{ width: `${pct}%` }} />
+                  <span className={styles.barTxt}>
+                    {tarefa.feitos} / {tarefa.total || "…"} · {tarefa.pessoas} na cena
+                  </span>
+                </div>
+                <Button variant="secondary" size="sm" leftIcon={<X size={13} />} onClick={st.cancelar}>
+                  Cancelar
+                </Button>
+              </>
+            ) : (
+              <Button variant="primary" onClick={() => void rastrear()} disabled={ocupado || pronto == null}>
+                {pronto === false ? "Baixar no Gerenciador de IA" : pessoas.some((p) => p.origem === "auto") ? "Rastrear de novo" : "Rastrear"}
+              </Button>
+            )}
           </>
-        ) : (
-          <Button variant="primary" onClick={() => void rastrear()} disabled={ocupado || pronto == null}>
-            {pronto === false ? "Baixar no Gerenciador de IA" : pessoas.some((p) => p.origem === "auto") ? "Rastrear de novo" : "Rastrear"}
-          </Button>
         )}
         {run && !tarefa && run.frames_analyzed > 0 && (
           <span className={styles.dim}>
@@ -249,7 +256,7 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
           </span>
         )}
         {st.erro && <span className={styles.error}>{st.erro}</span>}
-        {run && !tarefa && !st.erro && run.frames_analyzed > 0 && pessoas.length === 0 && (
+        {iaLigada && run && !tarefa && !st.erro && run.frames_analyzed > 0 && pessoas.length === 0 && (
           <span className={styles.dim}>
             Nada encontrado com confiança {limiarDoRun(run) ?? st.limiar.toFixed(2)}. À noite, de longe ou em
             baixa resolução, baixe a confiança (0,25 a 0,35) e rastreie de novo.
@@ -275,11 +282,11 @@ export function PessoasPanel({ workspacePath, media, currentTime, events, onSeek
             <option value="ambos">os dois</option>
           </select>
         </div>
-        {tarefa?.fase === "mancha" ? (
+        {tarefa?.fase === "mancha" || tarefa?.fase === "preparar" ? (
           <>
-            <div className={styles.bar}>
-              <div className={styles.barFill} style={{ width: "100%" }} />
-              <span className={styles.barTxt}>seguindo… {tarefa.feitos}</span>
+            <div className={styles.bar} data-fase={tarefa.fase}>
+              <div className={styles.barFill} style={{ width: tarefa.fase === "preparar" ? `${pct}%` : "100%" }} />
+              <span className={styles.barTxt}>{tarefa.fase === "preparar" ? "Preparando" : `seguindo… ${tarefa.feitos}`}</span>
             </div>
             <Button variant="secondary" size="sm" leftIcon={<X size={13} />} onClick={st.cancelar}>
               Cancelar

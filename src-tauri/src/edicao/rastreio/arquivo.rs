@@ -4,6 +4,11 @@
 //!
 //! Linhas em ordem de pts, sem pts repetido. Buraco reencontrado dentro de uma corrida = linha ausente (B24).
 //! "Simplificar" troca o denso por âncoras (o rastreio fica sem denso).
+//!
+//! Quem contribui para cada linha, sem campo novo no formato: toda corrida substitui a faixa inteira que percorreu,
+//! então a linha que existe foi escrita pela corrida mais nova de `corridas` cuja faixa cobre o pts (a ESCRITORA). A
+//! linha pura cita a escritora; a linha fundida cita a outra corrida da fusão (a oposta, mais antiga). `corridas[]` =
+//! exatamente as corridas que contribuem para alguma linha (citada ou escritora).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Read;
@@ -16,6 +21,7 @@ use crate::edicao::armazem;
 use crate::edicao::executar::{self, sha256_bytes, sha_valido};
 use crate::edicao::mensagens::codigo;
 use crate::edicao::modelo::{Caixa, Chave, Denso, Interp, Racional, Rastreio, TamanhoPx};
+use crate::edicao::quadros::TabelaQuadros;
 use crate::error::{Result, SicroError};
 
 /// Esquema do arquivo denso (§6.1). O 1 (fixtures da Fase 0) ainda é lido.
@@ -182,14 +188,52 @@ fn amostra(l: &Linha) -> AmostraCorrida {
     AmostraCorrida { pts: l.pts, caixa, conf: l.conf, estado: l.estado, silhueta: None }
 }
 
-/// Põe as linhas (em ordem de pts) no denso e tira as corridas que nenhuma linha cita (a ordem das outras fica).
+/// A `Corrida` de cada posição de `corridas` (None = entrada que não é corrida: arquivo da Fase 0, trilha de Pessoas).
+fn tipadas(corridas: &[serde_json::Value]) -> Vec<Option<Corrida>> {
+    corridas.iter().map(|v| serde_json::from_value::<Corrida>(v.clone()).ok()).collect()
+}
+
+/// Escritora de cada linha (pts em ordem): a corrida de maior índice cuja faixa percorrida cobre o pts; None = nenhuma.
+fn escritoras(pts: &[i64], tipadas: &[Option<Corrida>]) -> Vec<Option<u32>> {
+    let n = pts.len();
+    let mut esc = vec![None; n];
+    // próxima linha ainda sem escritora (com atalho), para não repassar o que a mais nova já marcou
+    let mut prox: Vec<usize> = (0..=n).collect();
+    let achar = |prox: &mut Vec<usize>, mut i: usize| -> usize {
+        let mut r = i;
+        while prox[r] != r {
+            r = prox[r];
+        }
+        while prox[i] != r {
+            let seguinte = prox[i];
+            prox[i] = r;
+            i = seguinte;
+        }
+        r
+    };
+    for (k, c) in tipadas.iter().enumerate().rev() {
+        let Some(c) = c else { continue };
+        let (a, b) = (pts.partition_point(|&p| p < c.de_pts), pts.partition_point(|&p| p <= c.ate_pts));
+        let mut i = achar(&mut prox, a);
+        while i < b {
+            esc[i] = Some(k as u32);
+            prox[i] = i + 1;
+            i = achar(&mut prox, i + 1);
+        }
+    }
+    esc
+}
+
+/// Põe as linhas (em ordem de pts) no denso e deixa em `corridas` só as que contribuem para alguma linha (a citada e,
+/// na linha fundida, a escritora), na ordem em que estavam.
 fn montar(base: &ArquivoDenso, mut ls: Vec<Linha>, corridas: Vec<serde_json::Value>) -> ArquivoDenso {
     ls.sort_by_key(|l| l.pts);
-    let citadas: BTreeSet<u32> = ls.iter().map(|l| l.corrida).collect();
+    let esc = escritoras(&ls.iter().map(|l| l.pts).collect::<Vec<_>>(), &tipadas(&corridas));
+    let contribuem: BTreeSet<u32> = ls.iter().zip(&esc).flat_map(|(l, w)| [Some(l.corrida), *w]).flatten().collect();
     let mut novo_indice = BTreeMap::new();
     let mut ficam = Vec::new();
     for (i, c) in corridas.into_iter().enumerate() {
-        if citadas.contains(&(i as u32)) {
+        if contribuem.contains(&(i as u32)) {
             novo_indice.insert(i as u32, ficam.len() as u32);
             ficam.push(c);
         }
@@ -216,8 +260,9 @@ fn montar(base: &ArquivoDenso, mut ls: Vec<Linha>, corridas: Vec<serde_json::Val
 
 /// Junta uma corrida a um denso (ou a nenhum): a corrida substitui só a faixa que ela percorreu ("Retomar");
 /// o resto fica como estava. Entre duas âncoras com corridas dos dois lados (uma para a frente e outra para trás,
-/// uma de frente para a outra), `fundir`, só com as linhas da outra que não podem ter vindo de fusão anterior.
-/// A corrida nova vai para o fim de `corridas`; as que nenhuma linha cita saem.
+/// uma de frente para a outra), `fundir`, só com as linhas PURAS da outra (a mistura de uma fusão anterior não se
+/// desfaz e não entra). A linha em que a oposta entra cita a oposta; a nova é a escritora dela.
+/// A corrida nova vai para o fim de `corridas`; as que não contribuem para nenhuma linha saem.
 /// Sem base, `rastreio`, `midia_sha256`, `espaco` e `pixel` saem vazios: quem chama preenche (`gravar` confere).
 pub fn juntar(base: Option<&ArquivoDenso>, res: &ResultadoCorrida) -> Result<ArquivoDenso> {
     let vazio = ArquivoDenso {
@@ -252,73 +297,57 @@ pub fn juntar(base: Option<&ArquivoDenso>, res: &ResultadoCorrida) -> Result<Arq
     corridas.push(serde_json::to_value(c)?);
     let (lo, hi, x) = (c.de_pts, c.ate_pts, c.ancora_pts);
 
-    let tipadas: Vec<(u32, Corrida)> = base.corridas.iter().enumerate().filter_map(|(i, v)| serde_json::from_value::<Corrida>(v.clone()).ok().map(|o| (i as u32, o))).collect();
-    // a corrida do outro sentido cuja âncora está adiante, no fim da faixa percorrida (ou além), e que cobre parte dela
-    let oposta = tipadas
+    let tipadas_base = tipadas(&base.corridas);
+    let esc = escritoras(&base.pts, &tipadas_base);
+    // linha pura da corrida i: cita i e foi i quem a escreveu
+    let pura = |j: usize, i: u32| velhas[j].corrida == i && esc[j] == Some(i);
+    let puras_na_faixa: BTreeSet<u32> = (0..velhas.len()).filter(|&j| velhas[j].pts >= lo && velhas[j].pts <= hi && pura(j, velhas[j].corrida)).map(|j| velhas[j].corrida).collect();
+    // a corrida do outro sentido cuja âncora está adiante, no fim da faixa percorrida (ou além), com linha pura nela
+    let oposta = tipadas_base
         .iter()
-        .cloned()
-        .filter(|(_, o)| o.sentido != c.sentido)
-        .filter(|(_, o)| match c.sentido {
-            Sentido::Frente => o.ancora_pts >= hi && o.ancora_pts > x,
-            Sentido::Tras => o.ancora_pts <= lo && o.ancora_pts < x,
+        .enumerate()
+        .filter_map(|(i, o)| o.as_ref().map(|o| (i as u32, o.sentido, o.ancora_pts)))
+        .filter(|&(_, sentido, _)| sentido != c.sentido)
+        .filter(|&(_, _, y)| match c.sentido {
+            Sentido::Frente => y >= hi && y > x,
+            Sentido::Tras => y <= lo && y < x,
         })
-        .filter(|(i, _)| velhas.iter().any(|l| l.corrida == *i && l.pts >= lo && l.pts <= hi))
-        .min_by_key(|(_, o)| (o.ancora_pts - x).abs())
-        .map(|(i, o)| (i, o.ancora_pts));
+        .filter(|&(i, _, _)| puras_na_faixa.contains(&i))
+        .min_by_key(|&(_, _, y)| (y - x).abs())
+        .map(|(i, _, y)| (i, y));
 
-    let novas: Vec<Linha> = res.amostras.iter().map(|a| da_amostra(a, nova)).collect();
     let ls = match oposta {
         None => {
             let mut ls: Vec<Linha> = velhas.into_iter().filter(|l| l.pts < lo || l.pts > hi).collect();
-            ls.extend(novas);
+            ls.extend(res.amostras.iter().map(|a| da_amostra(a, nova)));
             ls
         }
         Some((i, y)) => {
             let (a, b) = (x.min(y), x.max(y));
-            // linha da oposta que já pode ter sido fundida com outra corrida do sentido da nova (a mistura não se desfaz):
-            // não entra na fusão; dentro da faixa percorrida sai, fora dela fica como estava
-            let fundida = |p: i64| {
-                tipadas.iter().any(|(k, o)| {
-                    *k != i
-                        && o.sentido == c.sentido
-                        && o.de_pts <= p
-                        && p <= o.ate_pts
-                        && match c.sentido {
-                            Sentido::Frente => o.ancora_pts <= p,
-                            Sentido::Tras => o.ancora_pts >= p,
-                        }
-                })
-            };
-            let pura = |l: &Linha| l.corrida == i && l.pts >= a && l.pts <= b && !fundida(l.pts);
-            let delas: Vec<AmostraCorrida> = velhas.iter().filter(|l| pura(l)).map(amostra).collect();
-            let (frente, tras, i_frente, i_tras) = match c.sentido {
-                Sentido::Frente => (res.amostras.as_slice(), delas.as_slice(), nova, i),
-                Sentido::Tras => (delas.as_slice(), res.amostras.as_slice(), i, nova),
+            let dela: Vec<bool> = (0..velhas.len()).map(|j| pura(j, i) && velhas[j].pts >= a && velhas[j].pts <= b).collect();
+            let delas: Vec<AmostraCorrida> = velhas.iter().zip(&dela).filter(|(_, &e)| e).map(|(l, _)| amostra(l)).collect();
+            let com_ela: BTreeSet<i64> = delas.iter().map(|d| d.pts).collect();
+            let (frente, tras) = match c.sentido {
+                Sentido::Frente => (res.amostras.as_slice(), delas.as_slice()),
+                Sentido::Tras => (delas.as_slice(), res.amostras.as_slice()),
             };
             let fundidas = super::fundir::fundir(frente, tras, a, b);
-            let com_caixa = |v: &[AmostraCorrida]| -> BTreeSet<i64> { v.iter().filter(|x| x.caixa.is_some()).map(|x| x.pts).collect() };
-            let (cf, ct) = (com_caixa(frente), com_caixa(tras));
-            let mut ls: Vec<Linha> = velhas.iter().filter(|l| (l.pts < lo || l.pts > hi) && !pura(l)).cloned().collect();
-            // a linha cita a corrida de onde veio a caixa; das duas, a da âncora mais perto (a que deu a silhueta)
-            ls.extend(fundidas.iter().map(|f| {
-                let perto = if f.pts - a <= b - f.pts { i_frente } else { i_tras };
-                let de = match (cf.contains(&f.pts), ct.contains(&f.pts)) {
-                    (true, false) => i_frente,
-                    (false, true) => i_tras,
-                    _ => perto,
-                };
-                da_amostra(f, de)
-            }));
+            // as linhas puras da oposta na faixa da fusão voltam pela fusão; da faixa percorrida, nada velho fica
+            let mut ls: Vec<Linha> = velhas.iter().zip(&dela).filter(|(l, &e)| (l.pts < lo || l.pts > hi) && !e).map(|(l, _)| l.clone()).collect();
+            ls.extend(fundidas.iter().map(|f| da_amostra(f, if com_ela.contains(&f.pts) { i } else { nova })));
             ls
         }
     };
     Ok(montar(base, ls, corridas))
 }
 
-/// Silhuetas do denso juntado: as da corrida nova (a última de `d.corridas`) e, nos outros quadros, as da base.
+/// Silhuetas do denso juntado: as da corrida nova (a última de `d.corridas`) nas linhas que ela escreveu sozinha; na
+/// linha fundida, a do lado da âncora mais perto (a outra, se esse lado não tem); nos outros quadros, as da base.
 /// None = nenhum quadro com silhueta.
 pub(crate) fn silhuetas_juntadas(d: &ArquivoDenso, res: &ResultadoCorrida, base: Option<&ArquivoSilhuetas>, modelo: &str) -> Option<ArquivoSilhuetas> {
     let nova = d.corridas.len().checked_sub(1)? as u32;
+    let tip = tipadas(&d.corridas);
+    let esc = escritoras(&d.pts, &tip);
     let da_corrida: BTreeMap<i64, &Vec<u8>> = res.amostras.iter().filter_map(|a| a.silhueta.as_ref().map(|s| (a.pts, s))).collect();
     let da_base: BTreeMap<i64, &Vec<u8>> = base.map(|b| b.pts.iter().copied().zip(b.mascaras.iter()).collect()).unwrap_or_default();
     let (mut pts, mut mascaras) = (Vec::new(), Vec::new());
@@ -326,9 +355,19 @@ pub(crate) fn silhuetas_juntadas(d: &ArquivoDenso, res: &ResultadoCorrida, base:
         if d.estado[i] == ESTADO_AUSENTE {
             continue;
         }
-        let m = if d.corrida[i] == nova { da_corrida.get(&d.pts[i]) } else { da_base.get(&d.pts[i]) };
+        let p = d.pts[i];
+        let m = if d.corrida[i] == nova {
+            da_corrida.get(&p)
+        } else if esc[i] == Some(nova) {
+            let outra = tip.get(d.corrida[i] as usize).and_then(|o| o.as_ref()).map(|o| o.ancora_pts);
+            let perto_da_nova = outra.is_none_or(|y| (p - res.corrida.ancora_pts).abs() <= (p - y).abs());
+            let (um, outro) = if perto_da_nova { (da_corrida.get(&p), da_base.get(&p)) } else { (da_base.get(&p), da_corrida.get(&p)) };
+            um.or(outro)
+        } else {
+            da_base.get(&p)
+        };
         if let Some(m) = m {
-            pts.push(d.pts[i]);
+            pts.push(p);
             mascaras.push((*m).clone());
         }
     }
@@ -360,9 +399,10 @@ pub fn editar(ws: &Path, cache: &Path, projeto: &serde_json::Value, rastreio_id:
         exigir(rastreio_id, Some(&d.sha256))?;
     }
     let denso = r.denso.as_ref().map(|d| ler(&pasta, &r.id, &d.sha256)).transpose()?;
-    let prep = executar::preparar(ws, &p, cache, false)?;
-    let tb = prep.fontes.get(midia).map(|f| f.quadros.tb).ok_or_else(|| SicroError::Validation(format!("{}: {midia}", codigo::MIDIA_AUSENTE)))?;
-    let (ancoras, novo) = aplicar(r, denso.as_ref(), op, tb)?;
+    // só a mídia do rastreio (o projeto inteiro calcularia o SHA-256 da sessão de todas)
+    let (_, fonte) = executar::preparar_uma(ws, &p, midia, cache, &std::sync::atomic::AtomicBool::new(false))?;
+    let tb = fonte.quadros.tb;
+    let (ancoras, novo) = aplicar_com(r, denso.as_ref(), op, tb, Some(&fonte.quadros))?;
     let denso = match novo {
         Some(mut d) => {
             d.rastreio = r.id.clone();
@@ -374,11 +414,26 @@ pub fn editar(ws: &Path, cache: &Path, projeto: &serde_json::Value, rastreio_id:
     Ok(Editado { ancoras, denso })
 }
 
-/// Trechos contínuos das linhas: passo maior que `SALTO_DE_TRECHO` × o passo mediano separa.
-fn trechos(d: &ArquivoDenso) -> Vec<std::ops::Range<usize>> {
+/// Trechos contínuos das linhas. Com a tabela do decodificador que tem todos os pts do denso: duas linhas seguidas são
+/// do mesmo trecho quando são quadros vizinhos na tabela (o buraco é quadro que falta, não passo longo: CFTV que cai
+/// de taxa não vira uma âncora por quadro). Sem ela: passo maior que `SALTO_DE_TRECHO` × o passo mediano separa.
+fn trechos(d: &ArquivoDenso, tab: Option<&TabelaQuadros>) -> Vec<std::ops::Range<usize>> {
     let n = d.pts.len();
     if n == 0 {
         return vec![];
+    }
+    if let Some(tab) = tab.filter(|t| d.pts.iter().all(|&p| t.pts.binary_search(&p).is_ok())) {
+        // o pts seguinte ao de `p` na tabela (pts repetido do MPEG-PS: o grupo inteiro fica para trás)
+        let seguinte = |p: i64| tab.pts.get(tab.pts.partition_point(|&x| x <= p)).copied();
+        let mut v = Vec::new();
+        let mut ini = 0;
+        for i in 1..=n {
+            if i == n || seguinte(d.pts[i - 1]) != Some(d.pts[i]) {
+                v.push(ini..i);
+                ini = i;
+            }
+        }
+        return v;
     }
     let mut passos: Vec<i64> = d.pts.windows(2).map(|p| p[1] - p[0]).collect();
     passos.sort_unstable();
@@ -399,6 +454,17 @@ fn trechos(d: &ArquivoDenso) -> Vec<std::ops::Range<usize>> {
 /// O núcleo de `editar`, sem disco: âncoras e denso novos de `r` (None = sem mudança nas âncoras; denso None =
 /// rastreio sem denso). `tb` = base da tabela do decodificador da mídia.
 pub fn aplicar(r: &Rastreio, denso: Option<&ArquivoDenso>, op: &OpRastreio, tb: Racional) -> Result<(Option<Vec<Chave<Caixa>>>, Option<ArquivoDenso>)> {
+    aplicar_com(r, denso, op, tb, None)
+}
+
+/// `aplicar` com a tabela de quadros da mídia (os trechos do "Simplificar" pelos quadros vizinhos dela).
+pub(crate) fn aplicar_com(
+    r: &Rastreio,
+    denso: Option<&ArquivoDenso>,
+    op: &OpRastreio,
+    tb: Racional,
+    tab: Option<&TabelaQuadros>,
+) -> Result<(Option<Vec<Chave<Caixa>>>, Option<ArquivoDenso>)> {
     if tb.num <= 0 || tb.den <= 0 {
         return Err(invalido("base de tempo"));
     }
@@ -429,7 +495,7 @@ pub fn aplicar(r: &Rastreio, denso: Option<&ArquivoDenso>, op: &OpRastreio, tb: 
             let Some(d) = denso else { return Ok((None, None)) };
             let ls = linhas(d);
             let mut novas: Vec<Chave<Caixa>> = Vec::new();
-            for tr in trechos(d) {
+            for tr in trechos(d, tab) {
                 let am: Vec<AmostraCorrida> = ls[tr.clone()].iter().map(amostra).collect();
                 for k in laco::quadros_chave(&am, d.pixel, tolerancia, PISO_PX) {
                     let a = &am[k];
@@ -643,15 +709,14 @@ pub(crate) mod testes {
             if k < 30 {
                 assert_eq!(x, 0.2, "{k}");
             } else if (40..=42).contains(&k) {
-                // só a de trás tem caixa: fica com ela, e a linha cita a de trás
-                assert_eq!((x, corrida_em(&d, k)), (0.8, 0), "{k}");
-                continue;
+                // só a de trás tem caixa: fica com ela
+                assert_eq!(x, 0.8, "{k}");
             } else {
                 let wt = k as f64 / 100.0;
                 assert_eq!(x, (1.0 - wt) * 0.2 + wt * 0.8, "{k}");
             }
-            // a corrida citada é a da âncora mais perto
-            assert_eq!(corrida_em(&d, k), if k <= 50 { 1 } else { 0 }, "{k}");
+            // onde a de trás entra, a linha cita a de trás (a oposta); a nova é a escritora. Antes de 30, só a nova
+            assert_eq!(corrida_em(&d, k), if k < 30 { 1 } else { 0 }, "{k}");
         }
         // ao contrário: a base é para a frente (perdeu em 61), a nova para trás desde 100 até a âncora 0
         let f: Vec<_> = (0..=60).map(|k| (k, Some(0.2))).collect();
@@ -697,6 +762,201 @@ pub(crate) mod testes {
         let f4: Vec<_> = (30..=60).map(|k| (k, Some(0.3))).collect();
         let d4 = juntar(Some(&d1), &res(Sentido::Frente, 30, 30, 70, &f4)).unwrap();
         assert_eq!((x_em(&d4, 60), x_em(&d4, 65), x_em(&d4, 80)), (Some(0.3), None, x_em(&d1, 80)));
+    }
+
+    /// "Ambos" a partir de uma âncora no meio de [A, B] já fundido: a corrida para a frente não tira de `corridas` a de
+    /// trás velha, que ainda entra nas linhas fundidas de [A, C); a para trás então não funde com essa mistura. Nada da
+    /// corrida velha de trás (x = 0,9) sobra em [A, C]; no fim, só as duas novas em `corridas`.
+    #[test]
+    fn ambos_do_meio_de_uma_fusao_nao_guarda_a_velha() {
+        let f0: Vec<_> = (0..=100).map(|k| (k, Some(0.1))).collect();
+        let d0 = com_cabecalho(juntar(None, &res(Sentido::Frente, 0, 0, 100, &f0)).unwrap());
+        let t1: Vec<_> = (0..=100).map(|k| (k, Some(0.9))).collect();
+        let d1 = juntar(Some(&d0), &res(Sentido::Tras, 100, 0, 100, &t1)).unwrap();
+        assert_eq!(x_em(&d1, 50), Some(0.5 * 0.1 + 0.5 * 0.9));
+        // "ambos" da âncora 50: para a frente até a âncora 100, depois para trás até a âncora 0
+        let f2: Vec<_> = (50..=100).map(|k| (k, Some(0.5))).collect();
+        let d2 = juntar(Some(&d1), &res(Sentido::Frente, 50, 50, 100, &f2)).unwrap();
+        // a de trás velha entra nas linhas fundidas de 0 a 49: fica em `corridas`
+        assert_eq!(corridas(&d2).unwrap().iter().map(|c| (c.sentido, c.ancora_pts / 512)).collect::<Vec<_>>(), vec![(Sentido::Frente, 0), (Sentido::Tras, 100), (Sentido::Frente, 50)]);
+        let t3: Vec<_> = (0..=50).map(|k| (k, Some(0.3))).collect();
+        let d3 = juntar(Some(&d2), &res(Sentido::Tras, 50, 0, 50, &t3)).unwrap();
+        for k in 0..=100 {
+            assert_eq!(x_em(&d3, k), Some(if k <= 50 { 0.3 } else { 0.5 }), "quadro {k}");
+        }
+        assert_eq!(corridas(&d3).unwrap().iter().map(|c| (c.sentido, c.ancora_pts / 512)).collect::<Vec<_>>(), vec![(Sentido::Frente, 50), (Sentido::Tras, 50)]);
+    }
+
+    /// Modelo de referência do `juntar`: cada linha com o valor e o CONJUNTO das corridas que entram nela (o formato só
+    /// guarda uma por linha). Corridas sorteadas (sentido, âncora, faixa, buracos, cauda perdida) e "Apagar daqui em
+    /// diante": a cada passo, as linhas, os valores, quem contribui em cada linha (citada + escritora) e `corridas[]`
+    /// (exatamente as que contribuem) iguais ao modelo.
+    #[test]
+    fn corridas_sao_exatamente_as_que_contribuem() {
+        use std::collections::BTreeMap as Mapa;
+        #[derive(Clone, Debug)]
+        struct Linha {
+            x: Option<f64>,
+            quem: BTreeSet<usize>,
+        }
+        struct Modelo {
+            linhas: Mapa<i64, Linha>,
+            corridas: Vec<Corrida>,
+            fusoes: usize,
+        }
+        impl Modelo {
+            fn vivas(&self) -> BTreeSet<usize> {
+                self.linhas.values().flat_map(|l| l.quem.iter().copied()).collect()
+            }
+            fn juntar(&mut self, r: &ResultadoCorrida) {
+                let c = r.corrida.clone();
+                let n = self.corridas.len();
+                self.corridas.push(c.clone());
+                let (lo, hi, x) = (c.de_pts / 512, c.ate_pts / 512, c.ancora_pts / 512);
+                let vivas = self.vivas();
+                let pura = |l: &Linha, o: usize| l.quem.len() == 1 && l.quem.contains(&o);
+                let oposta = vivas
+                    .iter()
+                    .copied()
+                    .filter(|&o| {
+                        let k = &self.corridas[o];
+                        let y = k.ancora_pts / 512;
+                        k.sentido != c.sentido
+                            && match c.sentido {
+                                Sentido::Frente => y >= hi && y > x,
+                                Sentido::Tras => y <= lo && y < x,
+                            }
+                            && self.linhas.range(512 * lo..=512 * hi).any(|(_, l)| pura(l, o))
+                    })
+                    .min_by_key(|&o| ((self.corridas[o].ancora_pts / 512) - x).abs());
+                let novas: Mapa<i64, Option<f64>> = r.amostras.iter().map(|a| (a.pts, a.caixa.map(|b| b.x))).collect();
+                match oposta {
+                    None => {
+                        self.linhas.retain(|&p, _| p < 512 * lo || p > 512 * hi);
+                        for (&p, &v) in &novas {
+                            self.linhas.insert(p, Linha { x: v, quem: [n].into() });
+                        }
+                    }
+                    Some(o) => {
+                        self.fusoes += 1;
+                        let y = self.corridas[o].ancora_pts / 512;
+                        let (a, b) = (x.min(y), x.max(y));
+                        let delas: Mapa<i64, Option<f64>> = self.linhas.range(512 * a..=512 * b).filter(|(_, l)| pura(l, o)).map(|(&p, l)| (p, l.x)).collect();
+                        self.linhas.retain(|&p, _| (p < 512 * lo || p > 512 * hi) && !delas.contains_key(&p));
+                        let am = |m: &Mapa<i64, Option<f64>>| -> Vec<AmostraCorrida> {
+                            m.iter().map(|(&p, &v)| AmostraCorrida { pts: p, caixa: v.map(|x| Caixa { x, y: 0.25, w: 0.1, h: 0.2 }), conf: 0.9, estado: if v.is_some() { ESTADO_OK } else { ESTADO_AUSENTE }, silhueta: None }).collect()
+                        };
+                        let (fr, tr) = match c.sentido {
+                            Sentido::Frente => (am(&novas), am(&delas)),
+                            Sentido::Tras => (am(&delas), am(&novas)),
+                        };
+                        for f in super::super::fundir::fundir(&fr, &tr, 512 * a.min(b), 512 * b) {
+                            // a corrida nova leu o quadro (amostra ou cauda perdida): entra
+                            let leu = f.pts >= 512 * lo && f.pts <= 512 * hi;
+                            let quem: BTreeSet<usize> = match (delas.contains_key(&f.pts), leu) {
+                                (true, true) => [o, n].into(),
+                                (true, false) => [o].into(),
+                                (false, _) => [n].into(),
+                            };
+                            self.linhas.insert(f.pts, Linha { x: f.caixa.map(|b| b.x), quem });
+                        }
+                    }
+                }
+            }
+        }
+        let mut sorteio = 0x5eed_1234_u64;
+        let mut tirar = |n: u64| {
+            sorteio ^= sorteio << 13;
+            sorteio ^= sorteio >> 7;
+            sorteio ^= sorteio << 17;
+            sorteio % n
+        };
+        let (mut passos, mut fusoes, mut mistas, mut guardadas) = (0, 0, 0, 0);
+        for rodada in 0..1000 {
+            let mut m = Modelo { linhas: Mapa::new(), corridas: Vec::new(), fusoes: 0 };
+            let mut d: Option<ArquivoDenso> = None;
+            for passo in 0..(2 + tirar(7)) {
+                let onde = format!("rodada {rodada}, passo {passo}");
+                if d.is_some() && tirar(8) == 0 {
+                    // "Apagar daqui em diante"
+                    let de = tirar(60) as i64;
+                    m.linhas.retain(|&p, _| p < 512 * de);
+                    let r = rastreio(vec![], OrigemRastreio::Assistido);
+                    let (_, novo) = aplicar(&r, d.as_ref(), &OpRastreio::ApagarFaixa { de_pts: 512 * de, ate_pts: None }, TB).unwrap();
+                    d = novo.map(com_cabecalho);
+                    if d.is_none() {
+                        assert!(m.linhas.is_empty(), "{onde}");
+                        m.corridas.clear();
+                    }
+                } else {
+                    let frente = tirar(2) == 0;
+                    // metade das âncoras numa grade (corridas de frente uma para a outra, como entre marcações do perito)
+                    let grade = tirar(2) == 0;
+                    let x = if grade { 15 * tirar(5) as i64 } else { tirar(61) as i64 };
+                    let alcance = if grade { 15 * (1 + tirar(4) as i64) } else { 1 + tirar(60) as i64 };
+                    let (lo, hi) = if frente { (x, (x + alcance).min(60)) } else { ((x - alcance).max(0), x) };
+                    let (lo, hi) = (lo.min(hi), hi.max(lo));
+                    // cauda perdida: as amostras acabam antes da faixa lida; buracos no meio
+                    let corte = tirar(4) as i64;
+                    let fim_am = if frente { (hi - corte).max(x) } else { (lo + corte).min(x) };
+                    let valor = 0.05 + passo as f64 * 0.1 + rodada as f64 * 1e-4;
+                    let ks: Vec<i64> = if frente { (x..=fim_am).collect() } else { (fim_am..=x).collect() };
+                    let am: Vec<(i64, Option<f64>)> = ks.iter().map(|&k| (k, (k == x || tirar(6) != 0).then_some(valor + k as f64 * 1e-3))).collect();
+                    let mut r = res(if frente { Sentido::Frente } else { Sentido::Tras }, x, lo, hi, &am);
+                    r.corrida.feito_em = format!("{rodada}-{passo}");
+                    m.juntar(&r);
+                    d = Some(com_cabecalho(juntar(d.as_ref(), &r).unwrap()));
+                }
+                passos += 1;
+                let Some(dd) = &d else { continue };
+                // linhas e valores
+                let linhas: Vec<(i64, Option<f64>)> = (0..dd.pts.len()).map(|i| (dd.pts[i], (dd.estado[i] != ESTADO_AUSENTE).then_some(dd.x[i]))).collect();
+                let esperadas: Vec<(i64, Option<f64>)> = m.linhas.iter().map(|(&p, l)| (p, l.x)).collect();
+                assert_eq!(linhas, esperadas, "{onde}: linhas");
+                // quem contribui, linha a linha: a citada e a escritora
+                let tip = tipadas(&dd.corridas);
+                let esc = escritoras(&dd.pts, &tip);
+                let id = |k: u32| tip[k as usize].as_ref().unwrap().feito_em.clone();
+                for (i, (&p, l)) in m.linhas.iter().enumerate() {
+                    let derivado: BTreeSet<String> = [Some(dd.corrida[i]), esc[i]].into_iter().flatten().map(id).collect();
+                    let modelo: BTreeSet<String> = l.quem.iter().map(|&k| m.corridas[k].feito_em.clone()).collect();
+                    assert_eq!(derivado, modelo, "{onde}: quadro {}", p / 512);
+                }
+                // `corridas[]` = exatamente as que contribuem, na ordem em que nasceram
+                let vivas: Vec<String> = m.vivas().into_iter().map(|k| m.corridas[k].feito_em.clone()).collect();
+                assert_eq!(dd.corridas.iter().map(|v| v["feito_em"].as_str().unwrap().to_string()).collect::<Vec<_>>(), vivas, "{onde}: corridas");
+                mistas += m.linhas.values().filter(|l| l.quem.len() == 2).count();
+                // corrida que só fica por entrar numa linha fundida (nenhuma linha a cita)
+                guardadas += vivas.iter().filter(|v| !(0..dd.pts.len()).any(|i| id(dd.corrida[i]) == **v)).count();
+            }
+            fusoes += m.fusoes;
+        }
+        eprintln!("{passos} passos, {fusoes} fusões, {mistas} linhas fundidas, {guardadas} corridas guardadas só pela fusão");
+        assert!(passos > 4000 && fusoes > 400 && mistas > 10000 && guardadas > 300, "{passos} {fusoes} {mistas} {guardadas}");
+    }
+
+    /// Silhuetas do denso juntado: a linha pura fica com a da sua corrida; a fundida, com a do lado da âncora mais perto.
+    #[test]
+    fn silhuetas_da_linha_fundida_pelo_lado_mais_perto() {
+        let com_sil = |mut r: ResultadoCorrida, marca: u8| {
+            for a in &mut r.amostras {
+                a.silhueta = a.caixa.map(|_| vec![marca, (a.pts / 512) as u8]);
+            }
+            r
+        };
+        let t: Vec<_> = (30..=100).map(|k| (k, Some(0.8))).collect();
+        let rt = com_sil(res(Sentido::Tras, 100, 30, 100, &t), 1);
+        let base = com_cabecalho(juntar(None, &rt).unwrap());
+        let sil_base = silhuetas_juntadas(&base, &rt, None, "m").unwrap();
+        let f: Vec<_> = (0..=100).map(|k| (k, Some(0.2))).collect();
+        let rf = com_sil(res(Sentido::Frente, 0, 0, 100, &f), 2);
+        let d = com_cabecalho(juntar(Some(&base), &rf).unwrap());
+        let s = silhuetas_juntadas(&d, &rf, Some(&sil_base), "m").unwrap();
+        assert_eq!(s.pts, (0..=100).map(|k| 512 * k).collect::<Vec<i64>>());
+        for (k, m) in s.mascaras.iter().enumerate() {
+            // de 0 a 50 a âncora da frente (0) está mais perto; de 51 a 100, a de trás (100)
+            assert_eq!(m, &vec![if k <= 50 { 2 } else { 1 }, k as u8], "quadro {k}");
+        }
     }
 
     /// Índice de corrida absurdo (arquivo montado à mão): recusado antes de `juntar` completar `corridas` até ele.
@@ -810,6 +1070,67 @@ pub(crate) mod testes {
             let erro = (a.caixa.x * 640.0 - (100.0 + 2.0 * k as f64)).abs();
             assert!(erro <= 2.0 + 1e-6, "quadro {k}: {erro:.2} px");
         }
+    }
+
+    /// CFTV que cai de taxa (passo de 512 até o quadro 100, depois 1 024: mais que 1,5 × o mediano) com a caixa em reta:
+    /// pela tabela do decodificador o denso é um trecho só e vira poucas âncoras; sem ela, cada quadro da parte lenta
+    /// virava um trecho (uma âncora por quadro). Quadro que falta na tabela continua separando.
+    #[test]
+    fn simplificar_pela_tabela_quando_a_taxa_cai() {
+        use crate::edicao::quadros::{Busca, Declarado, OrigemTabela};
+        let pts = |k: i64| if k <= 100 { 512 * k } else { 512 * 100 + 1024 * (k - 100) };
+        let mut d = com_cabecalho(denso_teste(0, 140, |_| ESTADO_OK, |_| TIPO_MEDIDO));
+        for k in 0..=140i64 {
+            let j = k as usize;
+            d.pts[j] = pts(k);
+            (d.x[j], d.y[j], d.w[j], d.h[j]) = ((100.0 + pts(k) as f64 / 512.0) / 640.0, 0.2, 0.1, 0.2);
+        }
+        let tab = |ks: &mut dyn Iterator<Item = i64>| {
+            let v: Vec<i64> = ks.map(pts).collect();
+            let n = v.len();
+            TabelaQuadros {
+                tb: TB,
+                pts: v,
+                chave: vec![true; n],
+                passo_mediano: 512,
+                passo: (512, 1024),
+                vfr: true,
+                origem: OrigemTabela::Decodificador,
+                ffmpeg_sha256: String::new(),
+                erros_decodificacao: 0,
+                busca: Busca::SemBusca,
+                declarado: Declarado { r_frame_rate: String::new(), avg_frame_rate: String::new(), nb_frames: None, duracao: None },
+                pacotes: n as u64,
+                lacunas: vec![],
+            }
+        };
+        let r = rastreio(vec![], OrigemRastreio::Assistido);
+        let op = OpRastreio::Simplificar { tolerancia: 0.04 };
+        let sem = aplicar(&r, Some(&d), &op, TB).unwrap().0.unwrap();
+        let t = tab(&mut (0..=140));
+        let com = aplicar_com(&r, Some(&d), &op, TB, Some(&t)).unwrap().0.unwrap();
+        assert!(sem.len() > 35 && com.len() <= 3, "sem a tabela {}, com {}", sem.len(), com.len());
+        let r2 = rastreio(com, OrigemRastreio::Assistido);
+        for k in 0..=140i64 {
+            let a = avaliar(&r2, None, Instante { t: pts(k) as f64 / 15360.0, pts: Some(pts(k)) }).unwrap();
+            assert!((a.caixa.x * 640.0 - (100.0 + pts(k) as f64 / 512.0)).abs() <= 2.0 + 1e-6, "quadro {k}");
+        }
+        // quadro 120 sem linha no denso (perdido e reencontrado sem linha): na tabela ele existe, então separa
+        let mut furado = d.clone();
+        let fora = furado.pts.binary_search(&pts(120)).unwrap();
+        for c in [&mut furado.x, &mut furado.y, &mut furado.w, &mut furado.h, &mut furado.conf] {
+            c.remove(fora);
+        }
+        for c in [&mut furado.estado, &mut furado.tipo] {
+            c.remove(fora);
+        }
+        furado.corrida.remove(fora);
+        furado.pts.remove(fora);
+        let ks: Vec<i64> = aplicar_com(&r, Some(&furado), &op, TB, Some(&t)).unwrap().0.unwrap().iter().map(|k| k.pts.unwrap()).collect();
+        assert!(ks.contains(&pts(119)) && ks.contains(&pts(121)) && ks.len() <= 5, "{ks:?}");
+        // tabela que não tem os pts do denso (outro espaço): cai na regra do passo mediano
+        let outra = tab(&mut (0..=70));
+        assert_eq!(aplicar_com(&r, Some(&d), &op, TB, Some(&outra)).unwrap().0.unwrap().len(), sem.len());
     }
 
     /// Denso imutável com o histórico da tela: cada corrida e cada edição dão um arquivo novo; desfazer e refazer só

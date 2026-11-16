@@ -3,8 +3,8 @@
     "entrada": "rosto",
     "nome": "rosto",
     "saida": {
-      "intensidade": 0.75,
-      "modo": "mosaico"
+      "intensidade": 1.0,
+      "modo": "desfoque"
     }
   },
   {
@@ -19,8 +19,8 @@
     "entrada": "corpo",
     "nome": "corpo",
     "saida": {
-      "intensidade": 0.75,
-      "modo": "mosaico"
+      "intensidade": 1.0,
+      "modo": "desfoque"
     }
   },
   {
@@ -43,8 +43,8 @@
     "entrada": "outro",
     "nome": "outro",
     "saida": {
-      "intensidade": 0.75,
-      "modo": "mosaico"
+      "intensidade": 1.0,
+      "modo": "desfoque"
     }
   }
 ]

@@ -1,8 +1,8 @@
 //! Banco dos testes do P2.3 (VitTrack e EdgeTAM). Quadros pelo ffmpeg dos testes (rgb24 pelo filtro bitexact: bytes
 //! iguais no 9.0.1 e no 7.0.2); referência em `<SICRO_SEQUENCIAS>/ref_p23/`, gerada por `ref_p23/gerar.py` com o
 //! código de `p3a/referencia/` sobre os MESMOS quadros (o SHA-256 de cada um vai junto); as 38 sequências; as
-//! métricas de `p3a/src/laco_teste.py`; o laço de `laco_sicro.py` portado (só para os números do aceite enquanto o
-//! `laco.rs` do P2.2 não chega); e a sessão de GPU dos testes.
+//! métricas de `p3a/src/laco_teste.py`; o laço de `laco_sicro.py` portado linha a linha (a conferência do `laco.rs`
+//! sobre as saídas gravadas do motor real); e a sessão de GPU dos testes.
 
 use std::io::Read;
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ use sha2::{Digest, Sha256};
 use super::super::laco::{CRESCE_BUSCA, BUSCA_MAX, P_INCERTO, P_PRESENTE, RAZAO_MAX, RAZAO_REENCONTRO, REENCONTRO_REL, SALTO_MAX, T_INCERTO, T_PERDA, T_REENCONTRO_MIN};
 use super::super::{Busca, CaixaPx, Imagem, Laco, LeitorQuadros, PedidoCorrida, Rastreador, Sentido, ESTADO_AUSENTE, ESTADO_INCERTO, ESTADO_OK, MAX_QUADROS};
 use crate::edicao::ffmpeg::sonda::Capacidades;
-use crate::edicao::modelo::{Chave, TamanhoPx};
+use crate::edicao::modelo::{Caixa, Chave, TamanhoPx};
 use crate::edicao::testes::fontes;
 use crate::ia::{self, Modelo, Opcoes, Preferencia, Provedor, SessaoIa};
 
@@ -232,25 +232,32 @@ pub fn metricas(gt: &[Option<Gt>], ini: usize, am: &[Amostra]) -> Metricas {
     m
 }
 
-/// O laço de `laco_sicro.py` (`seguir` e `seguir_por_memoria`), portado linha a linha; `paciencia` em quadros.
-pub fn laco_referencia(r: &mut dyn Rastreador, q: &mut Quadros, ini: usize, caixa0: CaixaPx, paciencia: u32) -> Vec<Amostra> {
-    let q0 = q.ate(ini).expect("quadro inicial");
-    r.iniciar(&q0, caixa0).expect("iniciar");
+/// De onde o laço de referência tira os quadros (a gravação de uma corrida).
+pub trait Fonte {
+    /// Próximo quadro (índice); None = acabou.
+    fn avancar(&mut self) -> Option<usize>;
+    /// O motor no quadro atual.
+    fn seguir(&mut self, r: &mut dyn Rastreador, b: &Busca) -> super::super::Passo;
+}
+
+/// O laço de `laco_sicro.py` (`seguir` e `seguir_por_memoria`), portado linha a linha, depois do quadro marcado
+/// (o `iniciar` já foi); `paciencia` em quadros.
+pub fn laco_referencia_de(r: &mut dyn Rastreador, q: &mut dyn Fonte, ini: usize, caixa0: CaixaPx, paciencia: u32) -> Vec<Amostra> {
     let mut am = vec![Amostra { indice: ini, caixa: Some(caixa0), estado: ESTADO_OK }];
     let mut caixa = caixa0;
     let mut tipica: Option<f64> = None;
     let mut perdidos = 0u32;
     let presenca = r.laco() == Laco::Presenca;
     loop {
-        let Some((indice, quadro)) = q.proximo() else { break };
+        let Some(indice) = q.avancar() else { break };
         let (nova, conf, aceita);
         if presenca {
-            let p = r.seguir(&quadro, &Busca { caixa, janela: true }).expect("seguir");
+            let p = q.seguir(r, &Busca { caixa, janela: true });
             conf = p.conf;
             nova = p.caixa;
             aceita = nova.is_some() && conf >= P_PRESENTE;
         } else if perdidos == 0 {
-            let p = r.seguir(&quadro, &Busca { caixa, janela: true }).expect("seguir");
+            let p = q.seguir(r, &Busca { caixa, janela: true });
             conf = p.conf;
             nova = p.caixa;
             aceita = conf >= T_PERDA && plausivel(&nova.unwrap(), &caixa, RAZAO_MAX, SALTO_MAX);
@@ -258,10 +265,10 @@ pub fn laco_referencia(r: &mut dyn Rastreador, q: &mut Quadros, ini: usize, caix
             let k = (1.0 + CRESCE_BUSCA * perdidos as f64).min(BUSCA_MAX);
             let (cx, cy) = (caixa.x + caixa.w / 2.0, caixa.y + caixa.h / 2.0);
             let larga = CaixaPx { x: cx - caixa.w * k / 2.0, y: cy - caixa.h * k / 2.0, w: caixa.w * k, h: caixa.h * k };
-            let cand = r.seguir(&quadro, &Busca { caixa: larga, janela: false }).expect("reprocura").caixa.unwrap();
+            let cand = q.seguir(r, &Busca { caixa: larga, janela: false }).caixa.unwrap();
             let (ccx, ccy) = (cand.x + cand.w / 2.0, cand.y + cand.h / 2.0);
             let centrada = CaixaPx { x: ccx - caixa.w / 2.0, y: ccy - caixa.h / 2.0, w: caixa.w, h: caixa.h };
-            let p = r.seguir(&quadro, &Busca { caixa: centrada, janela: true }).expect("reprocura");
+            let p = q.seguir(r, &Busca { caixa: centrada, janela: true });
             conf = p.conf;
             nova = p.caixa;
             let limiar = T_REENCONTRO_MIN.max(REENCONTRO_REL * tipica.unwrap_or(0.6));
@@ -292,6 +299,74 @@ pub fn laco_referencia(r: &mut dyn Rastreador, q: &mut Quadros, ini: usize, caix
     am
 }
 
+/// Uma chamada a `seguir` gravada: a busca pedida e o passo (sem a silhueta: só o laço olha).
+#[derive(Clone)]
+pub struct Chamada {
+    pub busca: Busca,
+    pub passo: super::super::Passo,
+}
+
+/// O motor real com cada `seguir` gravado em ordem (quadros seguidos a partir do marcado).
+pub struct Gravador<'a> {
+    pub motor: &'a mut dyn Rastreador,
+    pub chamadas: Vec<Chamada>,
+}
+
+impl Rastreador for Gravador<'_> {
+    fn iniciar(&mut self, q: &Imagem, c: CaixaPx) -> crate::error::Result<super::super::Passo> {
+        self.motor.iniciar(q, c)
+    }
+    fn seguir(&mut self, q: &Imagem, b: &Busca) -> crate::error::Result<super::super::Passo> {
+        let p = self.motor.seguir(q, b)?;
+        self.chamadas.push(Chamada { busca: *b, passo: super::super::Passo { silhueta: None, ..p.clone() } });
+        Ok(p)
+    }
+    fn laco(&self) -> Laco {
+        self.motor.laco()
+    }
+    fn limiares(&self, fps: f64) -> super::super::Limiares {
+        self.motor.limiares(fps)
+    }
+    fn corrida(&self) -> super::super::MotorCorrida {
+        self.motor.corrida()
+    }
+}
+
+/// A gravação como fonte do laço de referência: quadros `ini+1, ini+2…`; cada `seguir` devolve a chamada gravada na
+/// ordem e, no motor que usa a busca (reprocura), confere que a referência pediu a MESMA busca, bit a bit.
+pub struct Repeticao<'a> {
+    pub chamadas: &'a [Chamada],
+    pub i: usize,
+    pub quadro: usize,
+    pub conferir_busca: bool,
+    /// O laço pediu um quadro depois do último lido pela corrida.
+    pub pediu_alem: bool,
+    pub divergencia: Option<String>,
+}
+
+impl Fonte for Repeticao<'_> {
+    fn avancar(&mut self) -> Option<usize> {
+        if self.i >= self.chamadas.len() {
+            self.pediu_alem = true;
+            return None;
+        }
+        self.quadro += 1;
+        Some(self.quadro)
+    }
+    fn seguir(&mut self, _: &mut dyn Rastreador, b: &Busca) -> super::super::Passo {
+        let Some(c) = self.chamadas.get(self.i) else {
+            self.divergencia.get_or_insert(format!("quadro {}: chamada a mais", self.quadro));
+            return super::super::Passo { caixa: Some(b.caixa), conf: 0.0, silhueta: None };
+        };
+        self.i += 1;
+        let igual = |a: &CaixaPx, r: &CaixaPx| [a.x, a.y, a.w, a.h].iter().zip([r.x, r.y, r.w, r.h]).all(|(x, y)| x.to_bits() == y.to_bits());
+        if self.conferir_busca && (c.busca.janela != b.janela || !igual(&c.busca.caixa, &b.caixa)) {
+            self.divergencia.get_or_insert(format!("quadro {}: busca {b:?}, a corrida pediu {:?}", self.quadro, c.busca));
+        }
+        c.passo.clone()
+    }
+}
+
 fn plausivel(nova: &CaixaPx, velha: &CaixaPx, razao_max: f64, salto_max: f64) -> bool {
     let (rw, rh) = (nova.w / velha.w, nova.h / velha.h);
     if !((1.0 / razao_max..=razao_max).contains(&rw) && (1.0 / razao_max..=razao_max).contains(&rh)) {
@@ -306,19 +381,26 @@ fn plausivel(nova: &CaixaPx, velha: &CaixaPx, razao_max: f64, salto_max: f64) ->
 struct Leitor<'a> {
     q: &'a mut Quadros,
     ini: usize,
+    /// A corrida pediu um quadro depois do último do vídeo.
+    acabou: bool,
 }
 
 impl LeitorQuadros for Leitor<'_> {
     fn proximo(&mut self) -> crate::error::Result<Option<(i64, Imagem<'_>)>> {
         let ini = self.ini;
-        if self.q.k == usize::MAX || self.q.k.wrapping_add(1) < ini {
-            return Ok(self.q.ate(ini).map(|i| (ini as i64, i)));
-        }
-        Ok(self.q.proximo().map(|(k, i)| (k as i64, i)))
+        let r = if self.q.k == usize::MAX || self.q.k.wrapping_add(1) < ini {
+            self.q.ate(ini).map(|i| (ini as i64, i))
+        } else {
+            self.q.proximo().map(|(k, i)| (k as i64, i))
+        };
+        self.acabou |= r.is_none();
+        Ok(r)
     }
 }
 
-/// A corrida pelo `rastreio::correr` (laço do P2.2): é o que o fecho roda.
+/// A corrida pelo `rastreio::correr` (laço do P2.2, o aceite) sobre o motor gravado; depois o laço de referência
+/// (`laco_sicro.py` portado) roda sobre as MESMAS saídas do motor e tem de dar a mesma decisão em cada quadro, o mesmo
+/// fim e (na reprocura) as mesmas buscas. Divergência = pânico com o quadro.
 pub fn laco_do_sicro(r: &mut dyn Rastreador, q: &mut Quadros, ini: usize, caixa0: CaixaPx) -> Vec<Amostra> {
     let pixel = TamanhoPx { w: q.w, h: q.h };
     let p = PedidoCorrida {
@@ -332,12 +414,46 @@ pub fn laco_do_sicro(r: &mut dyn Rastreador, q: &mut Quadros, ini: usize, caixa0
         max_quadros: MAX_QUADROS,
         fps: 30.0,
     };
-    let mut leitor = Leitor { q, ini };
-    let res = super::super::correr(&p, &mut leitor, r, &AtomicBool::new(false), &mut |_| {}).expect("rastreio::correr");
-    res.amostras
+    let mut g = Gravador { motor: r, chamadas: Vec::new() };
+    let mut leitor = Leitor { q, ini, acabou: false };
+    let res = super::super::correr(&p, &mut leitor, &mut g, &AtomicBool::new(false), &mut |_| {}).expect("rastreio::correr");
+    let am: Vec<Amostra> = res
+        .amostras
         .iter()
         .map(|a| Amostra { indice: a.pts as usize, caixa: a.caixa.map(|c| CaixaPx::de_caixa(&c, pixel)), estado: a.estado })
-        .collect()
+        .collect();
+    // a referência sobre as mesmas saídas
+    let paciencia = g.limiares(30.0).paciencia;
+    let conferir_busca = g.laco() == Laco::Reprocura;
+    let chamadas = std::mem::take(&mut g.chamadas);
+    let mut rep = Repeticao { chamadas: &chamadas, i: 0, quadro: ini, conferir_busca, pediu_alem: false, divergencia: None };
+    let ref_am = laco_referencia_de(&mut g, &mut rep, ini, CaixaPx::de_caixa(&p.ancora.v, pixel), paciencia);
+    if let Some(d) = rep.divergencia {
+        panic!("laço do SICRO × referência: {d}");
+    }
+    assert_eq!(rep.i, chamadas.len(), "a referência fez {} chamadas, a corrida {}", rep.i, chamadas.len());
+    // parar pela paciência: nenhuma das duas pede outro quadro; chegar ao fim do vídeo (com o alvo à vista ou ainda
+    // perdido, sem esgotar a paciência): as duas pedem
+    let acabou = leitor.acabou;
+    assert_eq!(rep.pediu_alem, acabou, "fim: corrida {:?}", res.parou);
+    // com quadros perdidos no fim, "perdido" no primeiro deles; senão "fim" no último lido
+    let aceito = res.amostras.last().map_or(ini, |a| a.pts as usize);
+    let esperado = if aceito < rep.quadro { (super::super::Motivo::Perdido, aceito + 1) } else { (super::super::Motivo::Fim, rep.quadro) };
+    assert_eq!((res.parou.motivo, res.parou.pts), (esperado.0, Some(esperado.1 as i64)), "fim do vídeo: {acabou}");
+    // comparadas onde o laço grava, em 0..1, bit a bit: a caixa da referência (px do motor) passa pela mesma conta
+    // (`CaixaPx::caixa`); voltar a gravada para px não serve (x / w · w difere de x em até 1 ULP); no quadro marcado
+    // as duas são a âncora
+    let bits = |c: Caixa| [c.x, c.y, c.w, c.h].map(f64::to_bits);
+    let x: Vec<_> = res.amostras.iter().map(|a| (a.pts as usize, a.estado, a.caixa.map(bits))).collect();
+    let y: Vec<_> = ref_am
+        .iter()
+        .map(|a| (a.indice, a.estado, a.caixa.map(|c| if a.indice == ini { p.ancora.v } else { c.caixa(pixel) }).map(bits)))
+        .collect();
+    if x != y {
+        let k = x.iter().zip(&y).position(|(a, b)| a != b).unwrap_or(x.len().min(y.len()));
+        panic!("laço do SICRO × referência: amostra {k} ({} × {}): {:?} × {:?}", x.len(), y.len(), x.get(k), y.get(k));
+    }
+    am
 }
 
 /// As 38 sequências com o laço `laco` sobre o motor que `motor()` cria: devolve as métricas somadas e imprime cada
@@ -387,17 +503,13 @@ pub fn cpu(modelo: Modelo<'_>, teste: &str) -> Option<SessaoIa> {
     ia::testes::ou_dispensa(ia::testes::sessao_cpu(modelo), teste, "a lib dos testes")
 }
 
-/// Sessão de GPU dos testes: `ia::criar_sessao_com` (P2.1) com o pacote dos testes e `Preferencia::Gpu`; enquanto o
-/// corpo do P2.1 recusar (`nao_suportado: ia`), cria direto pelo `ort` com as mesmas opções (CUDA com
-/// `error_on_failure`, `use_tf32 = 0`, busca heurística, aquecimento). None = sem placa ou sem as libs (dispensa;
-/// falha com `SICRO_EXIGE_GPU=1`). Quem chama segura `ia::testes::trava_gpu()` enquanto a sessão vive.
+/// Sessão de GPU dos testes: `ia::criar_sessao_com` (P2.1) com o pacote dos testes e `Preferencia::Gpu`. None = sem
+/// placa ou sem as libs (dispensa; falha com `SICRO_EXIGE_GPU=1`). Quem chama segura `ia::testes::trava_gpu()`
+/// enquanto a sessão vive.
 pub fn gpu(modelo: &Path, aquecer: Option<[usize; 4]>, teste: &str) -> Option<SessaoIa> {
     let pacote = ia::testes::ou_dispensa_gpu(ia::testes::pacote_gpu(), teste, "o pacote de GPU dos testes")?;
     let op = Opcoes { preferencia: Preferencia::Gpu, aquecer, ..Opcoes::default() };
-    let s = match ia::criar_sessao_com(&pacote.lib, Some(&pacote), Modelo::Arquivo(modelo), &op) {
-        Err(crate::error::SicroError::Validation(m)) if m == "nao_suportado: ia" => gpu_direto(&pacote, modelo, &op), // FECHO: sai com o P2.1
-        r => r.map_err(|e| e.to_string()),
-    };
+    let s = ia::criar_sessao_com(&pacote.lib, Some(&pacote), Modelo::Arquivo(modelo), &op).map_err(|e| e.to_string());
     let s = match s {
         Ok(s) => Some(s),
         Err(e) => {
@@ -408,48 +520,4 @@ pub fn gpu(modelo: &Path, aquecer: Option<[usize; 4]>, teste: &str) -> Option<Se
     let s = ia::testes::ou_dispensa_gpu(s, teste, "uma placa NVIDIA que rode o CUDA")?;
     assert_eq!(s.provedor, Provedor::Cuda, "{teste}");
     Some(s)
-}
-
-fn gpu_direto(pacote: &ia::gpu::PacoteGpu, modelo: &Path, op: &Opcoes) -> Result<SessaoIa, String> {
-    use ort::ep;
-    static PRECARGA: std::sync::OnceLock<Result<(), String>> = std::sync::OnceLock::new();
-    PRECARGA
-        .get_or_init(|| {
-            // dependência antes do dependente; no Linux o cuDNN abre as irmãs sozinho
-            for (dir, prefixos) in [
-                (&pacote.cuda, &["libcudart.so.", "libnvJitLink.so.", "libnvrtc.so.", "libcublasLt.so.", "libcublas.so.", "libcurand.so."][..]),
-                (&pacote.cudnn, &["libcudnn.so."][..]),
-            ] {
-                for pre in prefixos {
-                    let mut achados: Vec<PathBuf> = std::fs::read_dir(dir)
-                        .map_err(|e| e.to_string())?
-                        .flatten()
-                        .map(|e| e.path())
-                        .filter(|p| p.file_name().and_then(|n| n.to_str()).is_some_and(|n| n.starts_with(pre)))
-                        .collect();
-                    achados.sort();
-                    if let Some(p) = achados.first() {
-                        ort::util::preload_dylib(p).map_err(|e| format!("{}: {e}", p.display()))?;
-                    }
-                }
-            }
-            Ok(())
-        })
-        .clone()?;
-    let env = crate::video::ort_env::entorno(&pacote.lib).map_err(|e| e.to_string())?;
-    let cuda = ep::CUDA::default().with_conv_algorithm_search(ep::cuda::ConvAlgorithmSearch::Heuristic).with_tf32(false).build().error_on_failure();
-    let mut s = ort::session::Session::builder(env)
-        .map_err(|e| e.to_string())?
-        .with_intra_threads(op.threads_cpu)
-        .map_err(|e| e.to_string())?
-        .with_execution_providers([cuda])
-        .map_err(|e| e.to_string())?
-        .commit_from_file(modelo)
-        .map_err(|e| e.to_string())?;
-    if let Some(f) = op.aquecer {
-        let nome = s.inputs()[0].name().to_string();
-        let t = ort::value::Tensor::from_array((f, vec![0f32; f.iter().product()])).map_err(|e| e.to_string())?;
-        s.run(ort::inputs![nome.as_str() => t]).map_err(|e| e.to_string())?;
-    }
-    Ok(SessaoIa { session: s, provedor: Provedor::Cuda, queda: None })
 }

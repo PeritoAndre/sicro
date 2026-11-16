@@ -1343,8 +1343,9 @@ export const commands = {
     return safeInvoke<PessoasEstado>("pessoas_rastrear", { workspacePath, mediaHash, opcoes });
   },
 
-  pessoasCancelar(): Promise<void> {
-    return safeInvoke<void>("pessoas_cancelar", {});
+  /** `daAnalise` = só as esperas do "Da análise" da Edição (a tarefa da análise segue). */
+  pessoasCancelar(daAnalise?: boolean): Promise<void> {
+    return safeInvoke<void>("pessoas_cancelar", daAnalise ? { daAnalise: true } : {});
   },
 
   pessoasEditar(workspacePath: string, mediaHash: string, edicao: EdicaoPessoa): Promise<PessoasEstado> {

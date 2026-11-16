@@ -1,10 +1,10 @@
 //! Diagnóstico de vídeo (P0.9, arquitetura §7.7): mídias de teste das medições do webview (`tempo3`, `pool8`,
 //! `compose`, `switch`) e gravação do resultado em `app_cache_dir()/edicao/diagnostico-<data>.json`.
-//! As mídias saem do ffmpeg do app (`SICRO_FFMPEG` vence; senão o embutido; senão o PATH) por `Command` direto,
+//! As mídias saem do ffmpeg da Edição (`sonda::escolher`: `SICRO_FFMPEG`, o campo das Configurações, o embutido, o
+//! PATH) por `Command` direto,
 //! sem `drawtext` (o 7.0.2 do AppImage não tem).
 
 use std::collections::BTreeMap;
-use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -79,7 +79,7 @@ pub struct MidiasDiagnostico {
 #[tauri::command]
 pub async fn edicao_diagnostico_midias(app: AppHandle) -> Result<MidiasDiagnostico> {
     let pasta = cache_edicao(&app)?.join(PASTA_MIDIAS);
-    let ffmpeg = escolher_ffmpeg(std::env::var_os("SICRO_FFMPEG"), || crate::tools::find_ffmpeg_tool("ffmpeg"))?;
+    let ffmpeg = escolher_ffmpeg()?;
     let app2 = app.clone();
     let m = tauri::async_runtime::spawn_blocking(move || {
         preparar(&pasta, &ffmpeg, DURACAO_PADRAO_S, &mut |feitas, total| {
@@ -121,17 +121,10 @@ fn ambiente(app: &AppHandle) -> AmbienteDiagnostico {
     }
 }
 
-/// `SICRO_FFMPEG` definido vence sempre (D13); inexistente é erro, nunca queda calada.
-fn escolher_ffmpeg(configurado: Option<OsString>, achar: impl FnOnce() -> Option<PathBuf>) -> Result<PathBuf> {
-    if let Some(c) = configurado.filter(|c| !c.is_empty()) {
-        let p = PathBuf::from(c);
-        return if p.is_file() {
-            Ok(p)
-        } else {
-            Err(SicroError::Validation(format!("SICRO_FFMPEG não existe: {}", p.display())))
-        };
-    }
-    achar().ok_or_else(|| SicroError::Validation("ffmpeg_ausente".into()))
+/// O binário da Edição (`sonda::escolher`, uma regra só): `SICRO_FFMPEG` vence sempre, depois o campo das
+/// Configurações; definido e inexistente é erro, nunca queda calada (D13).
+fn escolher_ffmpeg() -> Result<PathBuf> {
+    crate::edicao::ffmpeg::sonda::escolher().map(|(p, _)| p)
 }
 
 /// ffprobe da mesma pasta do ffmpeg (D13); senão o que o app acharia.
@@ -419,7 +412,7 @@ mod bancada {
     #[ignore]
     fn gerar_para_bancada() {
         let pasta = std::path::PathBuf::from(std::env::var("SICRO_DIAG_PASTA").expect("SICRO_DIAG_PASTA"));
-        let ff = super::escolher_ffmpeg(std::env::var_os("SICRO_FFMPEG"), || crate::tools::find_ffmpeg_tool("ffmpeg")).unwrap();
+        let ff = super::escolher_ffmpeg().unwrap();
         let m = super::preparar(&pasta, &ff, super::DURACAO_PADRAO_S, &mut |a, b| eprintln!("{a}/{b}")).unwrap();
         println!("{}", serde_json::to_string(&m).unwrap());
     }
@@ -451,22 +444,16 @@ mod testes {
         assert!(salvar_em(&pasta, &serde_json::json!([1, 2]), quando).is_err());
     }
 
+    /// O diagnóstico usa o binário da sonda (a ordem `SICRO_FFMPEG` → campo → embutido → PATH é testada em
+    /// `sonda::testes::sicro_ffmpeg_vence_a_ordem`).
     #[test]
-    fn sicro_ffmpeg_vence_e_inexistente_e_erro() {
-        let d = tempfile::tempdir().unwrap();
-        let f = d.path().join("ffmpeg");
-        std::fs::write(&f, b"").unwrap();
-        let outro = || Some(PathBuf::from("/outro/ffmpeg"));
-        assert_eq!(escolher_ffmpeg(Some(f.clone().into_os_string()), outro).unwrap(), f);
-        assert!(escolher_ffmpeg(Some(d.path().join("nao").into_os_string()), outro).is_err());
-        assert_eq!(escolher_ffmpeg(None, outro).unwrap(), PathBuf::from("/outro/ffmpeg"));
-        assert_eq!(escolher_ffmpeg(Some(OsString::new()), outro).unwrap(), PathBuf::from("/outro/ffmpeg"));
-        assert!(escolher_ffmpeg(None, || None).is_err());
+    fn diagnostico_usa_o_ffmpeg_da_sonda() {
+        assert_eq!(escolher_ffmpeg().ok(), crate::edicao::ffmpeg::sonda::escolher().ok().map(|(p, _)| p));
     }
 
     /// O binário do teste: `SICRO_FFMPEG`, senão o do app. Com `SICRO_EXIGE_FFMPEG=1` a falta é falha.
     fn ffmpeg_do_teste() -> Option<PathBuf> {
-        match escolher_ffmpeg(std::env::var_os("SICRO_FFMPEG"), || crate::tools::find_ffmpeg_tool("ffmpeg")) {
+        match escolher_ffmpeg() {
             Ok(p) => Some(p),
             Err(e) => {
                 assert!(std::env::var("SICRO_EXIGE_FFMPEG").as_deref() != Ok("1"), "ffmpeg exigido e ausente: {e}");

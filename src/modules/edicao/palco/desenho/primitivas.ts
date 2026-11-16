@@ -314,7 +314,12 @@ export function primitivas(e: Efeito, q: QuadroPalco): Primitiva[] {
   switch (e.tipo) {
     case "ocultar": {
       const r = q.rastreio(e.alvo.rastreio);
-      if (!r) return [];
+      if (!r) {
+        // invertida em ausência aceita: com o alvo fora, o quadro todo está fora da forma (como o motor)
+        if (!e.alvo.inverter || !q.ausente?.(e.alvo.rastreio)) return [];
+        const tudo: Primitiva = { k: "regiao", modo: e.modo, forma: { k: "caminho", d: [["M", 0, 0], ["L", 1, 0], ["L", 1, 1], ["L", 0, 1], ["Z"]] }, intensidade: e.intensidade, borda_suave: 0, inverter: false, espaco: "fonte" };
+        return [e.modo === "solido" ? { ...tudo, cor: e.cor } : tudo];
+      }
       const p: Primitiva = {
         k: "regiao",
         modo: e.modo,

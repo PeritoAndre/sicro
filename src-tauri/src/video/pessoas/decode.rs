@@ -1,9 +1,13 @@
-//! Leitura de quadros do vídeo pelo ffmpeg em pipe (rawvideo RGB). Os tempos de
-//! cada quadro vêm do ffprobe (pts de apresentação), não de uma conta com fps.
+//! Leitura de quadros do vídeo pelo ffmpeg em pipe (rawvideo RGB). O tempo de cada quadro
+//! vem do pts do decodificador (`LeitorDatado`), nunca de uma conta com fps nem do pacote de
+//! mesmo índice (`frame_times`, dos pacotes, só serve à busca do seguidor de antes).
 
-use std::io::Read;
+use std::io::{BufRead, BufReader, Read};
 use std::path::Path;
 use std::process::{Child, ChildStdout, Stdio};
+use std::sync::mpsc::{self, Receiver};
+use std::thread::JoinHandle;
+use std::time::Duration;
 
 use crate::error::{Result, SicroError};
 use crate::video::frame_export::detect_ffmpeg;
@@ -130,6 +134,156 @@ impl Drop for FrameReader {
     }
 }
 
+/// Linha do `showinfo` lida do stderr: base de tempo ou pts de um quadro (`todos` = antes da seleção).
+enum Linha {
+    Tb(i64, i64),
+    Pts { todos: bool, pts: Option<i64> },
+}
+
+fn ler_linha(l: &str) -> Option<Linha> {
+    let (todos, resto) = if let Some(r) = l.strip_prefix("[showinfo@todos @ ") {
+        (true, r)
+    } else {
+        (false, l.strip_prefix("[showinfo@pq @ ")?)
+    };
+    let resto = resto.split_once("] ")?.1.trim_start();
+    let resto = resto.strip_prefix("[info]").unwrap_or(resto).trim_start();
+    if let Some(tb) = resto.strip_prefix("config in time_base:") {
+        let (n, d) = tb.split(',').next()?.trim().split_once('/')?;
+        let (n, d) = (n.trim().parse::<i64>().ok()?, d.trim().parse::<i64>().ok()?);
+        return (n > 0 && d > 0).then_some(Linha::Tb(n, d));
+    }
+    if !resto.starts_with("n:") {
+        return None;
+    }
+    let pts = resto.split_once(" pts:")?.1.split_whitespace().next()?;
+    Some(Linha::Pts { todos, pts: pts.parse().ok() })
+}
+
+/// Tempos de todos os quadros decodificados (s), na ordem, ao fim de um `LeitorDatado`.
+pub struct Decodificados {
+    pub tempos: Vec<f64>,
+}
+
+/// Quadros RGB com o tempo de cada um pelo próprio decodificador (`-copyts` e `showinfo` lido do stderr, casado pela
+/// ordem): o n-ésimo quadro decodificado leva o pts dele, nunca o do n-ésimo pacote (TS, PS ou gravador que começa
+/// no meio do GOP, MP4 com lista de edição). `passo` > 1: um segundo `showinfo`, antes da seleção, conta todos.
+pub struct LeitorDatado {
+    leitor: FrameReader,
+    linhas: Receiver<Linha>,
+    leitura: Option<JoinHandle<()>>,
+    tb: Option<(i64, i64)>,
+    entregues: Vec<Option<i64>>,
+    todos: Vec<Option<i64>>,
+    passo: u32,
+    lidos: usize,
+}
+
+/// A linha de um quadro sai antes dos bytes dele: a espera só cobre a leitura do stderr.
+const ESPERA_LINHA: Duration = Duration::from_secs(60);
+
+impl LeitorDatado {
+    /// `ffmpeg` = o binário da Edição (`sonda::escolher`), o mesmo da tabela de quadros; `w`×`h` = tamanho de saída.
+    pub fn abrir(ffmpeg: &Path, path: &Path, passo: u32, w: u32, h: u32) -> Result<Self> {
+        let passo = passo.max(1);
+        let mut vf = String::new();
+        if passo > 1 {
+            vf.push_str(&format!("showinfo@todos=checksum=0,select='not(mod(n\\,{passo}))',"));
+        }
+        vf.push_str(&format!("showinfo@pq=checksum=0,scale={w}:{h}:flags=area,setsar=1"));
+        let mut child = crate::tools::command(ffmpeg)
+            .args(["-hide_banner", "-nostdin", "-nostats", "-loglevel", "info", "-copyts", "-i"])
+            .arg(path)
+            .args(["-map", "0:v:0", "-vf", &vf, "-fps_mode", "passthrough"])
+            .args(["-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .stdin(Stdio::null())
+            .spawn()
+            .map_err(|e| SicroError::Workspace(format!("could not spawn ffmpeg: {e}")))?;
+        let out = child.stdout.take().ok_or_else(|| SicroError::Workspace("ffmpeg sem saída".into()))?;
+        let err = child.stderr.take().ok_or_else(|| SicroError::Workspace("ffmpeg sem saída".into()))?;
+        let leitor = FrameReader { child, out, buf: vec![0u8; (w * h * 3) as usize] };
+        let (tx, linhas) = mpsc::channel();
+        let leitura = std::thread::spawn(move || {
+            let mut r = BufReader::new(err);
+            let mut buf = Vec::new();
+            loop {
+                buf.clear();
+                match r.read_until(b'\n', &mut buf) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {}
+                }
+                if let Some(l) = ler_linha(&String::from_utf8_lossy(&buf)) {
+                    if tx.send(l).is_err() {
+                        break;
+                    }
+                }
+            }
+        });
+        Ok(Self { leitor, linhas, leitura: Some(leitura), tb: None, entregues: Vec::new(), todos: Vec::new(), passo, lidos: 0 })
+    }
+
+    fn receber(&mut self, l: Linha) {
+        match l {
+            Linha::Tb(n, d) => self.tb = self.tb.or(Some((n, d))),
+            Linha::Pts { todos: true, pts } => self.todos.push(pts),
+            Linha::Pts { todos: false, pts } => self.entregues.push(pts),
+        }
+    }
+
+    fn tempo(&self, j: usize, pts: Option<i64>) -> Result<f64> {
+        let (n, d) = self.tb.ok_or_else(|| SicroError::Validation("pts_invalido: sem base de tempo".into()))?;
+        let p = pts.ok_or_else(|| SicroError::Validation(format!("pts_invalido: quadro {j} sem pts")))?;
+        Ok(p as f64 * n as f64 / d as f64)
+    }
+
+    /// Próximo quadro e o tempo dele (s, tempo de fonte), ou `None` no fim.
+    pub fn proximo(&mut self) -> Result<Option<(&[u8], f64)>> {
+        let k = self.lidos;
+        if self.leitor.next()?.is_none() {
+            return Ok(None);
+        }
+        self.lidos += 1;
+        while self.entregues.len() <= k {
+            match self.linhas.recv_timeout(ESPERA_LINHA) {
+                Ok(l) => self.receber(l),
+                Err(_) => return Err(SicroError::Validation(format!("leitura_divergente: quadro {k} sem pts"))),
+            }
+        }
+        let t = self.tempo(k, self.entregues[k])?;
+        Ok(Some((&self.leitor.buf, t)))
+    }
+
+    /// Lê até o fim e devolve os tempos de todos os quadros decodificados. Linha a mais ou a menos que os quadros
+    /// entregues, ou ffmpeg que não terminou bem, é `leitura_divergente`.
+    pub fn fim(mut self) -> Result<Decodificados> {
+        while self.leitor.next()?.is_some() {
+            self.lidos += 1;
+        }
+        let status = self.leitor.child.wait();
+        if let Some(h) = self.leitura.take() {
+            let _ = h.join();
+        }
+        while let Ok(l) = self.linhas.try_recv() {
+            self.receber(l);
+        }
+        if self.entregues.len() != self.lidos {
+            return Err(SicroError::Validation(format!("leitura_divergente: {} quadros, {} pts", self.lidos, self.entregues.len())));
+        }
+        // morto no meio (sinal, falta de memória) dava um vídeo cortado contado como inteiro; 69 = desistiu por erros
+        // de decodificação e vale até onde foi (a regra da tabela do decodificador)
+        let ok = status.as_ref().is_ok_and(|s| s.success() || (s.code() == Some(69) && self.lidos > 0));
+        if !ok {
+            let como = status.map_or_else(|e| e.to_string(), |s| s.to_string());
+            return Err(SicroError::Validation(format!("leitura_divergente: o ffmpeg terminou com {como}")));
+        }
+        let todos = if self.passo > 1 { std::mem::take(&mut self.todos) } else { std::mem::take(&mut self.entregues) };
+        let tempos = todos.iter().enumerate().map(|(j, p)| self.tempo(j, *p)).collect::<Result<Vec<f64>>>()?;
+        Ok(Decodificados { tempos })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -225,5 +379,54 @@ mod tests {
             let x = 30.0 + 3.0 * n as f32;
             assert!((a.x - x).abs() <= 1.0 && (a.y - 80.0).abs() <= 1.0, "quadro {n}: ({}, {}) vs ({x}, 80)", a.x, a.y);
         }
+    }
+
+    /// `ffmpeg` falso: 3 quadros 8×8 com as linhas do `showinfo` e sai com `fim` (código ou sinal).
+    #[cfg(unix)]
+    fn ffmpeg_falso(dir: &Path, fim: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let p = dir.join("ffmpeg falso");
+        let script = format!(
+            "#!/bin/sh\nprintf '[showinfo@pq @ 0x1] config in time_base: 1/25, frame_rate: 25/1\\n' >&2\ni=0\nwhile [ $i -lt 3 ]; do\n  printf '[showinfo@pq @ 0x1] n:   %d pts:   %d pts_time:0\\n' $i $i >&2\n  head -c 192 /dev/zero\n  i=$((i+1))\ndone\n{fim}\n"
+        );
+        std::fs::write(&p, script).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p
+    }
+
+    /// ffmpeg que não termina bem (código de erro, morto por sinal) depois de entregar quadros: `fim` é erro, nunca um
+    /// vídeo cortado contado como inteiro; 0 e 69 (desistiu por erros de decodificação, como a tabela) valem.
+    #[cfg(unix)]
+    #[test]
+    fn leitor_datado_cobra_o_fim_do_ffmpeg() {
+        let d = tempfile::tempdir().unwrap();
+        let video = d.path().join("v.mp4");
+        for (fim, vale) in [("exit 0", true), ("exit 69", true), ("exit 1", false), ("kill -9 $$", false)] {
+            let mut l = LeitorDatado::abrir(&ffmpeg_falso(d.path(), fim), &video, 1, 8, 8).unwrap();
+            let (_, t) = l.proximo().unwrap().expect("quadro");
+            assert_eq!(t, 0.0);
+            match l.fim() {
+                Ok(dec) => assert!(vale && dec.tempos == vec![0.0, 0.04, 0.08], "{fim}: {:?}", dec.tempos),
+                Err(SicroError::Validation(m)) => assert!(!vale && m.starts_with("leitura_divergente: o ffmpeg"), "{fim}: {m}"),
+                Err(e) => panic!("{fim}: {e}"),
+            }
+        }
+    }
+
+    /// O ffmpeg de verdade morto no meio da leitura: erro.
+    #[test]
+    fn leitor_datado_morto_no_meio_e_erro() {
+        use crate::edicao::testes::fontes::{self, Fonte};
+        let Some(cap) = fontes::cap() else { return };
+        let video = fontes::gerar(Fonte::Mp4).expect("fonte");
+        let inteiro = LeitorDatado::abrir(&cap.binario, &video, 1, 64, 48).unwrap().fim().unwrap();
+        assert!(inteiro.tempos.len() > 20, "{}", inteiro.tempos.len());
+        let mut l = LeitorDatado::abrir(&cap.binario, &video, 1, 64, 48).unwrap();
+        for _ in 0..3 {
+            l.proximo().unwrap().expect("quadro");
+        }
+        l.leitor.child.kill().unwrap();
+        let r = l.fim();
+        assert!(matches!(&r, Err(SicroError::Validation(m)) if m.starts_with("leitura_divergente")), "{:?}", r.map(|x| x.tempos.len()));
     }
 }

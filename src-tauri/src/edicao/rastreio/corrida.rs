@@ -711,7 +711,6 @@ fn espaco(t: &Trabalho, cap: &Capacidades, pasta_projeto: &Path, fonte: &FonteIn
 struct Trabalho {
     ws: PathBuf,
     cache: PathBuf,
-    ai: AiSettings,
     p: ProjetoEdicao,
     r: Rastreio,
     clipe: Option<ClipeTrecho>,
@@ -731,6 +730,20 @@ fn trecho(p: &ProjetoEdicao, clipe_id: &str) -> Option<ClipeTrecho> {
 /// Não grava nada no projeto: o arquivo denso novo (e as silhuetas) vão para a pasta do projeto e o ponteiro sai no
 /// evento final. `projeto` é o documento da tela (D2).
 pub fn pedir(ws: &Path, cache: &Path, ai: &AiSettings, projeto: &Value, pedido: &PedidoSeguir, emitir: Emissor) -> Result<String> {
+    pedir_com(ws, cache, ai, projeto, pedido, emitir, &mut |ai, m| escolher(ai, m))
+}
+
+/// `pedir` com quem cria o motor (testes: motor falso). O motor é criado UMA vez por pedido: em `ambos` o mesmo segue
+/// para trás (o `iniciar` recomeça o estado), sem segunda sessão para esperar.
+pub(crate) fn pedir_com(
+    ws: &Path,
+    cache: &Path,
+    ai: &AiSettings,
+    projeto: &Value,
+    pedido: &PedidoSeguir,
+    emitir: Emissor,
+    criar: &mut dyn FnMut(&AiSettings, EscolhaMotor) -> Result<Box<dyn Rastreador>>,
+) -> Result<String> {
     let p = armazem::tipado(projeto)?;
     if !armazem::id_valido(&p.id) || !armazem::id_valido(&pedido.rastreio_id) {
         return Err(erro(codigo::ITEM_INVALIDO, "id"));
@@ -751,7 +764,7 @@ pub fn pedir(ws: &Path, cache: &Path, ai: &AiSettings, projeto: &Value, pedido: 
         return Err(ocupado());
     }
     // o motor é escolhido antes: falta de modelo ou interruptor desligado voltam para a tela na hora
-    let motor = escolher(ai, pedido.motor)?;
+    let motor = criar(ai, pedido.motor)?;
     let tarefa = uuid::Uuid::new_v4().to_string();
     let cancelar = Arc::new(AtomicBool::new(false));
     {
@@ -762,14 +775,20 @@ pub fn pedir(ws: &Path, cache: &Path, ai: &AiSettings, projeto: &Value, pedido: 
         *g = Some(EmCurso { tarefa: tarefa.clone(), cancelar: cancelar.clone() });
     }
     let vez = Vez(tarefa.clone());
-    let t = Trabalho { ws: ws.to_path_buf(), cache: cache.to_path_buf(), ai: ai.clone(), p, r, clipe, pedido: pedido.clone(), tarefa: tarefa.clone(), cancelar };
+    let t = Trabalho { ws: ws.to_path_buf(), cache: cache.to_path_buf(), p, r, clipe, pedido: pedido.clone(), tarefa: tarefa.clone(), cancelar };
     std::thread::Builder::new()
         .name("sicro-rastreio".into())
         .spawn(move || {
             let _vez = vez;
             let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| trabalhar(&t, motor, &emitir)));
+            // `ambos` com o segundo lado em falha: o fim com o que foi seguido, e depois a falha (a tela aplica o fim e
+            // mostra a frase)
+            let mut depois = None;
             let ev = match r {
-                Ok(Ok(fim)) => EventoRastreio::Fim(fim),
+                Ok(Ok((fim, falha_depois))) => {
+                    depois = falha_depois.map(|e| falha(&t, e));
+                    EventoRastreio::Fim(fim)
+                }
                 // cancelada antes da primeira corrida (tabela, intermediário): fim sem nada novo
                 Ok(Err(e)) if executar::codigo_de(&e) == Some(ERRO_CANCELADO) => EventoRastreio::Fim(FimRastreio {
                     tarefa_id: t.tarefa.clone(),
@@ -784,6 +803,9 @@ pub fn pedir(ws: &Path, cache: &Path, ai: &AiSettings, projeto: &Value, pedido: 
             // a vez sai antes do evento: quem recebe o fim pode pedir outra corrida
             drop(_vez);
             emitir(ev);
+            if let Some(f) = depois {
+                emitir(f);
+            }
         })
         .map_err(SicroError::Io)?;
     Ok(tarefa)
@@ -812,18 +834,20 @@ fn quadro_da_ancora(tab: &TabelaQuadros, k: &Chave<Caixa>) -> usize {
     tab.do_par(k.t, k.pts)
 }
 
-fn trabalhar(t: &Trabalho, primeiro: Box<dyn Rastreador>, emitir: &Emissor) -> Result<FimRastreio> {
-    let prep = executar::preparar(&t.ws, &t.p, &t.cache, false)?;
-    let cap = prep.cap.clone();
+/// A corrida (uma ou as duas, em `ambos`). Falha no segundo lado de `ambos` depois de o primeiro seguir algo: o
+/// primeiro é gravado e a falha volta à parte (o fim sai antes dela).
+fn trabalhar(t: &Trabalho, mut motor: Box<dyn Rastreador>, emitir: &Emissor) -> Result<(FimRastreio, Option<SicroError>)> {
     let midia = t.r.midia.as_deref().unwrap_or_default();
     let m = t.p.midias.iter().find(|m| m.id == midia).ok_or_else(|| erro(codigo::MIDIA_AUSENTE, midia))?;
-    let mut fonte = prep.fontes.get(midia).cloned().ok_or_else(|| erro(codigo::MIDIA_AUSENTE, midia))?;
+    // só a mídia do rastreio, olhando o cancelamento (o SHA-256 da sessão de uma mídia grande leva segundos)
+    let (cap, mut fonte) = executar::preparar_uma(&t.ws, &t.p, midia, &t.cache, &t.cancelar)?;
+    let pasta = armazem::pasta_projeto(&t.ws, &t.p.id);
     // os pts do denso são os do decodificador (§3.1): sem a tabela dele, faz agora
     if fonte.quadros.origem != OrigemTabela::Decodificador {
         let tab = TabelaQuadros::do_decodificador(&cap, &fonte.caminho, &t.cancelar, &mut |_| {})?.guardar(&t.cache, &m.sha256)?;
         fonte = executar::fonte_info_memo(&cap, &fonte.caminho, &m.sha256, tab, m.cor.as_ref())?;
     }
-    let esp = espaco(t, &cap, &prep.pasta_projeto, &fonte)?;
+    let esp = espaco(t, &cap, &pasta, &fonte)?;
     let tab = esp.tab.clone();
     let (fa, fb) = esp.faixa;
     if fb <= fa {
@@ -842,7 +866,6 @@ fn trabalhar(t: &Trabalho, primeiro: Box<dyn Rastreador>, emitir: &Emissor) -> R
     // quadros das outras âncoras do perito
     let outras: Vec<usize> = t.r.ancoras.iter().map(|k| quadro_da_ancora(&tab, k)).filter(|&j| j != j0).collect();
     let pedido_ate = t.pedido.ate_s.map(|s| tab.exibido(s));
-    let pasta = prep.pasta_projeto.clone();
     let mut base: Option<ArquivoDenso> = match &t.r.denso {
         Some(d) => Some(arquivo::ler(&pasta, &t.r.id, &d.sha256)?),
         None => None,
@@ -856,18 +879,14 @@ fn trabalhar(t: &Trabalho, primeiro: Box<dyn Rastreador>, emitir: &Emissor) -> R
     });
     let cor_rgb = cor::ler(&t.r.cor).map(|c| [c.r, c.g, c.b]).unwrap_or([255, 204, 0]);
     let mut lim = Limitador { emitir, tarefa: t.tarefa.clone(), rastreio: t.r.id.clone(), cor: cor_rgb, ultimo: None };
-    let mut motor = Some(primeiro);
     let mut parou = Vec::new();
     let mut novo = false;
+    let mut falha_depois = None;
     for &s in sentidos(t.pedido.sentido) {
         if t.cancelar.load(Ordering::SeqCst) {
             parou.push(ParouSentido { sentido: s, motivo: Motivo::Cancelado, pts: None });
             continue;
         }
-        let mut r = match motor.take() {
-            Some(m) => m,
-            None => escolher(&t.ai, t.pedido.motor)?,
-        };
         // até a âncora seguinte do perito, o pedido da tela ou a borda do clipe
         let (ancora_seguinte, fim) = match s {
             Sentido::Frente => {
@@ -879,27 +898,38 @@ fn trabalhar(t: &Trabalho, primeiro: Box<dyn Rastreador>, emitir: &Emissor) -> R
                 (a, [a, pedido_ate, Some(fa)].into_iter().flatten().max().unwrap_or(fa).clamp(fa, j0))
             }
         };
-        let leitor = LeitorPipe::abrir_com_cancelar(&cap, &esp.leitura, anc_pts - esp.desloc, Some(tab.pts[fim] - esp.desloc), s, pixel, Some(t.cancelar.clone()))?;
-        let mut leitor = Deslocado { leitor, desloc: esp.desloc };
-        let pc = PedidoCorrida {
-            rastreio: t.r.id.clone(),
-            midia_sha256: m.sha256.clone(),
-            espaco: t.r.espaco.clone(),
-            pixel,
-            ancora: Chave { t: tab.tempo(j0), pts: Some(anc_pts), v: t.pedido.ancora.v, interp: t.pedido.ancora.interp },
-            sentido: s,
-            ate_pts: Some(tab.pts[fim]),
-            max_quadros: MAX_QUADROS,
-            fps,
-        };
-        let corrida = laco::correr(&pc, &mut leitor, r.as_mut(), &t.cancelar, &mut |a| lim.avanco(s, a));
-        drop(leitor);
-        let mut res = match corrida {
-            Ok(r) => r,
-            // cancelada antes do quadro da âncora: nada deste lado; o outro lado (já feito) fica
-            Err(e) if executar::codigo_de(&e) == Some(ERRO_CANCELADO) => {
+        let lado = (|| -> Result<Option<super::ResultadoCorrida>> {
+            let leitor = LeitorPipe::abrir_com_cancelar(&cap, &esp.leitura, anc_pts - esp.desloc, Some(tab.pts[fim] - esp.desloc), s, pixel, Some(t.cancelar.clone()))?;
+            let mut leitor = Deslocado { leitor, desloc: esp.desloc };
+            let pc = PedidoCorrida {
+                rastreio: t.r.id.clone(),
+                midia_sha256: m.sha256.clone(),
+                espaco: t.r.espaco.clone(),
+                pixel,
+                ancora: Chave { t: tab.tempo(j0), pts: Some(anc_pts), v: t.pedido.ancora.v, interp: t.pedido.ancora.interp },
+                sentido: s,
+                ate_pts: Some(tab.pts[fim]),
+                max_quadros: MAX_QUADROS,
+                fps,
+            };
+            match laco::correr(&pc, &mut leitor, motor.as_mut(), &t.cancelar, &mut |a| lim.avanco(s, a)) {
+                Ok(r) => Ok(Some(r)),
+                // cancelada antes do quadro da âncora: nada deste lado; o outro lado (já feito) fica
+                Err(e) if executar::codigo_de(&e) == Some(ERRO_CANCELADO) => Ok(None),
+                Err(e) => Err(e),
+            }
+        })();
+        let mut res = match lado {
+            Ok(Some(r)) => r,
+            Ok(None) => {
                 parou.push(ParouSentido { sentido: s, motivo: Motivo::Cancelado, pts: None });
                 continue;
+            }
+            // o lado de antes já seguiu: grava o que foi seguido e a falha sai depois do fim
+            Err(e) if novo => {
+                tracing::warn!("rastreio {}: {s:?} falhou depois do outro lado: {e}", t.r.id);
+                falha_depois = Some(e);
+                break;
             }
             Err(e) => return Err(e),
         };
@@ -922,8 +952,8 @@ fn trabalhar(t: &Trabalho, primeiro: Box<dyn Rastreador>, emitir: &Emissor) -> R
         (true, Some(d)) => (Some(arquivo::gravar(&pasta, &d, tab.tb)?), base_sil.map(|s| silhueta::gravar(&pasta, &t.r.id, &s)).transpose()?),
         _ => (None, None),
     };
-    Ok(FimRastreio { tarefa_id: t.tarefa.clone(), rastreio_id: t.r.id.clone(), parou, denso, silhuetas })
+    Ok((FimRastreio { tarefa_id: t.tarefa.clone(), rastreio_id: t.r.id.clone(), parou, denso, silhuetas }, falha_depois))
 }
 
 #[cfg(test)]
-mod testes;
+pub(crate) mod testes;

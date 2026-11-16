@@ -626,7 +626,7 @@ pub(crate) fn superres_nucleo(
     let tempo_s = inicio.elapsed().as_secs_f64();
     let pj = json!({
         "t": params.t, "escala": params.escala, "modelo": "Real-ESRGAN general-x4v3 (BSD-3)",
-        "runtime": ai.sr_version, "ladrilho": 160, "origem": origem,
+        "runtime": crate::ia::sessao::versao_runtime(), "provedor": sr.provedor.fio(), "ladrilho": 160, "origem": origem,
         "entrada": { "largura": w, "altura": h, "sha256": entrada_sha },
         "tempo_de_processamento_s": tempo_s,
     });
@@ -737,7 +737,7 @@ pub async fn realce_superres_imagem(
             serde_json::to_vec_pretty(&json!({
                 "tipo": "superres_imagem", "sha256": sha256, "origem": params.relative_path,
                 "roi": params.roi, "escala": params.escala, "modelo": "Real-ESRGAN general-x4v3 (BSD-3)",
-                "runtime": ai.sr_version, "aviso": superres::AVISO, "aplicativo": format!("SICRO {APP_VERSION}"),
+                "runtime": crate::ia::sessao::versao_runtime(), "provedor": sr.provedor.fio(), "aviso": superres::AVISO, "aplicativo": format!("SICRO {APP_VERSION}"),
                 "criado_em": Utc::now().to_rfc3339(), "tempo_de_processamento_s": tempo_s,
             }))
             .unwrap_or_default(),
@@ -1163,6 +1163,44 @@ mod testes {
     //! `SICRO_REALCE_DIR` e `SICRO_REALCE_SAIDA` existem. Sem elas, não faz nada.
     use super::*;
     use crate::models::{NewOccurrenceInput, RegisterVideoInput};
+
+    /// O registro da super-resolução grava onde ela rodou e o onnxruntime carregado (§6.6: a saída da GPU não é bit a
+    /// bit a da CPU), não a versão do item instalado.
+    #[test]
+    fn superres_grava_provedor_e_runtime() {
+        use crate::ia::testes as t;
+        let Some(lib) = t::ou_dispensa(t::ort_lib(), "superres_grava_provedor_e_runtime", "a lib dos testes") else { return };
+        let modelo = Path::new(t::DOSSIE).join("p2/modelos/realesr-general-x4v3.onnx");
+        if t::ou_dispensa(modelo.is_file().then_some(()), "superres_grava_provedor_e_runtime", "realesr-general-x4v3.onnx").is_none() {
+            return;
+        }
+        let Some(_) = crate::edicao::testes::fontes::cap() else { return };
+        let src = crate::edicao::testes::fontes::gerar(crate::edicao::testes::fontes::Fonte::Mp4).unwrap();
+        let d = tempfile::tempdir().unwrap();
+        let ws = crate::workspace::create::create_workspace(NewOccurrenceInput::default(), d.path()).unwrap().path.to_string_lossy().to_string();
+        let vm = tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(
+            ws.clone(),
+            RegisterVideoInput { source_path: src.to_string_lossy().into(), allow_duplicate: false },
+        ))
+        .unwrap();
+        let cache = d.path().join("cache");
+        std::fs::create_dir_all(&cache).unwrap();
+        let ai = crate::commands::settings_commands::AiSettings {
+            sr_ort_lib_path: lib.to_string_lossy().into_owned(),
+            sr_model_path: modelo.to_string_lossy().into_owned(),
+            sr_version: "Real-ESRGAN general-x4v3 + onnxruntime 1.31.1".into(),
+            ..Default::default()
+        };
+        let p = ParamsSuperRes { resultado_id: None, t: 1.0, roi: Some(Roi { x: 0, y: 0, w: 32, h: 32 }), escala: 2, com_lente: false };
+        let r = superres_nucleo(&ai, &ws, &vm.sha256, p, &cache, &AtomicBool::new(false), &|_, _, _| {}).unwrap();
+        let pj = &r.arquivo.resultado.parametros;
+        assert_eq!(pj["provedor"].as_str(), Some("cpu"), "{pj}");
+        assert_eq!(pj["runtime"].as_str(), Some(crate::ia::sessao::versao_runtime().as_str()), "{pj}");
+        assert!(pj["runtime"].as_str().unwrap().starts_with("onnxruntime 1.31"), "{pj}");
+        // o mesmo no arquivo ao lado do PNG
+        let lado: serde_json::Value = serde_json::from_slice(&std::fs::read(format!("{}.json", r.arquivo.absoluto)).unwrap()).unwrap();
+        assert_eq!((&lado["parametros"]["provedor"], &lado["parametros"]["runtime"]), (&pj["provedor"], &pj["runtime"]));
+    }
 
     #[test]
     fn fluxo_completo_no_caso() {

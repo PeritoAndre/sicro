@@ -430,16 +430,55 @@ pub struct ProvItem {
     pub audio: Option<AudioClipe>,
 }
 
-/// Quadros cobertos por tipo de amostra.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+/// Quadros lidos com a ocultação ativa, por de onde veio a região (`avaliar::Como`). Cobertos = `ancora` +
+/// `ancora_do_programa` + `segurado` + `medido` + `interpolado`; `incerto` está dentro de `medido` e `interpolado`;
+/// `interpolado_entre_marcacoes` e `interpolado_do_programa`, dentro de `interpolado` (o resto é linha interpolada do
+/// denso); `ausente` não foi coberto.
+// CONTRATO: fecho da Fase 2 (acréscimos com `serde(default)`): `ancora` deixa de contar o `Segurado` e as âncoras do
+// "Simplificar" (`Rastreio.ancoras_do_programa`), que têm contagem própria; o PDF não as chama de marcação do perito.
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ProvQuadrosOcultos {
+    /// Numa âncora do perito.
     pub ancora: u32,
     pub medido: u32,
     pub interpolado: u32,
     pub incerto: u32,
+    /// Depois da última âncora de rastreio manual, segurando-a.
+    #[serde(default)]
+    pub segurado: u32,
+    /// Numa âncora escolhida pelo "Simplificar" que o perito não mexeu.
+    #[serde(default)]
+    pub ancora_do_programa: u32,
+    /// Dos interpolados, os calculados entre duas âncoras do perito (nem do "Simplificar", nem linha do denso).
+    #[serde(default)]
+    pub interpolado_entre_marcacoes: u32,
+    /// Dos interpolados, os calculados entre âncoras em que ao menos uma é do "Simplificar" (o resto veio do denso).
+    #[serde(default)]
+    pub interpolado_do_programa: u32,
+    /// Sem região dentro de uma ausência aceita pelo perito: o alvo, se estiver ali, fica à vista; na invertida, o
+    /// quadro inteiro sai coberto.
+    #[serde(default)]
+    pub ausente: u32,
+}
+
+impl ProvQuadrosOcultos {
+    /// Soma dos dois (a mesma ocultação em vários clipes).
+    pub fn somar(&mut self, o: &ProvQuadrosOcultos) {
+        self.ancora += o.ancora;
+        self.medido += o.medido;
+        self.interpolado += o.interpolado;
+        self.incerto += o.incerto;
+        self.segurado += o.segurado;
+        self.ancora_do_programa += o.ancora_do_programa;
+        self.interpolado_entre_marcacoes += o.interpolado_entre_marcacoes;
+        self.interpolado_do_programa += o.interpolado_do_programa;
+        self.ausente += o.ausente;
+    }
 }
 
 /// Ocultação aplicada: tempo de fonte (s) e os clipes em que aparece.
+// CONTRATO: fecho da Fase 2 (revisão): `de_s`, `ate_s` e `clipes` contam também os quadros lidos sem região numa
+// ausência aceita (`quadros.ausente`); ocultação só com esses quadros entra (antes sumia: sem "A conferir").
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvOcultacao {
     pub midia: String,
@@ -550,6 +589,8 @@ fn sem_legendas() -> ModoLegendas {
 pub struct ProvRastreio {
     pub id: String,
     pub origem: OrigemRastreio,
+    /// Âncoras do perito: as do "Simplificar" que ele não mexeu (`Rastreio.ancoras_do_programa`) não contam.
+    // CONTRATO: fecho da Fase 2 (antes contava todas).
     pub ancoras: u32,
     pub denso_sha256: Option<String>,
     pub silhuetas_sha256: Option<String>,

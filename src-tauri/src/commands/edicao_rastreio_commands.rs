@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::commands::settings_commands::get_app_settings;
+use crate::commands::settings_commands::{get_app_settings, AiSettings};
 use crate::edicao::armazem;
 use crate::edicao::conferencia::{self, TrechoConferencia};
 use crate::edicao::mensagens::{self, codigo};
@@ -72,9 +72,14 @@ pub async fn edicao_rastreio_seguir(
         let emitir: corrida::Emissor = Box::new(move |ev: EventoRastreio| {
             let _ = app.emit(EVENTO_RASTREIO, ev);
         });
-        corrida::pedir(ws, &cache, &ai, &projeto, &pedido, emitir)
+        seguir(ws, &cache, &ai, &projeto, &pedido, emitir)
     })
     .await
+}
+
+/// Corpo de `edicao_rastreio_seguir` (sem o `AppHandle`: cache do caso, Configurações e o emissor chegam prontos).
+pub(crate) fn seguir(ws: &Path, cache: &Path, ai: &AiSettings, projeto: &Value, pedido: &PedidoSeguir, emitir: corrida::Emissor) -> Result<String> {
+    corrida::pedir(ws, cache, ai, projeto, pedido, emitir)
 }
 
 /// Para a corrida (P2.2).
@@ -116,7 +121,12 @@ pub async fn edicao_rastreio_de_pessoas(
 #[tauri::command]
 pub async fn edicao_conferencia_trechos(app: AppHandle, workspace_path: String, saida_id: String) -> Result<Vec<TrechoConferencia>> {
     let cache = cache_do_caso(&app, Path::new(&workspace_path))?;
-    em_fundo(move || conferencia::trechos_com_cache(Path::new(&workspace_path), &saida_id, Some(&cache))).await
+    em_fundo(move || conferencia_trechos(Path::new(&workspace_path), &cache, &saida_id)).await
+}
+
+/// Corpo de `edicao_conferencia_trechos`.
+pub(crate) fn conferencia_trechos(ws: &Path, cache: &Path, saida_id: &str) -> Result<Vec<TrechoConferencia>> {
+    conferencia::trechos_com_cache(ws, saida_id, Some(cache))
 }
 
 #[cfg(test)]

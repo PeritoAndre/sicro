@@ -65,6 +65,9 @@ pub mod condicao {
     // CONTRATO: acréscimo (verificação da Fase 1; §5.7).
     /// Predefinição WhatsApp: o código do arquivo só confere no envio como documento.
     pub const SO_COMO_DOCUMENTO: &str = "so_como_documento";
+    // CONTRATO: acréscimo (fecho da Fase 2).
+    /// `ocultar_interpolado` quando alguma ponta da interpolação não é marcação do perito ("Simplificar", denso).
+    pub const OCULTAR_INTERPOLADO_CALCULADO: &str = "ocultar_interpolado_calculado";
 }
 
 /// Frases com número ou nome no meio: `{n}`, `{item}`… são trocados por quem monta os dados (`juri::dados`).
@@ -82,8 +85,9 @@ pub mod modelo {
     pub const MEDIDA_VELOCIDADE_SEM_FAIXA: &str = "Velocidade calculada (item {item}): aproximadamente {kmh} km/h, sem faixa de erro calculada.";
     pub const DERIVADA: &str = "Este arquivo foi feito pela perícia a partir de outra gravação do caso ({como}).";
     pub const CONFERIDA_POR: &str = "{frase} {por}, em {quando}.";
-    /// Anexo E: trechos em que o perito aceitou a falta do alvo (o rastreio não dá região e nada é coberto).
-    pub const AUSENCIAS: &str = "trechos sem ocultação, aceitos pelo perito: {lista}";
+    /// Anexo E: ausências do alvo aceitas pelo perito, como ele as registrou. Onde o rastreio dá região dentro delas
+    /// a ocultação cobre (§6.1): o intervalo não é dito "sem ocultação" (`QUADROS_AUSENTES` conta os quadros sem região).
+    pub const AUSENCIAS: &str = "ausências do alvo aceitas pelo perito: {lista}";
     pub const IA_LEGENDAS: &str = "Legendas escritas a partir de degravação automática e conferidas pelo perito.";
     /// Só quando o `feito` conta legenda automática que saiu sem a conferência registrada.
     pub const IA_LEGENDAS_SEM_CONFERENCIA: &str = "Legendas escritas a partir de degravação automática; sem conferência registrada pelo perito: {n}.";
@@ -91,12 +95,30 @@ pub mod modelo {
     /// Uma corrida do rastreio (`Corrida` do §6.1).
     pub const CORRIDA: &str = "{modelo} · {execucao} · {sentido}, {faixa} · parada: {parou} · limiares {ok} e {perdido}, paciência de {paciencia} quadros · {quando}";
     pub const CONFIRMADO: &str = "confirmado por {por} em {quando}, de {de} a {ate}";
+    /// `feito.rastreios[].ancoras`: só as do perito (as do "Simplificar" que ele não mexeu ficam de fora).
     pub const MARCACOES: &str = "marcações do perito: {n}";
-    /// `feito.ocultacoes[].quadros`: como cada quadro coberto obteve a região (`avaliar::Como`). `ancora` conta também o
-    /// quadro que segura a última marcação (`Como::Segurado`): "marcados" afirmaria marcação quadro a quadro.
-    pub const QUADROS_OCULTOS: &str = "quadros: {ancora} pela marcação do perito, {medido} medidos, {interpolado} interpolados, {incerto} incertos";
+    /// `feito.ocultacoes[].quadros`: como cada quadro coberto obteve a região (`avaliar::Como`), uma parte por
+    /// contagem, separadas por " · ". Os incertos estão dentro dos medidos e dos interpolados (a frase diz, e não se
+    /// somam); os sem região ficam fora dos cobertos (na invertida, cobertos por inteiro).
+    pub const QUADROS_OCULTOS: &str = "quadros — {lista}";
+    // CONTRATO: fecho da Fase 2 (as partes de `QUADROS_OCULTOS`).
+    pub const QUADROS_MARCADOS: &str = "na marcação do perito: {n}";
+    /// Âncora do "Simplificar" (`Rastreio.ancoras_do_programa`): escolhida pelo programa, nunca "do perito".
+    pub const QUADROS_DO_PROGRAMA: &str = "em ponto escolhido pelo programa entre as amostras: {n}";
+    /// `Como::Segurado`: depois da última marcação de rastreio manual.
+    pub const QUADROS_SEGURADOS: &str = "com a última marcação do perito mantida: {n}";
+    pub const QUADROS_MEDIDOS: &str = "medidos: {n}";
+    pub const QUADROS_INTERPOLADOS: &str = "interpolados: {n}";
+    pub const QUADROS_INCERTOS: &str = "dos medidos e interpolados, incertos: {n}";
+    pub const QUADROS_AUSENTES: &str = "sem região, em ausência aceita pelo perito: {n}";
+    // CONTRATO: acréscimo (revisão do fecho da Fase 2).
+    /// Invertida: sem o alvo, tudo está fora da forma e o quadro sai todo coberto.
+    pub const QUADROS_AUSENTES_INVERTIDA: &str = "quadro inteiro coberto, em ausência aceita pelo perito: {n}";
     /// Rastreio com corrida que não lê como `Corrida` (gravada antes da Fase 2): o anexo só diz quantas.
     pub const CORRIDAS_ILEGIVEIS: &str = "corridas sem registro legível: {n}";
+    // CONTRATO: acréscimo (fecho da Fase 2).
+    /// Corrida que não deu amostra a nenhum quadro usado (fora do trecho, ou substituída ali por outra): fica só a conta.
+    pub const CORRIDAS_FORA: &str = "corridas sem amostra nos trechos usados: {n}";
 }
 
 /// (chave, texto): rótulos de valores do modelo (`grupo.valor`) usados nas tabelas.
@@ -287,6 +309,7 @@ const CONDICOES: &[(&str, &str)] = &[
     (codigo::OCULTACAO_REVERSIVEL, "Há texto ou placa coberto por mosaico ou desfoque. Esse tipo de cobertura pode permitir a leitura por quem tentar revertê-la."),
     (codigo::OCULTACAO_FRACA, "Há ocultação por mosaico ou desfoque de pouca intensidade, que pode não impedir o reconhecimento."),
     (codigo::OCULTAR_INTERPOLADO, "Em parte das imagens, a posição da ocultação foi calculada entre duas marcações do perito, e não marcada uma a uma."),
+    (condicao::OCULTAR_INTERPOLADO_CALCULADO, "Em parte das imagens, a posição da ocultação foi calculada a partir das posições vizinhas, e não marcada nem medida uma a uma."),
     (codigo::OCULTAR_INCERTO, "Em parte das imagens, a posição da ocultação veio de acompanhamento automático que o programa marcou como incerto."),
     (codigo::SILHUETA_EM_OCULTAR, "Há ocultação recortada pelo contorno do corpo. O contorno é calculado por programa e pode deixar bordas à mostra."),
     (codigo::MEDIA_DE_QUADROS, "Há trecho em que cada imagem é a média de várias imagens seguidas. Acontecimentos rápidos podem sumir ou parecer durar mais do que duraram."),
@@ -423,6 +446,10 @@ mod testes {
         // faixa que a imagem não tem
         let vel = do_efeito("velocidade_exibida").unwrap();
         assert!(vel.contains("faixa de erro") && vel.contains("aproximado"), "{vel}");
+        // o que o programa escolheu nunca é dito do perito (fecho da Fase 2)
+        for f in [modelo::QUADROS_DO_PROGRAMA, modelo::CORRIDAS_FORA, da_condicao(condicao::OCULTAR_INTERPOLADO_CALCULADO).unwrap()] {
+            assert!(!f.contains("perito"), "{f}");
+        }
         // só o sólido opaco é dado como irreversível (D17)
         assert!(do_efeito("ocultar").unwrap().contains("não é possível desfazer"));
         assert!(!do_efeito(tipo::OCULTAR_PARCIAL).unwrap().contains("desfazer"));

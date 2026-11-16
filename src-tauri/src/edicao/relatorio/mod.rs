@@ -223,7 +223,7 @@ pub(crate) mod apoio {
                     intensidade: 1.0,
                     conteudo: ConteudoOculto::Rosto,
                     motivo: "terceiro sem relação".into(),
-                    quadros: ProvQuadrosOcultos { ancora: 2, medido: 0, interpolado: 0, incerto: 0 },
+                    quadros: ProvQuadrosOcultos { ancora: 2, ..Default::default() },
                     inverter: false,
                     margem: 0.0,
                     borda_suave: 0.0,

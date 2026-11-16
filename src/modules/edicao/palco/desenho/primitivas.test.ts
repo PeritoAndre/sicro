@@ -40,6 +40,17 @@ describe("primitivas", () => {
     expect(desfoque && "cor" in desfoque).toBe(false);
   });
 
+  it("ocultar invertida em ausência aceita: cobre o quadro todo; sem ausência ou não invertida, nada", () => {
+    const e: EfOcultar = { ...base, tipo: "ocultar", modo: "mosaico", alvo: { ...alvo, inverter: true }, intensidade: 1, cor: "#000000ff", conteudo: "rosto", motivo: "" };
+    const ausente = (id: string) => id === "r1";
+    const [p] = primitivas(e, quadro(MEIO, null, { ausente }));
+    expect(p && p.k === "regiao" && { forma: p.forma, inverter: p.inverter, espaco: p.espaco, modo: p.modo }).toEqual({
+      forma: { k: "caminho", d: [["M", 0, 0], ["L", 1, 0], ["L", 1, 1], ["L", 0, 1], ["Z"]] }, inverter: false, espaco: "fonte", modo: "mosaico",
+    });
+    expect(primitivas(e, quadro(MEIO, null))).toEqual([]);
+    expect(primitivas({ ...e, alvo }, quadro(MEIO, null, { ausente }))).toEqual([]);
+  });
+
   it("holofote: região no canvas (passa por A), escurece fora", () => {
     const e: EfHolofote = { ...base, tipo: "holofote", alvo: { ...alvo, forma: "elipse" }, escurecer: 0.6, dessaturar: 0.5 };
     const [p] = primitivas(e, quadro(MEIO, r));

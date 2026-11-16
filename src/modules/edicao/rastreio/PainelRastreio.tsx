@@ -6,7 +6,7 @@
  * Dono: P2.4. Montado em `MarcacoesSecao` (com a bandeira `RASTREIO_PRONTO`).
  */
 
-import { useMemo, useState, type MouseEvent } from "react";
+import { useState, type MouseEvent } from "react";
 import { ChevronsLeft, ChevronsRight, CircleDashed, CircleOff, Eraser, EyeOff, Loader2, Play, RefreshCw, SkipForward, Spline, Square, TriangleAlert, Users } from "lucide-react";
 import type { ClipePrincipal, ClipeSobreposto, ContextoClipe, Efeito, Id, Rastreio, TabelaQuadros } from "@domain/edicao";
 import { ESTADO_AUSENTE, ESTADO_INCERTO } from "@domain/edicao";
@@ -26,13 +26,13 @@ import {
   ausenciaNoCursor,
   desatualizado,
   editarRastreio,
-  FRACAS,
   irAoProximoFraco,
   marcasDoAlvo,
   paradaDe,
   pedidoDe,
   RASTREIO_PRONTO,
   seguirEfeito,
+  temFraco,
   TOLERANCIA_SIMPLIFICAR,
   trazerDaAnalise,
   useRastreioStore,
@@ -82,19 +82,18 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
   useEdicaoStore((s) => s.cursor);
   const corrida = useRastreioStore((s) => s.corrida);
   const paradas = useRastreioStore((s) => s.paradas);
-  const densos = useRastreioStore((s) => s.densos);
+  // o denso que chega refaz as marcas (guardadas no store: o arrasto de uma alça não as refaz)
+  useRastreioStore((s) => s.densos);
   const menu = useContextMenu();
   useMenuAberto(menu.isOpen);
   const [ocupado, setOcupado] = useState(false);
+  const [trazendo, setTrazendo] = useState(false);
   /** Mídias sem trilha na análise ("Da análise" desliga depois de perguntar). */
   const [semTrilha, setSemTrilha] = useState<string | null>(null);
 
   const x = doc ? alvoDoEfeito(doc, efeito.id, clipe.id, tabela) : null;
   const r: Rastreio | null = x?.rastreio ?? null;
-  const denso = r?.denso ? (densos[r.denso.sha256] ?? null) : null;
-  // marcas da faixa do efeito: refeitas quando muda o rastreio, o denso ou a tabela, não a cada quadro do cursor
-  const chave = x ? `${x.de}|${x.ate}|${x.ateExclusivo}` : "";
-  const mm = useMemo(() => (x ? marcasDoAlvo(x) : null), [r, denso, x?.tabela, chave]); // eslint-disable-line react-hooks/exhaustive-deps
+  const mm = x ? marcasDoAlvo(x) : null;
   if (!RASTREIO_PRONTO || !x || !r || !doc || r.id !== rastreio) return null;
 
   const sha = acharMidia(doc, x.clipe.midia)?.sha256 ?? null;
@@ -108,7 +107,7 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
   // o cursor anda sem refazer as marcas
   const tCursor = ctx.tempo();
   const ausencia = mm ? ausenciaNoCursor(x, mm) : null;
-  const haFraco = !!mm && mm.m.some((k) => FRACAS.has(k));
+  const haFraco = !!mm && temFraco(mm);
   const ptsCursor = x.tabela ? (ptsDaTabela(x.tabela)[exibido(x.tabela, tCursor)] as number) : null;
   const algoDepois = ptsCursor != null && (r.ancoras.some((k) => (k.pts != null ? k.pts >= ptsCursor : k.t >= tCursor)) || (!!r.denso && r.denso.ate_s >= tCursor));
   const velho = desatualizado(r, efeito.id, problemas ?? []);
@@ -116,6 +115,11 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
   const comEspera = (f: () => Promise<void>) => {
     setOcupado(true);
     void f().finally(() => setOcupado(false));
+  };
+  const trazer = (pessoa: string, rotulo: string) => {
+    if (!sha) return;
+    setTrazendo(true);
+    comEspera(() => trazerDaAnalise(efeito.id, x.clipe.midia, sha, pessoa, rotulo).finally(() => setTrazendo(false)));
   };
   const abrirMenu = (el: HTMLElement, itens: MenuItem[]) => {
     const b = el.getBoundingClientRect();
@@ -136,7 +140,7 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
           alvo,
           e.pessoas.map((pe) => ({
             label: pe.nome || `#${pe.numero}`,
-            onSelect: () => comEspera(() => trazerDaAnalise(efeito.id, x.clipe.midia, sha, pe.id, "Da análise")),
+            onSelect: () => trazer(pe.id, "Da análise"),
           })),
         );
       })
@@ -168,6 +172,13 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
             ) : (
               <Loader2 size={13} className={styles.dim} aria-hidden />
             )}
+          </>
+        ) : trazendo ? (
+          <>
+            <Mini onClick={() => void commands.pessoasCancelar(true)} data-acao="parar-da-analise">
+              <Square size={12} /> Parar
+            </Mini>
+            <Loader2 size={13} className={styles.dim} aria-hidden />
           </>
         ) : (
           <>
@@ -231,7 +242,7 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
             disabled={!livre}
             onClick={() => {
               const o = r.origem;
-              if (o.tipo === "pessoas") comEspera(() => trazerDaAnalise(efeito.id, x.clipe.midia, sha, o.pessoa_id, "Atualizar"));
+              if (o.tipo === "pessoas") trazer(o.pessoa_id, "Atualizar");
             }}
             data-acao="atualizar-rastreio"
           >

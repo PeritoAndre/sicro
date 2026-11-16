@@ -57,7 +57,7 @@ function gravarPrefs(p: Prefs) {
 }
 
 export interface Tarefa {
-  fase: "rastrear" | "exportar" | "mancha";
+  fase: PessoasProgresso["fase"];
   feitos: number;
   total: number;
   pessoas: number;

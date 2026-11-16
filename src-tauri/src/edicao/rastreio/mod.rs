@@ -314,8 +314,3 @@ pub fn correr(
 ) -> Result<ResultadoCorrida> {
     laco::correr(p, leitor, r, cancelar, avanco)
 }
-
-/// Detalhe do `nao_suportado` das peças do rastreio ainda não entregues (regra 1 de contratos-fase2).
-pub(crate) fn recusa(detalhe: &str) -> crate::error::SicroError {
-    crate::error::SicroError::Validation(format!("{}: {detalhe}", super::mensagens::codigo::NAO_SUPORTADO))
-}

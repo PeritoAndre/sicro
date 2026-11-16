@@ -534,7 +534,7 @@ export type OpRastreio = { tipo: "apagar_faixa"; de_pts: Pts; ate_pts: Pts | nul
 /** O front grava `ancoras` quando vem e `denso` sempre (null = rastreio sem denso). */
 export interface Editado { ancoras: Chave<Caixa>[] | null; denso: Denso | null }
 /** "Conferir ocultações" (conferencia.rs, P2.6): segundos do arquivo exportado, `[de_s, ate_s)`. */
-export type ComoFraco = "incerto" | "interpolado";
+export type ComoFraco = "incerto" | "interpolado" | "ausencia"; // "ausencia": sem região, em ausência aceita
 export interface FaixaFraca { de_s: Seg; ate_s: Seg; como: ComoFraco }
 export interface TrechoConferencia { efeito: Id; conteudo: EfOcultar["conteudo"]; de_s: Seg; ate_s: Seg; fracos: FaixaFraca[] }
 
@@ -557,6 +557,7 @@ export type Primitiva =
 export interface QuadroPalco { q: number; t: Seg; pts: Pts | null; indice: number | null; programa_s: Seg;
                                A: [number, number, number, number, number, number];
                                canvas: { w: number; h: number }; rastreio(id: Id): Caixa | null;
+                               ausente?(id: Id): boolean;   // ausência aceita sem caixa no quadro (ocultar invertida cobre tudo)
                                sprite(pedido: PedidoSprite): SpriteTexto | null;
                                atlas(estilo: EstiloTexto, alturaCanvas: number): AtlasCarimbo | null;
                                midia(id: Id): { w: number; h: number } | null }     // tamanho da imagem em px

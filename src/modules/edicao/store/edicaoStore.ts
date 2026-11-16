@@ -13,6 +13,7 @@ import type { Analise, Cursor, Id, MidiaRef, Problema, ProjetoAberto, ProjetoEdi
 import { Autosave, type EstadoSalvo } from "./autosave";
 import { desfazer as voltar, refazer as avancar, registrar, type Passo, type Retrato } from "./historico";
 import { animaveisVazios, aplicarPrender, aplicarSaidaAuto, comoChegou, completar, garantirMidia, novoProjeto, novoTrecho } from "../modelo/projeto";
+import { podarAncorasDoPrograma } from "../modelo/rastreio";
 
 /** Documento congelado em desenvolvimento e nos testes: atribuição fora do `alterar` vira exceção. */
 const CONGELAR = import.meta.env.DEV || import.meta.env.MODE === "test";
@@ -191,9 +192,11 @@ const fechado = () => ({
 /** Aplica `f` a uma cópia; o documento devolvido é congelado (dev/teste). Mudança que deixa lista de chaves
  *  vazia é recusada (exceção em desenvolvimento): tirar a última chave vira valor fixo (`tirarChave`). */
 function produzir(doc: ProjetoEdicao, f: (d: Draft<ProjetoEdicao>) => void): ProjetoEdicao {
-  const novo = immer.produce(doc, (d) => {
+  const feito = immer.produce(doc, (d) => {
     f(d);
   });
+  // Fase 2 (fecho): âncora do programa mexida à mão vira do perito
+  const novo = podarAncorasDoPrograma(doc, feito, (b, g) => immer.produce(b, g));
   if (novo === doc) return doc;
   const antes = new Set(animaveisVazios(doc));
   const vazios = animaveisVazios(novo).filter((c) => !antes.has(c));

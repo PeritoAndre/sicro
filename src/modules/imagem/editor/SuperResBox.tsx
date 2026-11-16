@@ -8,6 +8,7 @@ import { revealExported } from "@core/reveal";
 import type { ResultadoSuperResImagem, Roi } from "@domain/video_realce";
 import type { SicroImageSelection } from "../engine/schema";
 import { useImagemStore } from "../store/imagemStore";
+import { useSettingsStore } from "@stores/settingsStore";
 import styles from "./FilterBench.module.css";
 
 function caixa(sel: SicroImageSelection | null): Roi | null {
@@ -46,6 +47,7 @@ export function SuperResBox({
   useEffect(() => {
     void commands.getAiStatus().then((a) => setPronto(a.superres_ok)).catch(() => setPronto(false));
   }, []);
+  const iaLigada = !useSettingsStore((v) => v.settings.ai.modelos_desligados);
 
   const rodar = async () => {
     setRodando(true);
@@ -61,6 +63,7 @@ export function SuperResBox({
     }
   };
 
+  if (!iaLigada) return null;
   return (
     <section className={styles.card}>
       <div className={styles.cardHead}>

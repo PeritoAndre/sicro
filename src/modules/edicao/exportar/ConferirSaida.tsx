@@ -1,12 +1,12 @@
 /**
  * "Conferir ocultações" (§5.10): percorre no ARQUIVO exportado os intervalos ocultados (`edicao_conferencia_trechos`),
- * os trechos fracos (incerto, interpolado) primeiro; "Próximo trecho fraco", "Quadro anterior", "Próximo quadro";
+ * os trechos fracos (incerto, interpolado, ausência aceita) primeiro; "Próximo trecho fraco", "Quadro anterior", "Próximo quadro";
  * termina em "Conferido" ou "Concluir sem conferir" (`conferirSaida`). Dono: P2.6.
  * Montado na Fila e nas Saídas ("A conferir"); só chama comando quando o diálogo abre.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, CheckCircle2, CircleDashed, Loader2, ScanEye, SkipForward, Spline, StepBack, StepForward } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CircleDashed, EyeOff, Loader2, ScanEye, SkipForward, Spline, StepBack, StepForward } from "lucide-react";
 import { Dialog } from "@components/Dialog/Dialog";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import { caminhoDoCaso } from "@core/caminhoDoCaso";
@@ -60,8 +60,15 @@ export function ConferirSaida({ ws, saidaId }: ConferirSaidaProps) {
   );
 }
 
+/** Incerto, interpolado, ou sem região numa ausência aceita (o alvo, se estiver ali, está à vista). */
 const IconeFraco = ({ como }: { como: FaixaFraca["como"] }) =>
-  como === "incerto" ? <AlertTriangle size={12} className={styles.alerta} aria-hidden data-fraco="incerto" /> : <Spline size={12} className={styles.alerta} aria-hidden data-fraco="interpolado" />;
+  como === "incerto" ? (
+    <AlertTriangle size={12} className={styles.alerta} aria-hidden data-fraco="incerto" />
+  ) : como === "ausencia" ? (
+    <EyeOff size={12} className={styles.alerta} aria-hidden data-fraco="ausencia" />
+  ) : (
+    <Spline size={12} className={styles.alerta} aria-hidden data-fraco="interpolado" />
+  );
 
 const faixa = (de: number, ate: number) => `${formatarTempo(de)} – ${formatarTempo(ate)}`;
 

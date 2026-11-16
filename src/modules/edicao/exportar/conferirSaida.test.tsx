@@ -1,7 +1,8 @@
 // @vitest-environment happy-dom
 /**
  * "Conferir ocultações" (P2.6) montado de verdade com comandos falsos: nada pedido ao montar; ao abrir, toca o
- * ARQUIVO exportado e lista os trechos do retrato (fracos primeiro, ícone do fraco, tempo como dado); "Próximo trecho
+ * ARQUIVO exportado e lista os trechos do retrato (fracos primeiro, ícone do fraco, inclusive a ausência aceita, tempo
+ * como dado); "Próximo trecho
  * fraco", "Quadro anterior" e "Próximo quadro" movem o vídeo; termina em "Conferido" ou "Concluir sem conferir";
  * só rótulos do §8.6.
  */
@@ -21,7 +22,7 @@ vi.mock("@components/Dialog/ask", () => ask);
 
 import { botao, clicar, desmontarTudo, esperar, montar, textosVisiveis } from "../inspetor/testeTela";
 import { textoPermitido } from "../inspetor/rotulos.teste";
-import { CONFERIR_PRONTO, ConferirSaida, passoDe, proximoFraco } from "./ConferirSaida";
+import { CONFERIR_PRONTO, ConferirSaida, passoDe, proximoFraco, tabelaDaSaida } from "./ConferirSaida";
 
 const WS = "/casos/c1";
 
@@ -153,6 +154,22 @@ describe("Conferir ocultações", () => {
     expect(corpo().querySelector("[data-conferencia]")).toBeNull();
   });
 
+  it("ausência aceita: faixa fraca com o ícone dela, e o Próximo trecho fraco leva até lá", async () => {
+    const comAusencia: TrechoConferencia[] = [
+      { efeito: "o1", conteudo: "rosto", de_s: 1 / 3, ate_s: 2, fracos: [{ de_s: 1, ate_s: 4 / 3, como: "incerto" }, { de_s: 4 / 3, ate_s: 5 / 3, como: "ausencia" }] },
+    ];
+    cmd.edicaoConferenciaTrechos.mockResolvedValue(comAusencia);
+    await abrir();
+    const linha = corpo().querySelector<HTMLElement>("[data-trechos] > li")!;
+    expect([...linha.querySelectorAll<HTMLElement>("[data-faixa-fraca]")].map((b) => b.dataset.faixaFraca)).toEqual(["incerto", "ausencia"]);
+    expect(linha.querySelector('[data-faixa-fraca="ausencia"] [data-fraco="ausencia"]')).toBeTruthy();
+    const passo = 6 / 180;
+    await clicar(botao(corpo(), "Próximo trecho fraco"));
+    await clicar(botao(corpo(), "Próximo trecho fraco"));
+    expect(video()!.currentTime).toBeCloseTo(4 / 3 + passo / 2, 9);
+    semFrase();
+  });
+
   it("proximoFraco e passoDe", () => {
     expect(proximoFraco(TRECHOS, 0, 1 / 30)).toBeCloseTo(31 / 30, 12);
     expect(proximoFraco(TRECHOS, 31 / 30 + 1 / 60, 1 / 30)).toBeCloseTo(112 / 30, 12);
@@ -160,5 +177,14 @@ describe("Conferir ocultações", () => {
     expect(proximoFraco([TRECHOS[2]!], 0, 1 / 30)).toBeNull();
     expect(passoDe({ duracao_s: 6, n_quadros: 180 })).toBeCloseTo(1 / 30, 12);
     expect(passoDe(null)).toBeCloseTo(1 / 30, 12);
+  });
+
+  it("tabelaDaSaida: passo exato em 29,97, 23,976 e 25 (1 h sem deriva)", () => {
+    for (const [num, den] of [[30000, 1001], [24000, 1001], [25, 1]] as const) {
+      const n = Math.round((3600 * num) / den);
+      const t = tabelaDaSaida({ duracao_s: (n * den) / num, n_quadros: n });
+      expect(t.passo_mediano * num).toBe(t.tb.den * den);
+      expect(t.passos.every((p) => p === t.passo_mediano)).toBe(true);
+    }
   });
 });

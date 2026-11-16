@@ -1,5 +1,6 @@
 //! "Conferir ocultações" (§5.10, §10): os intervalos ocultados no ARQUIVO exportado, em tempo do arquivo, com os
-//! trechos fracos (quadros `incerto` e interpolados) primeiro. Lê só o retrato da saída (O7). Dono: P2.6.
+//! trechos fracos (quadros `incerto`, interpolados e os sem região numa ausência aceita, fora da invertida) primeiro.
+//! Lê só o retrato da saída (O7). Dono: P2.6.
 //!
 //! Do retrato: o `projeto.json` (ocultações, rastreios, densos em `dados/`) e o `feito` do relatório técnico (mapa de
 //! quadros de cada clipe, em inteiros, e o slot na saída). O retrato não guarda a tabela de quadros: com passo
@@ -26,17 +27,22 @@ use super::quadros::{OrigemTabela, TabelaQuadros};
 use super::motor::plano::{ProvMapa, ProvNaSaida};
 use super::motor::LeitorRastreios;
 use super::rastreio::avaliar::{self, Como, Instante};
+use super::rastreio::arquivo::{self, MAX_BYTES_DENSO};
 use super::rastreio::{ArquivoDenso, ArquivoSilhuetas};
 use crate::database::repositories::video_edit_output_repo;
 use crate::error::{Result, SicroError};
 use crate::workspace::paths;
 
-/// Como o quadro fraco foi coberto.
+/// Como o quadro fraco foi coberto; `Ausencia` = não foi: o rastreio não dá região e o perito aceitou a ausência do
+/// alvo (se ele aceitou por engano, o alvo está à vista no arquivo). Na invertida o quadro sem região sai todo coberto
+/// e não é fraco.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComoFraco {
     Incerto,
     Interpolado,
+    // CONTRATO: acréscimo do fecho da Fase 2 (espelho em `src/types/edicao.ts`).
+    Ausencia,
 }
 
 /// Faixa de quadros fracos, em segundos do arquivo exportado.
@@ -47,7 +53,8 @@ pub struct FaixaFraca {
     pub como: ComoFraco,
 }
 
-/// Um intervalo em que uma ocultação aparece no arquivo (segundos do arquivo, `[de_s, ate_s)`).
+/// Um intervalo a conferir de uma ocultação no arquivo (segundos do arquivo, `[de_s, ate_s)`): onde ela aparece e onde
+/// uma ausência aceita a deixa sem região (faixa fraca `Ausencia`).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TrechoConferencia {
     pub efeito: String,
@@ -114,11 +121,16 @@ impl LeitorRastreios for DoRetrato {
         if !sha_valido(sha256) {
             return Err(ausente());
         }
-        let bytes = std::fs::read(self.pasta.join("dados").join(format!("{sha256}.json"))).map_err(|_| ausente())?;
-        if sha256_bytes(&bytes) != sha256 {
+        // a regra do `arquivo::ler` (teto, SHA-256, colunas), sobre o `dados/` do retrato
+        let f = std::fs::File::open(self.pasta.join("dados").join(format!("{sha256}.json"))).map_err(|_| ausente())?;
+        let mut bytes = Vec::new();
+        std::io::Read::read_to_end(&mut std::io::Read::take(f, MAX_BYTES_DENSO + 1), &mut bytes).map_err(|_| ausente())?;
+        if bytes.len() as u64 > MAX_BYTES_DENSO || sha256_bytes(&bytes) != sha256 {
             return Err(ausente());
         }
-        Ok(Arc::new(serde_json::from_slice(&bytes).map_err(|e| erro(format!("{}: {e}", codigo::RASTREIO_AUSENTE)))?))
+        let d: ArquivoDenso = serde_json::from_slice(&bytes).map_err(|e| erro(format!("{}: {e}", codigo::RASTREIO_AUSENTE)))?;
+        arquivo::conferir(&d).map_err(|e| erro(format!("{}: {rastreio}: {e}", codigo::RASTREIO_AUSENTE)))?;
+        Ok(Arc::new(d))
     }
 
     fn silhuetas(&self, _: &str, _: &str) -> Result<Arc<ArquivoSilhuetas>> {
@@ -175,7 +187,8 @@ struct OrigemF {
     campos: bool,
 }
 
-/// Estado da ocultação num quadro: None = não cobre; Some(None) = cobre; Some(Some(k)) = cobre, fraco.
+/// Estado da ocultação num quadro: None = fora dela; Some(None) = cobre; Some(Some(k)) = fraco (cobre, ou sem região
+/// numa ausência aceita).
 type Estado = Option<Option<ComoFraco>>;
 
 /// Faixas de slots do arquivo `[de, ate)` em que cada ocultação aparece, e as fracas.
@@ -187,6 +200,7 @@ struct Faixas {
 }
 
 /// Os trechos a partir do projeto do retrato e do relatório técnico (`feito`), sem tabela de quadros.
+#[cfg(test)]
 pub(crate) fn calcular(p: &ProjetoEdicao, tecnico: &Value, densos: &dyn LeitorRastreios) -> Result<Vec<TrechoConferencia>> {
     calcular_com(p, tecnico, densos, &|_| None)
 }
@@ -273,7 +287,7 @@ pub(crate) fn calcular_com(p: &ProjetoEdicao, tecnico: &Value, densos: &dyn Leit
         let Some(conteudo) = f.conteudo else { continue };
         for (a, b) in unir(f.cobertas) {
             let mut fracos: Vec<FaixaFraca> = Vec::new();
-            for k in [ComoFraco::Incerto, ComoFraco::Interpolado] {
+            for k in [ComoFraco::Incerto, ComoFraco::Interpolado, ComoFraco::Ausencia] {
                 let dela: Vec<(u64, u64)> = f.fracas.iter().filter(|x| x.2 == k).map(|x| (x.0.max(a), x.1.min(b))).filter(|x| x.0 < x.1).collect();
                 fracos.extend(unir(dela).into_iter().map(|(x, y)| FaixaFraca { de_s: seg(x), ate_s: seg(y), como: k }));
             }
@@ -366,11 +380,17 @@ fn segmentos_do_clipe(oc: &EfOcultar, r: &Rastreio, denso: Option<&ArquivoDenso>
         if !base_ativa(&oc.base, t) {
             return None;
         }
-        avaliar::avaliar(r, denso, Instante { t, pts: Some(pts) }).map(|a| match (a.incerto, a.como) {
-            (true, _) => Some(ComoFraco::Incerto),
-            (false, Como::Interpolado) => Some(ComoFraco::Interpolado),
-            _ => None,
-        })
+        match avaliar::avaliar(r, denso, Instante { t, pts: Some(pts) }) {
+            Some(a) => Some(match (a.incerto, a.como) {
+                (true, _) => Some(ComoFraco::Incerto),
+                (false, Como::Interpolado) => Some(ComoFraco::Interpolado),
+                _ => None,
+            }),
+            // sem região dentro do `ativo`: só numa ausência aceita (fora dela o motor recusa, `sem_cobertura`); a
+            // invertida cobre ali o quadro inteiro e não é fraca
+            None if avaliar::em_ausencia(r, t) => Some((!oc.alvo.inverter).then_some(ComoFraco::Ausencia)),
+            None => None,
+        }
     };
     let n = o.lidos as usize;
     // um quadro só (congelado, trecho de um quadro): vale o clipe inteiro
@@ -576,11 +596,21 @@ mod testes {
                     if !base_ativa(&oc.base, t) {
                         continue;
                     }
-                    if let Some(a) = avaliar::avaliar(r, d.as_deref(), Instante { t, pts: Some(pts) }) {
-                        e.0.push(it.na_saida.de_q + q as u64);
-                        if a.incerto || a.como == Como::Interpolado {
-                            e.1.push(it.na_saida.de_q + q as u64);
+                    match avaliar::avaliar(r, d.as_deref(), Instante { t, pts: Some(pts) }) {
+                        Some(a) => {
+                            e.0.push(it.na_saida.de_q + q as u64);
+                            if a.incerto || a.como == Como::Interpolado {
+                                e.1.push(it.na_saida.de_q + q as u64);
+                            }
                         }
+                        // ausência aceita: a conferir; fraca, salvo na invertida (o quadro inteiro coberto)
+                        None if avaliar::em_ausencia(r, t) => {
+                            e.0.push(it.na_saida.de_q + q as u64);
+                            if !oc.alvo.inverter {
+                                e.1.push(it.na_saida.de_q + q as u64);
+                            }
+                        }
+                        None => {}
                     }
                 }
             }
@@ -641,9 +671,8 @@ mod testes {
     /// Passo variável com lacuna e rastreio DENSO (o caso do CFTV): quadros incertos soltos não somem da
     /// conferência sem a tabela. Denso gravado à mão, uma linha por quadro real.
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn passo_variavel_com_denso_nunca_a_menos() {
-        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, Duble};
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, gravado};
         use crate::edicao::rastreio::{ESTADO_INCERTO, ESTADO_OK, TIPO_MEDIDO};
         let pts: Vec<i64> = (0..300i64).map(|k| k * 512 + if k > 60 { 15360 } else { 0 }).collect();
         let tab = apoio::tabela(TB, pts);
@@ -665,7 +694,7 @@ mod testes {
             corrida: vec![0; b - a],
             corridas: vec![],
         };
-        let sha = "f".repeat(64);
+        let (sha, leitor) = gravado(&d, tab.tb);
         let mut p = projeto_do_teste(&tab, &[a], "#00ff00ff");
         p.rastreios[0] = serde_json::from_value(json!({ "id": "r1", "nome": "r1", "cor": "#ff0000", "midia": "m1", "base": "fonte", "tipo": "caixa", "espaco": "original",
             "ancoras": [ancora(tab.tempo(a), Some(tab.pts[a]), [0.4, 0.4, 0.2, 0.2])],
@@ -673,7 +702,6 @@ mod testes {
             "silhuetas": null, "ausencias": [], "origem": { "tipo": "assistido" }, "confirmacao": null }))
         .unwrap();
         p.midias[0].ocultacoes[0].base.ativo.as_mut().unwrap().ate = Some(tab.tempo(b - 1));
-        let leitor = Duble([(sha, Arc::new(d))].into());
         let cap = Arc::new(apoio::cap_falsa());
         let plano = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p, &leitor, &alvo_final("cpu")).unwrap();
         comparar_plano("denso com lacuna", &p, &plano, &tab, &leitor, &|_| None, 1);
@@ -689,8 +717,11 @@ mod testes {
 
     fn comparar_plano(caso: &str, p: &ProjetoEdicao, plano: &Plano, tab: &crate::edicao::quadros::TabelaQuadros, densos: &dyn LeitorRastreios, tabelas: Tabelas, folga: usize) {
         let cap = Arc::new(apoio::cap_falsa());
+        // segundos do arquivo → slot, na taxa da saída do plano (29,97 e 25 também)
+        let fps = plano.proveniencia.saida.fps;
+        let q = |s: f64| (s * fps.num as f64 / fps.den as f64).round() as u64;
         let slots = |faixas: Vec<(f64, f64)>| -> Vec<u64> {
-            let mut s: Vec<u64> = faixas.into_iter().flat_map(|(a, b)| em_slots(a, b).0..em_slots(a, b).1).collect();
+            let mut s: Vec<u64> = faixas.into_iter().flat_map(|(a, b)| q(a)..q(b)).collect();
             s.sort_unstable();
             s.dedup();
             s
@@ -720,9 +751,8 @@ mod testes {
     /// Trechos fracos pelo denso: linhas `incerto` e de `tipo` interpolado viram faixas "incerto" e "interpolado"
     /// (B24), na ordem do tempo; o resto do denso cobre sem fraco. Denso gravado à mão, leitor falso.
     #[test]
-    #[ignore = "fecho da Fase 2: P2.2"]
     fn fracos_do_denso() {
-        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, Duble};
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, gravado};
         use crate::edicao::rastreio::{ESTADO_INCERTO, ESTADO_OK, TIPO_INTERPOLADO, TIPO_MEDIDO};
         let tab = apoio::tabela(TB, apoio::pts_regulares(300, (1, 30), TB, 0));
         let cap = Arc::new(apoio::cap_falsa());
@@ -744,14 +774,13 @@ mod testes {
             corrida: vec![0; b - a],
             corridas: vec![],
         };
-        let sha = "f".repeat(64);
+        let (sha, leitor) = gravado(&d, tab.tb);
         let r = json!({ "id": "r1", "nome": "r1", "cor": "#ff0000", "midia": "m1", "base": "fonte", "tipo": "caixa", "espaco": "original",
             "ancoras": [ancora(tab.tempo(a), Some(tab.pts[a]), [0.4, 0.4, 0.2, 0.2])],
             "denso": { "sha256": sha, "n": b - a, "de_s": tab.tempo(a), "ate_s": tab.tempo(b - 1), "ok": 55, "incertos": 5, "ausentes": 0 },
             "silhuetas": null, "ausencias": [], "origem": { "tipo": "assistido" }, "confirmacao": null });
         let o1 = ocultar("o1", "r1", "solido", json!({ "conteudo": "rosto", "ativo": { "de": tab.tempo(a), "ate": tab.tempo(b - 1) } }));
         let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([o1]))], vec![trecho("c1", "m1", &tab, 30, 120, 1.0, json!([]))], json!({ "rastreios": [r] }));
-        let leitor = Duble([(sha, Arc::new(d))].into());
         let plano = compilar(&cap, &apoio::fonte(tab, (320, 180)), &p, &leitor, &alvo_final("cpu")).unwrap();
         let v = calcular(&p, &feito(&plano, cap), &leitor).unwrap();
         let achado: Vec<(u64, u64, Vec<(u64, u64, ComoFraco)>)> = v
@@ -762,6 +791,243 @@ mod testes {
             })
             .collect();
         assert_eq!(achado, vec![(10, 70, vec![(30, 35, ComoFraco::Incerto), (40, 45, ComoFraco::Interpolado)])]);
+    }
+
+    /// Fecho da Fase 2: a conferência leva também às ausências aceitas (se o perito aceitou uma por engano, o alvo
+    /// está à vista ali): os quadros sem região dentro do `ativo` e de uma ausência aceita viram faixa fraca
+    /// `Ausencia`, no mesmo trecho; ausente fora de ausência não chega à exportação. Passo constante (exato) e com
+    /// lacuna (nunca a menos), contra a verdade por slot.
+    #[test]
+    fn ausencia_aceita_e_faixa_fraca() {
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, gravado};
+        use crate::edicao::rastreio::{ESTADO_AUSENTE, ESTADO_INCERTO, ESTADO_OK, TIPO_MEDIDO};
+        for (caso, pts) in [
+            ("passo constante", (0..300i64).map(|k| k * 512).collect::<Vec<i64>>()),
+            ("lacuna de 1 s", (0..300i64).map(|k| k * 512 + if k > 60 { 15360 } else { 0 }).collect()),
+        ] {
+            let tab = apoio::tabela(TB, pts);
+            let cap = Arc::new(apoio::cap_falsa());
+            let (a, b) = (40usize, 100usize);
+            // incerto 60..64; ausente 70..79 e 85..87, as duas aceitas
+            let estado = |j: usize| match j {
+                60..=64 => ESTADO_INCERTO,
+                70..=79 | 85..=87 => ESTADO_AUSENTE,
+                _ => ESTADO_OK,
+            };
+            let d = ArquivoDenso {
+                esquema: 2,
+                rastreio: "r1".into(),
+                midia_sha256: "0".repeat(64),
+                espaco: "original".into(),
+                pixel: crate::edicao::modelo::TamanhoPx { w: 320, h: 180 },
+                pts: tab.pts[a..b].to_vec(),
+                x: vec![0.4; b - a],
+                y: vec![0.4; b - a],
+                w: vec![0.2; b - a],
+                h: vec![0.2; b - a],
+                conf: vec![0.9; b - a],
+                estado: (a..b).map(estado).collect(),
+                tipo: vec![TIPO_MEDIDO; b - a],
+                corrida: vec![0; b - a],
+                corridas: vec![],
+            };
+            let (sha, leitor) = gravado(&d, tab.tb);
+            let aus = |x: usize, y: usize| json!({ "de_s": tab.tempo(x), "ate_s": tab.tempo(y), "motivo": "oculto", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito" });
+            let r = json!({ "id": "r1", "nome": "r1", "cor": "#ff0000", "midia": "m1", "base": "fonte", "tipo": "caixa", "espaco": "original",
+                "ancoras": [ancora(tab.tempo(a), Some(tab.pts[a]), [0.4, 0.4, 0.2, 0.2])],
+                "denso": { "sha256": sha, "n": b - a, "de_s": tab.tempo(a), "ate_s": tab.tempo(b - 1), "ok": 42, "incertos": 5, "ausentes": 13 },
+                "silhuetas": null, "ausencias": [aus(70, 79), aus(85, 87)], "origem": { "tipo": "assistido" }, "confirmacao": null });
+            let o1 = ocultar("o1", "r1", "solido", json!({ "conteudo": "rosto", "ativo": { "de": tab.tempo(a), "ate": tab.tempo(b - 1) } }));
+            let o2 = ocultar("o2", "r2", "solido", json!({ "conteudo": "placa", "ativo": { "de": tab.tempo(110), "ate": null } }));
+            let r2 = rastreio("r2", Some("m1"), "fonte", vec![ancora(tab.tempo(110), Some(tab.pts[110]), [0.1, 0.1, 0.2, 0.2])]);
+            let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([o1, o2]))], vec![trecho("c1", "m1", &tab, 30, 120, 1.0, json!([]))], json!({ "rastreios": [r, r2] }));
+            let plano = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{caso}: {e}"));
+            let v = calcular(&p, &feito(&plano, cap.clone()), &leitor).unwrap();
+            if caso == "passo constante" {
+                // um trecho só (a ausência não o parte), com as faixas na ordem do tempo; slot = quadro − 30
+                let achado: Vec<(u64, u64, Vec<(u64, u64, ComoFraco)>)> = v
+                    .iter()
+                    .filter(|t| t.efeito == "o1")
+                    .map(|t| (em_slots(t.de_s, t.ate_s).0, em_slots(t.de_s, t.ate_s).1, t.fracos.iter().map(|f| (em_slots(f.de_s, f.ate_s).0, em_slots(f.de_s, f.ate_s).1, f.como)).collect()))
+                    .collect();
+                assert_eq!(achado, vec![(10, 70, vec![(30, 35, ComoFraco::Incerto), (40, 50, ComoFraco::Ausencia), (55, 58, ComoFraco::Ausencia)])]);
+                // fracos primeiro
+                assert_eq!(v[0].efeito, "o1");
+            }
+            comparar_plano(caso, &p, &plano, &tab, &leitor, &|_| None, 1);
+            // invertida: sem região, o quadro sai todo coberto; o trecho é o mesmo, sem a faixa `Ausencia`
+            let mut pi = p.clone();
+            pi.midias[0].ocultacoes[0].alvo.inverter = true;
+            let plano_i = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &pi, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{caso}: {e}"));
+            let vi = calcular(&pi, &feito(&plano_i, cap.clone()), &leitor).unwrap();
+            let dele: Vec<(u64, u64, Vec<ComoFraco>)> =
+                vi.iter().filter(|t| t.efeito == "o1").map(|t| (em_slots(t.de_s, t.ate_s).0, em_slots(t.de_s, t.ate_s).1, t.fracos.iter().map(|f| f.como).collect())).collect();
+            assert!(!dele.is_empty() && dele.iter().all(|t| !t.2.contains(&ComoFraco::Ausencia)), "{caso}: {dele:?}");
+            if caso == "passo constante" {
+                assert_eq!(dele, vec![(10, 70, vec![ComoFraco::Incerto])]);
+            }
+            comparar_plano(&format!("{caso}, invertida"), &pi, &plano_i, &tab, &leitor, &|_| None, 1);
+        }
+        // a tela recebe o literal "ausencia"
+        assert_eq!(serde_json::to_value(ComoFraco::Ausencia).unwrap(), json!("ausencia"));
+    }
+
+    /// Taxas de NTSC e PAL, fonte que não começa em zero e câmera lenta: cobertos e fracos (incerto, interpolado,
+    /// ausência aceita) contra a verdade por slot do plano, exatos.
+    #[test]
+    fn taxas_29_97_e_25_contra_a_verdade() {
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, gravado};
+        use crate::edicao::rastreio::{ESTADO_AUSENTE, ESTADO_INCERTO, ESTADO_OK, TIPO_INTERPOLADO, TIPO_MEDIDO};
+        let ntsc = ((1, 30000), (1001, 30000));
+        for (caso, (tb, passo), inicio, fps, v) in [
+            ("29,97 → 29,97, início em 2 s", ntsc, 60060, (30000, 1001), 1.0),
+            ("25 → 29,97", ((1, 90000), (1, 25)), 0, (30000, 1001), 1.0),
+            ("29,97 → 25", ntsc, 0, (25, 1), 1.0),
+            ("29,97 → 29,97 a 0,5×", ntsc, 60060, (30000, 1001), 0.5),
+        ] {
+            let tab = apoio::tabela(tb, apoio::pts_regulares(300, passo, tb, inicio));
+            let cap = Arc::new(apoio::cap_falsa());
+            let (a, b) = (40usize, 100usize);
+            let estado = |j: usize| match j {
+                60..=64 => ESTADO_INCERTO,
+                70..=79 | 85..=87 => ESTADO_AUSENTE,
+                _ => ESTADO_OK,
+            };
+            let d = ArquivoDenso {
+                esquema: 2,
+                rastreio: "r1".into(),
+                midia_sha256: "0".repeat(64),
+                espaco: "original".into(),
+                pixel: crate::edicao::modelo::TamanhoPx { w: 320, h: 180 },
+                pts: tab.pts[a..b].to_vec(),
+                x: vec![0.4; b - a],
+                y: vec![0.4; b - a],
+                w: vec![0.2; b - a],
+                h: vec![0.2; b - a],
+                conf: vec![0.9; b - a],
+                estado: (a..b).map(estado).collect(),
+                tipo: (a..b).map(|j| if (66..=68).contains(&j) { TIPO_INTERPOLADO } else { TIPO_MEDIDO }).collect(),
+                corrida: vec![0; b - a],
+                corridas: vec![],
+            };
+            let (sha, leitor) = gravado(&d, tab.tb);
+            let aus = |x: usize, y: usize| json!({ "de_s": tab.tempo(x), "ate_s": tab.tempo(y), "motivo": "oculto", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito" });
+            let r = json!({ "id": "r1", "nome": "r1", "cor": "#ff0000", "midia": "m1", "base": "fonte", "tipo": "caixa", "espaco": "original",
+                "ancoras": [ancora(tab.tempo(a), Some(tab.pts[a]), [0.4, 0.4, 0.2, 0.2])],
+                "denso": { "sha256": sha, "n": b - a, "de_s": tab.tempo(a), "ate_s": tab.tempo(b - 1), "ok": 42, "incertos": 5, "ausentes": 13 },
+                "silhuetas": null, "ausencias": [aus(70, 79), aus(85, 87)], "origem": { "tipo": "assistido" }, "confirmacao": null });
+            let o1 = ocultar("o1", "r1", "solido", json!({ "conteudo": "rosto", "ativo": { "de": tab.tempo(a), "ate": tab.tempo(b - 1) } }));
+            let o2 = ocultar("o2", "r2", "solido", json!({ "conteudo": "placa", "ativo": { "de": tab.tempo(110), "ate": null } }));
+            let r2 = rastreio("r2", Some("m1"), "fonte", vec![ancora(tab.tempo(110), Some(tab.pts[110]), [0.1, 0.1, 0.2, 0.2])]);
+            let p = projeto(320, 180, fps, vec![midia("m1", "video", json!([o1, o2]))], vec![trecho("c1", "m1", &tab, 30, 120, v, json!([]))], json!({ "rastreios": [r, r2] }));
+            let plano = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p, &leitor, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{caso}: {e}"));
+            // passo constante: exato (folga 0)
+            comparar_plano(caso, &p, &plano, &tab, &leitor, &|_| None, 0);
+            let v = calcular(&p, &feito(&plano, cap), &leitor).unwrap();
+            for k in [ComoFraco::Incerto, ComoFraco::Interpolado, ComoFraco::Ausencia] {
+                assert!(v.iter().any(|t| t.fracos.iter().any(|f| f.como == k)), "{caso}: sem {k:?}");
+            }
+        }
+    }
+
+    /// O denso do retrato passa pela regra do `arquivo::ler` (SHA-256 do nome, colunas, índices): o malformado é
+    /// `rastreio_ausente`, nunca lido calado.
+    #[test]
+    fn retrato_le_o_denso_pela_regra_do_arquivo() {
+        let d = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(d.path().join("dados")).unwrap();
+        let leitor = DoRetrato { pasta: d.path().to_path_buf() };
+        let denso = |x: Vec<f64>| json!({ "esquema": 2, "rastreio": "r1", "midia_sha256": "0".repeat(64), "espaco": "original", "pixel": { "w": 320, "h": 180 },
+            "pts": [0, 512], "x": x, "y": [0.1, 0.1], "w": [0.2, 0.2], "h": [0.2, 0.2], "conf": [0.9, 0.9], "estado": [0, 0], "tipo": [0, 0], "corrida": [0, 0], "corridas": [] });
+        let grava = |v: Value| {
+            let b = serde_json::to_vec(&v).unwrap();
+            let sha = sha256_bytes(&b);
+            std::fs::write(d.path().join("dados").join(format!("{sha}.json")), &b).unwrap();
+            sha
+        };
+        let bom = grava(denso(vec![0.1, 0.1]));
+        assert_eq!(leitor.denso("r1", &bom).unwrap().pts, [0, 512]);
+        // uma coluna mais curta que as outras
+        let ruim = grava(denso(vec![0.1]));
+        assert!(leitor.denso("r1", &ruim).unwrap_err().to_string().contains(codigo::RASTREIO_AUSENTE));
+        // conteúdo que não é o do nome
+        std::fs::copy(d.path().join("dados").join(format!("{bom}.json")), d.path().join("dados").join(format!("{}.json", "e".repeat(64)))).unwrap();
+        assert!(leitor.denso("r1", &"e".repeat(64)).is_err());
+        assert!(leitor.denso("r1", "../x").is_err());
+    }
+
+    /// Bancada do diálogo "Conferir ocultações" (fecho da Fase 2, `sicro-bench/edicao-pro/bancada/fase2-conferir`): uma
+    /// exportação de verdade (motor, blocos, publicação "a conferir", retrato) de uma fonte que começa em 2 s e grava o
+    /// índice do quadro na luma (metade esquerda 20 + 13·⌊N/16⌋, direita 20 + 13·(N mod 16)). Trecho dos quadros
+    /// 30..150; `o1` (sólido verde) ativo de 40 a 110, ausência aceita 40..49 (antes da 1ª âncora), âncoras do perito
+    /// no 50 e no 90 (interpolado entre elas), segura a última até o 110. Grava em `$SICRO_BANCADA_CONFERIR`:
+    /// `exportado.mp4`, `saida.json` (a `SaidaRegistrada`) e `trechos.json` (`trechos` do retrato), e confere no
+    /// arquivo: índice de cada slot = 30 + slot; verde exatamente nos slots cobertos, ausente na ausência aceita.
+    #[test]
+    #[ignore = "bancada: SICRO_BANCADA_CONFERIR=<pasta>"]
+    fn bancada_conferir_arquivo_exportado() {
+        use crate::edicao::motor::efeitos::realce::testes::fonte_de;
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let destino = PathBuf::from(std::env::var("SICRO_BANCADA_CONFERIR").expect("SICRO_BANCADA_CONFERIR"));
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = fontes::pasta_temporaria("f2c-bancada");
+        let lum = "if(lt(X\\,W/2)\\,20+13*floor(N/16)\\,20+13*mod(N\\,16))";
+        let a: Vec<String> = ["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-f", "lavfi", "-i"]
+            .iter()
+            .map(|s| s.to_string())
+            .chain([format!("color=c=black:s=320x180:r=30:d=6,format=yuv420p,geq=lum='{lum}':cb=128:cr=128")])
+            .chain(["-c:v", "libx264", "-qp", "0", "-preset", "ultrafast", "-g", "15", "-bf", "0", "-pix_fmt", "yuv420p", "-video_track_timescale", "15360", "-output_ts_offset", "2", "fonte.mp4"].iter().map(|s| s.to_string()))
+            .collect();
+        let cmd = crate::edicao::ffmpeg::exec::Comando { nome: "fonte".into(), programa: cap.binario.clone(), args: a, pasta: pasta.clone(), ambiente: vec![], sem_ambiente: vec![], stderr: pasta.join("fonte.log") };
+        let (fim, _) = crate::edicao::ffmpeg::exec::rodar_com_saida(&cmd, &std::sync::atomic::AtomicBool::new(false)).unwrap();
+        crate::edicao::ffmpeg::exec::exigir_sucesso(&cmd, &fim).unwrap();
+        let f = fonte_de(&cap, &pasta.join("fonte.mp4"));
+        let tab = &f.quadros;
+        assert!((tab.tempo(0) - 2.0).abs() < 1e-6, "a fonte começa em 2 s: {}", tab.tempo(0));
+        let cx = [0.55, 0.6, 0.3, 0.3];
+        let r = json!({ "id": "r1", "nome": "r1", "cor": "#ff0000", "midia": "m1", "base": "fonte", "tipo": "caixa", "espaco": "original",
+            "ancoras": [ancora(tab.tempo(50), Some(tab.pts[50]), cx), ancora(tab.tempo(90), Some(tab.pts[90]), cx)],
+            "denso": null, "silhuetas": null,
+            "ausencias": [{ "de_s": tab.tempo(40), "ate_s": tab.tempo(49), "motivo": "fora_de_cena", "aceita_em": "2026-11-15T10:00:00Z", "por": "Perito Teste" }],
+            "origem": { "tipo": "manual" }, "confirmacao": null });
+        let o1 = ocultar("o1", "r1", "solido", json!({ "cor": "#00ff00ff", "conteudo": "placa", "ativo": { "de": tab.tempo(40), "ate": tab.tempo(110) } }));
+        let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([o1]))], vec![trecho("c1", "m1", tab, 30, 150, 1.0, json!([]))], json!({ "rastreios": [r] }));
+        let plano = Mundo::novo(&cap).com("m1", &f).compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}"));
+        let (caso_tmp, ws) = ex::caso();
+        let (_, res) = executor::exportar(&cap, &plano, &caso_tmp.path().join("render"), "2026-11-15T12:00:00Z").unwrap_or_else(|e| panic!("exportar ({}): {e}", cap.versao));
+        let mut amb = ex::ambiente(cap.clone(), caso_tmp.path(), "t1");
+        amb.caso = ws.clone();
+        let doc = serde_json::to_value(&p).unwrap();
+        let s = fila::publicar(&fila::Publicar { ws: &ws, projeto: &doc, plano: &plano, res: &res, amb: &amb, quando: chrono::Local::now(), tecnico: &Tec { plano: &plano, res: &res, amb: &amb } }).unwrap();
+        let v = trechos(&ws, &s.id).unwrap();
+        let fracos: Vec<(u64, u64, ComoFraco)> = v.iter().flat_map(|t| t.fracos.iter().map(|f| (em_slots(f.de_s, f.ate_s).0, em_slots(f.de_s, f.ate_s).1, f.como))).collect();
+        assert_eq!(fracos, [(10, 20, ComoFraco::Ausencia), (21, 60, ComoFraco::Interpolado)], "{}", cap.versao);
+        // o arquivo: índice na luma = 30 + slot; verde nos slots cobertos (fora da ausência), nada na ausência
+        let arquivo = paths::resolver_relativo(&ws, &s.arquivo);
+        let quadros = medir::quadros(&cap, &arquivo).unwrap();
+        assert_eq!(quadros.len() as u64, plano.total_q);
+        let luma = |q: &medir::QuadroRgb, x: u32| {
+            let mut soma = 0u32;
+            for y in 10..30 {
+                for dx in 0..20 {
+                    soma += q.px[((y * q.w + x + dx) * 3 + 1) as usize] as u32;
+                }
+            }
+            soma as f64 / 400.0
+        };
+        // RGB de faixa cheia: (Y − 16)·255/219; nível = (Y − 20) / 13
+        let nivel = |v: f64| ((v * 219.0 / 255.0 + 16.0 - 20.0) / 13.0).round() as i64;
+        for (k, q) in quadros.iter().enumerate() {
+            assert_eq!(nivel(luma(q, 60)) * 16 + nivel(luma(q, 240)), 30 + k as i64, "slot {k} ({})", cap.versao);
+            let verde = q.px.chunks_exact(3).filter(|p| verde(p)).count() > 200;
+            assert_eq!(verde, (20..=80).contains(&k), "slot {k} ({})", cap.versao);
+        }
+        std::fs::create_dir_all(&destino).unwrap();
+        std::fs::copy(&arquivo, destino.join("exportado.mp4")).unwrap();
+        std::fs::write(destino.join("saida.json"), serde_json::to_vec_pretty(&s).unwrap()).unwrap();
+        std::fs::write(destino.join("trechos.json"), serde_json::to_vec_pretty(&v).unwrap()).unwrap();
+        let _ = std::fs::remove_dir_all(&pasta);
+        eprintln!("bancada ({}): {} slots, trechos {:?}", cap.versao, quadros.len(), v.iter().map(|t| (t.de_s, t.ate_s)).collect::<Vec<_>>());
     }
 
     /// O relatório técnico do teste, pelo `tecnico.rs` de verdade.
