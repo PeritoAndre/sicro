@@ -1227,6 +1227,12 @@ fn texto_do_pdf(pdf: &Path) -> Option<String> {
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
+/// Texto na ordem em que foi escrito (célula de tabela que quebra de linha fica inteira, o `-layout` a intercala).
+fn texto_cru_do_pdf(pdf: &Path) -> Option<String> {
+    let out = std::process::Command::new("pdftotext").args(["-raw", "-enc", "UTF-8"]).arg(pdf).arg("-").output().ok()?;
+    out.status.success().then(|| String::from_utf8_lossy(&out.stdout).split_whitespace().collect::<Vec<_>>().join(" "))
+}
+
 /// O projeto da Fase 1 pela fila, em CPU, até conferido: MP4 com a contagem certa, legendas em arquivo, cada recurso
 /// na imagem ou no som, `tecnico.json` com tudo no `feito` e o PDF do júri gerado dele, aberto por fora e com os
 /// números do `feito`. A segunda exportação, com o `.trf` já gravado no projeto, dá os mesmos quadros compostos.
@@ -1369,6 +1375,7 @@ fn fase_1_projeto_com_tudo_exporta_com_relatorio_e_pdf() {
         }
     };
     let liso: String = texto.split_whitespace().collect::<Vec<_>>().join(" ");
+    let cru = texto_cru_do_pdf(&pdf).unwrap_or_default();
     for secao in ["O que é este documento", "O vídeo entregue", "As gravações usadas", "O que aparece no vídeo, na ordem", "O que foi acrescentado e o que foi modificado",
                   "Tempo, velocidade e câmeras alinhadas", "Limites deste vídeo", "Como conferir", "Identificação dos arquivos", "Propriedades das gravações",
                   "Processamentos, na ordem de aplicação", "Diferenças entre origem e saída", "Ocultações de imagem e de som", "Codificação da saída", "Programas e versões", "Referências"] {
@@ -1393,7 +1400,7 @@ fn fase_1_projeto_com_tudo_exporta_com_relatorio_e_pdf() {
         ("som ocultado", "Som ocultado".to_string()),
         ("conferência", PERITO.to_string()),
     ] {
-        assert!(liso.contains(&trecho), "{v}: PDF sem {o_que} ({trecho:?})");
+        assert!(liso.contains(&trecho) || cru.contains(&trecho), "{v}: PDF sem {o_que} ({trecho:?})");
     }
     // o SHA-256 do vídeo: o PDF é a raiz (o código pode quebrar de linha: os 16 primeiros dígitos)
     let sem_espaco: String = texto.chars().filter(|c| !c.is_whitespace()).collect();
