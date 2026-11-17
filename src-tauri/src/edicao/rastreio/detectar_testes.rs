@@ -620,6 +620,11 @@ struct CasoFluxo {
 }
 
 fn caso_fluxo(teste: &str) -> Option<CasoFluxo> {
+    caso_fluxo_com(teste, "6", None, 6, (6, 1))
+}
+
+/// `taxa` do vídeo (`-framerate`), início (`-output_ts_offset`), `n` quadros e a taxa do projeto.
+fn caso_fluxo_com(teste: &str, taxa: &str, inicio: Option<&str>, n: usize, fps: (i64, i64)) -> Option<CasoFluxo> {
     let cap = crate::edicao::testes::fontes::cap()?;
     let foto = t::ou_dispensa(Some(dossie("p3b/dados/placas_commons/img/c032.jpg")).filter(|p| p.is_file()), teste, "c032.jpg")?;
     let d = tempfile::Builder::new().prefix("p45-fluxo-").tempdir().unwrap();
@@ -627,13 +632,14 @@ fn caso_fluxo(teste: &str) -> Option<CasoFluxo> {
     std::fs::create_dir_all(&pai).unwrap();
     let ws = crate::workspace::create::create_workspace(crate::models::NewOccurrenceInput { peritos: vec!["Perito P45".into()], ..Default::default() }, &pai).unwrap().path;
     let video = d.path().join("placas.mp4");
-    let st = std::process::Command::new(&cap.binario)
-        .args(["-v", "error", "-y", "-loop", "1", "-framerate", "6", "-i"])
+    let mut ff = std::process::Command::new(&cap.binario);
+    ff.args(["-v", "error", "-y", "-loop", "1", "-framerate", taxa, "-i"])
         .arg(&foto)
-        .args(["-frames:v", "6", "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p"])
-        .arg(&video)
-        .status()
-        .unwrap();
+        .args(["-frames:v", &n.to_string(), "-c:v", "libx264", "-preset", "veryfast", "-crf", "12", "-pix_fmt", "yuv420p"]);
+    if let Some(s) = inicio {
+        ff.args(["-output_ts_offset", s]);
+    }
+    let st = ff.arg(&video).status().unwrap();
     assert!(st.success(), "{}", cap.versao);
     let vm = tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(
         ws.to_string_lossy().into(),
@@ -642,10 +648,10 @@ fn caso_fluxo(teste: &str) -> Option<CasoFluxo> {
     .unwrap();
     let caminho = crate::workspace::paths::resolver_relativo(&ws, &vm.relative_path);
     let tab = TabelaQuadros::do_decodificador(&cap, &caminho, &AtomicBool::new(false), &mut |_| {}).unwrap();
-    assert_eq!(tab.pts.len(), 6);
+    assert_eq!(tab.pts.len(), n);
     let mut m = crate::edicao::testes::aceite::midia("m1", "video", json!([]));
     (m["sha256"], m["relativo"], m["media_id"]) = (json!(vm.sha256), json!(vm.relative_path), json!(vm.id.to_string()));
-    let p = crate::edicao::testes::aceite::projeto(1920, 1280, (6, 1), vec![m], vec![crate::edicao::testes::aceite::trecho("c1", "m1", &tab, 0, 6, 1.0, json!([]))], json!({}));
+    let p = crate::edicao::testes::aceite::projeto(1920, 1280, fps, vec![m], vec![crate::edicao::testes::aceite::trecho("c1", "m1", &tab, 0, n, 1.0, json!([]))], json!({}));
     let cache = d.path().join("cache");
     std::fs::create_dir_all(&cache).unwrap();
     Some(CasoFluxo { ws, cache, cap, tab, sha: vm.sha256.clone(), projeto: serde_json::to_value(&p).unwrap(), _d: d })
@@ -653,6 +659,9 @@ fn caso_fluxo(teste: &str) -> Option<CasoFluxo> {
 
 /// Detecção de placas pelo comando (conjunto de CPU com a lib dos testes), à espera do fim.
 fn propor(c: &CasoFluxo, placa: &Path, coco: &Path) -> FimDeteccao {
+    // uma detecção por processo (`rastreio_em_curso`): os testes de fluxo esperam a vez
+    static VEZ: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let _vez = VEZ.lock().unwrap_or_else(|e| e.into_inner());
     let (tx, rx) = mpsc::channel();
     let tx = std::sync::Mutex::new(tx);
     let emitir: EmissorDeteccao = Box::new(move |e| {
@@ -669,7 +678,7 @@ fn propor(c: &CasoFluxo, placa: &Path, coco: &Path) -> FimDeteccao {
     loop {
         match rx.recv_timeout(std::time::Duration::from_secs(600)).expect("fim da detecção") {
             EventoDeteccao::Avanco(a) => {
-                assert_eq!((a.tarefa_id.as_str(), a.total), (tarefa.as_str(), 6));
+                assert_eq!((a.tarefa_id.as_str(), a.total as usize), (tarefa.as_str(), c.tab.pts.len()));
                 avancos += 1;
             }
             EventoDeteccao::Fim(f) => {
@@ -783,4 +792,59 @@ fn propor_folha_confirmar_render() {
     }
     assert!(placa_visivel_no_original > 0, "a medida não distingue: nenhuma placa clara no original");
     eprintln!("{}: {} propostas de placa, todas cobertas nos 6 quadros; {placa_visivel_no_original} caixas claras no original", c.cap.versao, fim.rastreios.len());
+}
+
+/// Vídeo a 29,97 que começa em 2,5 s: as propostas ficam nos pts da tabela (o primeiro quadro não é o pts 0), a folha
+/// nos tempos deles e, confirmadas, o render cobre a caixa de cada uma em todos os quadros (nos dois binários).
+#[test]
+fn propor_em_video_a_2997_que_nao_comeca_em_zero() {
+    let teste = "propor_em_video_a_2997_que_nao_comeca_em_zero";
+    let Some(c) = caso_fluxo_com(teste, "30000/1001", Some("2.5"), 8, (30000, 1001)) else { return };
+    let (Some(placa), Some(coco)) = (t::ou_dispensa(redacao(&PLACA_YOLOX), teste, PLACA_YOLOX.nome), t::ou_dispensa(yolox_coco(), teste, "yolox_s.onnx")) else { return };
+    if t::ou_dispensa(t::ort_lib(), teste, "a lib dos testes").is_none() {
+        return;
+    }
+    assert!(c.tab.tempo(0) > 2.4, "início {} ({})", c.tab.tempo(0), c.cap.versao);
+    let fim = propor(&c, &placa, &coco);
+    assert!(fim.rastreios.len() >= 3, "{} propostas", fim.rastreios.len());
+    let pasta = armazem::pasta_projeto(&c.ws, "p-teste");
+    let mut doc = c.projeto.clone();
+    doc["rastreios"] = serde_json::to_value(&fim.rastreios).unwrap();
+    let mut ocs = Vec::new();
+    for (i, r) in fim.rastreios.iter().enumerate() {
+        let d = r.denso.as_ref().unwrap();
+        let a = arquivo::ler(&pasta, &r.id, &d.sha256).unwrap();
+        assert_eq!(a.pts, c.tab.pts, "{}", r.nome);
+        assert!((d.de_s - c.tab.tempo(0)).abs() < 1e-9 && (d.ate_s - c.tab.tempo(7)).abs() < 1e-9);
+        let f = tira::folha(&c.ws, &c.cache, "p-teste", &c.sha, &d.sha256, 12).unwrap();
+        assert_eq!(f.tempos, (0..8).map(|j| c.tab.tempo(j)).collect::<Vec<_>>());
+        doc["rastreios"][i]["confirmacao"] = json!({ "por": "Perito P45", "em": "2026-11-17T20:00:00Z", "denso_sha256": d.sha256, "de_s": d.de_s, "ate_s": d.ate_s });
+        ocs.push(crate::edicao::testes::aceite::ocultar(&format!("o{i}"), &r.id, "solido", json!({ "ativo": { "de": d.de_s, "ate": d.ate_s }, "conteudo": "placa",
+            "alvo": { "rastreio": r.id, "forma": "retangulo", "vertices": null, "margem": 0.0, "borda_suave": 0.0, "inverter": false } })));
+    }
+    doc["midias"][0]["ocultacoes"] = Value::Array(ocs);
+    let p = armazem::tipado(&doc).unwrap();
+    let prep = executar::preparar(&c.ws, &p, &c.cache, false).unwrap();
+    let plano = crate::edicao::motor::compilar(&p, &prep.contexto(), &crate::edicao::testes::aceite::alvo_final("cpu")).expect("confirmada compila");
+    let r = crate::edicao::testes::executor::rodar(&c.cap, &plano, &crate::edicao::testes::fontes::pasta_temporaria("p45-2997"), &crate::edicao::testes::executor::Opcoes { sem_perdas: true, ..Default::default() }).expect("render");
+    let mut qs = Vec::new();
+    for b in &r.blocos {
+        qs.extend(crate::edicao::testes::medir::quadros(&c.cap, b).unwrap());
+    }
+    assert_eq!(qs.len(), 8);
+    for (j, q) in qs.iter().enumerate() {
+        for rr in &fim.rastreios {
+            let a = arquivo::ler(&pasta, &rr.id, &rr.denso.as_ref().unwrap().sha256).unwrap();
+            let (x0, y0) = ((a.x[j] * 1920.0).ceil() as u32 + 2, (a.y[j] * 1280.0).ceil() as u32 + 2);
+            let (x1, y1) = (((a.x[j] + a.w[j]) * 1920.0).floor() as u32 - 2, ((a.y[j] + a.h[j]) * 1280.0).floor() as u32 - 2);
+            let (mut escuros, mut n) = (0u32, 0u32);
+            for y in y0..y1 {
+                for x in x0..x1 {
+                    escuros += u32::from(q.px[((y * q.w + x) * 3) as usize..][..3].iter().all(|&v| v <= 24));
+                    n += 1;
+                }
+            }
+            assert!(n > 0 && escuros as f64 >= 0.99 * n as f64, "quadro {j}, {}: {escuros}/{n} escuros ({})", rr.nome, c.cap.versao);
+        }
+    }
 }

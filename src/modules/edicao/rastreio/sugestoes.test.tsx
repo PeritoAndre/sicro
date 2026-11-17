@@ -34,7 +34,7 @@ import { useEdicaoStore } from "../store/edicaoStore";
 import { esquecerRastreios } from "../store/rastreioStore";
 import { useSettingsStore } from "@stores/settingsStore";
 import { botao, clicar, desmontarTudo, esperar, lerFixture, montar, type Tela } from "../inspetor/testeTela";
-import { confirmada, esquecerSugestoes, proximoFraco, resumoDaSugestao, SugestoesSecao, trechosFracos, useSugestoesStore } from "./Sugestoes";
+import { confirmada, confirmarSugestao, esquecerSugestoes, proximoFraco, resumoDaSugestao, SugestoesSecao, trechosFracos, useSugestoesStore } from "./Sugestoes";
 import { CELULAS } from "./FolhaContato";
 
 /** Rótulos do §8.6 que a seção pode mostrar (sugestões, F4) e os do "Conteúdo" do Ocultar no menu. */
@@ -192,6 +192,34 @@ describe("Sugestões (ocultação assistida)", () => {
     await esperar(() => st().desfazer());
     expect(doc().rastreios.some((r) => r.origem.tipo === "deteccao")).toBe(false);
     expect(doc().midias.find((x) => x.id === m)!.ocultacoes.length).toBe(antes);
+  });
+
+  it("conteúdo trocado depois de confirmar: a folha vista de outro conteúdo não habilita; sem folha nada grava", async () => {
+    await detectarPlacas([proposta("r1", SHA("1"), T(0), T(0.9667)), proposta("r2", SHA("2"), T(1), T(1.9667))]);
+    const r = (id: string) => doc().rastreios.find((x) => x.id === id)!;
+    // a guarda não é só o botão
+    confirmarSugestao("r2");
+    expect(r("r2").confirmacao).toBeNull();
+    await clicar(linha("r1").querySelector<HTMLElement>("button[aria-expanded]")!);
+    await esperar();
+    await esperar(() => void linha("r1").querySelector("img")!.dispatchEvent(new Event("load")));
+    await clicar(botao(linha("r1"), "Confirmar"));
+    expect(confirmada(r("r1"))).toBe(true);
+    // nova corrida ou edição: outro denso
+    await esperar(() => st().alterar("Simplificar", (d) => void Object.assign(d.rastreios.find((x) => x.id === "r1")!.denso!, { sha256: SHA("3") })));
+    expect(confirmada(r("r1"))).toBe(false);
+    expect(linha("r1").querySelector('[data-estado-sugestao="pendente"]')).toBeTruthy();
+    const confirmar = () => botao(linha("r1"), "Confirmar") as HTMLButtonElement;
+    expect(confirmar().disabled).toBe(true);
+    confirmarSugestao("r1");
+    expect(r("r1").confirmacao!.denso_sha256).toBe(SHA("1"));
+    await esperar();
+    expect(cmd.edicaoRastreioTira).toHaveBeenLastCalledWith(WS, doc().id, expect.any(String), SHA("3"), CELULAS);
+    await esperar(() => void linha("r1").querySelector("img")!.dispatchEvent(new Event("load")));
+    expect(confirmar().disabled).toBe(false);
+    await clicar(confirmar());
+    expect(r("r1").confirmacao).toMatchObject({ denso_sha256: SHA("3") });
+    expect(confirmada(r("r1"))).toBe(true);
   });
 
   it("Trechos fracos vai ao intervalo de baixa confiança; resumo da linha", async () => {

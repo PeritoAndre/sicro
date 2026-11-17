@@ -235,6 +235,8 @@ const ROTULOS: &[(&str, &str)] = &[
     ("provedor.cuda", "CUDA"),
     ("uso.rastreio", "acompanhamento de alvo"),
     ("uso.legendas", "degravação das legendas"),
+    // P4.5: trilha de detecção da ocultação assistida (`ia::uso`)
+    ("uso.deteccao", "proposta de ocultação por detecção automática"),
     ("arquivo.modelo", "arquivo do modelo"),
     ("papel.runtime", "execução dos modelos de inteligência artificial"),
     ("onde.ocultacao", "ocultação {n}"),

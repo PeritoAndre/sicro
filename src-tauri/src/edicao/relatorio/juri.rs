@@ -3142,7 +3142,7 @@ mod testes {
         t2["feito"]["ia"] = json!([{ "modelo": "YOLOX-S", "arquivos": [{ "nome": "yolox_s.onnx", "sha256": "8".repeat(64) }], "origem": "x", "commit": "", "desvio": "",
             "runtime": "onnxruntime 1.31.1", "provedor": "cpu", "uso": "deteccao" }]);
         let m = dados(&t2, &[], &[]).unwrap()["modelos_ia"].clone();
-        assert_eq!((m.as_array().unwrap().len(), &m[0]["modelo"], &m[0]["uso"], &m[0]["execucao"]), (3, &json!("YOLOX-S"), &json!("deteccao"), &json!("onnxruntime 1.31.1 · CPU")));
+        assert_eq!((m.as_array().unwrap().len(), &m[0]["modelo"], &m[0]["uso"], &m[0]["execucao"]), (3, &json!("YOLOX-S"), &json!("proposta de ocultação por detecção automática"), &json!("onnxruntime 1.31.1 · CPU")));
         // onnxruntime com a versão e onde rodou, antes do sistema
         let sw: Vec<Vec<String>> = serde_json::from_value(d["software"].clone()).unwrap();
         assert_eq!(sw.iter().map(|l| l[0].as_str()).collect::<Vec<_>>(), ["SICRO", "FFmpeg", "Typst", "onnxruntime", "Sistema"]);
