@@ -197,6 +197,24 @@ impl Fundo {
         self.trava().itens.iter().find(|i| i.tarefa.chave == chave).map(|i| i.tarefa.clone())
     }
 
+    /// Cancela a tarefa viva dessa chave: na fila sai já `cancelada`; rodando, o sinal sobe e ela acaba `cancelada`.
+    /// Devolve se havia tarefa viva.
+    pub(crate) fn cancelar(&self, chave: &str) -> bool {
+        let lista = {
+            let mut g = self.trava();
+            let Some(i) = g.itens.iter_mut().find(|i| i.tarefa.chave == chave && !terminal(&i.tarefa.estado)) else { return false };
+            i.cancelar.store(true, Ordering::SeqCst);
+            if i.tarefa.estado == EstadoFundo::NaFila {
+                i.tarefa.estado = EstadoFundo::Cancelada;
+                i.trabalho = None;
+                i.terminada = Some(Instant::now());
+            }
+            Self::lista(&g)
+        };
+        self.emitir(lista);
+        true
+    }
+
     pub(crate) fn listar(&self) -> Vec<TarefaFundo> {
         let mut g = self.trava();
         Self::podar(&mut g);
@@ -343,6 +361,13 @@ pub(crate) fn pedir_com_prioridade(tipo: TipoFundo, chave: &str, trabalho: Traba
 /// Tarefa dessa chave, se houver.
 pub fn estado(chave: &str) -> Option<TarefaFundo> {
     global().estado(chave)
+}
+
+// CONTRATO: acréscimo (P4.3): a tira que a tela deixou de querer morre já, e o pedido seguinte da mesma chave roda
+// de novo (`cancelada` não é falha: não espera os 10 s).
+/// Cancela a tarefa viva dessa chave; devolve se havia.
+pub fn cancelar(chave: &str) -> bool {
+    global().cancelar(chave)
 }
 
 /// Tarefas atuais.
@@ -515,6 +540,29 @@ mod testes {
         assert_eq!(juntos.load(Ordering::SeqCst), 0);
         // depois de encerrar, um pedido novo liga trabalhadores de novo
         let id = f.pedir(TipoFundo::Proxy, "proxy:3", Box::new(|_, _| Ok(())), false);
+        ate(&f, |l| l.iter().any(|t| t.id == id && t.estado == EstadoFundo::Pronta));
+        f.encerrar();
+    }
+
+    /// Cancelar por chave (P4.3): a que roda acaba `cancelada` (não `falhou`), a da fila sai sem rodar, chave sem
+    /// tarefa viva devolve false, e o mesmo pedido logo depois roda de novo (sem a espera de 10 s da falha).
+    #[test]
+    fn cancelar_por_chave() {
+        let f = Fundo::nova(1);
+        let (liberar, juntos, maximo) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        f.pedir(TipoFundo::Tira, "tira:a", trabalho_preso(liberar.clone(), juntos.clone(), maximo.clone()), false);
+        let rodou_b = Arc::new(AtomicBool::new(false));
+        let r = rodou_b.clone();
+        f.pedir(TipoFundo::Tira, "tira:b", Box::new(move |_, _| { r.store(true, Ordering::SeqCst); Ok(()) }), false);
+        ate(&f, |l| l.iter().any(|t| t.chave == "tira:a" && t.estado == EstadoFundo::Rodando));
+        assert!(f.cancelar("tira:b"));
+        assert_eq!(*estado_de(&f.listar(), "tira:b"), EstadoFundo::Cancelada);
+        assert!(f.cancelar("tira:a"));
+        ate(&f, |l| l.iter().all(|t| terminal(&t.estado)));
+        assert_eq!(*estado_de(&f.listar(), "tira:a"), EstadoFundo::Cancelada);
+        assert!(!rodou_b.load(Ordering::SeqCst), "a cancelada na fila rodou");
+        assert!(!f.cancelar("tira:a") && !f.cancelar("tira:nenhuma"));
+        let id = f.pedir(TipoFundo::Tira, "tira:a", Box::new(|_, _| Ok(())), false);
         ate(&f, |l| l.iter().any(|t| t.id == id && t.estado == EstadoFundo::Pronta));
         f.encerrar();
     }

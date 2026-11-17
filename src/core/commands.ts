@@ -154,6 +154,7 @@ import type {
   Onda,
   OpRastreio,
   PedidoSprite,
+  PedidoTira,
   PreviaMidia,
   ProjetoAberto,
   ProjetoEdicao,
@@ -161,6 +162,7 @@ import type {
   QuadroEm,
   QuadroFinal,
   Rastreio,
+  RespostaTira,
   ResumoCapacidades,
   ResumoProjeto,
   RetratoCalculo,
@@ -1656,6 +1658,14 @@ export const commands = {
   /** Folha de contato do denso: recortes do alvo em `n` instantes, os trechos fracos sempre. */
   edicaoRastreioTira(workspacePath: string, projetoId: string, midiaSha256: string, densoSha256: string, n: number): Promise<Tira> {
     return safeInvoke<Tira>("edicao_rastreio_tira", { workspacePath, projetoId, midiaSha256, densoSha256, n });
+  },
+
+  // --- Fase 4 (P4.3): tiras de miniaturas (`tiras.rs`) ---
+  /** Tira de miniaturas; `tira` null = pedida à fila de fundo (pedir de novo quando `edicao:fundo` der `pronta` ou
+   *  `cancelada` para `chave`). O pedido novo do mesmo `canal` cancela o anterior. Erro `tabela_pendente` (MPEG-PS,
+   *  H.264 cru): pedir de novo quando `tabela:<sha256>` ficar pronta. */
+  edicaoTira(workspacePath: string, pedido: PedidoTira): Promise<RespostaTira> {
+    return safeInvoke<RespostaTira>("edicao_tira", { workspacePath, pedido });
   },
   // ===== fim da Edição (Fase 0) =====
 } as const;

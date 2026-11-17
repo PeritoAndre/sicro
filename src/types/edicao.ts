@@ -562,6 +562,18 @@ export interface Tira { relativo: string; colunas: number; tempos: Seg[] }
 export interface FaixaFraca { de_s: Seg; ate_s: Seg; como: ComoFraco }
 export interface TrechoConferencia { efeito: Id; conteudo: EfOcultar["conteudo"]; de_s: Seg; ate_s: Seg; fracos: FaixaFraca[] }
 
+// ---- Fase 4: tiras de miniaturas (tiras.rs, P4.3) ----
+/** Faixa [de_s, ate_s) em tempo de fonte; `n` miniaturas ou `largura` da faixa na tela (px; n = largura ÷ largura da
+ *  célula); `altura` de cada miniatura (px); `canal` = quem pede (o clipe): o pedido novo do mesmo canal cancela o anterior. */
+export interface PedidoTira { sha256: string; de_s: Seg; ate_s: Seg; n: number | null; largura: number | null; altura: number; canal: string }
+/** Célula da imagem: o quadro-chave (pts na base do fluxo; t em s de fonte). */
+export interface CelulaTira { pts: Pts; t: Seg }
+/** `relativo` = JPEG no cache (célula c em x = c·w); `miniaturas[k]` = célula da janela k; sem quadro-chave na faixa: `relativo` null e listas vazias. */
+export interface Tira { relativo: string | null; w: number; h: number; n: number; de_s: Seg; ate_s: Seg; celulas: CelulaTira[]; miniaturas: number[] }
+/** `tira` null = pedida à fila de fundo: pedir de novo quando `edicao:fundo` der `pronta` (ou `cancelada`) para `chave`.
+ *  MPEG-PS e H.264 cru sem a tabela do decodificador: erro `tabela_pendente` (pedir de novo quando `tabela:<sha256>` ficar pronta). */
+export interface RespostaTira { chave: string; tira: Tira | null }
+
 // ---- palco e desenho (§8.3) ----
 // Unidades: 0..1 do canvas. O pintor (front) e camada::formas (Rust) implementam TODOS os `k` uma vez; efeito novo só devolve primitivas.
 type Traco2 = { cor: Cor; largura: number; contorno?: Cor };

@@ -30,6 +30,7 @@ pub mod rastreio;
 pub mod refazer;
 pub mod relatorio;
 pub mod tempo;
+pub mod tiras;
 pub mod validar;
 
 #[cfg(test)]

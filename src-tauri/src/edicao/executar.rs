@@ -1426,7 +1426,7 @@ fn amostras_wav(arquivo: &Path) -> Result<u64> {
 // ---------------------------------------------------------------------------------------------- limpeza do cache
 
 /// Pastas do cache de um caso que entram na conta do teto (as tabelas de quadros ficam: são pequenas e caras).
-const PASTAS_DO_TETO: &[&str] = &["blocos", "quadro", "camadas", "mascaras", "previa", "proxies", "origem", "sprites", "atlas"];
+const PASTAS_DO_TETO: &[&str] = &["blocos", "quadro", "camadas", "mascaras", "previa", "proxies", "origem", "sprites", "atlas", "tiras"];
 /// `render/<tarefa>` mais velho que isso sai (§4).
 pub(crate) const IDADE_RENDER: Duration = Duration::from_secs(7 * 24 * 3600);
 /// Temporário de processo morto (`<hash>.tmp-<pid>-<n>`) mais velho que isso sai.
@@ -1437,7 +1437,7 @@ pub(crate) const TETO_CACHE: u64 = 20 * 1024 * 1024 * 1024;
 /// Pasta das marcas de instância do app dentro do cache da Edição.
 const INSTANCIAS: &str = "instancias";
 /// Pastas do cache de um caso com temporários `<nome>.tmp-<pid>-<n>` de processo morto.
-const PASTAS_COM_TMP: &[&str] = &["previa", "proxies", "camadas", "mascaras", "origem", "ondas"];
+const PASTAS_COM_TMP: &[&str] = &["previa", "proxies", "camadas", "mascaras", "origem", "ondas", "tiras"];
 
 /// Há outra instância viva do app neste cache? Cada processo segura uma marca presa por trava de arquivo em
 /// `<raiz>/instancias/` até acabar; a marca que se deixa prender é de processo morto e sai. Sem trava no sistema de

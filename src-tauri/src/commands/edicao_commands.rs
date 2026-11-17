@@ -31,6 +31,7 @@ use crate::edicao::motor::{Alvo, FonteInfo};
 use crate::edicao::previa::{self, MidiaInfo, PreviaMidia};
 use crate::edicao::proxy;
 use crate::edicao::quadros::{AlvoQuadro, OrigemTabela, QuadroEm, TabelaCompacta, TabelaQuadros};
+use crate::edicao::tiras::{self, PedidoTira, RespostaTira};
 use crate::edicao::validar;
 use crate::error::{Result, SicroError};
 use crate::models::VideoMedia;
@@ -569,6 +570,20 @@ pub async fn edicao_proxy_pedir(app: AppHandle, workspace_path: String, projeto:
     .await
 }
 
+// ---------------------------------------------------------------------------------------------- Fase 4
+
+/// Tira de miniaturas da mídia (P4.3, `tiras.rs`): a do cache, ou `tira` nula depois de pedir à fila de fundo
+/// (`chave` = a da tarefa em `edicao:fundo`). O pedido novo do mesmo `canal` cancela o anterior.
+#[tauri::command]
+pub async fn edicao_tira(app: AppHandle, workspace_path: String, pedido: PedidoTira) -> Result<RespostaTira> {
+    let raiz = app_cache(&app)?;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        tiras::pedir(ws, &cache_do_caso(&raiz, ws)?, &pedido)
+    })
+    .await
+}
+
 // ---------------------------------------------------------------------------------------------- partida e saída
 
 struct OuvinteTauri(AppHandle);
@@ -1037,6 +1052,7 @@ mod testes {
             edicao_retrato_calculo,
             edicao_origem_estado,
             edicao_proxy_pedir,
+            edicao_tira,
         ]);
     }
 }
