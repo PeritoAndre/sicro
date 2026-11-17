@@ -99,6 +99,8 @@ struct Track {
     last_frame: u32,
     /// 1ª aparição de uma trilha ainda não confirmada (entra no histórico ao confirmar).
     pending: Option<Sample>,
+    /// Última detecção casada (`guardar_detectada`).
+    det: Det,
 }
 
 /// Ponto da trilha: índice do quadro analisado e caixa em pixels do original.
@@ -121,12 +123,26 @@ pub struct Params {
     pub match_thr: f32,
     /// Quadros analisados que uma trilha perdida espera antes de morrer.
     pub max_lost: u32,
+    /// Folga sobre `high` para NASCER trilha depois do 1º quadro (o "+0,1" do ByteTrack original).
+    pub extra_nova: f32,
+    /// Alvo pequeno (redação): as duas caixas crescem `folga` do lado, com lado mínimo `piso` px, só no custo do IoU.
+    pub folga: f32,
+    pub piso: f32,
+    /// Histórico com a caixa DETECTADA (redação) em vez da do Kalman, que atrasa em movimento rápido.
+    pub guardar_detectada: bool,
 }
 
 impl Default for Params {
     fn default() -> Self {
-        Self { high: 0.5, low: 0.1, match_thr: 0.8, max_lost: 30 }
+        Self { high: 0.5, low: 0.1, match_thr: 0.8, max_lost: 30, extra_nova: 0.1, folga: 0.0, piso: 0.0, guardar_detectada: false }
     }
+}
+
+/// A caixa com a folga do custo (`p3b/ref/trilhas.py::_iou_mat`).
+fn inflar(d: &Det, folga: f32, piso: f32) -> Det {
+    let dw = (d.w * folga).max((piso - d.w) / 2.0).max(0.0);
+    let dh = (d.h * folga).max((piso - d.h) / 2.0).max(0.0);
+    Det { x: d.x - dw, y: d.y - dh, w: d.w + 2.0 * dw, h: d.h + 2.0 * dh, ..*d }
 }
 
 pub struct ByteTrack {
@@ -201,7 +217,7 @@ impl ByteTrack {
         // trilhas novas: fortes sem par e com folga sobre o limiar
         for di in um_d3 {
             let d = rest[di];
-            if dets[d].score < self.p.high + 0.1 && frame > 1 {
+            if dets[d].score < self.p.high + self.p.extra_nova && frame > 1 {
                 continue;
             }
             let id = self.next_id;
@@ -216,6 +232,7 @@ impl ByteTrack {
                 pending: (frame > 1).then(|| Sample {
                     frame, x: dets[d].x, y: dets[d].y, w: dets[d].w, h: dets[d].h, score: dets[d].score,
                 }),
+                det: dets[d],
             });
             let t = self.tracks.len() - 1;
             touched.push(t);
@@ -232,7 +249,7 @@ impl ByteTrack {
         for &i in &touched {
             let t = &self.tracks[i];
             if t.activated && t.state == State::Tracked && t.last_frame == frame {
-                let d = t.kf.det(t.score);
+                let d = if self.p.guardar_detectada { Det { score: t.score, ..t.det } } else { t.kf.det(t.score) };
                 out.push((t.id, d));
                 self.history.entry(t.id).or_default().push(Sample {
                     frame, x: d.x, y: d.y, w: d.w, h: d.h, score: t.score,
@@ -257,18 +274,21 @@ impl ByteTrack {
         tr.activated = true;
         tr.score = d.score;
         tr.last_frame = frame;
+        tr.det = *d;
     }
 
     /// Custo 1 − IoU (com a pontuação fundida, como no ByteTrack original, nas fortes).
     fn cost(&self, tracks: &[usize], dets_idx: &[usize], dets: &[Det], fuse: bool) -> Vec<Vec<f32>> {
+        let (folga, piso) = (self.p.folga, self.p.piso);
+        let inf = |d: Det| if folga > 0.0 || piso > 0.0 { inflar(&d, folga, piso) } else { d };
         tracks
             .iter()
             .map(|&t| {
-                let pb = self.tracks[t].kf.det(0.0);
+                let pb = inf(self.tracks[t].kf.det(0.0));
                 dets_idx
                     .iter()
                     .map(|&d| {
-                        let iou = pb.iou(&dets[d]);
+                        let iou = pb.iou(&inf(dets[d]));
                         1.0 - if fuse { iou * dets[d].score } else { iou }
                     })
                     .collect()
@@ -461,6 +481,44 @@ mod tests {
         assert_eq!(b.first().unwrap().frame, 11); // confirmada no 2º quadro em que aparece
         assert_eq!(b.last().unwrap().frame, 20);
         assert!(bt.tracks.iter().all(|t| t.id != 2), "a trilha 2 devia ter sido removida");
+    }
+
+    /// Parâmetros da redação (P4.5): o "+0,1" do nascimento, a folga no IoU para alvo pequeno e a caixa detectada.
+    #[test]
+    fn parametros_da_redacao() {
+        let d = |x: f32, y: f32, w: f32, s: f32| Det { x, y, w, h: w, score: s, classe: 0 };
+        // 2ª pessoa aparece no quadro 3 com 0,55: não nasce com o "+0,1" (0,6), nasce sem ele
+        for (extra, nasce) in [(0.1f32, false), (0.0, true)] {
+            let mut bt = ByteTrack::new(Params { extra_nova: extra, ..Params::default() });
+            for f in 0..6 {
+                let mut v = vec![d(100.0, 100.0, 40.0, 0.9)];
+                if f >= 2 {
+                    v.push(d(400.0, 100.0, 40.0, 0.55));
+                }
+                bt.update(&v);
+            }
+            assert_eq!(bt.history.len() == 2, nasce, "extra {extra}");
+        }
+        // alvo de 10 px andando 8 px por quadro: IoU 0,11 → custo 0,9 > 0,8, não casa; com a folga (25 %, lado mínimo
+        // 24 px) as caixas viram 24 px, IoU 0,5, e a trilha segue os 10 quadros
+        let seguidos = |folga: f32, piso: f32| {
+            let mut bt = ByteTrack::new(Params { folga, piso, ..Params::default() });
+            for f in 0..10 {
+                bt.update(&[d(100.0 + 8.0 * f as f32, 100.0, 10.0, 0.9)]);
+            }
+            bt.history.values().map(Vec::len).sum::<usize>()
+        };
+        assert!(seguidos(0.0, 0.0) < 5, "sem folga não devia seguir");
+        assert_eq!(seguidos(0.25, 24.0), 10);
+        // histórico: a caixa detectada (degrau de 30 px) × a do Kalman, que fica para trás
+        for (det, igual) in [(true, true), (false, false)] {
+            let mut bt = ByteTrack::new(Params { guardar_detectada: det, ..Params::default() });
+            for f in 0..8 {
+                bt.update(&[d(if f < 5 { 100.0 } else { 130.0 }, 100.0, 120.0, 0.9)]);
+            }
+            let h = &bt.history[&1];
+            assert_eq!(h.last().unwrap().x == 130.0, igual, "{h:?}");
+        }
     }
 
     #[test]

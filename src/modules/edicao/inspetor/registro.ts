@@ -64,6 +64,8 @@ import { AUDIO_CLIPE_PRONTO, AudioClipeSecao } from "./secoes/AudioClipeSecao";
 // Fase 2 (contratos-fase2.md (c)): o P2.6 liga o holofote em `HolofoteEditor.tsx`, sem tocar aqui
 import { adicionarHolofote, HOLOFOTE_PRONTO, HolofoteEditor, novoHolofote } from "./secoes/HolofoteEditor";
 import { alcasDoAlvo } from "./secoes/alvoRegiao";
+// Fase 4 (P4.5): ocultação assistida, depois das Marcações do trecho
+import { SUGESTOES_PRONTO, SugestoesSecao } from "../rastreio/Sugestoes";
 
 // ---- efeitos ----
 
@@ -284,7 +286,7 @@ const Realce = REALCE_PRONTO ? RealceSecao : RealceSoLeitura;
 
 /** Seções do Inspetor, por tipo de item, na ordem em que aparecem. `tela` e vídeo sobreposto: Fase 3. */
 export const SECOES: Partial<Record<TipoItem, FC<SecaoProps<never>>[]>> = {
-  "principal:trecho": [TrechoSecao, ...(AUDIO_CLIPE_PRONTO ? [AudioClipeSecao] : []), EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao] as FC<SecaoProps<never>>[],
+  "principal:trecho": [TrechoSecao, ...(AUDIO_CLIPE_PRONTO ? [AudioClipeSecao] : []), EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao, ...(SUGESTOES_PRONTO ? [SugestoesSecao] : [])] as FC<SecaoProps<never>>[],
   "principal:congelar": [CongelarSecao, EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao] as FC<SecaoProps<never>>[],
   "principal:imagem": [ImagemClipeSecao, EntradaSecao, EnquadramentoSecao, Realce, MarcacoesSecao] as FC<SecaoProps<never>>[],
   "principal:titulo": [TituloSecao, EntradaSecao, MarcacoesSecao] as FC<SecaoProps<never>>[],

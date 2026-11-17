@@ -86,6 +86,9 @@ export interface EstadoIa {
   gpu: EstadoGpuIa;
   rastreador: boolean;
   rastreador_mb: number;
+  /** Item "Ocultação" (P4.5). */
+  redacao: boolean;
+  redacao_mb: number;
   carregada: Provedor | null;
   reabrir: boolean;
 }

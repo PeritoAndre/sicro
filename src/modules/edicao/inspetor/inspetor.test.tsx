@@ -47,6 +47,7 @@ import { SELOS_PRONTOS } from "./secoes/SelosSecao";
 import { TrechoSecao } from "./secoes/TrechoSecao";
 import { EnquadramentoSecao } from "./secoes/EnquadramentoSecao";
 import { MarcacoesSecao } from "./secoes/MarcacoesSecao";
+import { SugestoesSecao } from "../rastreio/Sugestoes";
 import { TituloSecao } from "./secoes/TituloSecao";
 import { PAINEL_AUDIO_PRONTO } from "../audio/PainelAudio";
 import { EDITOR_TITULO_PRONTO } from "../titulos/EditorTitulo";
@@ -1067,7 +1068,8 @@ describe("rótulos", () => {
     expect([REGISTRO.lupa.Editor, REGISTRO.regua.Editor, REGISTRO.velocidade_exibida.Editor]).toEqual([LupaEditor, ReguaEditor, VelocidadeEditor]);
     for (const t of ["lupa", "regua", "velocidade_exibida"] as const) expect(EDITAVEIS.has(t), t).toBe(true);
     // seções por tipo de item: som do trecho depois do Trecho; Realce (P1.4) antes das Marcações
-    expect(secoesDe("principal", "trecho")).toEqual([TrechoSecao, AudioClipeSecao, EntradaSecao, EnquadramentoSecao, RealceSecao, MarcacoesSecao]);
+    // Fase 4 (P4.5): "Sugestões" depois das Marcações, só no trecho
+    expect(secoesDe("principal", "trecho")).toEqual([TrechoSecao, AudioClipeSecao, EntradaSecao, EnquadramentoSecao, RealceSecao, MarcacoesSecao, SugestoesSecao]);
     expect(secoesDe("principal", "congelar")?.slice(-2)).toEqual([RealceSecao, MarcacoesSecao]);
     expect(secoesDe("principal", "titulo")).toEqual([TituloSecao, EntradaSecao, MarcacoesSecao]);
     expect(secoesDe("livre", "titulo")).toEqual([TituloSecao]);

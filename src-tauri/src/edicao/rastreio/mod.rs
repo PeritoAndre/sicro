@@ -12,6 +12,10 @@ use crate::error::Result;
 pub mod arquivo;
 pub mod avaliar;
 pub mod corrida;
+// Fase 4 (P4.5): ocultação assistida
+pub mod decodificadores;
+pub mod detectar;
+pub mod tira;
 pub mod edgetam;
 pub mod fundir;
 pub mod laco;
@@ -175,6 +179,9 @@ pub enum MotorRastreio {
     Edgetam,
     Vittrack,
     Mancha,
+    // CONTRATO: acréscimo (P4.5). Trilha de detecção (detectores da redação + ByteTrack): a corrida guarda os
+    // arquivos dos modelos e vai para `feito.ia` com `uso` = "deteccao".
+    Deteccao,
 }
 
 /// Motor pedido: `auto` = edgetam com GPU pronta e item instalado, senão vittrack (com onnxruntime), senão mancha.

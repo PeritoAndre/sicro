@@ -2354,7 +2354,8 @@ mod testes {
                 "",
                 "onnxruntime 1.31.1",
             ),
-            MotorRastreio::Mancha => ("", vec![], "", "", "", ""),
+            // CONTRATO: variante nova (P4.5); os testes daqui não a usam
+            MotorRastreio::Mancha | MotorRastreio::Deteccao => ("", vec![], "", "", "", ""),
         };
         let modelo = ModeloCorrida { nome: nome.into(), origem: origem.into(), commit: commit.into(), arquivos, desvio: desvio.into() };
         Corrida {

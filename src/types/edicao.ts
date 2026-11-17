@@ -503,7 +503,8 @@ export const ESTADO_AUSENTE = 2;
 export const TIPO_MEDIDO = 0;
 export const TIPO_INTERPOLADO = 1;
 export const TIPO_ESTENDIDO = 2;
-export type MotorRastreio = "edgetam" | "vittrack" | "mancha";
+// CONTRATO: "deteccao" acrescentado (P4.5): trilha de detecção da redação (modelos + ByteTrack)
+export type MotorRastreio = "edgetam" | "vittrack" | "mancha" | "deteccao";
 /** `auto` = edgetam com GPU pronta e item instalado, senão vittrack, senão mancha. */
 export type EscolhaMotor = "auto" | "edgetam" | "vittrack" | "mancha";
 export type Sentido = "frente" | "tras";
@@ -545,6 +546,19 @@ export interface Editado { ancoras: Chave<Caixa>[] | null; denso: Denso | null;
                           corridas_do_programa?: Corrida[] }   // CONTRATO: acréscimo (17/11); ausente = fica como está
 /** "Conferir ocultações" (conferencia.rs, P2.6): segundos do arquivo exportado, `[de_s, ate_s)`. */
 export type ComoFraco = "incerto" | "interpolado" | "ausencia"; // "ausencia": sem região, em ausência aceita
+// ---- Fase 4 (P4.5): ocultação assistida (`rastreio/detectar.rs`, `rastreio/tira.rs`) ----
+export type ClasseDeteccao = "rosto" | "placa" | "cabeca" | "pessoa" | "veiculo";
+/** O que "Sugestões" pede (`edicao_detectar`): o trecho do clipe, no espaço original; "rosto" = cabeça e rosto. */
+export interface PedidoDetectar { clipe_id: Id; classes: ClasseDeteccao[] }
+/** Evento `edicao:deteccao` (até 5 por segundo). */
+export interface AvancoDeteccao { tipo: "avanco"; tarefa_id: string; feitos: number; total: number }
+/** Fim: as propostas (rastreios SEM confirmação, denso já gravado) da mídia; vazio quando parou antes (`cancelada`). */
+export interface FimDeteccao { tipo: "fim"; tarefa_id: string; clipe_id: Id; midia_id: Id; rastreios: Rastreio[]; cancelada: boolean }
+export interface FalhaDeteccao { tipo: "falhou"; tarefa_id: string; mensagem: string }
+export type EventoDeteccao = AvancoDeteccao | FimDeteccao | FalhaDeteccao;
+export const EVENTO_DETECCAO = "edicao:deteccao";
+/** Folha de contato (`edicao_rastreio_tira`): JPEG relativo ao cache do caso; `tempos` (tempo de fonte) por célula. */
+export interface Tira { relativo: string; colunas: number; tempos: Seg[] }
 export interface FaixaFraca { de_s: Seg; ate_s: Seg; como: ComoFraco }
 export interface TrechoConferencia { efeito: Id; conteudo: EfOcultar["conteudo"]; de_s: Seg; ate_s: Seg; fracos: FaixaFraca[] }
 

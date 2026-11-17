@@ -40,6 +40,8 @@ export const ROTULOS = new Set<string>([
   // Fase 2 (§8.6 "Rastreio" e contratos-fase2 (f)), já aqui: o pacote que liga a casca não edita este arquivo
   "Seguir para trás", "Incerto", "Fora de cena", "Oculto", "Perdido", "Retomar", "Aceitar ausência", "Próximo trecho fraco",
   "Apagar daqui em diante", "Simplificar", "Atualizar", "Dessaturar", "Quadro anterior", "Próximo quadro",
+  // Fase 4 (§8.6 "sugestões (F4)", P4.5)
+  "Sugestões", "Trechos fracos", "Confirmar", "Descartar",
   // amostras e unidades
   "Aa", "×", "%", "°", "#",
 ]);
@@ -53,7 +55,9 @@ export function textoPermitido(t: string): boolean {
   if (/^Perdido em (\d{2}:)?\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^\d+ marcaç(ão|ões)$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;
-  if (/^-?\d+(,\d+)?\s?(%|°|×)?$/.test(t)) return true;
+  if (/^-?\d+(,\d+)?\s?(%|°|×|px)?$/.test(t)) return true;
+  // andamento da detecção (P4.5): quadros feitos/total
+  if (/^\d+\/\d+$/.test(t)) return true;
   if (/^\d{2}:\d{2}(:\d{2})?(,\d{3})?$/.test(t)) return true;
   return false;
 }

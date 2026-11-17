@@ -23,6 +23,8 @@ const cmd = vi.hoisted(() => ({
   iaGpuAutoteste: vi.fn(),
   iaRastreadorInstalar: vi.fn(),
   iaRastreadorRemover: vi.fn(),
+  iaRedacaoInstalar: vi.fn(),
+  iaRedacaoRemover: vi.fn(),
 }));
 vi.mock("@core/commands", () => ({ commands: cmd }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
@@ -46,6 +48,8 @@ const estado = (o: Partial<EstadoIa> = {}, g: Partial<EstadoGpuIa> = {}): Estado
   gpu: gpu(g),
   rastreador: false,
   rastreador_mb: 65,
+  redacao: false,
+  redacao_mb: 245,
   carregada: null,
   reabrir: false,
   ...o,
@@ -178,6 +182,24 @@ describe("Gerenciador de IA: aceleração por GPU e rastreador", () => {
     await esperar(async () => botao(linha(tela, "rastreador"), "Remover").click());
     expect(cmd.iaRastreadorRemover).toHaveBeenCalledTimes(1);
     expect(botoes(linha(tela, "rastreador"))).toEqual(["Baixar"]);
+  });
+
+  it("item \"Ocultação\" (P4.5): tamanho, baixa, fica pronto e remove", async () => {
+    cmd.iaEstado.mockResolvedValue(estado());
+    cmd.iaRedacaoInstalar.mockResolvedValue(estado({ redacao: true }));
+    cmd.iaRedacaoRemover.mockResolvedValue(estado());
+    tela = await montar(<AiManagerCard />);
+    await esperar();
+    const r = () => linha(tela, "redacao");
+    expect(r().textContent).toContain("Ocultação");
+    expect(r().textContent).toContain("245");
+    expect(icone(r())).toBe("não instalado");
+    await esperar(async () => botao(r(), "Baixar").click());
+    expect(cmd.iaRedacaoInstalar).toHaveBeenCalledTimes(1);
+    expect(icone(r())).toBe("pronto");
+    await esperar(async () => botao(r(), "Remover").click());
+    expect(cmd.iaRedacaoRemover).toHaveBeenCalledTimes(1);
+    expect(botoes(r())).toEqual(["Baixar"]);
   });
 
   it("\"Usar modelos de IA\" grava `modelos_desligados` pelas Configurações e relê o estado", async () => {

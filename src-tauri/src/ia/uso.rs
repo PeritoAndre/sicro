@@ -14,7 +14,8 @@ pub fn da_proveniencia(rastreios: &[ProvRastreio]) -> Vec<ProvIa> {
         .flat_map(|r| r.corridas.iter().chain(&r.corridas_do_programa))
         .filter_map(|c| serde_json::from_value::<Corrida>(c.clone()).ok())
         .filter(|c| c.motor.motor != MotorRastreio::Mancha)
-        .map(|c| da_corrida(&c, "rastreio"))
+        // CONTRATO: acréscimo (P4.5): trilha de detecção registra `uso` = "deteccao"
+        .map(|c| da_corrida(&c, if c.motor.motor == MotorRastreio::Deteccao { "deteccao" } else { "rastreio" }))
         .collect();
     let chave = |p: &ProvIa| (p.modelo.clone(), p.provedor.clone(), serde_json::to_string(p).unwrap_or_default());
     v.sort_by_key(chave);

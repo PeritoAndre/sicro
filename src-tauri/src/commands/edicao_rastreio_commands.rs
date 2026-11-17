@@ -129,6 +129,49 @@ pub(crate) fn conferencia_trechos(ws: &Path, cache: &Path, saida_id: &str) -> Re
     conferencia::trechos_com_cache(ws, saida_id, Some(cache))
 }
 
+// ---- Fase 4 (P4.5): ocultação assistida
+
+/// Propõe alvos no trecho do clipe (§6.4) e devolve o `tarefa_id`; andamento e fim pelo evento `edicao:deteccao`.
+/// Não grava nada no projeto (os densos vão para a pasta dele; os rastreios saem no fim, sem confirmação).
+#[tauri::command]
+pub async fn edicao_detectar(app: AppHandle, workspace_path: String, projeto: Value, pedido: crate::edicao::rastreio::detectar::PedidoDetectar) -> Result<String> {
+    use crate::edicao::rastreio::detectar::{self, EventoDeteccao, EVENTO_DETECCAO};
+    let ai = get_app_settings(app.clone()).await?.ai;
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        let cache = cache_do_caso(&app, ws)?;
+        let emitir: detectar::EmissorDeteccao = Box::new(move |ev: EventoDeteccao| {
+            let _ = app.emit(EVENTO_DETECCAO, ev);
+        });
+        detectar::pedir(ws, &cache, &ai, &projeto, &pedido, emitir)
+    })
+    .await
+}
+
+/// Para a detecção.
+#[tauri::command]
+pub async fn edicao_detectar_cancelar(tarefa_id: String) -> Result<()> {
+    em_fundo(move || crate::edicao::rastreio::detectar::cancelar(&tarefa_id)).await
+}
+
+/// Folha de contato do denso (§6.3): recortes do alvo em `n` instantes, os fracos sempre.
+#[tauri::command]
+pub async fn edicao_rastreio_tira(
+    app: AppHandle,
+    workspace_path: String,
+    projeto_id: String,
+    midia_sha256: String,
+    denso_sha256: String,
+    n: u32,
+) -> Result<crate::edicao::rastreio::tira::Tira> {
+    em_fundo(move || {
+        let ws = Path::new(&workspace_path);
+        let cache = cache_do_caso(&app, ws)?;
+        crate::edicao::rastreio::tira::folha(ws, &cache, &projeto_id, &midia_sha256, &denso_sha256, n)
+    })
+    .await
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -144,6 +187,9 @@ mod testes {
             edicao_rastreio_editar,
             edicao_rastreio_de_pessoas,
             edicao_conferencia_trechos,
+            edicao_detectar,
+            edicao_detectar_cancelar,
+            edicao_rastreio_tira,
         ]);
     }
 }

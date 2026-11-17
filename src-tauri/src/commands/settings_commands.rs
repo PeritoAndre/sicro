@@ -144,6 +144,11 @@ pub struct AiSettings {
     pub rastreio_dir: String,
     #[serde(default)]
     pub rastreio_version: String,
+    // CONTRATO: acréscimo (P4.5). Item "Ocultação": pasta `ai/redacao` com os 6 modelos (vazio = não instalado).
+    #[serde(default)]
+    pub redacao_dir: String,
+    #[serde(default)]
+    pub redacao_version: String,
 }
 
 /// OCR (Tesseract) instalado pelo gerenciador: `engine_bin_path` é o executável;

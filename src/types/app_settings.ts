@@ -67,6 +67,9 @@ export interface AiSettings {
   /** Rastreador EdgeTAM: pasta `ai/rastreio` (vazio = não instalado) e versão. */
   rastreio_dir: string;
   rastreio_version: string;
+  // CONTRATO: acréscimo (P4.5). Item "Ocultação": pasta `ai/redacao` (vazio = não instalado) e versão.
+  redacao_dir: string;
+  redacao_version: string;
 }
 
 /** Motor de OCR (Tesseract) + idiomas instalados. */
@@ -148,6 +151,8 @@ export function defaultAppSettings(): AppSettings {
       gpu_dir: "",
       rastreio_dir: "",
       rastreio_version: "",
+      redacao_dir: "",
+      redacao_version: "",
     },
     ocr: {
       engine_bin_path: "",

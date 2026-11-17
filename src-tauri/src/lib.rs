@@ -190,6 +190,12 @@ pub fn run() {
             commands::edicao_rastreio_commands::edicao_rastreio_editar,
             commands::edicao_rastreio_commands::edicao_rastreio_de_pessoas,
             commands::edicao_rastreio_commands::edicao_conferencia_trechos,
+            // Fase 4 (P4.5): ocultação assistida
+            commands::edicao_rastreio_commands::edicao_detectar,
+            commands::edicao_rastreio_commands::edicao_detectar_cancelar,
+            commands::edicao_rastreio_commands::edicao_rastreio_tira,
+            commands::ia_commands::ia_redacao_instalar,
+            commands::ia_commands::ia_redacao_remover,
             commands::ia_commands::ia_estado,
             commands::ia_commands::ia_gpu_instalar,
             commands::ia_commands::ia_gpu_remover,
@@ -355,8 +361,8 @@ mod tests {
         let fonte = include_str!("lib.rs");
         let corpo = &fonte[fonte.find("pub fn run()").unwrap()..fonte.find("#[cfg(test)]").unwrap()];
         for (modulo, texto, n) in [
-            ("edicao_rastreio_commands", include_str!("commands/edicao_rastreio_commands.rs"), 6),
-            ("ia_commands", include_str!("commands/ia_commands.rs"), 6),
+            ("edicao_rastreio_commands", include_str!("commands/edicao_rastreio_commands.rs"), 9),
+            ("ia_commands", include_str!("commands/ia_commands.rs"), 8),
         ] {
             let ini = texto.find("fn comandos_registraveis").unwrap();
             let lista: Vec<&str> = texto[ini..].lines().map(str::trim).filter_map(|l| l.strip_suffix(',')).filter(|n| n.starts_with("edicao_") || n.starts_with("ia_")).collect();

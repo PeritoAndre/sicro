@@ -900,6 +900,8 @@ fn descricao_da_mancha(c: Option<&Corrida>) -> (String, String, Value) {
         MotorRastreio::Mancha => "correlação",
         MotorRastreio::Vittrack => "VitTrack",
         MotorRastreio::Edgetam => "EdgeTAM",
+        // CONTRATO: variante nova (P4.5); a mancha nunca corre com ela
+        MotorRastreio::Deteccao => "detecção",
     };
     let runtime = if c.motor.runtime.is_empty() { "SICRO".to_string() } else { c.motor.runtime.clone() };
     (format!("Mancha manual ({nome})"), runtime, json!({ "manual": true, "motor": c.motor.motor, "provedor": c.motor.provedor }))

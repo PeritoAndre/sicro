@@ -173,6 +173,8 @@ import type {
   Tarefa,
   TarefaFundo,
   TrechoConferencia,
+  PedidoDetectar,
+  Tira,
   UsoMidia,
 } from "@domain/edicao";
 import { toSicroError } from "./errors";
@@ -1232,6 +1234,15 @@ export const commands = {
     return safeInvoke<EstadoIa>("ia_rastreador_remover", {});
   },
 
+  /** Item "Ocultação" (P4.5): os 6 modelos da redação, SHA-256 conferido. */
+  iaRedacaoInstalar(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_redacao_instalar", {});
+  },
+
+  iaRedacaoRemover(): Promise<EstadoIa> {
+    return safeInvoke<EstadoIa>("ia_redacao_remover", {});
+  },
+
   // --- Rastreio no vídeo ---
   pessoasClasses(): Promise<ClasseInfo[]> {
     return safeInvoke<ClasseInfo[]>("pessoas_classes", {});
@@ -1630,6 +1641,21 @@ export const commands = {
   /** "Conferir ocultações": intervalos ocultados no arquivo exportado, fracos primeiro. */
   edicaoConferenciaTrechos(workspacePath: string, saidaId: string): Promise<TrechoConferencia[]> {
     return safeInvoke<TrechoConferencia[]>("edicao_conferencia_trechos", { workspacePath, saidaId });
+  },
+
+  // --- Fase 4 (P4.5): ocultação assistida ---
+  /** "Sugestões": devolve o `tarefa_id`; andamento e fim pelo evento `edicao:deteccao`. Não grava no projeto. */
+  edicaoDetectar(workspacePath: string, projeto: ProjetoEdicao, pedido: PedidoDetectar): Promise<string> {
+    return safeInvoke<string>("edicao_detectar", { workspacePath, projeto, pedido });
+  },
+
+  edicaoDetectarCancelar(tarefaId: string): Promise<void> {
+    return safeInvoke<void>("edicao_detectar_cancelar", { tarefaId });
+  },
+
+  /** Folha de contato do denso: recortes do alvo em `n` instantes, os trechos fracos sempre. */
+  edicaoRastreioTira(workspacePath: string, projetoId: string, midiaSha256: string, densoSha256: string, n: number): Promise<Tira> {
+    return safeInvoke<Tira>("edicao_rastreio_tira", { workspacePath, projetoId, midiaSha256, densoSha256, n });
   },
   // ===== fim da Edição (Fase 0) =====
 } as const;

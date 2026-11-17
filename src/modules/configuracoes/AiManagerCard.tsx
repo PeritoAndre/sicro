@@ -434,8 +434,10 @@ function fraseDoErro(e: unknown): string {
 
 const GPU_ID = "gpu";
 const RASTREADOR_ID = "rastreador";
+const REDACAO_ID = "redacao";
 
-/** Interruptor "Usar modelos de IA" e os itens da Fase 2: aceleração por GPU e rastreador (§6.5, §6.6). */
+/** Interruptor "Usar modelos de IA" e os itens da Fase 2 (aceleração por GPU e rastreador) e da Fase 4 (ocultação)
+ *  (§6.5, §6.6). */
 export function IaGeral({ progress }: { progress: Record<string, AiProgress> }) {
   const settings = useSettingsStore((s) => s.settings);
   const [estado, setEstado] = useState<EstadoIa | null>(null);
@@ -525,6 +527,22 @@ export function IaGeral({ progress }: { progress: Record<string, AiProgress> }) 
           progress={progress[RASTREADOR_ID]}
           onBaixar={() => void agir(RASTREADOR_ID, () => commands.iaRastreadorInstalar())}
           onRemover={() => void agir(RASTREADOR_ID, () => commands.iaRastreadorRemover())}
+        />
+      )}
+      {estado && (
+        <ItemIa
+          id={REDACAO_ID}
+          rotulo="Ocultação"
+          estado={busy === REDACAO_ID ? "ocupado" : estado.redacao ? "pronto" : "ausente"}
+          mb={estado.redacao_mb}
+          motivo={null}
+          reabrir={false}
+          instalado={estado.redacao}
+          podeBaixar
+          busy={busy}
+          progress={progress[REDACAO_ID]}
+          onBaixar={() => void agir(REDACAO_ID, () => commands.iaRedacaoInstalar())}
+          onRemover={() => void agir(REDACAO_ID, () => commands.iaRedacaoRemover())}
         />
       )}
     </>

@@ -1,7 +1,8 @@
 //! Comandos da IA (§6.3, §6.5): estado para o Gerenciador, aceleração por GPU (instalar, remover, autoteste em
-//! processo filho) e o item "Rastreador" (EdgeTAM; arquivos e SHA-256 em `edicao::rastreio::edgetam::ARQUIVOS`).
+//! processo filho), o item "Rastreador" (EdgeTAM; arquivos e SHA-256 em `edicao::rastreio::edgetam::ARQUIVOS`) e o
+//! item "Ocultação" (P4.5; `edicao::rastreio::detectar::ARQUIVOS`).
 //! O interruptor "Usar modelos de IA" grava `AiSettings.modelos_desligados` pelas Configurações. Progresso dos
-//! downloads pelo evento `ai-download-progress` (`id` = "gpu" | "rastreador"). Dono: P2.1.
+//! downloads pelo evento `ai-download-progress` (`id` = "gpu" | "rastreador" | "redacao"). Dono: P2.1.
 
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -11,7 +12,7 @@ use tauri::{AppHandle, Emitter, Manager};
 
 use crate::commands::settings_commands::{get_app_settings, save_app_settings, AiSettings};
 use crate::edicao::mensagens::{self, codigo};
-use crate::edicao::rastreio::edgetam;
+use crate::edicao::rastreio::{detectar, edgetam};
 use crate::error::{Result, SicroError};
 use crate::ia::gpu::{self, PacoteGpu, Placa};
 use crate::ia::pacote::{self, Arquivo, Fonte};
@@ -41,6 +42,9 @@ pub struct EstadoIa {
     /// Rastreador (EdgeTAM) instalado e o tamanho do download.
     pub rastreador: bool,
     pub rastreador_mb: u32,
+    // CONTRATO: acréscimo (P4.5). Item "Ocultação" (os 6 modelos da redação) instalado e o tamanho do download.
+    pub redacao: bool,
+    pub redacao_mb: u32,
     /// onnxruntime carregado nesta sessão (None = nenhum ainda).
     pub carregada: Option<Provedor>,
     /// Instalação feita com outro onnxruntime já carregado: vale ao reabrir o SICRO (`reabrir`).
@@ -108,6 +112,8 @@ fn estado_com(ai: &AiSettings, placa: Option<Placa>, carregada: Option<Provedor>
         gpu: EstadoGpuIa { disponivel: gpu::arquivos().is_some(), placa, requisito, instalada, pronta, motivo, mb: gpu::mb() },
         rastreador: rastreador_instalado(ai),
         rastreador_mb: rastreador_mb(),
+        redacao: detectar::instalado(ai),
+        redacao_mb: detectar::mb(),
         carregada,
         // a lib de GPU só entra num processo que ainda não carregou a de CPU
         reabrir: pronta && carregada == Some(Provedor::Cpu),
@@ -220,6 +226,50 @@ pub async fn ia_rastreador_remover(app: AppHandle) -> Result<EstadoIa> {
     estado_atual(&app).await.map_err(erro)
 }
 
+/// Os 6 arquivos do item "Ocultação", cada um pela URL fixa dele (dois re-hospedados numa release do SICRO).
+pub(crate) fn arquivos_redacao() -> Vec<Arquivo> {
+    detectar::ARQUIVOS.iter().map(|a| Arquivo { nome: a.nome.into(), url: a.url.into(), bytes: a.bytes, sha256: a.sha256.into() }).collect()
+}
+
+/// Item "Ocultação" (rostos, placas e cabeças, 245 MB) em `ai/redacao/`; grava `AiSettings.redacao_dir`.
+#[tauri::command]
+pub async fn ia_redacao_instalar(app: AppHandle) -> Result<EstadoIa> {
+    let dir = pasta_ai(&app)?.join("redacao");
+    let app2 = app.clone();
+    let dir2 = dir.clone();
+    CANCELAR.store(false, std::sync::atomic::Ordering::Relaxed);
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut ultimo = 0u64;
+        pacote::instalar_arquivos(&arquivos_redacao(), &Fonte::Rede, &dir2, &CANCELAR, &mut |r, t| {
+            if r - ultimo >= 4_000_000 || r == t {
+                ultimo = r;
+                let _ = app2.emit("ai-download-progress", Progresso { id: "redacao", received: r, total: t });
+            }
+        })
+    })
+    .await
+    .map_err(|e| SicroError::Validation(format!("instalação: {e}")))?
+    .map_err(erro)?;
+    let mut s = get_app_settings(app.clone()).await?;
+    s.ai.redacao_dir = dir.to_string_lossy().into_owned();
+    s.ai.redacao_version = "redacao-1".into();
+    save_app_settings(app.clone(), s).await?;
+    estado_atual(&app).await.map_err(erro)
+}
+
+#[tauri::command]
+pub async fn ia_redacao_remover(app: AppHandle) -> Result<EstadoIa> {
+    let mut s = get_app_settings(app.clone()).await?;
+    let dir = if s.ai.redacao_dir.is_empty() { pasta_ai(&app)?.join("redacao") } else { PathBuf::from(&s.ai.redacao_dir) };
+    if dir.exists() {
+        std::fs::remove_dir_all(&dir).map_err(|e| codigo_erro(&format!("{}: {e}", codigo::REABRIR)))?;
+    }
+    s.ai.redacao_dir = String::new();
+    s.ai.redacao_version = String::new();
+    save_app_settings(app.clone(), s).await?;
+    estado_atual(&app).await.map_err(erro)
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -234,6 +284,8 @@ mod testes {
             ia_gpu_autoteste,
             ia_rastreador_instalar,
             ia_rastreador_remover,
+            ia_redacao_instalar,
+            ia_redacao_remover,
         ]);
     }
 
@@ -309,6 +361,38 @@ mod testes {
         std::fs::write(dir.join(edgetam::ARQUIVOS[0].nome), b"truncado").unwrap();
         assert!(!rastreador_instalado(&ai));
         assert!(estado_de(&AiSettings::default(), None).rastreador_mb == rastreador_mb());
+        let _ = std::fs::remove_dir_all(&d);
+    }
+
+    /// Item "Ocultação" (P4.5): os 6 modelos pelas URLs fixas (dois na release do SICRO), instalados a partir dos
+    /// modelos do dossiê (sem rede) com SHA-256 e tamanho conferidos; arquivo trocado não instala; truncado depois
+    /// deixa de contar como instalado; remover tira a pasta.
+    #[test]
+    fn redacao_instala_dos_modelos_do_dossie() {
+        let a = arquivos_redacao();
+        assert_eq!(a.len(), 6);
+        assert!(a.iter().all(|x| x.url.starts_with("https://") && x.sha256.len() == 64));
+        assert_eq!(a.iter().filter(|x| x.url.starts_with(detectar::URL_SICRO)).count(), 2);
+        assert_eq!(estado_de(&AiSettings::default(), None).redacao_mb, 245);
+        let Some(m) = t::ou_dispensa(t::modelos(), "redacao_instala_dos_modelos_do_dossie", "a pasta de modelos") else { return };
+        let origem = m.join("redacao");
+        let d = std::env::temp_dir().join(format!("p45-redacao-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&d);
+        let dir = d.join("redacao");
+        let nao = AtomicBool::new(false);
+        // SHA-256 trocado: nada entra
+        let mut errado = a.clone();
+        errado[3].sha256 = "0".repeat(64);
+        assert!(pacote::instalar_arquivos(&errado, &Fonte::Pastas(vec![origem.clone()]), &dir, &nao, &mut |_, _| {}).is_err());
+        assert!(!dir.exists());
+        pacote::instalar_arquivos(&a, &Fonte::Pastas(vec![origem]), &dir, &nao, &mut |_, _| {}).unwrap();
+        let ai = AiSettings { redacao_dir: dir.to_string_lossy().into_owned(), ..Default::default() };
+        assert!(detectar::instalado(&ai) && estado_de(&ai, None).redacao);
+        for x in detectar::ARQUIVOS {
+            assert!(t::conferir_sha256(&dir.join(x.nome), x.sha256), "{}", x.nome);
+        }
+        std::fs::write(dir.join(detectar::ARQUIVOS[2].nome), b"truncado").unwrap();
+        assert!(!detectar::instalado(&ai) && !estado_de(&ai, None).redacao);
         let _ = std::fs::remove_dir_all(&d);
     }
 }

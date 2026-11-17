@@ -2,6 +2,8 @@
 //! O ffmpeg já entrega o quadro reduzido (lado maior = lado do modelo); aqui só se
 //! completa com cinza 114 (letterbox no canto superior esquerdo), BGR 0..255, CHW.
 //! O ONNX oficial sai SEM decodificar: grades e passos (8/16/32) são aplicados aqui.
+//! `posprocessar` é o mesmo pós-processamento com n classes, grade não quadrada e escala por eixo (redação, P4.5:
+//! YOLOX WholeBody12 com entrada esticada e o de placas).
 
 use std::path::Path;
 
@@ -62,16 +64,34 @@ pub fn letterbox_bgr_chw(rgb: &[u8], sw: usize, sh: usize, side: usize) -> Vec<f
 /// com limiar e NMS por classe, em pixels do original (`ratio` = reduzido / original).
 /// `out` tem `n × 85` valores: cx, cy, w, h, obj, 80 classes.
 pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32, mascara: &[bool; N_CLASSES]) -> Vec<Det> {
-    let strides = [8usize, 16, 32];
+    posprocessar(out, &Saida { colunas: 5 + N_CLASSES, h: side, w: side, cru: true }, (ratio, ratio), thr, nms_thr, mascara)
+}
+
+/// Forma da saída de um YOLOX: `colunas` = 5 + n classes; `h`×`w` = entrada do tensor (múltiplos de 32); `cru` =
+/// sem decodificar (cx = (v + col)·s, w = exp(v)·s); senão já em pixels do tensor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Saida {
+    pub colunas: usize,
+    pub h: usize,
+    pub w: usize,
+    pub cru: bool,
+}
+
+/// `postprocess` com n classes, grade `h/s`×`w/s` (linha a linha, passos 8/16/32) e escala por eixo
+/// (`escala` = tensor / original em x e em y: letterbox dá a mesma nos dois; esticar, uma em cada). Score = obj ×
+/// melhor classe entre as de `mascara`.
+pub fn posprocessar(out: &[f32], s: &Saida, escala: (f32, f32), thr: f32, nms_thr: f32, mascara: &[bool]) -> Vec<Det> {
+    let (sx, sy) = escala;
+    let nc = s.colunas.saturating_sub(5).min(mascara.len());
     let mut dets: Vec<Det> = Vec::new();
     let mut idx = 0usize;
-    'outer: for &s in &strides {
-        let g = side / s;
-        for gy in 0..g {
-            for gx in 0..g {
-                let base = idx * 85;
+    'outer: for passo in [8usize, 16, 32] {
+        let (gh, gw) = (s.h / passo, s.w / passo);
+        for gy in 0..gh {
+            for gx in 0..gw {
+                let base = idx * s.colunas;
                 idx += 1;
-                if base + 85 > out.len() {
+                if base + s.colunas > out.len() {
                     break 'outer;
                 }
                 let obj = out[base + 4];
@@ -80,7 +100,7 @@ pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32,
                 }
                 // melhor classe entre as escolhidas
                 let mut melhor = (0u16, 0.0f32);
-                for c in 0..N_CLASSES {
+                for c in 0..nc {
                     if mascara[c] && out[base + 5 + c] > melhor.1 {
                         melhor = (c as u16, out[base + 5 + c]);
                     }
@@ -89,18 +109,13 @@ pub fn postprocess(out: &[f32], side: usize, ratio: f32, thr: f32, nms_thr: f32,
                 if score < thr {
                     continue;
                 }
-                let cx = (out[base] + gx as f32) * s as f32;
-                let cy = (out[base + 1] + gy as f32) * s as f32;
-                let w = out[base + 2].exp() * s as f32;
-                let h = out[base + 3].exp() * s as f32;
-                dets.push(Det {
-                    x: (cx - w / 2.0) / ratio,
-                    y: (cy - h / 2.0) / ratio,
-                    w: w / ratio,
-                    h: h / ratio,
-                    score,
-                    classe: melhor.0,
-                });
+                let (cx, cy, w, h) = if s.cru {
+                    let p = passo as f32;
+                    ((out[base] + gx as f32) * p, (out[base + 1] + gy as f32) * p, out[base + 2].exp() * p, out[base + 3].exp() * p)
+                } else {
+                    (out[base], out[base + 1], out[base + 2], out[base + 3])
+                };
+                dets.push(Det { x: (cx - w / 2.0) / sx, y: (cy - h / 2.0) / sy, w: w / sx, h: h / sy, score, classe: melhor.0 });
             }
         }
     }
@@ -141,6 +156,8 @@ pub fn nms(mut dets: Vec<Det>, thr: f32) -> Vec<Det> {
 pub struct Yolox {
     session: ort::session::Session,
     pub side: usize,
+    /// Entrada fixa do grafo (h, w); None = dinâmica (WholeBody12: o tamanho vem do quadro).
+    pub fixo: Option<(usize, usize)>,
     input_name: String,
     /// Onde a sessão rodou (vai ao registro da corrida: a saída da GPU não é bit a bit a da CPU).
     pub provedor: crate::ia::Provedor,
@@ -167,13 +184,23 @@ impl Yolox {
         let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
         let input = s.session.inputs().first().ok_or_else(|| err(&"modelo sem entrada"))?;
         let input_name = input.name().to_string();
-        let side = match input.dtype() {
+        let (side, fixo) = match input.dtype() {
             ort::value::ValueType::Tensor { shape, .. } => {
-                shape.get(2).copied().filter(|d| *d > 0).unwrap_or(640) as usize
+                let d = |i: usize| shape.get(i).copied().filter(|d| *d > 0).map(|d| d as usize);
+                (d(2).unwrap_or(640), d(2).zip(d(3)))
             }
-            _ => 640,
+            _ => (640, None),
         };
-        Ok(Self { session: s.session, side, input_name, provedor: s.provedor, queda: s.queda })
+        Ok(Self { session: s.session, side, fixo, input_name, provedor: s.provedor, queda: s.queda })
+    }
+
+    /// Tensor NCHW `[1, 3, h, w]` pronto → primeira saída copiada (o pós-processamento é de quem chama).
+    pub fn rodar(&mut self, dados: Vec<f32>, h: usize, w: usize) -> Result<Vec<f32>> {
+        let err = |e: &dyn std::fmt::Display| SicroError::Validation(format!("onnxruntime: {e}"));
+        let tensor = ort::value::Tensor::from_array(([1usize, 3, h, w], dados)).map_err(|e| err(&e))?;
+        let outputs = self.session.run(ort::inputs![self.input_name.as_str() => tensor]).map_err(|e| err(&e))?;
+        let (_, out) = outputs[0].try_extract_tensor::<f32>().map_err(|e| err(&e))?;
+        Ok(out.to_vec())
     }
 
     /// Detecta as classes da máscara num quadro RGB reduzido `sw`×`sh`; `ratio` = reduzido / original.
@@ -256,6 +283,32 @@ mod testes {
         assert!((p.y - (28.0 - 16.0) / 0.5).abs() < 1e-3);
         assert!((p.w - 32.0).abs() < 1e-3 && (p.h - 64.0).abs() < 1e-3);
         assert!((p.score - 0.81).abs() < 1e-4);
+    }
+
+    /// Grade não quadrada (h 64 × w 128: 8×16 + 4×8 + 2×4 = 168 âncoras), 2 classes, escala por eixo; a âncora
+    /// (lin 2, col 9) do passo 8 cai em (76, 20) no tensor. Saída já decodificada entra como está.
+    #[test]
+    fn grade_nao_quadrada_com_n_classes() {
+        let s = Saida { colunas: 7, h: 64, w: 128, cru: true };
+        let mut out = vec![0.0f32; 168 * 7];
+        let b = (2 * 16 + 9) * 7;
+        out[b..b + 7].copy_from_slice(&[0.5, 0.5, 2.0f32.ln(), 1.0f32.ln(), 0.9, 0.2, 0.8]);
+        let d = posprocessar(&out, &s, (0.5, 0.25), 0.3, 0.45, &[true, true]);
+        assert_eq!(d.len(), 1);
+        assert_eq!(d[0].classe, 1);
+        assert!((d[0].score - 0.72).abs() < 1e-6);
+        // centro (76, 20), caixa 16×8 no tensor → original: x / 0,5, y / 0,25
+        assert!((d[0].x - (76.0 - 8.0) / 0.5).abs() < 1e-3 && (d[0].y - (20.0 - 4.0) / 0.25).abs() < 1e-3, "{d:?}");
+        assert!((d[0].w - 32.0).abs() < 1e-3 && (d[0].h - 32.0).abs() < 1e-3);
+        // só a classe 0: 0,18 fica abaixo do limiar
+        assert!(posprocessar(&out, &s, (0.5, 0.25), 0.3, 0.45, &[true, false]).is_empty());
+        // lida como grade quadrada (lado = h), a mesma linha da saída cai em outro lugar
+        let q = Saida { w: 64, ..s };
+        assert!(posprocessar(&out, &q, (0.5, 0.25), 0.3, 0.45, &[true, true]).iter().all(|x| (x.x - d[0].x).abs() > 1.0));
+        // já decodificada: valores em pixels do tensor
+        let dec = [40.0f32, 30.0, 10.0, 20.0, 0.9, 0.0, 0.9];
+        let d = posprocessar(&dec, &Saida { colunas: 7, h: 32, w: 32, cru: false }, (1.0, 1.0), 0.3, 0.45, &[true, true]);
+        assert_eq!((d[0].x, d[0].y, d[0].w, d[0].h), (35.0, 20.0, 10.0, 20.0));
     }
 
     #[test]
