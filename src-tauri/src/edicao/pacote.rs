@@ -400,8 +400,11 @@ fn montar_em(p: &PedidoPacote, cancelar: &AtomicBool, pecas_dir: &Path, pecas: &
             miniaturas.push(Miniatura { n, jpeg: fs::read(pecas_dir.join(&x.nome))? });
         }
     }
+    // o texto das telas de texto e os intervalos entre imagens nos trechos usados (sem o mapa, o relatório sai sem eles)
+    let mapa = fs::read_to_string(p.pasta.join(MAPA)).ok();
+    let extra = juri::Complementos { projeto: Some(&projeto_bytes), mapa: mapa.as_deref() };
     let gerar = |mini: &[Miniatura]| -> Result<crate::relatorio_pdf::Saida> {
-        let dados = juri::dados(p.tecnico, mini, &arquivos)?;
+        let dados = juri::dados_com(p.tecnico, mini, &arquivos, extra)?;
         crate::relatorio_pdf::gerar(&juri::entrada(p.tecnico, dados, mini, &projeto_bytes, p.pdf)?)
     };
     let pdf = match gerar(&miniaturas) {

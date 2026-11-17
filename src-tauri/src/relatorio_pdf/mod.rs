@@ -24,6 +24,9 @@ const FONTES: &[&[u8]] = &[
     include_bytes!("../edicao/camada/fontes/LibertinusSerif-BoldItalic.otf"),
     include_bytes!("../edicao/camada/fontes/DejaVuSansMono.ttf"),
     include_bytes!("../edicao/camada/fontes/DejaVuSansMono-Bold.ttf"),
+    // títulos e marca: a letra do app
+    include_bytes!("../edicao/camada/fontes/Inter-Regular.ttf"),
+    include_bytes!("../edicao/camada/fontes/Inter-Bold.ttf"),
 ];
 
 const SUBSTITUTO: char = '\u{25A1}'; // □
@@ -331,6 +334,60 @@ pub(crate) mod testes {
 
     pub(crate) fn contem(pdf: &[u8], agulha: &[u8]) -> bool {
         pdf.windows(agulha.len()).any(|w| w == agulha)
+    }
+
+    /// Textos do documento paginado que passam da margem direita (2,2 cm): (página, texto, quanto passou em pt). Não
+    /// contam o espaço no fim da linha nem a pontuação que o texto justificado pendura na margem (até meio em).
+    pub(crate) fn transbordos(e: &Entrada) -> Vec<(usize, String, f64)> {
+        use typst::layout::{Abs, Em, Frame, FrameItem, Point, Transform};
+        fn andar(f: &Frame, ts: Transform, limite: Abs, pagina: usize, saida: &mut Vec<(usize, String, f64)>) {
+            for (pos, item) in f.items() {
+                let ts = ts.pre_concat(Transform::translate(pos.x, pos.y));
+                match item {
+                    FrameItem::Group(g) => andar(&g.frame, ts.pre_concat(g.transform), limite, pagina, saida),
+                    FrameItem::Text(t) => {
+                        let txt = |g: &typst::text::Glyph| t.text.get(g.range()).unwrap_or("");
+                        let visiveis = t.glyphs.iter().rposition(|g| !txt(g).trim().is_empty()).map_or(0, |i| i + 1);
+                        let largura = t.glyphs[..visiveis].iter().map(|g| g.x_advance).sum::<Em>().at(t.size);
+                        let pendura = t.glyphs[..visiveis].last().is_some_and(|g| txt(g).chars().all(|c| ".,;:-\u{ad}–—)»”’\"'".contains(c)));
+                        let folga = if pendura { t.size * 0.5 } else { Abs::zero() };
+                        let fim = Point::new(largura, Abs::zero()).transform(ts).x;
+                        if fim > limite + folga {
+                            saida.push((pagina, t.text.to_string(), (fim - limite).to_pt()));
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let (doc, _) = compilar(e).unwrap();
+        let mut v = Vec::new();
+        for (i, p) in doc.pages().iter().enumerate() {
+            // meio ponto de folga: o arredondamento do avanço dos glifos
+            let limite = p.frame.width() - Abs::cm(2.2) + Abs::pt(0.5);
+            andar(&p.frame, Transform::identity(), limite, i + 1, &mut v);
+        }
+        typst::comemo::evict(0);
+        v
+    }
+
+    /// Nada passa da margem, nem com nome de arquivo, caminho e texto do perito longos e sem pausa.
+    #[test]
+    fn nada_passa_da_margem() {
+        let mut e = entrada();
+        assert_eq!(transbordos(&e), vec![]);
+        let longo = "Camera_portaria_entrada_principal_gravacao_original_do_DVR-canal-01_2026-11-14_10h00m00s_ate_10h59m59s.mp4";
+        e.dados["saida"]["arquivo"] = longo.into();
+        e.dados["originais"][0]["arquivo"] = longo.into();
+        e.dados["originais"][0]["rotulo"] = longo.into();
+        e.dados["originais"][0]["tecnico"]["conteiner"] = "mov,mp4,m4a,3gp,3g2,mj2,mov,mp4,m4a,3gp,3g2,mj2,mov,mp4,m4a,3gp,3g2,mj2,mov,mp4".into();
+        e.dados["roteiro"][1]["descricao"] = format!("Texto do perito: {}", "x".repeat(300)).into();
+        e.dados["roteiro"][0]["textos"][0]["texto"] = "y".repeat(200).into();
+        e.dados["pacote"][0]["arquivo"] = format!("projeto/rastreios/970beb7c-4d61-432a-96e2-d4caf444bc11/{}.json", "7af28fe4".repeat(8)).into();
+        e.dados["processamentos"][0]["parametros"] = format!("rótulo «{}» · segue o rastreio R4", "z".repeat(150)).into();
+        e.dados["codificacao"][0][1] = format!("libx264; argumentos: -c:v libx264 -preset slow -crf 22 -maxrate 456k -bufsize 912k {}", "-x".repeat(60)).into();
+        let t = transbordos(&e);
+        assert_eq!(t, vec![], "{t:?}");
     }
 
     // ---- os 7 testes do protótipo

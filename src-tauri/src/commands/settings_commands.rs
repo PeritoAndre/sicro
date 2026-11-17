@@ -202,11 +202,19 @@ fn default_schema() -> String {
 }
 
 static FFMPEG: std::sync::RwLock<Option<std::path::PathBuf>> = std::sync::RwLock::new(None);
+static PERFIL: std::sync::RwLock<Option<(PeritoProfile, InstitutionSettings)>> = std::sync::RwLock::new(None);
 
-/// Guarda o que vale no processo: a IA (interruptor e GPU, para a análise) e o ffmpeg escolhido.
+/// Guarda o que vale no processo: a IA (interruptor e GPU, para a análise), o ffmpeg escolhido e o perfil.
 fn lembrar(s: &AppSettings) {
     crate::ia::sessao::lembrar(&s.ai);
     *FFMPEG.write().unwrap_or_else(|e| e.into_inner()) = ffmpeg_de(&s.paths);
+    *PERFIL.write().unwrap_or_else(|e| e.into_inner()) = Some((s.profile.clone(), s.institution.clone()));
+}
+
+/// Perfil e instituição das Configurações (vazios antes da primeira leitura): o relatório da Edição usa quando o caso
+/// não diz o perito ou o órgão.
+pub fn perfil_configurado() -> (PeritoProfile, InstitutionSettings) {
+    PERFIL.read().unwrap_or_else(|e| e.into_inner()).clone().unwrap_or_default()
 }
 
 /// O campo "ffmpeg" como vale: vazio ou só espaço = automático.

@@ -9,6 +9,11 @@
 // CONTRATO: acréscimo da Fase 2 (P2.R) ao `/2`, só campos novos (dados e modelo andam juntos no binário):
 // `ocultacoes[].{n, arquivo, forma, regiao}` (planilha do 18-M §11; `filtro` sem a forma), `modelos_ia[].{execucao,
 // desvio}` (o provedor sai de `origem`) e `rastreios[]` (anexo H: cada rastreio em que um programa atuou).
+// CONTRATO: acréscimo da revisão do relatório (só campos novos): `programa` ("SICRO 6.0.0"), `roteiro[].textos` (o
+// texto das telas de texto, do `projeto.json`), `roteiro[].efeitos[]` passa a `{ texto, marcas[] }` (marcas com a cor
+// para a amostra) e `originais[].tecnico.intervalos_usados` (percentis dos intervalos nos trechos usados, do `mapa.csv`).
+
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::{DateTime, Datelike, FixedOffset, Timelike, Utc};
 use serde::{Deserialize, Serialize};
@@ -16,6 +21,7 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 
 use super::frases::{self, condicao, modelo, tipo, Classe};
+use super::legivel::{self, Marca};
 use super::tecnico;
 use crate::edicao::mensagens::codigo;
 use crate::edicao::modelo::ModoPdf;
@@ -42,9 +48,8 @@ pub struct ArquivoDoPacote {
 
 /// Lista dos quadros decodificados no pacote (§10.1): o que o comando de conferência dos quadros reproduz.
 const LISTA_DE_QUADROS: &str = "quadros.decodificados.sha256";
-/// Teto do texto de parâmetros de um processamento no anexo C (o inteiro está no `tecnico.json` anexado).
-const MAX_PARAMETROS: usize = 600;
-const MAX_VALOR: usize = 160;
+/// Menos intervalos que isto nos trechos usados: sem percentis (não dizem nada).
+const MIN_INTERVALOS: usize = 20;
 /// Texto do sobreposto que identifica a linha dele na lista de acréscimos.
 const MAX_TEXTO_SOBREPOSTO: usize = 60;
 
@@ -552,6 +557,7 @@ struct EConferencia {
 #[derive(Debug, Serialize)]
 struct RelatorioJuri {
     esquema: &'static str,
+    programa: String,
     caso: ECaso,
     perito: EAutor,
     gerado_em: String,
@@ -640,6 +646,7 @@ struct OriginalTecnico {
     intervalo_quadros: String,
     cor: String,
     observacoes: String,
+    intervalos_usados: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -651,8 +658,29 @@ struct ItemRoteiro {
     miniatura: Option<String>,
     origem: Option<String>,
     velocidade: Option<String>,
-    efeitos: Vec<String>,
+    efeitos: Vec<Efeito>,
     selos: Vec<String>,
+    textos: Vec<TextoTela>,
+}
+
+/// O que foi posto ou mudado no item; `marcas` só nas marcações ("3 setas" e cada uma com a cor).
+#[derive(Debug, Serialize)]
+struct Efeito {
+    texto: String,
+    marcas: Vec<Marca>,
+}
+
+impl Efeito {
+    fn so(texto: String) -> Self {
+        Efeito { texto, marcas: Vec::new() }
+    }
+}
+
+/// Um bloco de uma tela de texto: o papel ("Título") e o texto como o perito escreveu.
+#[derive(Debug, Serialize)]
+struct TextoTela {
+    papel: String,
+    texto: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -774,12 +802,12 @@ struct Anexo {
 // Formatação pt-BR
 
 /// Número com vírgula e `casas` fixas.
-fn dec(v: f64, casas: usize) -> String {
+pub(super) fn dec(v: f64, casas: usize) -> String {
     format!("{v:.casas$}").replace('.', ",").replace('-', "−")
 }
 
 /// Número com até `casas`, sem zeros sobrando.
-fn num(v: f64, casas: usize) -> String {
+pub(super) fn num(v: f64, casas: usize) -> String {
     let s = format!("{v:.casas$}");
     let s = if s.contains('.') { s.trim_end_matches('0').trim_end_matches('.') } else { &s };
     let s = if s == "-0" { "0" } else { s };
@@ -787,7 +815,7 @@ fn num(v: f64, casas: usize) -> String {
 }
 
 /// "0:07,500", "1:02:03,500".
-fn tempo(s: f64) -> String {
+pub(super) fn tempo(s: f64) -> String {
     if !s.is_finite() {
         return "—".into();
     }
@@ -897,12 +925,12 @@ fn letra(i: usize) -> String {
     s
 }
 
-fn rot(chave: &str) -> &'static str {
+pub(super) fn rot(chave: &str) -> &'static str {
     frases::rotulo(chave).unwrap_or("—")
 }
 
 /// Rótulo do valor do grupo; fora do catálogo, o próprio valor.
-fn rot_ou(grupo: &str, valor: &str) -> String {
+pub(super) fn rot_ou(grupo: &str, valor: &str) -> String {
     frases::rotulo(&format!("{grupo}.{valor}")).map(str::to_string).unwrap_or_else(|| valor.to_string())
 }
 
@@ -929,28 +957,6 @@ fn cortar(s: String, max: usize) -> String {
     let mut c: String = s.chars().take(max).collect();
     c.push('…');
     c
-}
-
-/// Parâmetros de um processamento em texto: `chave: valor; …`, sem o que só identifica o item.
-fn parametros(v: &Value) -> String {
-    let Some(o) = v.as_object() else { return "—".into() };
-    let partes: Vec<String> = o
-        .iter()
-        .filter(|(k, _)| !matches!(k.as_str(), "tipo" | "id" | "ligado" | "nome"))
-        .map(|(k, v)| {
-            let valor = match v {
-                Value::Null => "—".to_string(),
-                Value::String(s) => s.clone(),
-                outro => outro.to_string(),
-            };
-            format!("{k}: {}", cortar(valor, MAX_VALOR))
-        })
-        .collect();
-    if partes.is_empty() {
-        "—".into()
-    } else {
-        cortar(partes.join("; "), MAX_PARAMETROS)
-    }
 }
 
 /// "item 3" · "itens 2, 5".
@@ -984,39 +990,142 @@ fn ms_do_passo(passo: i64, tb: &R) -> String {
     dec(passo as f64 * tb.num as f64 / tb.den as f64 * 1000.0, 3)
 }
 
-fn formato(conteiner: &str, codec: &str) -> String {
-    let c = conteiner.to_ascii_lowercase();
-    let cont = if c.contains("mp4") {
-        "MP4"
-    } else if c.contains("matroska") {
-        "MKV"
-    } else if c.contains("avi") {
-        "AVI"
-    } else if c.contains("mpegts") {
-        "MPEG-TS"
-    } else if c.contains("mpeg") {
-        "MPEG"
+/// Nome do codec que se reconhece fora do ffmpeg ("h264" → "H.264"); `imagem` = arquivo de imagem parada.
+fn codec_leigo(codec: &str, imagem: bool) -> String {
+    let c = codec.trim().to_ascii_lowercase();
+    let nome = match c.as_str() {
+        "" => "",
+        "h264" => "H.264",
+        "hevc" | "h265" => "H.265",
+        "mpeg4" => "MPEG-4",
+        "msmpeg4" | "msmpeg4v2" | "msmpeg4v3" => "MPEG-4 (Microsoft)",
+        "mjpeg" | "jpeg" | "jpg" if imagem => "JPEG",
+        "mjpeg" => "Motion JPEG",
+        "mpeg2video" => "MPEG-2",
+        "mpeg1video" => "MPEG-1",
+        "h263" => "H.263",
+        "wmv1" | "wmv2" | "wmv3" => "WMV",
+        "vp8" => "VP8",
+        "vp9" => "VP9",
+        "av1" => "AV1",
+        "prores" => "ProRes",
+        "dvvideo" => "DV",
+        "rawvideo" => "sem compressão",
+        "theora" => "Theora",
+        "webp" => "WebP",
+        "jpegxl" => "JPEG XL",
+        "opus" => "Opus",
+        "vorbis" => "Vorbis",
+        "amr_nb" | "amr_wb" => "AMR",
+        _ if c.starts_with("pcm_") => "PCM",
+        // png, bmp, tiff, gif, ffv1, aac, mp3, flac, h263…: a sigla
+        _ => return c.to_ascii_uppercase(),
+    };
+    nome.to_string()
+}
+
+/// Formato como quem não é técnico conhece ("MP4 (H.264)", "PNG"); o nome do ffmpeg fica no anexo B. `nome` = nome
+/// do arquivo: a extensão separa MOV de MP4, que o ffmpeg lê com o mesmo leitor.
+fn formato(conteiner: &str, codec: &str, nome: &str) -> String {
+    let c = conteiner.trim().to_ascii_lowercase();
+    let ext = nome.rsplit_once('.').map(|x| x.1.to_ascii_lowercase()).unwrap_or_default();
+    // imagem parada (image2, image2pipe, png_pipe…): o formato é o da imagem
+    if c.starts_with("image2") || c.ends_with("_pipe") {
+        let cod = codec_leigo(codec, true);
+        return if !cod.is_empty() {
+            cod
+        } else if !ext.is_empty() {
+            ext.to_ascii_uppercase()
+        } else {
+            "—".into()
+        };
+    }
+    let cont = if c.contains("mp4") || c.starts_with("mov") {
+        match ext.as_str() {
+            "mov" => "MOV".to_string(),
+            "3gp" => "3GP".to_string(),
+            "m4a" => "M4A".to_string(),
+            _ => "MP4".to_string(),
+        }
+    } else if c.contains("matroska") || c.contains("webm") {
+        if ext == "webm" { "WebM" } else { "MKV" }.to_string()
     } else {
-        conteiner
+        match c.as_str() {
+            "" => String::new(),
+            "avi" => "AVI".into(),
+            "mpegts" => "MPEG-TS".into(),
+            "mpeg" | "mpegps" | "mpegvideo" => "MPEG".into(),
+            "asf" => if ext == "wmv" { "WMV" } else { "ASF" }.into(),
+            "dhav" => "DAV".into(),
+            "h264" => "H.264".into(),
+            "hevc" => "H.265".into(),
+            "flv" | "wav" | "mp3" | "ogg" | "flac" | "aac" | "mxf" => c.to_ascii_uppercase(),
+            // leitor de nome técnico: vale a extensão, que é o que se vê no arquivo
+            _ if !ext.is_empty() => ext.to_ascii_uppercase(),
+            _ => conteiner.trim().to_string(),
+        }
     };
-    let cod = match codec.to_ascii_lowercase().as_str() {
-        "h264" => "H.264".to_string(),
-        "hevc" | "h265" => "H.265".to_string(),
-        "mpeg4" => "MPEG-4".to_string(),
-        "mjpeg" => "MJPEG".to_string(),
-        "ffv1" => "FFV1".to_string(),
-        "" => String::new(),
-        _ => codec.to_string(),
-    };
+    let cod = codec_leigo(codec, false);
     match (cont.is_empty(), cod.is_empty()) {
         (true, true) => "—".into(),
-        (false, true) => cont.to_string(),
+        (false, true) => cont,
         (true, false) => cod,
+        // fluxo sem contêiner (H.264 puro): diz uma vez
+        (false, false) if cont == cod => cont,
         (false, false) => format!("{cont} ({cod})"),
     }
 }
 
-fn original(i: usize, m: &FMidia) -> Original {
+/// Intervalos entre imagens seguidas da gravação nos trechos usados, por mídia, em ticks: do `mapa.csv` (colunas
+/// `q,item,clipe,midia,pts,indice,t_s,tipo`), pelos quadros de índice seguido. Linha que não lê fica de fora.
+fn intervalos_do_mapa(csv: &str) -> HashMap<String, Vec<i64>> {
+    let mut quadros: HashMap<String, BTreeMap<u64, i64>> = HashMap::new();
+    for linha in csv.lines().skip(1) {
+        let c = campos_csv(linha);
+        let (Some(midia), Some(pts), Some(j)) = (c.get(3).filter(|m| !m.is_empty()), c.get(4).and_then(|p| p.parse::<i64>().ok()), c.get(5).and_then(|j| j.parse::<u64>().ok())) else {
+            continue;
+        };
+        quadros.entry(midia.clone()).or_default().insert(j, pts);
+    }
+    quadros
+        .into_iter()
+        .map(|(m, q)| {
+            let mut passos: Vec<i64> = q.iter().filter_map(|(j, pts)| q.get(&(j + 1)).map(|prox| prox - pts)).filter(|p| *p > 0).collect();
+            passos.sort_unstable();
+            (m, passos)
+        })
+        .collect()
+}
+
+/// Campos de uma linha CSV (aspas duplas com `""` dentro, como o `mapa::campo` grava).
+fn campos_csv(linha: &str) -> Vec<String> {
+    let (mut v, mut atual, mut aspas, mut cs) = (Vec::new(), String::new(), false, linha.chars().peekable());
+    while let Some(c) = cs.next() {
+        match c {
+            '"' if aspas && cs.peek() == Some(&'"') => {
+                atual.push('"');
+                cs.next();
+            }
+            '"' => aspas = !aspas,
+            ',' if !aspas => v.push(std::mem::take(&mut atual)),
+            _ => atual.push(c),
+        }
+    }
+    v.push(atual);
+    v
+}
+
+/// Percentil `p` (0..1) de uma lista ordenada, pelo posto mais próximo.
+fn percentil(v: &[i64], p: f64) -> i64 {
+    v[((p * (v.len() - 1) as f64).round() as usize).min(v.len() - 1)]
+}
+
+/// Imagens por segundo para leigo: inteiro a partir de 10, uma casa abaixo disso ("15", "7,5").
+fn por_segundo_txt(f: f64) -> String {
+    num(f, if f >= 10.0 { 0 } else { 1 })
+}
+
+fn original(i: usize, m: &FMidia, passos: Option<&[i64]>) -> Original {
     let med = &m.medido;
     let especie = match med.quadros {
         0 => "especie.som",
@@ -1024,15 +1133,25 @@ fn original(i: usize, m: &FMidia) -> Original {
         _ => "especie.video",
     };
     let variavel = med.quadros > 1 && ritmo_variavel(med);
+    // percentis 10, 50 e 90 dos intervalos nos trechos usados: o mínimo e o máximo absolutos (1 tique, um buraco de
+    // segundos) não dizem o ritmo a quem assiste; ficam no anexo B
+    let passos = passos.filter(|p| med.quadros > 1 && p.len() >= MIN_INTERVALOS);
     let ritmo = match (med.quadros, por_segundo(med.passo_med, &med.tb)) {
         (0, _) => rot("ritmo.som").to_string(),
         (1, _) | (_, None) => rot("ritmo.imagem").to_string(),
-        (_, Some(_)) if variavel => {
-            let (de, ate) = (por_segundo(med.passo_max, &med.tb).unwrap_or(0.0), por_segundo(med.passo_min, &med.tb).unwrap_or(0.0));
-            frases::preencher(rot("ritmo.variavel"), &[("de", &num(de, 2)), ("ate", &num(ate, 2))])
+        (_, Some(f)) if variavel => {
+            let faixa = passos.and_then(|p| Some((por_segundo(percentil(p, 0.9), &med.tb)?, por_segundo(percentil(p, 0.1), &med.tb)?)));
+            match faixa.map(|(de, ate)| (por_segundo_txt(de), por_segundo_txt(ate))) {
+                Some((de, ate)) if de != ate => frases::preencher(rot("ritmo.variavel_faixa"), &[("fps", &por_segundo_txt(f)), ("de", &de), ("ate", &ate)]),
+                _ => frases::preencher(rot("ritmo.variavel"), &[("fps", &por_segundo_txt(f))]),
+            }
         }
         (_, Some(f)) => frases::preencher(rot("ritmo.constante"), &[("fps", &num(f, 2))]),
     };
+    let intervalos_usados = passos.map(|p| {
+        let ms = |q: f64| ms_do_passo(percentil(p, q), &med.tb);
+        format!("percentis 10, 50 e 90: {} · {} · {} ms ({} intervalos nos trechos usados)", ms(0.1), ms(0.5), ms(0.9), milhar(p.len() as u64))
+    });
     let mut recebido = rot(match m.recebido.nativo {
         Some(true) => "recebido.nativo",
         Some(false) => "recebido.convertido",
@@ -1092,7 +1211,7 @@ fn original(i: usize, m: &FMidia) -> Original {
         duracao: if med.quadros <= 1 { "—".into() } else { duracao(med.ate_s - med.de_s) },
         imagem: (m.largura > 0 && m.altura > 0).then(|| format!("{} × {} pontos", m.largura, m.altura)),
         ritmo,
-        formato: formato(&m.conteiner, &m.codec),
+        formato: formato(&m.conteiner, &m.codec, &m.nome),
         taxa_variavel: variavel,
         formato_nativo: m.recebido.nativo,
         recebido,
@@ -1109,6 +1228,7 @@ fn original(i: usize, m: &FMidia) -> Original {
             intervalo_quadros: intervalo,
             cor: if m.cor.matriz.is_empty() { "—".into() } else { format!("{}, faixa {}", m.cor.matriz.to_uppercase().replace("BT", "BT."), if m.cor.faixa == "pc" { "cheia" } else { "limitada" }) },
             observacoes: if obs.is_empty() { "—".into() } else { obs.join("; ") },
+            intervalos_usados,
         },
     }
 }
@@ -1394,13 +1514,51 @@ fn onde_oc(ns: &[usize]) -> String {
     frases::preencher(rot(if ns.len() == 1 { "onde.ocultacao" } else { "onde.ocultacoes" }), &[("n", &lista)])
 }
 
+/// O que o relatório lê do pacote além do `tecnico.json`: o `projeto.json` (texto das telas de texto; só vale com o
+/// SHA-256 de `feito.projeto`) e o `mapa.csv` (intervalos entre imagens nos trechos usados). Sem eles o relatório sai
+/// sem esses textos.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct Complementos<'a> {
+    pub projeto: Option<&'a [u8]>,
+    pub mapa: Option<&'a str>,
+}
+
+/// Texto de cada tela de texto do `projeto.json` (`principal[]` de tipo `titulo`), por id do clipe: os blocos com
+/// texto, na ordem título, subtítulo, corpo, rodapé.
+fn textos_das_telas(projeto: &Value) -> HashMap<String, Vec<TextoTela>> {
+    const ORDEM: [&str; 4] = ["titulo", "subtitulo", "corpo", "rodape"];
+    let mut telas = HashMap::new();
+    for c in projeto["principal"].as_array().into_iter().flatten().filter(|c| c["tipo"] == "titulo") {
+        let Some(id) = c["id"].as_str() else { continue };
+        let mut blocos: Vec<&Value> = c["titulo"]["blocos"].as_array().into_iter().flatten().filter(|b| b["conteudo"].as_str().is_some_and(|t| !t.trim().is_empty())).collect();
+        blocos.sort_by_key(|b| ORDEM.iter().position(|p| b["papel"] == *p).unwrap_or(ORDEM.len()));
+        let textos =
+            blocos.into_iter().map(|b| TextoTela { papel: rot_ou("bloco", b["papel"].as_str().unwrap_or("")), texto: b["conteudo"].as_str().unwrap_or("").trim().to_string() }).collect();
+        telas.insert(id.to_string(), textos);
+    }
+    telas
+}
+
 /// `dados.json` do modelo, com todos os valores já em texto pronto para imprimir.
 pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPacote]) -> Result<Value> {
+    dados_com(tecnico, miniaturas, arquivos, Complementos::default())
+}
+
+/// `dados` com o que vem do pacote (`Complementos`).
+pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPacote], extra: Complementos) -> Result<Value> {
     if tecnico.get("esquema").and_then(Value::as_str) != Some(tecnico::ESQUEMA_TECNICO) {
         return Err(SicroError::Validation("relatorio: tecnico.json de outro esquema".into()));
     }
     let t: Tecnico = serde_json::from_value(tecnico.clone())?;
     let (f, e) = (&t.feito, &t.execucao);
+    // o projeto só conta se é o que o `feito` registra
+    let mut telas = extra
+        .projeto
+        .filter(|b| !f.projeto.sha256.is_empty() && format!("{:x}", Sha256::digest(b)) == f.projeto.sha256)
+        .and_then(|b| serde_json::from_slice::<Value>(b).ok())
+        .map(|p| textos_das_telas(&p))
+        .unwrap_or_default();
+    let intervalos = extra.mapa.map(intervalos_do_mapa).unwrap_or_default();
     let com_som = f.audio.mixagem.is_some() || e.conteudo.audio_sha256.is_some();
     let id_da_midia = |id: &str| f.midias.iter().position(|m| m.id == id).map(letra).unwrap_or_else(|| "—".into());
     let n_do_clipe = |id: &str| f.roteiro.iter().find(|it| it.clipe == id).map(|it| it.n);
@@ -1425,7 +1583,7 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         duracao: duracao(f.saida.duracao_s),
         imagem: format!("{} × {} pontos", f.saida.largura, f.saida.altura),
         ritmo: frases::preencher(rot("ritmo.saida"), &[("fps", &taxa(f.saida.fps.num, f.saida.fps.den))]),
-        formato: format!("{}, {}", formato(if ext == "mkv" { "matroska" } else { &ext }, codec_saida), rot(if com_som { "som.com" } else { "som.sem" })),
+        formato: format!("{}, {}", formato(if ext == "mkv" { "matroska" } else { &ext }, codec_saida, &video), rot(if com_som { "som.com" } else { "som.sem" })),
         perfil: f.saida.predefinicao.as_deref().map(|p| rot_ou("predefinicao", p)).unwrap_or_else(|| "—".into()),
         com_perdas: f.saida.com_perdas,
     };
@@ -1442,14 +1600,44 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         }
         None => usos.push((tipo.to_string(), rotulo, vec![n])),
     };
+    // formas das marcações do vídeo inteiro, para a linha da seção 5
+    let mut formas_destaque: Vec<&str> = Vec::new();
     for it in &f.roteiro {
-        let mut efeitos: Vec<String> = Vec::new();
+        let mut efeitos: Vec<Efeito> = Vec::new();
+        let simples = |efeitos: &mut Vec<Efeito>, r: String| {
+            if !efeitos.iter().any(|e| e.marcas.is_empty() && e.texto == r) {
+                efeitos.push(Efeito::so(r));
+            }
+        };
+        // marcações, lupas e holofotes do item: um resumo de cada tipo, no lugar do primeiro
+        let do_tipo = |nome: &str| it.processamentos.iter().filter(|p| p.nome == nome).map(|p| &p.parametros).collect::<Vec<_>>();
+        let mut resumidos: Vec<&str> = Vec::new();
         for p in &it.processamentos {
             let Some(t) = tipo_do_proc(p) else { continue };
             let r = rotulo_do_proc(p, t);
             usar(t, r.clone(), it.n);
-            if !efeitos.contains(&r) {
-                efeitos.push(r);
+            match t {
+                "destaque" | "lupa" | "holofote" if resumidos.contains(&t) => {}
+                "destaque" => {
+                    resumidos.push(t);
+                    let ps = do_tipo(t);
+                    for x in &ps {
+                        let fm = x["forma"].as_str().unwrap_or("");
+                        if !formas_destaque.contains(&fm) {
+                            formas_destaque.push(fm);
+                        }
+                    }
+                    efeitos.extend(legivel::destaques(&ps).into_iter().map(|(texto, marcas)| Efeito { texto, marcas }));
+                }
+                "lupa" => {
+                    resumidos.push(t);
+                    simples(&mut efeitos, legivel::lupas(&do_tipo(t)));
+                }
+                "holofote" => {
+                    resumidos.push(t);
+                    simples(&mut efeitos, legivel::holofotes(do_tipo(t).len()));
+                }
+                _ => simples(&mut efeitos, r),
             }
         }
         // ocultação da MÍDIA (D17, o padrão da tela) não está nos processamentos do clipe: muda a imagem do item do
@@ -1458,16 +1646,14 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
             let t = tipo_da_ocultacao(&o.modo);
             let r = format!("{} ({})", frases::rotulo_do_efeito(t).unwrap_or(""), rot_ou("conteudo", &o.conteudo));
             usar(t, r.clone(), it.n);
-            if !efeitos.contains(&r) {
-                efeitos.push(r);
-            }
+            simples(&mut efeitos, r);
         }
         for x in extras_do_item(it, com_som) {
             let r = frases::rotulo_do_efeito(x).unwrap_or(x).to_string();
             usar(x, r.clone(), it.n);
             // o tipo do item e a velocidade já estão escritos no bloco
             if !matches!(x, tipo::CONGELAR | tipo::TITULO | tipo::IMAGEM_CLIPE | tipo::CAMERA_LENTA | tipo::ACELERADO) {
-                efeitos.push(r);
+                efeitos.push(Efeito::so(r));
             }
         }
         let origem = it.origem.as_ref().map(|o| {
@@ -1478,6 +1664,14 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
                 format!("{g}, de {} a {}", tempo(o.de_s), tempo(o.ate_s))
             }
         });
+        // o texto da tela e o dos títulos sobrepostos que aparecem no item, como estão no vídeo
+        let mut textos = if it.tipo == "titulo" { telas.remove(&it.clipe).unwrap_or_default() } else { Vec::new() };
+        for s in f.sobrepostos.iter().filter(|s| s.tipo == "titulo" && itens_nos_slots(&f.roteiro, s.na_saida.de_q, s.na_saida.n_q).contains(&it.n)) {
+            let texto = s.textos.iter().map(|t| t.trim()).filter(|t| !t.is_empty()).collect::<Vec<_>>().join("\n");
+            if !texto.is_empty() {
+                textos.push(TextoTela { papel: frases::rotulo_do_efeito(tipo::TEXTO_SOBREPOSTO).unwrap_or("").to_string(), texto });
+            }
+        }
         roteiro.push(ItemRoteiro {
             n: it.n,
             tipo: rot_ou("clipe", &it.tipo),
@@ -1488,6 +1682,7 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
             velocidade: velocidade_txt(it),
             efeitos,
             selos: it.selos.clone(),
+            textos,
         });
     }
     if com_som {
@@ -1565,8 +1760,12 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
         let rotulo = frases::rotulo_do_efeito(tipo::AVISO_NA_IMAGEM).unwrap_or("");
         acrescimos.push(Linha { o_que: format!("{rotulo}: {texto}"), onde: onde(itens), explicacao: frases::do_efeito(tipo::AVISO_NA_IMAGEM).unwrap_or("").to_string() });
     }
+    // forma fora do catálogo: a linha não diz as formas
+    let formas: Vec<String> = formas_destaque.iter().map(|f| legivel::plural_da_forma(f).map(str::to_string)).collect::<Option<_>>().unwrap_or_default();
     for (t, rotulo, itens) in &usos {
-        let linha = Linha { o_que: rotulo.clone(), onde: onde(itens), explicacao: frases::do_efeito(t).unwrap_or("").to_string() };
+        // "Marcação (setas e retângulos)": o que foi desenhado; cada uma, no item do roteiro
+        let o_que = if t == "destaque" && !formas.is_empty() { frases::preencher(rot("marca.secao"), &[("formas", &legivel::lista_e(&formas))]) } else { rotulo.clone() };
+        let linha = Linha { o_que, onde: onde(itens), explicacao: frases::do_efeito(t).unwrap_or("").to_string() };
         match frases::classe_do_efeito(t) {
             Some(Classe::Acrescimo) => acrescimos.push(linha),
             // tipo fora do catálogo (versão mais nova) entra como mudança, sem frase
@@ -1779,6 +1978,16 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     };
 
     // ---- anexos técnicos C, D e E
+    // rastreio citado no anexo C: o "R" do anexo H; o que não está lá, pelo começo do id e pela origem
+    let ref_rastreio = |id: &str| -> String {
+        id_listado(id).unwrap_or_else(|| {
+            let curto: String = id.chars().take(8).collect();
+            match rastreio(id).and_then(origem_do_rastreio) {
+                Some(o) => format!("{curto} ({o})"),
+                None => curto,
+            }
+        })
+    };
     let (mut processamentos, mut diferencas) = (Vec::new(), Vec::new());
     for it in &f.roteiro {
         let item = it.n.to_string();
@@ -1816,6 +2025,8 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
                 obs: if it.tipo == "congelar" { format!("mesmo quadro por {}", duracao(it.na_saida.ate_s - it.na_saida.de_s)) } else { "—".into() },
             });
         }
+        // o `ativo` e as chaves animadas estão na base de tempo do clipe: a da gravação, no trecho
+        let base = if it.origem.is_some() { "da gravação" } else { "do clipe" };
         for p in &it.processamentos {
             processamentos.push(Processamento {
                 item: item.clone(),
@@ -1824,7 +2035,7 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
                     Some(t) => frases::rotulo_do_efeito(t).map(str::to_string).unwrap_or_else(|| t.to_string()),
                     None => rot("enquadramento.inteiro").to_string(),
                 },
-                parametros: parametros(&p.parametros),
+                parametros: legivel::parametros(&p.nome, &p.parametros, &ref_rastreio, base),
             });
         }
     }
@@ -1946,8 +2157,16 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     maquina.extend(e.sistema.gpu.iter().map(|g| format!("GPU {g}")));
     maquina.extend(e.sistema.driver.iter().map(|d| format!("driver {d}")));
     let mut software = vec![
-        ["SICRO".to_string(), format!("{} ({})", ou_traco(&e.sicro.versao), ou_traco(&e.sicro.commit)), rot("papel.sicro").to_string()],
-        ["FFmpeg".to_string(), ou_traco(&e.ffmpeg.versao), format!("{} · origem: {} · SHA-256 {}", rot("papel.ffmpeg"), ou_traco(&e.ffmpeg.origem), ou_traco(&e.ffmpeg.sha256))],
+        [
+            "SICRO".to_string(),
+            if e.sicro.commit.trim().is_empty() { ou_traco(&e.sicro.versao) } else { format!("{} ({})", ou_traco(&e.sicro.versao), e.sicro.commit.trim()) },
+            rot("papel.sicro").to_string(),
+        ],
+        [
+            "FFmpeg".to_string(),
+            ou_traco(&e.ffmpeg.versao),
+            format!("{} · origem: {} · SHA-256 {}", rot("papel.ffmpeg"), ou_traco(&rot_ou("ffmpeg", e.ffmpeg.origem.trim())), ou_traco(&e.ffmpeg.sha256)),
+        ],
         ["Typst".to_string(), ou_traco(&e.typst), rot("papel.typst").to_string()],
     ];
     // o programa que rodou os modelos ("onnxruntime 1.31.1") e onde (CPU, CUDA): a saída da GPU não é a da CPU (§6.6)
@@ -2025,12 +2244,13 @@ pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPac
     let projeto = arquivos.iter().map(|a| a.rel.replace('\\', "/")).find(|r| nome_do_arquivo(r) == "projeto.json").unwrap_or_else(|| "projeto.json".into());
     let r = RelatorioJuri {
         esquema: ESQUEMA_JURI,
+        programa: ["SICRO", e.sicro.versao.trim()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join(" "),
         caso: ECaso { numero: e.caso.numero.clone(), referencia: e.caso.referencia.clone(), orgao: e.caso.orgao.clone(), requisitante: e.caso.requisitante.clone() },
         perito: EAutor { nome: e.autor.nome.clone(), cargo: e.autor.cargo.clone(), matricula: e.autor.matricula.clone() },
         gerado_em: data(&t.renderizado_em),
         revisado_por: Some(f.revisado_por.trim().to_string()).filter(|s| !s.is_empty()),
         saida,
-        originais: f.midias.iter().enumerate().map(|(i, m)| original(i, m)).collect(),
+        originais: f.midias.iter().enumerate().map(|(i, m)| original(i, m, intervalos.get(&m.id).map(Vec::as_slice))).collect(),
         roteiro,
         acrescimos,
         mudancas,
@@ -2174,9 +2394,11 @@ mod testes {
         pv.roteiro[1].processamentos = vec![
             proc(1, "ocultar", json!({ "tipo": "ocultar", "id": "e1", "conteudo": "rosto", "motivo": "terceiro /sem relação", "alvo": { "rastreio": "r1" } })),
             proc(2, "media_temporal", json!({ "tipo": "media_temporal", "id": "e2", "quadros": 8 })),
-            proc(3, "destaque", json!({ "tipo": "destaque", "id": "e3", "rastreio": "r1", "forma": "elipse" })),
+            proc(3, "destaque", json!({ "tipo": "destaque", "id": "e3", "rastreio": "r1", "forma": "elipse", "margem": 0.05, "traco": { "cor": "#ed333b", "espessura": 0.004, "contorno": true },
+                "rotulo": { "texto": "P1", "lado": "cima", "estilo": { "tamanho": 0.03, "cor": "#ffffff", "negrito": true } } })),
             proc(4, "carimbo", json!({ "tipo": "carimbo", "id": "e4", "mostra": "tempo_fonte" })),
             proc(5, "velocidade_exibida", json!({ "tipo": "velocidade_exibida", "id": "e5", "calculo": { "kmh": 42.0, "faixa": [39.0, 45.5] } })),
+            proc(6, "destaque", json!({ "tipo": "destaque", "id": "e8", "rastreio": "r1", "forma": "seta", "tamanho": 0.02, "angulo_graus": 90.0, "traco": { "cor": "#ffd84a", "espessura": 0.002, "contorno": true } })),
         ];
         pv.roteiro[2].processamentos = vec![
             proc(1, "regua", json!({ "tipo": "regua", "id": "e6", "comprimento_m": 2.0, "calibracao": { "residuo_m": 0.02 } })),
@@ -2196,6 +2418,24 @@ mod testes {
 
     fn miniaturas() -> Vec<Miniatura> {
         vec![Miniatura { n: 2, jpeg: JPEG.to_vec() }]
+    }
+
+    /// O `projeto.json` com a tela de texto do item 1 (o `feito` passa a registrar o SHA-256 dele) e um `mapa.csv` dos
+    /// quadros 30..90 da gravação do item 2, sem o 60 (o par que falta não conta como intervalo).
+    fn complementos(t: &mut Value) -> (Vec<u8>, String) {
+        let projeto = serde_json::to_vec(&json!({ "principal": [{ "id": "c1", "tipo": "titulo", "titulo": { "modelo": "cartela", "blocos": [
+            { "papel": "rodape", "conteudo": "Perícia 0000/2026" },
+            { "papel": "corpo", "conteudo": "  " },
+            { "papel": "titulo", "conteudo": "Chegada do veículo\nà portaria" },
+            { "papel": "subtitulo", "conteudo": "Câmera 1" },
+        ] } }] }))
+        .unwrap();
+        t["feito"]["projeto"]["sha256"] = json!(format!("{:x}", Sha256::digest(&projeto)));
+        let mut mapa = String::from("q,item,clipe,midia,pts,indice,t_s,tipo\n0,1,c1,,,,,\n");
+        for (q, j) in (30..90u64).filter(|j| *j != 60).enumerate() {
+            mapa.push_str(&format!("{q},2,c2,m1,{},{j},{},novo\n", 512 * j, j as f64 / 30.0));
+        }
+        (projeto, mapa)
     }
 
     fn pdf_de(tecnico: &Value, modo: ModoPdf) -> (relatorio_pdf::Entrada, String) {
@@ -2253,8 +2493,9 @@ mod testes {
     fn contrato_2() {
         assert_eq!(ESQUEMA_JURI, "sicro.relatorio_juri/2");
         let c = Cena::nova("juri");
-        let t = tecnico_completo(&c);
-        let d = dados(&t, &miniaturas(), &pacote()).unwrap();
+        let mut t = tecnico_completo(&c);
+        let (projeto, mapa) = complementos(&mut t);
+        let d = dados_com(&t, &miniaturas(), &pacote(), Complementos { projeto: Some(&projeto), mapa: Some(&mapa) }).unwrap();
         assert_eq!(d["esquema"], json!(ESQUEMA_JURI));
         // mesmos campos do exemplo, em todos os níveis
         let mut exemplo: Value = serde_json::from_slice(include_bytes!("../../relatorio_pdf/exemplo/dados.json")).unwrap();
@@ -2410,7 +2651,7 @@ mod testes {
         assert_eq!(oc[0].1, "item 2");
         assert!(oc[0].2.contains("não é possível desfazer"));
         let item = d["roteiro"].as_array().unwrap().iter().find(|it| it["n"] == 2).unwrap();
-        assert!(item["efeitos"].as_array().unwrap().contains(&json!("Ocultação (rosto)")), "{item}");
+        assert!(item["efeitos"].as_array().unwrap().contains(&json!({ "texto": "Ocultação (rosto)", "marcas": [] })), "{item}");
         assert!(!d["limitacoes"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().contains("como documento")));
         // mosaico: outra frase; WhatsApp: o código só confere no envio como documento
         plano.proveniencia.ocultacoes[0].modo = crate::edicao::modelo::ModoOcultar::Mosaico;
@@ -2473,7 +2714,7 @@ mod testes {
         assert!(o_que(&d, "acrescimos").contains(&"Narração".to_string()));
         assert_eq!(d["acrescimos"].as_array().unwrap().iter().find(|l| l["o_que"] == "Narração").unwrap()["onde"], json!("itens 2, 3"));
         assert!(d["ocultacoes"].as_array().unwrap().iter().any(|o| o["conteudo"] == "som"));
-        assert!(d["roteiro"][1]["efeitos"].as_array().unwrap().contains(&json!("Som da gravação retirado")));
+        assert!(d["roteiro"][1]["efeitos"].as_array().unwrap().contains(&json!({ "texto": "Som da gravação retirado", "marcas": [] })));
         // a mesma proveniência, sem som na saída: o `feito` continua trazendo o som do clipe e os silêncios
         let mut sem = com.clone();
         sem["feito"]["audio"]["mixagem"] = Value::Null;
@@ -2516,7 +2757,7 @@ mod testes {
             let d = dados(&t, &[], &[]).unwrap();
             let linhas: Vec<&str> = d["mudancas"].as_array().unwrap().iter().map(|l| l["o_que"].as_str().unwrap()).filter(|o| ["Ampliação", "Imagem ajustada para preencher a tela", "Ajuste de tamanho"].contains(o)).collect();
             assert_eq!(linhas, na_secao_5.into_iter().collect::<Vec<_>>(), "{regiao} {ajuste}");
-            let do_item: Vec<&str> = d["roteiro"][1]["efeitos"].as_array().unwrap().iter().map(|e| e.as_str().unwrap()).collect();
+            let do_item: Vec<&str> = d["roteiro"][1]["efeitos"].as_array().unwrap().iter().map(|e| e["texto"].as_str().unwrap()).collect();
             assert_eq!(do_item, na_secao_5.into_iter().collect::<Vec<_>>(), "{regiao} {ajuste}");
             let anexo: Vec<&str> = d["processamentos"].as_array().unwrap().iter().filter(|p| p["item"] == "2" && p["ordem"] == "1").map(|p| p["nome"].as_str().unwrap()).collect();
             assert_eq!(anexo, [no_anexo_c], "{regiao} {ajuste}");
@@ -2614,6 +2855,12 @@ mod testes {
         assert!(novas[1].1.starts_with("itens 1, 2, de 0:00,000 a "), "{}", novas[1].1);
         assert_eq!((novas[2].0.as_str(), novas[2].1.as_str()), ("Imagem sobreposta", "item 2, de 0:01,333 a 0:01,500"));
         assert_eq!(novas[2].2, frases::do_efeito("imagem").unwrap());
+        // o texto inteiro do título sobreposto, nos itens em que ele aparece; imagem sobreposta não tem texto
+        let d = dados(&t, &[], &[]).unwrap();
+        for i in [0, 1] {
+            assert_eq!(d["roteiro"][i]["textos"], json!([{ "papel": "Texto sobreposto", "texto": "Rua das Flores, 120\nPortão\n14/11/2026" }]), "item {}", i + 1);
+        }
+        assert_eq!(d["roteiro"][2]["textos"], json!([]));
         // texto longo do perito não estoura a coluna
         t["feito"]["sobrepostos"][0]["textos"] = json!(["x".repeat(500)]);
         assert!(linhas(&t).iter().any(|l| l.0.chars().count() == "Texto sobreposto: ".chars().count() + 61));
@@ -3255,6 +3502,89 @@ mod testes {
         assert_eq!(serde_json::to_vec(&d).unwrap(), serde_json::to_vec(&dados(&t, &[], &[]).unwrap()).unwrap());
     }
 
+    /// No PDF paginado: o texto das telas de texto, cada marcação com a forma, o rótulo e a cor, a linha legível do
+    /// anexo C, o ritmo para leigo, a marca do SICRO; e nada passa da margem, nem com nome longo sem pausa.
+    #[test]
+    fn pdf_com_telas_marcacoes_e_identidade() {
+        let c = Cena::nova("juri-pdf-marcas");
+        let mut t = tecnico_completo(&c);
+        let (projeto, mapa) = complementos(&mut t);
+        let longo = "Camera_portaria_entrada_principal_gravacao_original_do_DVR_canal_01_2026-11-14_10h00m00s_ate_10h59m59s.mp4";
+        t["feito"]["midias"][0]["nome"] = json!(longo);
+        let d = dados_com(&t, &miniaturas(), &pacote(), Complementos { projeto: Some(&projeto), mapa: Some(&mapa) }).unwrap();
+        let e = entrada(&t, d.clone(), &miniaturas(), &projeto, ModoPdf::A3).unwrap();
+        let texto = relatorio_pdf::texto(&e).unwrap();
+        let tem = |s: &str| assert!(texto.contains(s), "falta no PDF: {s}\n{texto}");
+        // telas de texto, na ordem título, subtítulo, corpo (vazio: fora), rodapé
+        assert_eq!(
+            d["roteiro"][0]["textos"],
+            json!([{ "papel": "Título", "texto": "Chegada do veículo\nà portaria" }, { "papel": "Subtítulo", "texto": "Câmera 1" }, { "papel": "Rodapé", "texto": "Perícia 0000/2026" }])
+        );
+        tem("TÍTULO Chegada do veículo à portaria SUBTÍTULO Câmera 1 RODAPÉ Perícia 0000/2026");
+        // marcações: forma, quantidade, rótulo e cor (com a amostra), e a seção 5 com as formas
+        assert_eq!(
+            d["roteiro"][1]["efeitos"].as_array().unwrap().iter().filter(|e| !e["marcas"].as_array().unwrap().is_empty()).cloned().collect::<Vec<_>>(),
+            [json!({ "texto": "1 elipse", "marcas": [{ "texto": "P1 (vermelha)", "cor": "#ed333b" }] }), json!({ "texto": "1 seta", "marcas": [{ "texto": "sem rótulo (amarela)", "cor": "#ffd84a" }] })]
+        );
+        tem("1 elipse: P1 (vermelha); ");
+        tem("1 seta: sem rótulo (amarela)");
+        tem("Marcação (elipses e setas)");
+        // anexo C: uma linha legível por processamento, sem JSON
+        tem("Elipse vermelha (#ed333b), espessura 0,4 %, com contorno · margem 5 % · rótulo «P1» acima, letra 3 %, branca (#ffffff), negrito · segue o rastreio R1");
+        tem("Seta amarela (#ffd84a), espessura 0,2 %, com contorno · tamanho 2 % · direção 90° · sem rótulo · segue o rastreio R1");
+        assert!(!d["processamentos"].to_string().contains("\\\"traco\\\""), "JSON cru no anexo C");
+        // ritmo e formato para leigo; o nome do leitor do ffmpeg só no anexo B
+        tem("30 imagens por segundo, constante");
+        tem("MP4 (H.264) · 123 MB");
+        tem("percentis 10, 50 e 90: 33,333 · 33,333 · 33,333 ms (57 intervalos nos trechos usados)");
+        // a marca do programa
+        tem("Gerado pelo SICRO 6.0.0");
+        let s = relatorio_pdf::gerar(&e).unwrap();
+        assert!(s.avisos.is_empty() && relatorio_pdf::testes::contem(&s.pdf, b"<pdfaid:part>3</pdfaid:part>"), "{:?}", s.avisos);
+        let fora = relatorio_pdf::testes::transbordos(&e);
+        assert_eq!(fora, vec![], "texto além da margem");
+        // projeto que não é o do `feito`: sem o texto das telas
+        let outro = dados_com(&t, &[], &[], Complementos { projeto: Some(b"{\"principal\":[]}"), mapa: None }).unwrap();
+        assert_eq!(outro["roteiro"][0]["textos"], json!([]));
+    }
+
+    /// Ferramenta, não teste: o relatório de uma exportação de verdade, sem tocar nela. `SICRO_RELATORIO_DE` = pasta
+    /// com `*.tecnico.json`, `SHA256SUMS.txt`, `mapa.csv` e `projeto/projeto.json`; `SICRO_RELATORIO_IMG` = pasta com
+    /// as miniaturas `N.jpg` (opcional); `SICRO_GUARDAR_PDF` = onde gravar `Relatório.pdf` e `dados.json`.
+    #[test]
+    #[ignore = "ferramenta: relatório a partir de uma pasta de exportação"]
+    fn relatorio_de_uma_pasta() {
+        use std::path::PathBuf;
+        let de = PathBuf::from(std::env::var("SICRO_RELATORIO_DE").expect("SICRO_RELATORIO_DE"));
+        let para = PathBuf::from(std::env::var("SICRO_GUARDAR_PDF").expect("SICRO_GUARDAR_PDF"));
+        let tec = std::fs::read_dir(&de).unwrap().filter_map(|x| x.ok()).map(|x| x.path()).find(|p| p.to_string_lossy().ends_with(".tecnico.json")).expect("*.tecnico.json");
+        let t: Value = serde_json::from_slice(&std::fs::read(tec).unwrap()).unwrap();
+        let somas = std::fs::read_to_string(de.join("SHA256SUMS.txt")).unwrap_or_default();
+        let mut arquivos: Vec<ArquivoDoPacote> = somas.lines().filter_map(|l| l.split_once("  ")).map(|(s, r)| ArquivoDoPacote { rel: r.into(), sha256: s.into() }).collect();
+        if !somas.is_empty() {
+            arquivos.push(ArquivoDoPacote { rel: "SHA256SUMS.txt".into(), sha256: format!("{:x}", Sha256::digest(somas.as_bytes())) });
+        }
+        let projeto = std::fs::read(de.join("projeto/projeto.json")).unwrap_or_default();
+        let mapa = std::fs::read_to_string(de.join("mapa.csv")).ok();
+        let mut mini: Vec<Miniatura> = Vec::new();
+        if let Ok(img) = std::env::var("SICRO_RELATORIO_IMG") {
+            for x in std::fs::read_dir(img).unwrap().filter_map(|x| x.ok()) {
+                if let Some(n) = x.file_name().to_string_lossy().strip_suffix(".jpg").and_then(|n| n.parse::<u32>().ok()) {
+                    mini.push(Miniatura { n, jpeg: std::fs::read(x.path()).unwrap() });
+                }
+            }
+        }
+        mini.sort_by_key(|m| m.n);
+        let d = dados_com(&t, &mini, &arquivos, Complementos { projeto: Some(&projeto), mapa: mapa.as_deref() }).unwrap();
+        std::fs::write(para.join("dados.json"), serde_json::to_vec_pretty(&d).unwrap()).unwrap();
+        let e = entrada(&t, d, &mini, &projeto, ModoPdf::A3).unwrap();
+        let s = relatorio_pdf::gerar(&e).unwrap();
+        std::fs::write(para.join("Relatório.pdf"), &s.pdf).unwrap();
+        println!("páginas: {} · avisos: {:?}", s.paginas, s.avisos);
+        let fora = relatorio_pdf::testes::transbordos(&e);
+        assert_eq!(fora, vec![], "texto além da margem");
+    }
+
     #[test]
     fn formatacao_pt_br() {
         assert_eq!((tempo(7.5), tempo(0.0), tempo(62.0004), tempo(3723.5), tempo(-1.0)), ("0:07,500".into(), "0:00,000".into(), "1:02,000".into(), "1:02:03,500".into(), "−0:01,000".into()));
@@ -3267,19 +3597,53 @@ mod testes {
         assert_eq!((taxa(30, 1), taxa(30000, 1001), taxa(25, 1), taxa(0, 0)), ("30".into(), "29,97".into(), "25".into(), "—".into()));
         assert_eq!((letra(0), letra(25), letra(26), letra(27), letra(701), letra(702)), ("A".into(), "Z".into(), "AA".into(), "AB".into(), "ZZ".into(), "AAA".into()));
         assert_eq!((num(2.0, 2), num(0.5, 3), num(-0.0, 1), num(45.55, 1), dec(2.0, 2)), ("2".into(), "0,5".into(), "0".into(), "45,5".into(), "2,00".into()));
-        assert_eq!(parametros(&json!({ "tipo": "x", "id": "e1", "ligado": true, "nome": "n", "b": 1.5, "a": "t /x", "c": null, "d": { "k": [1, 2] } })), "a: t /x; b: 1.5; c: —; d: {\"k\":[1,2]}");
-        assert_eq!(parametros(&json!({ "regiao": "x".repeat(1000) })).chars().count(), "regiao: ".len() + MAX_VALOR + 1);
         assert_eq!((onde(&[3]), onde(&[2, 5])), ("item 3".into(), "itens 2, 5".into()));
+        assert_eq!((por_segundo_txt(15.15), por_segundo_txt(29.97), por_segundo_txt(7.5), por_segundo_txt(1.0)), ("15".into(), "30".into(), "7,5".into(), "1".into()));
     }
 
-    /// Ritmo da gravação pelos passos medidos: constante, variável (com a faixa) e lacuna.
+    /// Formato com o nome que se reconhece fora do ffmpeg; o leitor do ffmpeg fica no anexo B.
+    #[test]
+    fn formato_sem_nome_do_ffmpeg() {
+        let casos = [
+            ("image2pipe", "png", "Untitled-1_.png", "PNG"),
+            ("image2", "mjpeg", "foto.jpg", "JPEG"),
+            ("png_pipe", "", "x.png", "PNG"),
+            ("mov,mp4,m4a,3gp,3g2,mj2", "h264", "cam 1.mp4", "MP4 (H.264)"),
+            ("mov,mp4,m4a,3gp,3g2,mj2", "hevc", "IMG_0001.MOV", "MOV (H.265)"),
+            ("matroska,webm", "vp9", "a.webm", "WebM (VP9)"),
+            ("matroska,webm", "h264", "a.mkv", "MKV (H.264)"),
+            ("dhav", "h264", "canal1.dav", "DAV (H.264)"),
+            ("h264", "h264", "bruto.264", "H.264"),
+            ("asf", "wmv3", "x.wmv", "WMV"),
+            ("wav", "pcm_s16le", "voz.wav", "WAV (PCM)"),
+            ("lavfi_desconhecido", "rawvideo", "x.yuv", "YUV (sem compressão)"),
+            ("", "", "", "—"),
+        ];
+        for (c, k, n, esperado) in casos {
+            assert_eq!(formato(c, k, n), esperado, "{c} {k} {n}");
+        }
+    }
+
+    /// Intervalos dos trechos usados pelo `mapa.csv`: só entre quadros de índice seguido, por gravação.
+    #[test]
+    fn intervalos_pelo_mapa() {
+        let csv = "q,item,clipe,midia,pts,indice,t_s,tipo\n0,1,c1,,,,,\n1,2,c2,m1,100,10,0.1,novo\n2,2,c2,m1,100,10,0.1,repetido\n3,2,c2,m1,133,11,0.133,novo\n\
+                   4,2,c2,m1,200,13,0.2,novo\n5,3,\"c,3\",m2,0,0,0,novo\n6,3,\"c,3\",m2,40,1,0.04,novo\n,2,c2,m1,166,12,0.166,descartado\nlixo\n";
+        let m = intervalos_do_mapa(csv);
+        assert_eq!((m["m1"].as_slice(), m["m2"].as_slice()), ([33, 33, 34].as_slice(), [40].as_slice()));
+        assert_eq!(campos_csv("a,\"b,\"\"c\"\"\",d"), ["a", "b,\"c\"", "d"]);
+        assert_eq!((percentil(&[1, 2, 3, 4, 5], 0.0), percentil(&[1, 2, 3, 4, 5], 0.5), percentil(&[1, 2, 3, 4, 5], 1.0)), (1, 3, 5));
+    }
+
+    /// Ritmo da gravação pelos passos medidos: constante, variável (a mediana e a faixa típica) e lacuna.
     #[test]
     fn ritmo_e_intervalo_da_gravacao() {
-        let midia = |min: i64, med: i64, max: i64, lacunas: Value| -> Original {
+        let com_passos = |min: i64, med: i64, max: i64, lacunas: Value, passos: Option<&[i64]>| -> Original {
             let m: FMidia = serde_json::from_value(json!({ "id": "m1", "nome": "cam.mp4", "medido": { "tb": { "num": 1, "den": 1000 }, "de_s": 0.0, "ate_s": 20.0,
                 "quadros": 500, "passo_min": min, "passo_med": med, "passo_max": max, "lacunas": lacunas }, "usado": [{ "de_s": 3.0, "ate_s": 9.0 }], "usado_total_s": 6.0 })).unwrap();
-            original(1, &m)
+            original(1, &m, passos)
         };
+        let midia = |min: i64, med: i64, max: i64, lacunas: Value| com_passos(min, med, max, lacunas, None);
         let o = midia(40, 40, 40, json!([]));
         assert_eq!((o.id.as_str(), o.ritmo.as_str(), o.taxa_variavel, o.tecnico.intervalo_quadros.as_str()), ("B", "25 imagens por segundo, constante", false, "40,000 ms (mín. = máx.)"));
         let c = o.cobertura.unwrap();
@@ -3287,15 +3651,25 @@ mod testes {
         // oscilação de ±4 ms em 40 ms: constante
         assert!(!midia(36, 40, 44, json!([])).taxa_variavel);
         let o = midia(40, 40, 83, json!([]));
-        assert_eq!((o.ritmo.as_str(), o.taxa_variavel), ("entre 12,05 e 25 imagens por segundo (variável)", true));
-        assert_eq!(o.tecnico.intervalo_quadros, "40,000 a 83,000 ms (mediana 40,000)");
+        assert_eq!((o.ritmo.as_str(), o.taxa_variavel), ("cerca de 25 imagens por segundo, em intervalos irregulares", true));
+        assert_eq!((o.tecnico.intervalo_quadros.as_str(), &o.tecnico.intervalos_usados), ("40,000 a 83,000 ms (mediana 40,000)", &None));
+        // a câmera que alterna 30 e 15 imagens por segundo (o 1 tique e o buraco de 1 s ficam fora da faixa típica)
+        let mut passos: Vec<i64> = [vec![1, 1000], vec![33; 45], vec![66; 55]].concat();
+        passos.sort_unstable();
+        let o = com_passos(1, 66, 1000, json!([[0, 1000]]), Some(&passos));
+        assert_eq!(o.ritmo, "cerca de 15 imagens por segundo, em intervalos irregulares (na maior parte, entre 15 e 30 por segundo)");
+        assert_eq!(o.tecnico.intervalos_usados.as_deref(), Some("percentis 10, 50 e 90: 33,000 · 66,000 · 66,000 ms (102 intervalos nos trechos usados)"));
+        // faixa que dá o mesmo número nas duas pontas não se escreve; poucos intervalos não fazem percentil
+        assert_eq!(com_passos(1, 66, 1000, json!([]), Some(&[66; 30])).ritmo, "cerca de 15 imagens por segundo, em intervalos irregulares");
+        assert_eq!(com_passos(1, 66, 1000, json!([]), Some(&[33, 66, 66])).tecnico.intervalos_usados, None);
         assert!(midia(40, 40, 40, json!([[400, 4000]])).taxa_variavel, "lacuna");
         assert_eq!((o.recebido.as_str(), o.relogio.as_str(), o.formato_nativo), ("não informado", "sem informação", None));
         // som (narração) e foto: sem tabela de quadros não há duração nem parte usada a declarar (nunca "0 s")
         for (quadros, especie, ritmo) in [(0, "Som", "só som"), (1, "Imagem", "imagem única")] {
             let m: FMidia = serde_json::from_value(json!({ "id": "m2", "nome": "x", "medido": { "tb": { "num": 1, "den": 1000 }, "de_s": 0.0, "ate_s": 0.0, "quadros": quadros } })).unwrap();
-            let o = original(0, &m);
+            let o = original(0, &m, Some(&[40; 30]));
             assert_eq!((o.especie.as_str(), o.ritmo.as_str(), o.duracao.as_str(), o.cobertura.is_none(), o.taxa_variavel), (especie, ritmo, "—", true, false));
+            assert_eq!(o.tecnico.intervalos_usados, None);
         }
     }
 }

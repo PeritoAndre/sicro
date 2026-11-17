@@ -16,7 +16,7 @@
         },
         {
           "explicacao": "Desenho posto sobre a imagem para guiar o olhar. Não faz parte da gravação.",
-          "o_que": "Marcação",
+          "o_que": "Marcação (elipses e setas)",
           "onde": "item 2"
         },
         {
@@ -274,6 +274,7 @@
             "cor": "BT.709, faixa limitada",
             "fps_nominal": "30/1",
             "intervalo_quadros": "33,333 ms (mín. = máx.)",
+            "intervalos_usados": "percentis 10, 50 e 90: 33,333 · 33,333 · 33,333 ms (57 intervalos nos trechos usados)",
             "observacoes": "—",
             "par": "1:1",
             "pix_fmt": "yuv420p",
@@ -321,7 +322,7 @@
           "item": "1",
           "nome": "recorte",
           "ordem": "1",
-          "parametros": "de_pts: 15360"
+          "parametros": "de_pts 15360"
         },
         {
           "item": "2",
@@ -333,31 +334,37 @@
           "item": "2",
           "nome": "Ocultação",
           "ordem": "1",
-          "parametros": "alvo: {\"rastreio\":\"r1\"}; conteudo: rosto; motivo: terceiro /sem relação"
+          "parametros": "Rosto · motivo «terceiro /sem relação» · segue o rastreio R1"
         },
         {
           "item": "2",
           "nome": "Média de imagens",
           "ordem": "2",
-          "parametros": "quadros: 8"
+          "parametros": "Média de 8 imagens seguidas"
         },
         {
           "item": "2",
           "nome": "Marcação",
           "ordem": "3",
-          "parametros": "forma: elipse; rastreio: r1"
+          "parametros": "Elipse vermelha (#ed333b), espessura 0,4 %, com contorno · margem 5 % · rótulo «P1» acima, letra 3 %, branca (#ffffff), negrito · segue o rastreio R1"
         },
         {
           "item": "2",
           "nome": "Relógio na imagem",
           "ordem": "4",
-          "parametros": "mostra: tempo_fonte"
+          "parametros": "Mostra o tempo da gravação original"
         },
         {
           "item": "2",
           "nome": "Velocidade calculada",
           "ordem": "5",
-          "parametros": "calculo: {\"faixa\":[39.0,45.5],\"kmh\":42.0}"
+          "parametros": "42 km/h · faixa de 39 a 45,5 km/h"
+        },
+        {
+          "item": "2",
+          "nome": "Marcação",
+          "ordem": "6",
+          "parametros": "Seta amarela (#ffd84a), espessura 0,2 %, com contorno · tamanho 2 % · direção 90° · sem rótulo · segue o rastreio R1"
         },
         {
           "item": "3",
@@ -369,15 +376,16 @@
           "item": "3",
           "nome": "Régua de escala",
           "ordem": "1",
-          "parametros": "calibracao: {\"residuo_m\":0.02}; comprimento_m: 2.0"
+          "parametros": "Comprimento 2,00 m · sem rótulo · calibração: erro médio 0,020 m"
         },
         {
           "item": "3",
           "nome": "Holofote",
           "ordem": "2",
-          "parametros": "alvo: {\"rastreio\":\"r2\"}"
+          "parametros": "Segue o rastreio R2"
         }
       ],
+      "programa": "SICRO 6.0.0",
       "rastreios": [
         {
           "amostras": "—",
@@ -415,32 +423,81 @@
       "reproducao": {
         "observacao": "Refeita com as mesmas versões dos programas e na mesma classe de computador, a montagem resulta em arquivo idêntico, com o mesmo código de verificação. Em outro computador, as imagens antes da compressão resultam iguais e o arquivo pode diferir.",
         "projeto": "projeto/projeto.json",
-        "projeto_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+        "projeto_sha256": "f0bbefce09392c343db950e9631f0f551489a6992e56935af2b3073ca1f4bae9"
       },
       "revisado_por": null,
       "roteiro": [
         {
           "descricao": "item 1",
           "efeitos": [
-            "recorte"
+            {
+              "marcas": [],
+              "texto": "recorte"
+            }
           ],
           "miniatura": null,
           "n": 1,
           "na_saida": "0:00,000 a 0:01,000",
           "origem": null,
           "selos": [],
+          "textos": [
+            {
+              "papel": "Título",
+              "texto": "Chegada do veículo\nà portaria"
+            },
+            {
+              "papel": "Subtítulo",
+              "texto": "Câmera 1"
+            },
+            {
+              "papel": "Rodapé",
+              "texto": "Perícia 0000/2026"
+            }
+          ],
           "tipo": "Tela de texto",
           "velocidade": null
         },
         {
           "descricao": "item 2",
           "efeitos": [
-            "Ocultação (rosto)",
-            "Média de imagens (8)",
-            "Marcação",
-            "Relógio na imagem",
-            "Velocidade calculada",
-            "Som da gravação retirado"
+            {
+              "marcas": [],
+              "texto": "Ocultação (rosto)"
+            },
+            {
+              "marcas": [],
+              "texto": "Média de imagens (8)"
+            },
+            {
+              "marcas": [
+                {
+                  "cor": "#ed333b",
+                  "texto": "P1 (vermelha)"
+                }
+              ],
+              "texto": "1 elipse"
+            },
+            {
+              "marcas": [
+                {
+                  "cor": "#ffd84a",
+                  "texto": "sem rótulo (amarela)"
+                }
+              ],
+              "texto": "1 seta"
+            },
+            {
+              "marcas": [],
+              "texto": "Relógio na imagem"
+            },
+            {
+              "marcas": [],
+              "texto": "Velocidade calculada"
+            },
+            {
+              "marcas": [],
+              "texto": "Som da gravação retirado"
+            }
           ],
           "miniatura": "img/2.jpg",
           "n": 2,
@@ -449,20 +506,28 @@
           "selos": [
             "Média de 8 imagens"
           ],
+          "textos": [],
           "tipo": "Trecho de gravação",
           "velocidade": "normal (1×)"
         },
         {
           "descricao": "item 3",
           "efeitos": [
-            "Régua de escala",
-            "Holofote"
+            {
+              "marcas": [],
+              "texto": "Régua de escala"
+            },
+            {
+              "marcas": [],
+              "texto": "Holofote"
+            }
           ],
           "miniatura": null,
           "n": 3,
           "na_saida": "0:03,000 a 0:03,500",
           "origem": "gravação A, no instante 0:03,333",
           "selos": [],
+          "textos": [],
           "tipo": "Imagem parada",
           "velocidade": "parada"
         }
@@ -507,7 +572,7 @@
         [
           "FFmpeg",
           "n9.0.1",
-          "leitura das gravações e produção do vídeo · origem: path · SHA-256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          "leitura das gravações e produção do vídeo · origem: do sistema (PATH) · SHA-256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         ],
         [
           "Typst",
@@ -609,6 +674,7 @@
         "nome": "Perito Teste"
       },
       "processamentos": [],
+      "programa": "SICRO 6.0.0",
       "rastreios": [],
       "referencias": [
         "SWGDE Best Practices for Digital Forensic Video Analysis, 18-V-001, versão 2.0 (10/12/2025)",
@@ -623,7 +689,7 @@
       "reproducao": {
         "observacao": "Refeita com as mesmas versões dos programas e na mesma classe de computador, a montagem resulta em arquivo idêntico, com o mesmo código de verificação. Em outro computador, as imagens antes da compressão resultam iguais e o arquivo pode diferir.",
         "projeto": "projeto.json",
-        "projeto_sha256": "9999999999999999999999999999999999999999999999999999999999999999"
+        "projeto_sha256": "f0bbefce09392c343db950e9631f0f551489a6992e56935af2b3073ca1f4bae9"
       },
       "revisado_por": null,
       "roteiro": [],
@@ -649,7 +715,7 @@
         [
           "FFmpeg",
           "n9.0.1",
-          "leitura das gravações e produção do vídeo · origem: path · SHA-256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+          "leitura das gravações e produção do vídeo · origem: do sistema (PATH) · SHA-256 ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
         ],
         [
           "Typst",

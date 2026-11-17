@@ -782,21 +782,37 @@ pub(crate) fn limpar_depois_de_publicar(fila: &Fila, tarefa: &Tarefa, cache: &Pa
     executar::limpar_cache(raiz, executar::TETO_CACHE, &vivas);
 }
 
-/// Quem, onde e com quê (`execucao.autor`, `caso`, `sicro`, `sistema`), lido do caso e da máquina.
+/// Perito e caso do retrato: o que o caso diz; o perito que falta é o do perfil das Configurações (o cargo e a
+/// matrícula do perfil só valem para ele), e o órgão que falta, a instituição das Configurações.
+fn quem_e_onde(
+    occ: Option<&crate::models::Occurrence>,
+    perfil: &crate::commands::settings_commands::PeritoProfile,
+    inst: &crate::commands::settings_commands::InstitutionSettings,
+) -> (Autor, executar::RetratoCaso) {
+    let campo = |s: Option<&String>| s.map(|x| x.trim().to_string()).filter(|x| !x.is_empty());
+    let do_perfil = perfil.full_name.trim();
+    let nome = occ.and_then(|o| campo(o.peritos.first())).unwrap_or_else(|| do_perfil.to_string());
+    let mesmo = !do_perfil.is_empty() && nome.to_lowercase() == do_perfil.to_lowercase();
+    let autor = Autor {
+        nome,
+        matricula: if mesmo { perfil.registration.trim().to_string() } else { String::new() },
+        cargo: if mesmo { perfil.role.trim().to_string() } else { String::new() },
+    };
+    let instituicao = [inst.organization.trim(), inst.unit.trim()].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join(" · ");
+    let caso = executar::RetratoCaso {
+        numero: occ.and_then(|o| campo(o.protocolo.as_ref()).or(campo(o.numero_bo.as_ref()))).unwrap_or_default(),
+        referencia: occ.and_then(|o| campo(o.titulo.as_ref())).unwrap_or_default(),
+        orgao: occ.and_then(|o| campo(o.delegacia.as_ref())).unwrap_or(instituicao),
+        requisitante: occ.and_then(|o| campo(o.oficio.as_ref()).or(campo(o.requisicao.as_ref()))).unwrap_or_default(),
+    };
+    (autor, caso)
+}
+
+/// Quem, onde e com quê (`execucao.autor`, `caso`, `sicro`, `sistema`), lido do caso, das Configurações e da máquina.
 pub(crate) fn identidade(ws: &Path, cap: &super::ffmpeg::sonda::Capacidades) -> executar::Identidade {
     let occ = abrir_banco(ws).ok().and_then(|(c, o)| occurrence_repo::find_by_id(&c, &o).ok().flatten());
-    let (autor, caso) = match occ {
-        Some(o) => (
-            Autor { nome: o.peritos.first().cloned().unwrap_or_default(), ..Default::default() },
-            executar::RetratoCaso {
-                numero: o.protocolo.clone().or(o.numero_bo.clone()).unwrap_or_default(),
-                referencia: o.titulo.clone().unwrap_or_default(),
-                orgao: o.delegacia.clone().unwrap_or_default(),
-                requisitante: o.oficio.clone().or(o.requisicao.clone()).unwrap_or_default(),
-            },
-        ),
-        None => Default::default(),
-    };
+    let (perfil, inst) = crate::commands::settings_commands::perfil_configurado();
+    let (autor, caso) = quem_e_onde(occ.as_ref(), &perfil, &inst);
     executar::Identidade {
         autor,
         caso,
@@ -1969,6 +1985,31 @@ mod testes {
     fn ida_e_volta<T: Serialize + DeserializeOwned>(j: Value) {
         let lido: T = serde_json::from_value(j.clone()).expect("lê");
         assert_eq!(serde_json::to_value(&lido).unwrap(), j);
+    }
+
+    /// Capa do relatório: o caso manda; o que ele não diz vem do perfil das Configurações, e campo vazio é falta.
+    #[test]
+    fn perito_e_orgao_do_perfil_quando_o_caso_nao_diz() {
+        use crate::commands::settings_commands::{InstitutionSettings, PeritoProfile};
+        let caso = |peritos: Value, delegacia: Value| -> crate::models::Occurrence {
+            serde_json::from_value(json!({ "id": "00000000-0000-4000-8000-000000000001", "titulo": "PINHO", "numero_bo": null, "protocolo": " ",
+                "requisicao": "Req 7", "oficio": "", "delegacia": delegacia, "tipo_pericia": null, "natureza": null, "municipio": null, "bairro": null,
+                "logradouro": null, "referencia": null, "latitude": null, "longitude": null, "data_fato": null, "data_acionamento": null,
+                "data_chegada": null, "data_encerramento": null, "peritos": peritos, "status": "aberta",
+                "created_at": "2026-11-17T00:00:00Z", "updated_at": "2026-11-17T00:00:00Z" }))
+            .unwrap()
+        };
+        let perfil = PeritoProfile { full_name: " André ".into(), registration: "123".into(), role: "Perito Criminal".into(), ..Default::default() };
+        let inst = InstitutionSettings { organization: "Polícia Científica".into(), unit: "Audiovisual".into(), ..Default::default() };
+        let (a, c) = quem_e_onde(Some(&caso(json!([]), Value::Null)), &perfil, &inst);
+        assert_eq!((a.nome.as_str(), a.cargo.as_str(), a.matricula.as_str()), ("André", "Perito Criminal", "123"));
+        assert_eq!((c.numero.as_str(), c.referencia.as_str(), c.orgao.as_str(), c.requisitante.as_str()), ("", "PINHO", "Polícia Científica · Audiovisual", "Req 7"));
+        // o caso diz outro perito: o cargo e a matrícula do perfil não são dele; a delegacia do caso fica
+        let (a, c) = quem_e_onde(Some(&caso(json!(["Fulana"]), json!("1ª DP"))), &perfil, &inst);
+        assert_eq!((a.nome.as_str(), a.cargo.as_str(), a.matricula.as_str(), c.orgao.as_str()), ("Fulana", "", "", "1ª DP"));
+        // nada em lugar nenhum: vazio (a capa omite a linha)
+        let (a, c) = quem_e_onde(None, &PeritoProfile::default(), &InstitutionSettings::default());
+        assert_eq!((a.nome.as_str(), c.orgao.as_str()), ("", ""));
     }
 
     #[test]

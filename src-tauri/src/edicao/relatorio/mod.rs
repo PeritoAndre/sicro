@@ -3,6 +3,7 @@
 
 pub mod frases;
 pub mod juri;
+mod legivel;
 pub mod mapa;
 pub mod tecnico;
 
