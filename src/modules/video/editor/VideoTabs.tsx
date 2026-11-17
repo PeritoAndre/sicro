@@ -3,11 +3,12 @@
  * um volta ao instante em que estava), adiciona vídeos sem sair da análise e,
  * no botão direito, compara lado a lado com o vídeo atual.
  */
-import { Columns2, Plus, Scissors, Wand2 } from "lucide-react";
+import { Cctv, Columns2, Plus, Scissors, Wand2 } from "lucide-react";
 import type { VideoMedia } from "@domain/video";
 import { useContextMenu } from "@components/ContextMenu/ContextMenu";
 import { VideoThumb } from "../VideoThumb";
 import { formatDuration, parseDerivation, parseRealceCopia } from "./format";
+import { copiaDeGravador } from "../gravador";
 import styles from "./VideoTabs.module.css";
 
 interface Props {
@@ -65,6 +66,7 @@ export function VideoTabs({ workspacePath, videos, activeId, adding, onOpen, onA
           const active = v.id === activeId;
           const clip = parseDerivation(v.derivation_json) != null;
           const copia = parseRealceCopia(v.derivation_json) != null;
+          const gravador = copiaDeGravador(v.derivation_json) != null;
           return (
             <button
               key={v.id}
@@ -86,6 +88,7 @@ export function VideoTabs({ workspacePath, videos, activeId, adding, onOpen, onA
                 <span className={styles.name}>
                   {clip && <Scissors size={10} aria-hidden className={styles.clip} />}
                   {copia && <Wand2 size={10} aria-hidden className={styles.clip} />}
+                  {gravador && <Cctv size={10} aria-label="cópia de trabalho" className={styles.clip} />}
                   {v.filename}
                 </span>
                 {v.duration_s != null && (

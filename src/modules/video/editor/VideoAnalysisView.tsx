@@ -9,7 +9,7 @@ import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Clock, Columns2, Copy, Repeat, Scissors, Trash2, Wand2, X } from "lucide-react";
+import { ArrowLeft, Cctv, Clock, Columns2, Copy, Repeat, Scissors, Trash2, Wand2, X } from "lucide-react";
 import type {
   ClipMode,
   ExportClipResult,
@@ -66,7 +66,7 @@ import styles from "./VideoAnalysisView.module.css";
 import { askConfirm } from "@components/Dialog/ask";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
 import { confirmarExclusaoVideo } from "../excluirVideo";
-import { EXT_GRAVADOR, registrarVideo } from "../gravador";
+import { EXT_GRAVADOR, copiaDeGravador, registrarVideo } from "../gravador";
 
 /** `visivel` falso: a Edição está na frente (§8.1). Fica montada, pausada e sem atalhos. */
 export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}) {
@@ -686,6 +686,8 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
   const derivation = parseDerivation(media0?.derivation_json);
   const copiaRealce = parseRealceCopia(media0?.derivation_json);
   const origemDaCopia = copiaRealce ? mediaList.find((m) => m.sha256 === copiaRealce.source.sha256) ?? null : null;
+  const copiaDvr = copiaDeGravador(media0?.derivation_json);
+  const originalDvr = copiaDvr ? mediaList.find((m) => m.sha256 === copiaDvr.origem.sha256) ?? null : null;
   const sourceOfClip = derivation
     ? mediaList.find((m) => m.sha256 === derivation.source.sha256) ?? null
     : null;
@@ -919,6 +921,23 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
               title="Abrir o vídeo de origem"
             >
               abrir origem
+            </button>
+          )}
+        </div>
+      )}
+
+      {copiaDvr && (
+        <div className={styles.derivedBar} data-copia-gravador>
+          <Cctv size={11} /> cópia de trabalho de <strong>{copiaDvr.origem.filename}</strong> (mesmos quadros)
+          {copiaDvr.relogio && <> · relógio do gravador {copiaDvr.relogio}</>}
+          {copiaDvr.lacunas > 0 && <> · {copiaDvr.lacunas === 1 ? "1 lacuna" : `${copiaDvr.lacunas} lacunas`}</>}
+          {originalDvr && (
+            <button
+              type="button"
+              onClick={() => workspacePath && void openMedia(workspacePath, originalDvr.id)}
+              title="Abrir o original do gravador"
+            >
+              abrir original
             </button>
           )}
         </div>

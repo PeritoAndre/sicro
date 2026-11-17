@@ -40,7 +40,11 @@ const midia = (id: string, x: Partial<VideoMedia> = {}): VideoMedia => ({
   created_at: "2026-11-17T10:00:00Z", updated_at: "2026-11-17T10:00:00Z", derived_from_hash: null, derivation_json: null, ...x,
 });
 const original = midia("cam 1.dav");
-const copia = midia("cam 1.mkv", { sha256: "c".repeat(64), derived_from_hash: original.sha256, derivation_json: '{"kind":"copia_dvr"}' });
+const copia = midia("cam 1.mkv", {
+  sha256: "c".repeat(64),
+  derived_from_hash: original.sha256,
+  derivation_json: JSON.stringify({ kind: "copia_dvr", source: { sha256: original.sha256, filename: original.filename } }),
+});
 
 let raiz: Root | null = null;
 const fila = () => act(async () => new Promise<void>((r) => setTimeout(r, 0)));
@@ -90,6 +94,13 @@ describe("Central: vídeo de gravador", () => {
     expect(cmd.openVideoMedia).toHaveBeenCalledWith(WS, copia.id);
     expect(useVideoStore.getState().activeMediaId).toBe(copia.id);
     expect(document.querySelector("p")?.textContent ?? "").not.toMatch(/gravador|cópia/i);
+  });
+
+  it("na lista, a cópia vem marcada como cópia de trabalho e o original como vídeo", async () => {
+    await act(async () => useVideoStore.setState({ list: [copia, original] }));
+    const chips = [...document.querySelectorAll("span")].map((s) => s.textContent);
+    expect(chips.filter((t) => t === "cópia de trabalho")).toHaveLength(1);
+    expect(chips.filter((t) => t === "vídeo")).toHaveLength(1);
   });
 
   it("Hikvision antigo: a frase do catálogo na tela, nada registrado nem aberto", async () => {

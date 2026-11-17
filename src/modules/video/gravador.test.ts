@@ -14,7 +14,7 @@ const cmd = vi.hoisted(() => ({
 }));
 vi.mock("@core/commands", () => ({ commands: cmd }));
 
-import { EXT_GRAVADOR, registrarVideo } from "./gravador";
+import { EXT_GRAVADOR, copiaDeGravador, registrarVideo } from "./gravador";
 import { useVideoStore } from "./store/videoStore";
 import { midiaDoCaso } from "@modules/edicao/store/coleta";
 
@@ -87,6 +87,17 @@ describe("importação de gravador", () => {
 
   it("extensões do diálogo: as de gravador", () => {
     for (const x of ["dav", "ifv", "lvf", "264", "h264", "265", "h265", "hevc"]) expect(EXT_GRAVADOR).toContain(x);
+  });
+});
+
+describe("a cópia na tela (copiaDeGravador)", () => {
+  it("original, relógio e lacunas da cópia; outro derivado ou JSON ruim: null", () => {
+    expect(copiaDeGravador(copia.derivation_json)).toEqual({ origem: { sha256: SHA_O, filename: "cam 1.dav" }, relogio: null, lacunas: 1 });
+    const comRelogio = JSON.stringify({ ...JSON.parse(derivacaoDvr(1505762699)), relogio: "2017-09-18 19:24:59.000", lacunas: [] });
+    expect(copiaDeGravador(comRelogio)).toEqual({ origem: { sha256: SHA_O, filename: "cam 1.dav" }, relogio: "2017-09-18 19:24:59.000", lacunas: 0 });
+    for (const j of [null, "", "{", JSON.stringify({ kind: "clip", source: { sha256: SHA_O, filename: "x" } }), JSON.stringify({ kind: "copia_dvr" })]) {
+      expect(copiaDeGravador(j)).toBeNull();
+    }
   });
 });
 

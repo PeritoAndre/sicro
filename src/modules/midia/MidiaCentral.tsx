@@ -11,7 +11,7 @@ import type { ResumoProjeto } from "@domain/edicao";
 import { abrirEdicao, duplicarEdicao, excluirEdicao, fraseDoProblema, listarEdicoes, novaEdicao, resumoDaEdicao } from "@modules/edicao/central";
 import { separarErro } from "@modules/edicao/store/edicaoStore";
 import { confirmarExclusaoVideo } from "@modules/video/excluirVideo";
-import { EXT_GRAVADOR, registrarVideo } from "@modules/video/gravador";
+import { EXT_GRAVADOR, copiaDeGravador, registrarVideo } from "@modules/video/gravador";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { useShortcuts } from "@core/useShortcuts";
@@ -210,7 +210,7 @@ export function MidiaCentral() {
             className={thumbStyles.miniVazia}
           />
         ),
-        tipo: "vídeo",
+        tipo: copiaDeGravador(m.derivation_json) ? "cópia de trabalho" : "vídeo",
         resumo: [
           m.duration_s != null ? formatDuration(m.duration_s) : null,
           m.width && m.height ? `${m.width}×${m.height}` : null,
