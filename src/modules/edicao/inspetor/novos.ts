@@ -67,14 +67,15 @@ export function novoRastreio(midia: Id | null, t: Seg, caixa: Caixa = CAIXA_CENT
   };
 }
 
+/** Padrão do dono (17/11): seta, espessura 0,2 %, contorno, tamanho 2 %, direção 90°, sem rótulo. */
 export const novoDestaque = (rastreio: Id): EfDestaque => ({
   ...base(),
   tipo: "destaque",
-  forma: "retangulo",
+  forma: "seta",
   rastreio,
-  traco: { cor: COR_DESENHO, espessura: 0.006, contorno: true },
-  tamanho: 0.12,
-  angulo_graus: 45,
+  traco: { cor: COR_DESENHO, espessura: 0.002, contorno: true },
+  tamanho: 0.02,
+  angulo_graus: 90,
   margem: 0,
   rotulo: null,
 });

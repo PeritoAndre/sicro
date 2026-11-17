@@ -12,7 +12,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import type { Caixa, ClipeTitulo, ClipeTrecho, EfOcultar, EfTexto, MidiaInfo, MidiaRef, ProjetoEdicao, QuadroEm } from "@domain/edicao";
+import type { EfDestaque, Caixa, ClipeTitulo, ClipeTrecho, EfOcultar, EfTexto, MidiaInfo, MidiaRef, ProjetoEdicao, QuadroEm } from "@domain/edicao";
 import type { VideoMedia } from "@domain/video";
 
 const cmd = vi.hoisted(() => ({
@@ -176,6 +176,9 @@ beforeAll(async () => {
 
   // destaque de uma âncora no trecho 1, marcada no palco sobre o quadro do início
   const destaque = adicionarEfeito(c1.id, "destaque", "Destaque")!;
+  // o padrão é a seta (17/11); o ponta a ponta mede a caixa amarela: o perito escolhe Retângulo e a espessura
+  mudar("Forma", noEfeito<EfDestaque>(destaque, (x) => void (x.forma = "retangulo")));
+  mudar("Espessura", noEfeito<EfDestaque>(destaque, (x) => void (x.traco.espessura = 0.006)));
   const rastreio = st().doc!.rastreios.at(-1)!.id;
   useInspetorUi.getState().pedir({ tipo: "caixa", rastreio, efeito: destaque }, (v, t, pts) => marcarAncora(rastreio, { t, pts, v: v as Caixa }, "Marcar"));
   useInspetorUi.getState().marcado({ x: 0.3, y: 0.25, w: 0.12, h: 0.2 }, 12, 12 * 30 * 512);

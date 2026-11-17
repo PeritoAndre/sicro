@@ -292,11 +292,11 @@
           "rastreio": "00000000-0000-4000-8000-000000000010",
           "traco": {
             "cor": "#ffd84a",
-            "espessura": 0.006,
+            "espessura": 0.002,
             "contorno": true
           },
-          "tamanho": 0.12,
-          "angulo_graus": 45,
+          "tamanho": 0.02,
+          "angulo_graus": 90,
           "margem": 0,
           "rotulo": {
             "texto": "Suspeito",
@@ -326,11 +326,11 @@
           "rastreio": "00000000-0000-4000-8000-000000000012",
           "traco": {
             "cor": "#ffd84a",
-            "espessura": 0.006,
+            "espessura": 0.002,
             "contorno": true
           },
-          "tamanho": 0.12,
-          "angulo_graus": 45,
+          "tamanho": 0.02,
+          "angulo_graus": 90,
           "margem": 0.1,
           "rotulo": null
         },
@@ -527,15 +527,15 @@
           "nome": "",
           "ativo": null,
           "tipo": "destaque",
-          "forma": "retangulo",
+          "forma": "seta",
           "rastreio": "00000000-0000-4000-8000-000000000006",
           "traco": {
             "cor": "#ffd84a",
-            "espessura": 0.006,
+            "espessura": 0.002,
             "contorno": true
           },
-          "tamanho": 0.12,
-          "angulo_graus": 45,
+          "tamanho": 0.02,
+          "angulo_graus": 90,
           "margem": 0,
           "rotulo": null
         }

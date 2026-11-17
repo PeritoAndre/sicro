@@ -224,8 +224,8 @@
             "espessura": 0.006,
             "contorno": true
           },
-          "tamanho": 0.12,
-          "angulo_graus": 45,
+          "tamanho": 0.02,
+          "angulo_graus": 90,
           "margem": 0,
           "rotulo": null
         },
