@@ -333,7 +333,35 @@ pub fn cap() -> Option<Arc<Capacidades>> {
             }
         })
         .clone();
+    if abaixo_do_minimo() {
+        assert!(c.is_none(), "SICRO_FFMPEG_ABAIXO_DO_MINIMO=1 e a sonda aprovou o ffmpeg");
+        eprintln!("aviso: teste dispensado, ffmpeg abaixo do mínimo");
+        return None;
+    }
     decidir(c, std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1"))
+}
+
+// CONTRATO: acréscimo.
+/// `SICRO_FFMPEG_ABAIXO_DO_MINIMO=1` (CI da Ubuntu 22.04, ffmpeg 4.4): a sonda TEM de reprovar o ffmpeg dos testes,
+/// e os testes que precisam de um utilizável ficam dispensados.
+pub fn abaixo_do_minimo() -> bool {
+    std::env::var("SICRO_FFMPEG_ABAIXO_DO_MINIMO").is_ok_and(|v| v == "1")
+}
+
+// CONTRATO: acréscimo.
+/// O outro ffmpeg da máquina (o do sistema ou o 7.0.2 do AppImage). Falta dele com `SICRO_EXIGE_FFMPEG=1` é falha
+/// só no Linux: o instalador do Windows leva um ffmpeg só.
+pub fn outro_ffmpeg(cap: &Capacidades) -> Option<Arc<Capacidades>> {
+    let candidatos = [Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg-linux/ffmpeg"), PathBuf::from("/usr/bin/ffmpeg")];
+    let mesmo = |p: &Path| std::fs::canonicalize(p).ok() == std::fs::canonicalize(&cap.binario).ok();
+    let achado = candidatos.iter().find(|p| p.exists() && !mesmo(p)).and_then(|p| sonda::capacidades_de(p, sonda::Origem::Configurado, None, false).ok());
+    let achado = achado.filter(|c| c.faltam.is_empty() && c.sha256 != cap.sha256);
+    if achado.is_none() {
+        let exige = cfg!(target_os = "linux") && std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1");
+        assert!(!exige, "SICRO_EXIGE_FFMPEG=1 e o segundo ffmpeg não foi achado");
+        eprintln!("aviso: comparação entre binários dispensada, sem o segundo ffmpeg");
+    }
+    achado
 }
 
 fn decidir(c: Option<Arc<Capacidades>>, exige: bool) -> Option<Arc<Capacidades>> {

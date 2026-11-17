@@ -292,14 +292,13 @@ fn misturar(g: &mut Grafo, a: Lado, b: Lado, xfade: &str, d: u32, k: (u32, u32),
 #[cfg(test)]
 mod testes {
     use super::*;
-    use std::path::{Path, PathBuf};
+    use std::path::Path;
     use std::sync::atomic::AtomicBool;
-    use std::sync::Arc;
 
     use serde_json::{json, Value};
 
     use crate::edicao::ffmpeg::exec::{self, Comando};
-    use crate::edicao::ffmpeg::sonda::{self, Capacidades};
+    use crate::edicao::ffmpeg::sonda::Capacidades;
     use crate::edicao::modelo::{AudioTransicao, LinhaResolvida, Nivel, ProjetoEdicao};
     use crate::edicao::motor::plano::Plano;
     use crate::edicao::motor::{blocos, compilar_video, Alvo, Contexto};
@@ -898,25 +897,12 @@ mod testes {
         }
     }
 
-    /// O outro ffmpeg da máquina (o do sistema ou o 7.0.2 do AppImage); com `SICRO_EXIGE_FFMPEG=1` a falta é falha.
-    fn outro_ffmpeg(cap: &Capacidades) -> Option<Arc<Capacidades>> {
-        let candidatos = [Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg-linux/ffmpeg"), PathBuf::from("/usr/bin/ffmpeg")];
-        let mesmo = |p: &Path| std::fs::canonicalize(p).ok() == std::fs::canonicalize(&cap.binario).ok();
-        let achado = candidatos.iter().find(|p| p.exists() && !mesmo(p)).and_then(|p| sonda::capacidades_de(p, sonda::Origem::Configurado, None, false).ok());
-        let achado = achado.filter(|c| c.faltam.is_empty() && c.sha256 != cap.sha256);
-        if achado.is_none() {
-            assert!(!std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1"), "SICRO_EXIGE_FFMPEG=1 e o segundo ffmpeg não foi achado");
-            eprintln!("aviso: teste dispensado, sem o segundo ffmpeg");
-        }
-        achado
-    }
-
     /// Todo tipo do catálogo, nas três taxas, dá os mesmos bytes no 9.0.1 e no 7.0.2 (o hash do composto não pode
     /// depender da versão).
     #[test]
     fn cada_transicao_igual_nos_dois_binarios() {
         let Some(cap) = fontes::cap() else { return };
-        let Some(outro) = outro_ffmpeg(&cap) else { return };
+        let Some(outro) = fontes::outro_ffmpeg(&cap) else { return };
         let m = apoio::medida(&cap, Fonte::Mp4);
         for fps in TAXAS {
             for &(tipo, _) in XFADE {

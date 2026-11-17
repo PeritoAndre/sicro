@@ -1774,7 +1774,8 @@ mod testes {
             let base = fonte_info(&cap, &comum, "00", Arc::new(TabelaQuadros::de_pacotes(&cap, &comum).unwrap()), None).unwrap();
             assert_eq!((base.exibido, &base.quadros.pts, base.quadros.tb), ((322, 242), &vec![0], r(1, 1)), "{} {ext}", cap.versao);
             for (dir, arq) in [("100% {c}", "foto"), ("x%5d", "foto"), ("comum", "foto %d"), ("d'água 50% [a:b]", "100%03d")] {
-                let d = pasta.join(dir);
+                // `:` não cabe em nome no Windows
+                let d = pasta.join(if cfg!(windows) { dir.replace(':', "") } else { dir.to_string() });
                 std::fs::create_dir_all(&d).unwrap();
                 let arq = d.join(format!("{arq}.{ext}"));
                 std::fs::copy(&comum, &arq).unwrap();
