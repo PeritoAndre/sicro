@@ -4,14 +4,15 @@ import { Volume2, VolumeX } from "lucide-react";
 import type { ClipeTrecho } from "@domain/edicao";
 import { ehChaves } from "../../modelo/curva";
 import { noClipe } from "../acoes";
-import { Deslizante, Grade, Marca, Numero, Secao, Tempo, Texto } from "../campos";
+import { Deslizante, Grade, Marca, Secao, Tempo, Texto } from "../campos";
 import { useEdicaoStore } from "../../store/edicaoStore";
 import type { SecaoProps } from "../registro";
 import { CorDaMidia, NomeMidia } from "./comum";
+// P3.4: a velocidade (constante ou rampa) mora na seção dela
+import { VelocidadeCampos } from "./VelocidadeSecao";
 import styles from "../Inspetor.module.css";
 
-/** Velocidade aceita: 0,05× a 16×, com até 3 casas (vira racional exato no Rust). */
-export const velocidadeValida = (v: number) => v >= 0.05 && v <= 16 && Math.abs(Math.round(v * 1000) - v * 1000) < 1e-6;
+export { velocidadeValida } from "./VelocidadeSecao";
 
 export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>) {
   const id = c.id;
@@ -60,19 +61,7 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
             })
           }
         />
-        <Numero
-          rotulo="Velocidade"
-          item={id}
-          valor={c.velocidade.tipo === "constante" ? c.velocidade.fator : 1}
-          desligado={c.velocidade.tipo !== "constante"}
-          min={0.05}
-          max={16}
-          passo={0.25}
-          casas={c.velocidade.tipo === "constante" && !Number.isInteger(c.velocidade.fator * 100) ? 3 : 2}
-          unidade="×"
-          valido={velocidadeValida}
-          aplicar={(v) => noClipe<ClipeTrecho>(id, (x) => void (x.velocidade = { tipo: "constante", fator: v }))}
-        />
+        <VelocidadeCampos clipe={c} tabela={tab} travado={travado} />
         <div className={styles.som}>
           <span className={styles.rotulo}>Som</span>
           <span className={styles.somLinha}>

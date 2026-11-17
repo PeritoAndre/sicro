@@ -100,7 +100,8 @@ fn cortar(xa: f64, xb: f64, n: u64) -> Option<(u64, u64)> {
     (b > a).then_some((a, b))
 }
 
-/// Trechos ligados da principal com o clipe resolvido: (início no programa, n_q, início na fonte, fator).
+/// Trechos ligados da principal com o clipe resolvido: (início no programa, n_q, início na fonte, fator, clipe).
+/// Rampa (P3.4): fator 0, e o tempo de programa sai de `tempo::programa_da_fonte` (`no_trecho`).
 fn trechos<'a>(p: &'a ProjetoEdicao, linha: &LinhaResolvida) -> Vec<(u64, u64, f64, f64, &'a ClipeTrecho)> {
     let mut v = Vec::new();
     for r in linha.clipes.iter().filter(|r| r.fonte.is_some()) {
@@ -109,14 +110,22 @@ fn trechos<'a>(p: &'a ProjetoEdicao, linha: &LinhaResolvida) -> Vec<(u64, u64, f
             _ => None,
         });
         let Some(t) = t else { continue };
-        // rampa é da Fase 3 (a validação recusa antes)
-        let Velocidade::Constante { fator } = t.velocidade else { continue };
-        if !(fator.is_finite() && fator > 0.0) {
-            continue;
-        }
+        let fator = match &t.velocidade {
+            Velocidade::Constante { fator } if fator.is_finite() && *fator > 0.0 => *fator,
+            Velocidade::Rampa { pontos } if tempo::pontos_da_rampa_ok(pontos).is_ok() => 0.0,
+            _ => continue,
+        };
         v.push((r.inicio_q, r.n_q as u64, t.inicio_s, fator, t));
     }
     v
+}
+
+/// Segundos de programa, desde o início do trecho, do instante de fonte `s` (fator 0 = rampa).
+fn no_trecho(t: &ClipeTrecho, ini_s: f64, fator: f64, s: f64) -> f64 {
+    if fator > 0.0 {
+        return (s - ini_s) / fator;
+    }
+    tempo::programa_da_fonte(&t.velocidade, ini_s, s).unwrap_or(f64::NAN)
 }
 
 /// A legenda inteira no eixo de slots da janela (0 = primeiro slot dela), sem cortar: pode começar antes de 0 e acabar
@@ -175,7 +184,8 @@ fn aparicoes(p: &ProjetoEdicao, linha: &LinhaResolvida) -> Vec<Aparicao> {
                     if &t.midia != midia {
                         continue;
                     }
-                    let x = |t: f64| (t - ini_s) * num / den / fator;
+                    // rampa: pela integral (a mesma conta do vídeo e do som)
+                    let x = |s: f64| if fator > 0.0 { (s - ini_s) * num / den / fator } else { no_trecho(t, ini_s, fator, s) * num / den };
                     let Some((xa, xb)) = inteira(x(*de), x(*ate)) else { continue };
                     let a = Aparicao { i, xa, xb, ini_q, n_q };
                     if a.visivel(xa, xb).is_some() {
@@ -207,12 +217,13 @@ pub fn sob_silencio(p: &ProjetoEdicao, linha: &LinhaResolvida) -> Vec<String> {
     // (mídia, de, ate na fonte, de, ate no programa), já cortados à janela do trecho
     let mut agem: Vec<(&str, f64, f64, f64, f64)> = Vec::new();
     for (ini_q, n_q, ini_s, fator, t) in trechos(p, linha) {
-        let fim_s = ini_s + n_q as f64 * den / num * fator;
+        // rampa: a janela vai até o fim do trecho na fonte
+        let fim_s = if fator > 0.0 { ini_s + n_q as f64 * den / num * fator } else { t.fim_s };
         let t0 = ini_q as f64 * den / num;
         for s in t.audio.silencios.iter().filter(|s| s.de.is_finite() && s.ate.is_finite()) {
             let (a, b) = (s.de.max(ini_s), s.ate.min(fim_s));
             if a < b {
-                agem.push((t.midia.as_str(), a, b, t0 + (a - ini_s) / fator, t0 + (b - ini_s) / fator));
+                agem.push((t.midia.as_str(), a, b, t0 + no_trecho(t, ini_s, fator, a), t0 + no_trecho(t, ini_s, fator, b)));
             }
         }
     }
@@ -628,7 +639,22 @@ mod testes {
             projeto(320, 180, (30, 1), m(), vec![trecho("c1", "m1", t, 30, 90, 1.0, json!([]))],
                 trilha(vec![de_fonte("l1", "m1", -1e300, 1e300, "aaaa\nbbbb")], 1, "sans")),
         ));
+        // P3.4: rampa 1× → 0,25× → 1× de 1 s a 4 s; a fala em 2,0..2,5 s (a parte lenta) ocupa mais slots
+        let mut rampa = trecho("c1", "m1", t, 30, 120, 1.0, json!([]));
+        rampa["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": 1.5, "v": 1.0 }, { "t": 2.5, "v": 0.25 }, { "t": 3.5, "v": 1.0 }] });
+        rampa["audio"]["silencios"] = json!([{ "id": "s1", "de": 3.0, "ate": 3.2, "modo": "tom", "motivo": "" }]);
+        v.push((
+            "rampa: legenda de fonte pela integral; silêncio na parte lenta",
+            projeto(320, 180, (30, 1), m(), vec![rampa],
+                trilha(vec![de_fonte("l1", "m1", 1.2, 1.4, "antes"), de_fonte("l2", "m1", 2.0, 2.5, "lenta"), de_fonte("l3", "m1", 3.1, 3.3, "calada")], 2, "sans")),
+        ));
         v
+    }
+
+    /// Programa (s) do instante de fonte `s` no trecho em rampa do caso 13, a partir do início `ini`.
+    fn no_trecho_s(ini: f64, s: f64) -> f64 {
+        let v: Velocidade = serde_json::from_value(json!({ "tipo": "rampa", "pontos": [{ "t": 1.5, "v": 1.0 }, { "t": 2.5, "v": 0.25 }, { "t": 3.5, "v": 1.0 }] })).unwrap();
+        tempo::programa_da_fonte(&v, ini, s).unwrap()
     }
 
     #[test]
@@ -672,6 +698,13 @@ mod testes {
         assert_eq!(e11, esperado.map(|(a, b, s)| (a, b, s.to_string())).to_vec());
         // 2^33 slots no eixo do trecho, metade para cada página: a segunda começa no slot 0 dele
         assert_eq!((faixas(12), ex(12)[0].linhas.clone()), (vec![(0, 60)], vec!["bbbb".to_string()]));
+        // rampa: 1× até 1,5 s (l1 em 6..12), a fala lenta dura mais do que 15 slots; a do silêncio é barrada
+        assert_eq!(faixas(13)[0], (6, 12));
+        let lenta = ex(13).into_iter().find(|e| e.linhas == ["lenta"]).unwrap();
+        let (a, b) = (no_trecho_s(1.0, 2.0) * 30.0, no_trecho_s(1.0, 2.5) * 30.0);
+        assert_eq!((lenta.de_q, lenta.ate_q), ((a + 0.5).floor() as u64, (b + 0.5).floor() as u64));
+        assert!(lenta.ate_q - lenta.de_q > 25, "{lenta:?}");
+        assert_eq!(lista[13]["saida"]["sob_silencio"], json!(["l3"]));
         crate::edicao::curva::fixtures::conferir("legendas-exibidas.json", Value::Array(lista));
     }
 

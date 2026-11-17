@@ -675,7 +675,8 @@ fn trecho(mut m: Montagem, t: &ClipeTrecho, res: &ClipeResolvido, janela: Janela
     let mut f = vec![
         "tpad=stop_mode=clone:stop=1".to_string(),
         format!("settb=1/{}", mapa.c),
-        filtro("setpts", None, &[("expr", expr::setpts_mapa(mapa.p0, mapa.kn, mapa.kd, mapa.e, mapa.m))]),
+        // P3.4: a constante pela fórmula, a rampa pela tabela de slots
+        filtro("setpts", None, &[("expr", tempo::setpts(&tab_clipe, &mapa))]),
         format!("fps@{}={}/{}:start_time=0", m.rot, m.canvas.fps.num, m.canvas.fps.den),
         "tpad=stop_mode=clone:stop=-1".to_string(),
     ];

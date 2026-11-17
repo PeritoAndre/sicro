@@ -5,8 +5,8 @@ use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 
 use super::modelo::{
-    BaseRastreio, ClipePrincipal, ClipeResolvido, ClipeSobreposto, Efeito, FaixaFonte, LinhaResolvida, LivreResolvido, OndePrender, Posicao,
-    Prender, ProjetoEdicao, Racional, Tolerante, Velocidade,
+    BaseRastreio, Chave, ClipePrincipal, ClipeResolvido, ClipeSobreposto, Efeito, FaixaFonte, Interp, LinhaResolvida, LivreResolvido, OndePrender,
+    Posicao, Prender, ProjetoEdicao, Racional, Tolerante, Velocidade,
 };
 use super::motor::Contexto;
 use super::quadros::TabelaQuadros;
@@ -134,13 +134,340 @@ impl Conta {
 
 /// Mapa dos quadros `j_in..j_out` para slots na taxa `fps`, em i128. Erro `mapa_grande` se passar de 2^53 ou de `MAX_SLOTS`;
 /// `intervalo` se o trecho é vazio, sai da tabela ou tem ponta no meio de um pts repetido (`faixa_do_trecho` não devolve essas).
+/// Rampa: `kn = kd = e = 0` (não há fórmula; o grafo recebe a tabela, `setpts`).
 pub fn mapa_trecho(tab: &TabelaQuadros, j_in: usize, j_out: usize, v: &Velocidade, fps: Racional) -> Result<MapaQuadros> {
     let v = match v {
         Velocidade::Constante { fator } => fator_racional(*fator)?,
-        // Fase 3 (P3.4)
-        Velocidade::Rampa { .. } => return Err(erro("nao_suportado: rampa")),
+        Velocidade::Rampa { pontos } => return mapa_rampa(tab, j_in, j_out, pontos, fps),
     };
     mapa_racional(tab, j_in, j_out, v, fps)
+}
+
+// ---------------------------------------------------------------- rampa (Fase 3, P3.4)
+
+/// `ln` só com + − × ÷ (redução por potências de 2, que é exata, e a série de atanh): o mesmo `f64` no Rust e no
+/// espelho do front em qualquer sistema (o `ln` da biblioteca muda de uma para outra no último bit).
+fn ln(x: f64) -> f64 {
+    let (mut m, mut e) = (x, 0.0);
+    while m > std::f64::consts::SQRT_2 {
+        m *= 0.5;
+        e += 1.0;
+    }
+    while m < std::f64::consts::FRAC_1_SQRT_2 {
+        m *= 2.0;
+        e -= 1.0;
+    }
+    let z = (m - 1.0) / (m + 1.0);
+    e * std::f64::consts::LN_2 + 2.0 * z * atanh_sobre_z(z * z)
+}
+
+/// atanh(z)/z = Σ z²ᵏ/(2k + 1), para |z| ≤ 0,18 (14 termos: erro abaixo de 1e-20).
+fn atanh_sobre_z(z2: f64) -> f64 {
+    let mut s = 0.0;
+    for k in (0..14).rev() {
+        s = s * z2 + 1.0 / (2 * k + 1) as f64;
+    }
+    s
+}
+
+/// ∫ dw / v com v linear de `a` a `b`, por unidade de w: ln(b/a)/(b − a); perto de a = b, 2·(atanh(z)/z)/(a + b).
+fn ln_sobre_dif(a: f64, b: f64) -> f64 {
+    if a == b {
+        return 1.0 / a;
+    }
+    let z = (b - a) / (b + a);
+    if z.abs() < 0.125 {
+        2.0 * atanh_sobre_z(z * z) / (a + b)
+    } else {
+        ln(b / a) / (b - a)
+    }
+}
+
+/// Rampa pronta: pontos em s a partir de `t0`, fator e se segura o fator até o seguinte (`degrau`). v é linear entre
+/// os pontos; antes do primeiro e depois do último vale o da ponta. τ = ∫ dt / v, em `f64` com as contas na ordem
+/// do espelho (`modelo/tempo.ts`).
+// CONTRATO: acréscimo (motor de áudio, legendas e espelho usam a mesma conta).
+pub(crate) struct Rampa {
+    pontos: Vec<(f64, f64, bool)>,
+}
+
+/// Teto de pontos de uma rampa (documento estragado não vira laço de bilhões de passos).
+pub const MAX_PONTOS_RAMPA: usize = 1000;
+
+/// Pontos de rampa aceitos? Erro `velocidade`: sem ponto, mais de `MAX_PONTOS_RAMPA`, fora de ordem, tempo não
+/// finito, fator fora de 0,05..16 ou com mais de 3 casas, interpolação `suave` (a rampa é linear por partes, §3.1).
+// CONTRATO: acréscimo (a validação usa a mesma regra).
+pub fn pontos_da_rampa_ok(pontos: &[Chave<f64>]) -> Result<()> {
+    if pontos.is_empty() || pontos.len() > MAX_PONTOS_RAMPA {
+        return Err(erro("velocidade"));
+    }
+    let mut antes = f64::NEG_INFINITY;
+    for k in pontos {
+        fator_racional(k.v)?;
+        if !k.t.is_finite() || k.t < antes || k.interp == Interp::Suave {
+            return Err(erro("velocidade"));
+        }
+        antes = k.t;
+    }
+    Ok(())
+}
+
+impl Rampa {
+    /// Pontos conferidos por `pontos_da_rampa_ok`, com o tempo contado de `t0`.
+    pub(crate) fn nova(pontos: &[Chave<f64>], t0: f64) -> Result<Self> {
+        pontos_da_rampa_ok(pontos)?;
+        Ok(Rampa { pontos: pontos.iter().map(|k| (k.t - t0, k.v, k.interp == Interp::Degrau)).collect() })
+    }
+
+    /// Região de `x`: 0 = até o primeiro ponto; r = entre os pontos r−1 e r; n = depois do último.
+    fn regiao(&self, x: f64) -> usize {
+        self.pontos.partition_point(|p| p.0 < x)
+    }
+
+    /// ∫ dw / v de `x` a `y` (x ≤ y), andando a região `r` (a de `x`) para a frente.
+    fn integrar(&self, mut x: f64, y: f64, r: &mut usize) -> f64 {
+        let p = &self.pontos;
+        let n = p.len();
+        let mut total = 0.0;
+        loop {
+            let fim = if *r < n { p[*r].0 } else { f64::INFINITY };
+            let ate = if y < fim { y } else { fim };
+            if ate > x {
+                total += self.pedaco(*r, x, ate);
+                x = ate;
+            }
+            if y <= fim || *r == n {
+                return total;
+            }
+            *r += 1;
+        }
+    }
+
+    /// ∫ dw / v em [x0, x1] dentro da região `r`.
+    fn pedaco(&self, r: usize, x0: f64, x1: f64) -> f64 {
+        let p = &self.pontos;
+        let n = p.len();
+        if r == 0 {
+            return (x1 - x0) / p[0].1;
+        }
+        if r == n {
+            return (x1 - x0) / p[n - 1].1;
+        }
+        let ((t0, v0, degrau), (t1, v1, _)) = (p[r - 1], p[r]);
+        if degrau || v0 == v1 || !(t1 > t0) {
+            return (x1 - x0) / v0;
+        }
+        let va = v0 + (v1 - v0) * ((x0 - t0) / (t1 - t0));
+        let vb = v0 + (v1 - v0) * ((x1 - t0) / (t1 - t0));
+        (x1 - x0) * ln_sobre_dif(va, vb)
+    }
+
+    /// Duração na saída (s) do trecho de fonte [0, d] (s a partir de `t0`).
+    pub(crate) fn duracao(&self, d: f64) -> f64 {
+        let mut r = self.regiao(0.0);
+        if d > 0.0 {
+            self.integrar(0.0, d, &mut r)
+        } else {
+            0.0
+        }
+    }
+
+    /// τ acumulado em cada um dos instantes `us` (crescentes, s a partir de `t0`), a partir do primeiro.
+    pub(crate) fn taus(&self, us: &[f64]) -> Vec<f64> {
+        let mut v = Vec::with_capacity(us.len());
+        let Some(&u0) = us.first() else { return v };
+        let mut r = self.regiao(u0);
+        let (mut x, mut tau) = (u0, 0.0);
+        for &u in us {
+            if u > x {
+                tau += self.integrar(x, u, &mut r);
+                x = u;
+            }
+            v.push(tau);
+        }
+        v
+    }
+
+    /// Menor e maior fator dos pontos.
+    pub(crate) fn faixa(&self) -> (f64, f64) {
+        self.pontos.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), p| (a.min(p.1), b.max(p.1)))
+    }
+}
+
+/// Mapa de um trecho em rampa: τ de cada quadro pela `Rampa`, em slots `T`; slot(j) = teto(T_j − ε), com
+/// ε = min(1/2, menor passo positivo de T / 2) (a folga do §3.1); n_q = max(1, teto(T_fim − ε)).
+fn mapa_rampa(tab: &TabelaQuadros, j_in: usize, j_out: usize, pontos: &[Chave<f64>], fps: Racional) -> Result<MapaQuadros> {
+    // os pontos antes do trecho: erro de velocidade vem antes do de intervalo, como na constante
+    pontos_da_rampa_ok(pontos)?;
+    // c, R, M, P_jin, P_fim e as conferências do trecho (pts repetido na ponta, passo negativo, 2^53) pela conta de 1×
+    let k = Conta::nova(tab, j_in, j_out, Racional { num: 1, den: 1 }, fps)?;
+    let (tn, td) = (tab.tb.num as f64, tab.tb.den as f64);
+    let (fnum, fden) = (fps.num as f64, fps.den as f64);
+    let pin = tab.pts[j_in];
+    let t0 = (pin as f64 * tn) / td;
+    let rampa = Rampa::nova(pontos, t0)?;
+    let n = tab.pts.len();
+    let fim = if j_out < n { tab.pts[j_out] } else { tab.pts[n - 1] + tab.passo_mediano.max(1) };
+    // instantes de fonte (s) de cada quadro lido e do fim, a partir do primeiro
+    let us: Vec<f64> = tab.pts[j_in..j_out].iter().chain(std::iter::once(&fim)).map(|&p| ((p - pin) as f64 * tn) / td).collect();
+    let ts: Vec<f64> = rampa.taus(&us).into_iter().map(|tau| (tau * fnum) / fden).collect();
+    let t_fim = ts[ts.len() - 1];
+    if !t_fim.is_finite() || t_fim > MAX_SLOTS as f64 {
+        return Err(erro("mapa_grande"));
+    }
+    let mut menor = f64::INFINITY;
+    for w in ts.windows(2) {
+        let d = w[1] - w[0];
+        if d > 0.0 && d < menor {
+            menor = d;
+        }
+    }
+    let eps = if menor / 2.0 < 0.5 { menor / 2.0 } else { 0.5 };
+    let n_q = ((t_fim - eps).ceil()).max(1.0);
+    if n_q > MAX_SLOTS as f64 || j_out > u32::MAX as usize || (n_q as i128).checked_mul(k.m).is_none_or(|x| x >= LIMITE_DOUBLE) {
+        return Err(erro("mapa_grande"));
+    }
+    let n_q = n_q as usize;
+    let slot = |i: usize| ((ts[i] - eps).ceil()).max(0.0).min(n_q as f64) as usize;
+    let mut quadro_do_slot = vec![0u32; n_q];
+    let (mut distintos, mut s) = (0u32, 0usize);
+    for j in j_in..j_out {
+        let depois = if j + 1 < j_out { slot(j + 1 - j_in) } else { n_q };
+        if depois > s {
+            quadro_do_slot[s..depois].fill(j as u32);
+            distintos += 1;
+            s = depois;
+        }
+    }
+    let i = |v: i128| i64::try_from(v).map_err(|_| erro("mapa_grande"));
+    Ok(MapaQuadros {
+        j_in,
+        j_out,
+        c: i(k.c)?,
+        r: i(k.r)?,
+        m: i(k.m)?,
+        kn: 0,
+        kd: 0,
+        e: 0,
+        p0: i(k.p0)?,
+        n_q: n_q as u32,
+        quadro_do_slot,
+        repetidos: n_q as u32 - distintos,
+        descartados: (j_out - j_in) as u32 - distintos,
+    })
+}
+
+/// Primeiro slot (do clipe) de cada quadro lido `j_in..j_out`: o primeiro que mostra um quadro ≥ j (descartado = o do
+/// quadro que o cobre; depois do último mostrado = `n_q`). É o que o `fps` precisa receber para dar `quadro_do_slot`.
+// CONTRATO: acréscimo (proveniência da rampa e conferência das ocultações).
+pub fn slot_de_cada_lido(m: &MapaQuadros) -> Vec<u32> {
+    let mut v = Vec::with_capacity(m.j_out.saturating_sub(m.j_in));
+    let mut q = 0usize;
+    for j in m.j_in..m.j_out {
+        while q < m.quadro_do_slot.len() && (m.quadro_do_slot[q] as usize) < j {
+            q += 1;
+        }
+        v.push(q as u32);
+    }
+    v
+}
+
+/// O mapa é de rampa (sem fórmula fechada)?
+pub fn eh_rampa(m: &MapaQuadros) -> bool {
+    m.kd == 0
+}
+
+/// `setpts` do trecho (§3.1, §5.3), depois de `settb=1/c`: velocidade constante = a fórmula inteira
+/// (`expr::setpts_mapa`); rampa = árvore balanceada sobre `PTS` que devolve `slot·M` de cada quadro lido, em inteiros.
+/// Depois do último quadro (o clone do `tpad` e o fim do fluxo) vale `n_q·M`, senão o `fps` descarta o último quadro
+/// junto com o clone no mesmo slot.
+// CONTRATO: acréscimo (o motor chama no lugar de `expr::setpts_mapa`).
+pub fn setpts(tab: &TabelaQuadros, m: &MapaQuadros) -> String {
+    if !eh_rampa(m) {
+        return super::motor::expr::setpts_mapa(m.p0, m.kn, m.kd, m.e, m.m);
+    }
+    let r = m.r as i128;
+    let mm = m.m as i128;
+    let slots = slot_de_cada_lido(m);
+    let mut pontos: Vec<(i128, i128)> = Vec::with_capacity(slots.len() + 1);
+    for (k, j) in (m.j_in..m.j_out).enumerate() {
+        let p = tab.pts[j] as i128 * r;
+        let v = slots[k] as i128 * mm;
+        // pts repetido: vale o último quadro dele
+        match pontos.last_mut() {
+            Some(u) if u.0 == p => u.1 = v,
+            _ => pontos.push((p, v)),
+        }
+    }
+    let ultimo = pontos.last().map_or(0, |u| u.0);
+    pontos.push((ultimo + 1, m.n_q as i128 * mm));
+    arvore_setpts(&pontos)
+}
+
+/// Corrida de pontos de passo e degrau constantes: [de, ate) em `pontos`.
+struct CorridaPts {
+    de: usize,
+    ate: usize,
+}
+
+/// Árvore sobre `PTS` de pontos (P crescente, valor): cada folha vale de P dela até o P da seguinte; a primeira vale
+/// antes e a última depois. Pontos seguidos de passo e degrau iguais viram `v0+(PTS-p0)/passo*degrau` (exato nos pts
+/// dos quadros: inteiros em `double`).
+fn arvore_setpts(pontos: &[(i128, i128)]) -> String {
+    let mut c: Vec<CorridaPts> = Vec::new();
+    let mut i = 0;
+    while i < pontos.len() {
+        let mut j = i + 1;
+        if j < pontos.len() {
+            let (dp, dv) = (pontos[j].0 - pontos[i].0, pontos[j].1 - pontos[i].1);
+            while j < pontos.len() && pontos[j].0 - pontos[j - 1].0 == dp && pontos[j].1 - pontos[j - 1].1 == dv {
+                j += 1;
+            }
+            // dois pontos de degrau diferente de zero não poupam nada e roubam o passo da corrida seguinte
+            if j - i == 2 && dv != 0 && j < pontos.len() {
+                j = i + 1;
+            }
+        }
+        c.push(CorridaPts { de: i, ate: j });
+        i = j;
+    }
+    fn folha(p: &[(i128, i128)], x: &CorridaPts) -> String {
+        let (p0, v0) = p[x.de];
+        if x.ate - x.de == 1 || p[x.de + 1].1 == v0 {
+            return v0.to_string();
+        }
+        let (dp, dv) = (p[x.de + 1].0 - p0, p[x.de + 1].1 - v0);
+        let menos = if p0 < 0 { format!("+{}", -p0) } else { format!("-{p0}") };
+        format!("{v0}+(PTS{menos})/{dp}*{dv}")
+    }
+    fn arvore(p: &[(i128, i128)], c: &[CorridaPts]) -> String {
+        if c.len() == 1 {
+            return folha(p, &c[0]);
+        }
+        let m = c.len() / 2;
+        format!("if(lt(PTS,{}),{},{})", p[c[m].de].0, arvore(p, &c[..m]), arvore(p, &c[m..]))
+    }
+    arvore(pontos, &c)
+}
+
+/// Segundos de programa, a partir do início do clipe, em que o trecho mostra o instante de fonte `t` (constante:
+/// (t − início)/v; rampa: ∫ dt/v). None = velocidade inválida.
+// CONTRATO: acréscimo (legendas e silêncios de fonte num trecho em rampa).
+pub fn programa_da_fonte(v: &Velocidade, inicio_s: f64, t: f64) -> Option<f64> {
+    match v {
+        Velocidade::Constante { fator } => (fator.is_finite() && *fator > 0.0).then(|| (t - inicio_s) / fator),
+        Velocidade::Rampa { pontos } => {
+            let r = Rampa::nova(pontos, inicio_s).ok()?;
+            let d = t - inicio_s;
+            if !d.is_finite() {
+                return None;
+            }
+            let (a, b) = if d >= 0.0 { (0.0, d) } else { (d, 0.0) };
+            let mut reg = r.regiao(a);
+            let x = r.integrar(a, b, &mut reg);
+            Some(if d >= 0.0 { x } else { -x })
+        }
+    }
 }
 
 /// `mapa_trecho` com a velocidade já em fração.
@@ -263,11 +590,13 @@ fn trecho_de(c: &ClipePrincipal) -> Option<(&str, Par, Par, &Velocidade)> {
 fn medir(c: &ClipePrincipal, ctx: &Contexto, fps: Racional) -> (u32, Option<FaixaFonte>) {
     if let Some((midia, ini, fim, v)) = trecho_de(c) {
         let estimado = || {
-            let fator = match v {
-                Velocidade::Constante { fator } if fator.is_finite() && *fator > 0.0 => *fator,
-                _ => 1.0,
+            let d = fim.0 - ini.0;
+            let saida = match v {
+                Velocidade::Constante { fator } if fator.is_finite() && *fator > 0.0 => d / fator,
+                Velocidade::Rampa { pontos } => Rampa::nova(pontos, ini.0).map_or(d, |r| r.duracao(d)),
+                _ => d,
             };
-            n_q_sem_fonte((fim.0 - ini.0) / fator, fps)
+            n_q_sem_fonte(saida, fps)
         };
         let Some(f) = ctx.fontes.get(midia) else { return (estimado(), None) };
         // a tabela do mapa: a da fonte, ou a de campos no desentrelace por campo (P1.4; espelho `modelo/realce.ts`).
@@ -888,7 +1217,8 @@ print(json.dumps(saida))
         assert_eq!(codigo(mapa_trecho(&tab, 0, 10, &cte(1.0), r(0, 1))), "intervalo");
         assert_eq!(codigo(mapa_trecho(&tab, 0, 10, &cte(0.01), r(30, 1))), "velocidade");
         assert_eq!(codigo(mapa_trecho(&tab, 0, 10, &cte(1.2345), r(30, 1))), "velocidade");
-        assert_eq!(codigo(mapa_trecho(&tab, 0, 10, &Velocidade::Rampa { pontos: Vec::new() }, r(30, 1))), "nao_suportado: rampa");
+        // rampa sem ponto (P3.4: a rampa tem mapa; a falta de ponto é velocidade inválida)
+        assert_eq!(codigo(mapa_trecho(&tab, 0, 10, &Velocidade::Rampa { pontos: Vec::new() }, r(30, 1))), "velocidade");
         let vazia = apoio::tabela((1, 1000), Vec::new());
         assert_eq!(codigo(mapa_trecho(&vazia, 0, 1, &cte(1.0), r(30, 1))), "intervalo");
         // produto acima de 2^53: base de tempo que não casa com a taxa
@@ -971,6 +1301,11 @@ print(json.dumps(saida))
     fn trecho(id: &str, midia: &str, de: (f64, Option<i64>), ate: (f64, Option<i64>), fator: f64, transicao: Value) -> Value {
         json!({ "tipo": "trecho", "id": id, "midia": midia, "inicio_s": de.0, "inicio_pts": de.1, "fim_s": ate.0, "fim_pts": ate.1,
                 "velocidade": { "tipo": "constante", "fator": fator }, "transicao_entrada": transicao })
+    }
+    fn trecho_rampa(id: &str, midia: &str, de: (f64, Option<i64>), ate: (f64, Option<i64>), pontos: Value) -> Value {
+        let mut t = trecho(id, midia, de, ate, 1.0, json!(null));
+        t["velocidade"] = json!({ "tipo": "rampa", "pontos": pontos });
+        t
     }
     fn titulo(id: &str, duracao_s: f64, transicao: Value) -> Value {
         json!({ "tipo": "titulo", "id": id, "duracao_s": duracao_s, "transicao_entrada": transicao,
@@ -1249,7 +1584,7 @@ print(json.dumps(saida))
         casos.push(caso_mapa("erro: fora da mídia", &tab, 10, 61, &cte(1.0), r(30, 1)));
         casos.push(caso_mapa("erro: velocidade abaixo de 0,05", &tab, 0, 10, &cte(0.04), r(30, 1)));
         casos.push(caso_mapa("erro: velocidade com 4 casas", &tab, 0, 10, &cte(0.3333), r(30, 1)));
-        casos.push(caso_mapa("erro: rampa", &tab, 0, 10, &Velocidade::Rampa { pontos: Vec::new() }, r(30, 1)));
+        casos.push(caso_mapa("erro: rampa sem ponto", &tab, 0, 10, &Velocidade::Rampa { pontos: Vec::new() }, r(30, 1)));
         // passos de 4 s ainda cabem em 32 bits na tabela compacta
         let grossa = apoio::tabela((1, 1_000_000_007), apoio::pts_regulares(60, (4, 1), (1, 1_000_000_007), 0));
         casos.push(caso_mapa("erro: mapa grande", &grossa, 0, 55, &cte(1.0), r(60000, 1001)));
@@ -1261,6 +1596,31 @@ print(json.dumps(saida))
             }
         }
         casos.push(caso_mapa("pts negativo até o fim da mídia a 0,05× em 59,94", &neg, 50, 60, &cte(0.05), r(60000, 1001)));
+        // rampa (P3.4): 1× → 0,25× → 1× e 1× → 4× → 1× em toda base, na própria taxa e em outra
+        for (i, &(nome, tb, passo, inicio)) in BASES.iter().enumerate() {
+            let tab = apoio::tabela(tb, apoio::pts_regulares(120, passo, tb, inicio));
+            let t = |j: usize| tab.tempo(j);
+            let fps = if i % 2 == 0 { (passo.1, passo.0) } else { TAXAS[i % TAXAS.len()] };
+            let fps = r(fps.0, fps.1);
+            let lenta = rampa(&[(t(30), 1.0), (t(50), 0.25), (t(70), 1.0)]);
+            let rapida = rampa(&[(t(30), 1.0), (t(50), 4.0), (t(70), 1.0)]);
+            casos.push(caso_mapa(&format!("{nome}: rampa 1× → 0,25× → 1× a {}/{}", fps.num, fps.den), &tab, 20, 80, &lenta, fps));
+            casos.push(caso_mapa(&format!("{nome}: rampa 1× → 4× → 1× a 30"), &tab, 20, 110, &rapida, r(30, 1)));
+            casos.push(caso_mapa(&format!("{nome}: rampa até o fim da mídia"), &tab, 90, 120, &rampa(&[(t(100), 0.5), (t(119), 0.05)]), r(30000, 1001)));
+        }
+        let k = |t: f64, v: f64, interp: Interp| Chave { t, pts: None, v, interp };
+        let degrau = Velocidade::Rampa { pontos: vec![k(tab.tempo(5), 0.333, Interp::Degrau), k(tab.tempo(20), 2.5, Interp::Linear), k(tab.tempo(40), 0.05, Interp::Degrau)] };
+        casos.push(caso_mapa("rampa com degraus", &tab, 0, 60, &degrau, r(25, 1)));
+        casos.push(caso_mapa("rampa com pontos fora do trecho", &tab, 10, 40, &rampa(&[(-3.0, 0.5), (9.0, 8.0)]), r(30, 1)));
+        casos.push(caso_mapa("rampa de um ponto", &tab, 10, 40, &rampa(&[(tab.tempo(20), 0.75)]), r(24000, 1001)));
+        casos.push(caso_mapa("rampa com dois pontos no mesmo instante", &tab, 10, 40, &rampa(&[(tab.tempo(20), 0.5), (tab.tempo(20), 2.0)]), r(30, 1)));
+        casos.push(caso_mapa("rampa em oscilação de 4 ms", &osc, 10, 100, &rampa(&[(osc.tempo(20), 1.0), (osc.tempo(60), 0.1), (osc.tempo(90), 1.5)]), r(30, 1)));
+        casos.push(caso_mapa("rampa em taxa variável", &vfr, 0, 100, &rampa(&[(vfr.tempo(10), 2.0), (vfr.tempo(90), 0.25)]), r(25, 1)));
+        casos.push(caso_mapa("rampa em pts negativo", &neg, 0, 60, &rampa(&[(neg.tempo(0), 0.25), (neg.tempo(59), 1.0)]), r(60000, 1001)));
+        casos.push(caso_mapa("erro: rampa suave", &tab, 0, 10, &Velocidade::Rampa { pontos: vec![k(0.1, 1.0, Interp::Suave)] }, r(30, 1)));
+        casos.push(caso_mapa("erro: rampa fora de ordem", &tab, 0, 10, &rampa(&[(0.2, 1.0), (0.1, 0.5)]), r(30, 1)));
+        casos.push(caso_mapa("erro: rampa com fator de 4 casas", &tab, 0, 10, &rampa(&[(0.2, 0.2505)]), r(30, 1)));
+        casos.push(caso_mapa("erro: rampa num trecho vazio", &tab, 10, 10, &rampa(&[(0.2, 1.0)]), r(30, 1)));
         fixtures::conferir("tempo-mapa.json", Value::Array(casos));
     }
 
@@ -1378,6 +1738,14 @@ print(json.dumps(saida))
                 trecho("v5", "a", (0.0, None), (2.0, None), 1.2345, json!(null)),
             ] })),
             caso("transição maior que os clipes", json!({ "principal": [titulo("t1", 1.0, json!(null)), titulo("t2", 0.5, transicao("dissolver", 3.0)), titulo("t3", 2.0, transicao("dissolver", 3.0))] })),
+            // rampa (P3.4): com tabela, sem tabela (estimada pela integral) e inválida (estimada a 1×)
+            caso("rampas", json!({ "fps": { "num": 30000, "den": 1001 }, "principal": [
+                trecho_rampa("r1", "a", (1.0, Some(15360)), (5.0, None), json!([{ "t": 2.0, "v": 1.0 }, { "t": 3.0, "v": 0.25 }, { "t": 4.0, "v": 1.0 }])),
+                trecho_rampa("r2", "nao_ha", (1.0, None), (5.0, None), json!([{ "t": 2.0, "v": 1.0 }, { "t": 3.0, "v": 0.25, "interp": "degrau" }, { "t": 4.0, "v": 1.0 }])),
+                trecho_rampa("r3", "b", (2.0, None), (6.0, None), json!([{ "t": 3.0, "v": 4.0 }])),
+                trecho_rampa("r4", "a", (1.0, None), (2.0, None), json!([])),
+                trecho_rampa("r5", "nao_ha", (1.0, None), (2.0, None), json!([{ "t": 3.0, "v": 0.5, "interp": "suave" }])),
+            ] })),
             // −7,5 slots: o Rust arredonda para longe do zero (−8); `Math.round` daria −7
             caso("livre preso com deslocamento negativo de meio slot", json!({
                 "principal": [titulo("t", 2.0, json!(null)), trecho("c1", "a", (1.0, None), (3.0, None), 1.0, json!(null))],
@@ -1387,6 +1755,240 @@ print(json.dumps(saida))
                 ] }] })),
         ];
         fixtures::conferir("tempo-resolver.json", Value::Array(casos));
+    }
+
+    // ---------------------------------------------------------------- rampa (P3.4)
+
+    fn rampa(pontos: &[(f64, f64)]) -> Velocidade {
+        Velocidade::Rampa { pontos: pontos.iter().map(|&(t, v)| Chave { t, pts: None, v, interp: Interp::Linear }).collect() }
+    }
+
+    #[test]
+    fn ln_a_mao_bate_com_o_da_biblioteca() {
+        let mut x = 1.0 / 400.0;
+        while x < 400.0 {
+            let (a, b) = (ln(x), x.ln());
+            assert!((a - b).abs() <= 4.0 * f64::EPSILON * b.abs().max(1.0), "ln({x}) = {a} × {b}");
+            x *= 1.0137;
+        }
+        assert_eq!(ln(1.0), 0.0);
+        // ∫ dw/v com v linear: ln(b/a)/(b − a), sem cancelamento perto de a = b
+        for (a, b) in [(1.0f64, 0.25f64), (0.25, 1.0), (0.05, 16.0), (1.0, 1.0 + 1e-9), (0.5, 0.55), (0.55, 0.5), (2.0, 2.0)] {
+            let exato = if a == b { 1.0 / a } else { ((b - a) / a).ln_1p() / (b - a) };
+            assert!((ln_sobre_dif(a, b) - exato).abs() <= 1e-12 * exato, "{a} {b}: {} × {exato}", ln_sobre_dif(a, b));
+        }
+        assert!((ln_sobre_dif(1.0, 1.0 + 1e-12) - 1.0).abs() < 1e-11);
+    }
+
+    /// Rampa de pontos todos iguais dá o mapa da velocidade constante (fora de empate exato na folga).
+    #[test]
+    fn rampa_de_um_fator_so_da_o_mapa_da_constante() {
+        let mut casos = 0;
+        for &(nome, tb, passo, inicio) in BASES {
+            let tab = apoio::tabela(tb, apoio::pts_regulares(120, passo, tb, inicio));
+            for v in [0.25, 0.5, 1.0, 2.0, 4.0] {
+                for fps in [r(passo.1, passo.0), r(30, 1), r(30000, 1001), r(25, 1)] {
+                    let lidos = ((30.0 * v) as usize).clamp(4, 100);
+                    let c = mapa_trecho(&tab, 10, 10 + lidos, &cte(v), fps).unwrap();
+                    let t_meio = tab.tempo(10 + lidos / 2);
+                    let m = mapa_trecho(&tab, 10, 10 + lidos, &rampa(&[(t_meio, v)]), fps).unwrap();
+                    assert_eq!((m.n_q, &m.quadro_do_slot, m.repetidos, m.descartados), (c.n_q, &c.quadro_do_slot, c.repetidos, c.descartados), "{nome} {v}× {fps:?}");
+                    assert_eq!((m.c, m.r, m.m, m.p0, m.kn, m.kd, m.e), (c.c, c.r, c.m, c.p0, 0, 0, 0));
+                    casos += 1;
+                }
+            }
+        }
+        assert_eq!(casos, BASES.len() * 20);
+    }
+
+    /// 1× → 0,25× → 1× (o aceite): nada descartado, cada quadro fica mais slots perto do mais lento, o total é o da
+    /// integral e o slot 0 mostra o quadro de entrada.
+    #[test]
+    fn rampa_desacelera_e_volta() {
+        let tab = apoio::tabela((1, 15360), apoio::pts_regulares(300, (1, 30), (1, 15360), 0));
+        let t = |j: usize| tab.tempo(j);
+        let v = rampa(&[(t(60), 1.0), (t(90), 0.25), (t(120), 1.0)]);
+        let m = mapa_trecho(&tab, 30, 150, &v, r(30, 1)).unwrap();
+        // 1 s a 1×, 2 × ln(4)/0,75 s nas rampas, 1 s a 1×
+        let tau = 2.0 + 2.0 * 4f64.ln() / 0.75;
+        assert_eq!(m.n_q, (tau * 30.0 - 0.5).ceil() as u32);
+        assert_eq!((m.quadro_do_slot[0], m.descartados, m.repetidos), (30, 0, m.n_q - 120));
+        let vezes: Vec<u32> = (30..150).map(|j| slots_do_quadro(&m, j).unwrap().1).collect();
+        assert!(vezes[..30].iter().all(|&n| n == 1), "1× antes da rampa: {:?}", &vezes[..30]);
+        assert!(vezes[90..].iter().all(|&n| n == 1), "1× depois: {:?}", &vezes[90..]);
+        // no mais lento (0,25×) 4 slots; cada metade da rampa dura ln(4)/0,75 s; simétrica; sem salto de mais de 1 slot
+        assert_eq!(vezes[60], 4, "{vezes:?}");
+        let soma = |a: usize, b: usize| vezes[a..b].iter().sum::<u32>() as f64;
+        let meia = 30.0 * 4f64.ln() / 0.75;
+        assert!((soma(30, 60) - meia).abs() <= 1.0 && (soma(60, 90) - meia).abs() <= 1.0, "{} {} × {meia}", soma(30, 60), soma(60, 90));
+        assert!(vezes.windows(2).all(|w| w[0].abs_diff(w[1]) <= 1), "{vezes:?}");
+        // a mesma rampa vista de qualquer taxa: nada descartado e a duração da integral
+        for fps in [r(25, 1), r(30000, 1001), r(60, 1)] {
+            let m = mapa_trecho(&tab, 30, 150, &v, fps).unwrap();
+            let f = fps.num as f64 / fps.den as f64;
+            assert!((m.n_q as f64 - tau * f).abs() <= 1.0, "{fps:?}: {} × {}", m.n_q, tau * f);
+            assert!(m.descartados == 0 || f < 30.0);
+        }
+        // acelerando: 1× → 4× → 1×, os quadros pulam no meio
+        let m = mapa_trecho(&tab, 30, 150, &rampa(&[(t(60), 1.0), (t(90), 4.0), (t(120), 1.0)]), r(30, 1)).unwrap();
+        assert!(m.descartados > 20 && m.repetidos == 0, "{} {}", m.descartados, m.repetidos);
+        let tau = 2.0 + 2.0 * (4f64.ln() / 3.0);
+        assert_eq!(m.n_q, (tau * 30.0 - 0.125).ceil() as u32);
+    }
+
+    #[test]
+    fn degrau_segura_ate_o_ponto_seguinte() {
+        let tab = apoio::tabela((1, 1000), apoio::pts_regulares(200, (1, 30), (1, 1000), 0));
+        let ponto = |t: f64, v: f64, interp: Interp| Chave { t, pts: None, v, interp };
+        let v = Velocidade::Rampa { pontos: vec![ponto(tab.tempo(20), 0.5, Interp::Degrau), ponto(tab.tempo(50), 0.25, Interp::Linear)] };
+        let m = mapa_trecho(&tab, 20, 80, &v, r(30, 1)).unwrap();
+        for j in 20..80 {
+            assert_eq!(slots_do_quadro(&m, j).map(|s| s.1), Some(if j < 50 { 2 } else { 4 }), "quadro {j}");
+        }
+        // antes do primeiro ponto vale o fator dele; depois do último, o do último
+        let m = mapa_trecho(&tab, 0, 40, &rampa(&[(tab.tempo(100), 0.5)]), r(30, 1)).unwrap();
+        assert_eq!((m.n_q, m.repetidos), (80, 40));
+    }
+
+    #[test]
+    fn erros_da_rampa() {
+        let tab = apoio::tabela((1, 1000), apoio::pts_regulares(60, (1, 30), (1, 1000), 0));
+        let com = |pontos: Vec<Chave<f64>>| codigo(mapa_trecho(&tab, 0, 30, &Velocidade::Rampa { pontos }, r(30, 1)));
+        let k = |t: f64, v: f64| Chave { t, pts: None, v, interp: Interp::Linear };
+        assert_eq!(com(vec![]), "velocidade");
+        assert_eq!(com(vec![k(0.5, 0.04)]), "velocidade");
+        assert_eq!(com(vec![k(0.5, 0.2505)]), "velocidade");
+        assert_eq!(com(vec![k(0.5, 1.0), k(0.4, 1.0)]), "velocidade");
+        assert_eq!(com(vec![k(f64::NAN, 1.0)]), "velocidade");
+        assert_eq!(com(vec![Chave { t: 0.5, pts: None, v: 1.0, interp: Interp::Suave }]), "velocidade");
+        assert_eq!(com(vec![k(0.5, 1.0); MAX_PONTOS_RAMPA + 1]), "velocidade");
+        // ponto fora do trecho é aceito no mapa (a validação acusa); velocidade antes de intervalo, como na constante
+        assert!(mapa_trecho(&tab, 0, 30, &rampa(&[(-5.0, 0.5), (90.0, 2.0)]), r(30, 1)).is_ok());
+        assert_eq!(codigo(mapa_trecho(&tab, 10, 10, &rampa(&[(0.5, 1.0)]), r(30, 1))), "intervalo");
+        assert_eq!(codigo(mapa_trecho(&tab, 10, 10, &rampa(&[]), r(30, 1))), "velocidade");
+        // 2^24 slots: 1 h de fonte a 0,05× em 60 qps passa do teto antes de alocar
+        let hora = apoio::tabela((1, 1000), apoio::pts_regulares(108_000, (1, 30), (1, 1000), 0));
+        assert_eq!(codigo(mapa_trecho(&hora, 0, 108_000, &rampa(&[(0.0, 0.05)]), r(1000, 1))), "mapa_grande");
+    }
+
+    /// Avaliador das árvores do `setpts` (as contas em `double`, como o ffmpeg).
+    fn avaliar_setpts(e: &str, pts: f64) -> f64 {
+        fn numero(s: &str) -> f64 {
+            s.parse().unwrap_or_else(|_| panic!("número {s}"))
+        }
+        if let Some(resto) = e.strip_prefix("if(lt(PTS,") {
+            let (lim, resto) = resto.split_once("),").unwrap();
+            // separa os dois ramos pela vírgula do nível de cima
+            let corpo = &resto[..resto.len() - 1];
+            let mut nivel = 0;
+            let meio = corpo
+                .char_indices()
+                .find(|&(_, c)| {
+                    nivel += match c {
+                        '(' => 1,
+                        ')' => -1,
+                        _ => 0,
+                    };
+                    c == ',' && nivel == 0
+                })
+                .unwrap()
+                .0;
+            return if pts < numero(lim) { avaliar_setpts(&corpo[..meio], pts) } else { avaliar_setpts(&corpo[meio + 1..], pts) };
+        }
+        // folha `v0+(PTS-p0)/passo*degrau`: "-p0" ou "+|p0|" lidos com o sinal
+        match e.split_once("+(PTS") {
+            Some((v0, resto)) => {
+                let (p0, resto) = resto.split_once(")/").unwrap();
+                let (dp, dv) = resto.split_once('*').unwrap();
+                numero(v0) + (pts + numero(p0)) / numero(dp) * numero(dv)
+            }
+            None => numero(e),
+        }
+    }
+
+    #[test]
+    fn setpts_da_rampa_em_inteiros() {
+        for (tb, passo, inicio) in [((1, 15360), (1, 30), 0i64), ((1, 1000), (1, 30), -1000), ((1, 90000), (1001, 30000), 324_126_000), ((1, 30), (1, 30), 0)] {
+            let tab = apoio::tabela(tb, apoio::pts_regulares(200, passo, tb, inicio));
+            let t = |j: usize| tab.tempo(j);
+            for (v, fps) in [
+                (rampa(&[(t(40), 1.0), (t(70), 0.25), (t(100), 1.0)]), r(30, 1)),
+                (rampa(&[(t(40), 1.0), (t(70), 4.0), (t(100), 1.0)]), r(25, 1)),
+                (rampa(&[(t(40), 0.05), (t(100), 16.0)]), r(60000, 1001)),
+            ] {
+                let m = mapa_trecho(&tab, 20, 140, &v, fps).unwrap();
+                let e = setpts(&tab, &m);
+                assert!(!e.contains("ceil") && e.len() < 120 * 60, "{e}");
+                let s = slot_de_cada_lido(&m);
+                for (k, j) in (20..140).enumerate() {
+                    let p = tab.pts[j] as f64 * m.r as f64;
+                    assert_eq!(avaliar_setpts(&e, p), s[k] as f64 * m.m as f64, "{tb:?} quadro {j} em {e}");
+                    // o quadro do slot é o último com slot ≤ q
+                    if (s[k] as usize) < m.quadro_do_slot.len() && (k + 1 == s.len() || s[k + 1] > s[k]) {
+                        assert_eq!(m.quadro_do_slot[s[k] as usize] as usize, j);
+                    }
+                }
+                let ultimo = tab.pts[139] as f64 * m.r as f64;
+                assert_eq!(avaliar_setpts(&e, ultimo + 1.0), m.n_q as f64 * m.m as f64, "depois do último: n_q");
+                assert!(avaliar_setpts(&e, tab.pts[0] as f64 * m.r as f64) <= 0.0, "antes do trecho: slot ≤ 0");
+            }
+            // constante: a fórmula de sempre
+            let c = mapa_trecho(&tab, 20, 140, &cte(0.5), r(30, 1)).unwrap();
+            assert_eq!(setpts(&tab, &c), crate::edicao::motor::expr::setpts_mapa(c.p0, c.kn, c.kd, c.e, c.m));
+        }
+        // pts repetido: vale o último quadro do pts
+        let mut pts = apoio::pts_regulares(80, (1, 30), (1, 1000), 0);
+        pts[41] = pts[40];
+        let tab = apoio::tabela((1, 1000), pts);
+        let m = mapa_trecho(&tab, 10, 70, &rampa(&[(tab.tempo(10), 0.5), (tab.tempo(69), 0.25)]), r(30, 1)).unwrap();
+        let e = setpts(&tab, &m);
+        let s = slot_de_cada_lido(&m);
+        assert_eq!(avaliar_setpts(&e, (tab.pts[40] * m.r) as f64), s[31] as f64 * m.m as f64);
+    }
+
+    #[test]
+    fn programa_da_fonte_e_a_duracao_do_mapa() {
+        let tab = apoio::tabela((1, 15360), apoio::pts_regulares(300, (1, 30), (1, 15360), 0));
+        let v = rampa(&[(2.0, 1.0), (3.0, 0.25), (4.0, 1.0)]);
+        let m = mapa_trecho(&tab, 30, 150, &v, r(30, 1)).unwrap();
+        let fim = programa_da_fonte(&v, tab.tempo(30), tab.tempo(150)).unwrap();
+        assert!((fim * 30.0 - m.n_q as f64).abs() <= 0.5, "{fim}");
+        // cada quadro lido começa no slot que a conta dá (com a folga de meio slot)
+        let s = slot_de_cada_lido(&m);
+        for (k, j) in (30..150).enumerate() {
+            let x = programa_da_fonte(&v, tab.tempo(30), tab.tempo(j)).unwrap() * 30.0;
+            assert_eq!(s[k], (x - 0.5).ceil() as u32, "quadro {j}");
+        }
+        assert_eq!(programa_da_fonte(&cte(0.5), 1.0, 2.0), Some(2.0));
+        assert_eq!(programa_da_fonte(&v, 2.0, 1.0), Some(-1.0));
+        assert_eq!(programa_da_fonte(&rampa(&[]), 2.0, 1.0), None);
+    }
+
+    /// τ da rampa em bits (o espelho confere o `f64` de cada instante, não só o slot que sai dele): linear, degrau,
+    /// pontas de 0,05× e 16×, fatores quase iguais (a série sem `ln`), pontos repetidos e fora dos instantes.
+    #[test]
+    fn fixture_rampa_taus() {
+        let k = |t: f64, v: f64, interp: Interp| Chave { t, pts: None, v, interp };
+        let l = Interp::Linear;
+        let rampas: Vec<(&str, Vec<Chave<f64>>, f64)> = vec![
+            ("1 → 0,25 → 1", vec![k(2.0, 1.0, l), k(3.0, 0.25, l), k(4.0, 1.0, l)], 1.0),
+            ("degraus", vec![k(1.5, 0.333, Interp::Degrau), k(2.0, 2.5, l), k(3.0, 0.05, Interp::Degrau)], 1.0),
+            ("0,05 → 16", vec![k(0.0, 0.05, l), k(10.0, 16.0, l)], -0.5),
+            ("quase iguais", vec![k(1.0, 1.0, l), k(2.0, 1.001, l), k(3.0, 0.999, l), k(4.0, 1.1, l)], 0.7),
+            ("dois no mesmo instante", vec![k(1.0, 0.5, l), k(1.0, 2.0, l), k(2.0, 1.0, l)], 0.0),
+            ("um ponto", vec![k(5.0, 0.75, l)], 1.0),
+            ("época", vec![k(1_505_762_712.0, 1.0, l), k(1_505_762_713.5, 0.1, l)], 1_505_762_710.0),
+        ];
+        let mut casos = Vec::new();
+        for (nome, pontos, t0) in rampas {
+            let r = Rampa::nova(&pontos, t0).unwrap();
+            let us: Vec<f64> = (0..=150).map(|i| i as f64 / 30.0 + if i % 7 == 3 { 1e-7 } else { 0.0 }).collect();
+            let fora: Vec<f64> = [-3.0, -0.5, 0.0, 0.25, 7.0, 12.5].iter().map(|d| t0 + d).collect();
+            let programa: Vec<Option<f64>> = fora.iter().map(|&t| programa_da_fonte(&Velocidade::Rampa { pontos: pontos.clone() }, t0, t)).collect();
+            casos.push(json!({ "nome": nome, "entrada": { "pontos": pontos, "t0": t0, "us": us, "fora": fora },
+                               "saida": { "taus": r.taus(&us), "duracao": r.duracao(4.2), "programa": programa } }));
+        }
+        fixtures::conferir("rampa-taus.json", Value::Array(casos));
     }
 
     // ---------------------------------------------------------------- medido no ffmpeg (cadeia do §5.3)
@@ -1399,7 +2001,8 @@ print(json.dumps(saida))
     use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
     use std::sync::Mutex;
 
-    /// Um trecho a renderizar: quadros `[j_in, j_out)` da fonte a `v`× na taxa `fps`.
+    /// Um trecho a renderizar: quadros `[j_in, j_out)` da fonte a `v`× na taxa `fps`; `rampa` (P3.4) troca a
+    /// velocidade constante por 1× → `v`× → 1× (pontos a ¼, ½ e ¾ do trecho).
     #[derive(Debug, Clone, Copy)]
     struct Caso {
         fonte: usize,
@@ -1407,6 +2010,16 @@ print(json.dumps(saida))
         fps: (i64, i64),
         j_in: usize,
         j_out: usize,
+    }
+
+    /// A velocidade de um caso: constante, ou a rampa 1× → v× → 1× no trecho (`rampa_no_trecho`).
+    fn velocidade_do_caso(tab: &TabelaQuadros, caso: &Caso, em_rampa: bool) -> Velocidade {
+        if !em_rampa {
+            return cte(caso.v);
+        }
+        let n = caso.j_out - caso.j_in;
+        let t = |k: usize| tab.tempo(caso.j_in + n * k / 4);
+        rampa(&[(t(1), 1.0), (t(2), caso.v), (t(3), 1.0)])
     }
 
     /// O que saiu de um render: o número desenhado em cada slot, os `frames in` do `fps@` e se houve `-ss`.
@@ -1432,10 +2045,11 @@ print(json.dumps(saida))
         if clonado == 1 {
             cor.push_str(",tpad=stop_mode=clone:stop=1");
         }
+        // o `setpts` do motor: a fórmula na constante, a tabela na rampa (P3.4)
         let grafo = format!(
-            "[0:v]{corte},{cor},settb=1/{c},setpts='ceil(((PTS-{p0})*{kn}-{e})/{kd})*{m}',fps@c000={num}/{den}:start_time=0,\
+            "[0:v]{corte},{cor},settb=1/{c},setpts='{expr}',fps@c000={num}/{den}:start_time=0,\
              tpad=stop_mode=clone:stop=-1,trim=end_frame={n_q}{reduzir},extractplanes=y[v]",
-            c = mapa.c, p0 = mapa.p0, kn = mapa.kn, e = mapa.e, kd = mapa.kd, m = mapa.m, num = fps.num, den = fps.den, n_q = mapa.n_q,
+            c = mapa.c, expr = setpts(tab, mapa), num = fps.num, den = fps.den, n_q = mapa.n_q,
             reduzir = if m.por_conteudo.is_some() { format!(",{}", apoio::REDUZIDO.0) } else { String::new() }
         );
         let nome = format!("g{n}.txt");
@@ -1477,10 +2091,13 @@ print(json.dumps(saida))
     }
 
     /// Previsto em inteiros × medido: devolve os slots conferidos, ou o que divergiu.
-    fn conferir_caso(cap: &Capacidades, nome: &str, m: &Medida, caso: &Caso, pasta: &Path, n: usize) -> std::result::Result<(u64, bool), String> {
+    #[allow(clippy::too_many_arguments)]
+    fn conferir_caso_em(cap: &Capacidades, nome: &str, m: &Medida, caso: &Caso, pasta: &Path, n: usize, em_rampa: bool) -> std::result::Result<(u64, bool), String> {
         let fps = r(caso.fps.0, caso.fps.1);
-        let rotulo = format!("{nome} quadros [{}, {}) a {}× em {}/{} ({})", caso.j_in, caso.j_out, caso.v, fps.num, fps.den, cap.versao);
-        let mapa = mapa_trecho(&m.info.quadros, caso.j_in, caso.j_out, &cte(caso.v), fps).map_err(|e| format!("{rotulo}: {e}"))?;
+        let como = if em_rampa { format!("rampa 1× → {}× → 1×", caso.v) } else { format!("{}×", caso.v) };
+        let rotulo = format!("{nome} quadros [{}, {}) a {como} em {}/{} ({})", caso.j_in, caso.j_out, fps.num, fps.den, cap.versao);
+        let v = velocidade_do_caso(&m.info.quadros, caso, em_rampa);
+        let mapa = mapa_trecho(&m.info.quadros, caso.j_in, caso.j_out, &v, fps).map_err(|e| format!("{rotulo}: {e}"))?;
         let s = renderizar(cap, m, &mapa, fps, pasta, n).map_err(|e| format!("{rotulo}: {e}"))?;
         let previsto: Vec<u32> = mapa.quadro_do_slot.iter().map(|&j| m.numeros[j as usize]).collect();
         if s.numeros != previsto {
@@ -1518,6 +2135,10 @@ print(json.dumps(saida))
     }
 
     fn rodar_casos_em(cap: &Capacidades, medidas: &[(String, std::sync::Arc<Medida>)], casos: &[Caso]) -> Placar {
+        rodar_casos_com(cap, medidas, casos, false)
+    }
+
+    fn rodar_casos_com(cap: &Capacidades, medidas: &[(String, std::sync::Arc<Medida>)], casos: &[Caso], em_rampa: bool) -> Placar {
         let (proximo, placar) = (AtomicUsize::new(0), Mutex::new(Placar::default()));
         let threads = std::thread::available_parallelism().map_or(2, |n| n.get() / 3).clamp(2, 6);
         std::thread::scope(|s| {
@@ -1528,7 +2149,7 @@ print(json.dumps(saida))
                         let n = proximo.fetch_add(1, Ordering::Relaxed);
                         let Some(caso) = casos.get(n) else { break };
                         let (nome, m) = &medidas[caso.fonte];
-                        let res = conferir_caso(cap, nome, m, caso, &pasta, n);
+                        let res = conferir_caso_em(cap, nome, m, caso, &pasta, n, em_rampa);
                         let mut p = placar.lock().unwrap();
                         p.casos += 1;
                         match res {
@@ -1793,5 +2414,83 @@ print(json.dumps(saida))
         }
         eprintln!("total: {usados} vídeos, {lidos} quadros; descartados a 1× na r_frame_rate: {total} (decodificador), {total_pacotes} (pacotes); na taxa nominal: {total_nominal}");
         assert!(total <= 2 && total_pacotes <= 2, "descartados na própria taxa: {total} e {total_pacotes}");
+    }
+
+    /// Aceite do P3.4 (arquitetura §11): rampa 1× → 0,25× → 1× em toda fonte da matriz, na taxa da fonte e em 29,97;
+    /// mais 1× → 4× → 1× a 25 e 1× → 0,05× → 1× a 60. O quadro que o mapa prevê em cada slot é o que o ffmpeg entrega
+    /// (o `setpts` em tabela) e o `fps@` conta todos os lidos.
+    #[test]
+    fn rampa_previsto_igual_ao_medido() {
+        let Some(cap) = fontes::cap() else { return };
+        let mut s = Sorteio(34);
+        let mut casos = Vec::new();
+        let mut medidas = Vec::new();
+        for (i, &f) in MATRIZ.iter().enumerate() {
+            let m = apoio::medida(&cap, f);
+            let d = fontes::descricao(f);
+            let n = m.limite;
+            let lidos = 60.min(n - 1);
+            let primeiro = |j: usize| m.info.quadros.pts.get(j).and_then(|&p| m.info.quadros.indice_do_pts(p)).unwrap_or(j);
+            for (v, fps) in [(0.25, d.fps), (0.25, (30000, 1001)), (4.0, (25, 1)), (0.05, (60, 1))] {
+                let (j_in, j_out) = match s.ate(5) {
+                    0 => (0, lidos),
+                    1 => (n - lidos, n),
+                    _ => {
+                        let a = s.ate(n - lidos);
+                        (a, a + lidos)
+                    }
+                };
+                casos.push(Caso { fonte: i, v, fps, j_in: primeiro(j_in), j_out: primeiro(j_out) });
+            }
+            medidas.push((format!("{f:?}"), m));
+        }
+        let p = rodar_casos_com(&cap, &medidas, &casos, true);
+        assert_eq!(p.casos, casos.len());
+        fechar(&cap, "rampa", p);
+    }
+
+    /// A rampa pela cadeia inteira do compilador (`clipe::trecho`, executor, `fps@` conferido), na exportação final e
+    /// numa janela de prévia no meio da parte lenta: o número desenhado em cada slot = o previsto pela proveniência,
+    /// e a proveniência leva o slot de cada quadro lido.
+    #[test]
+    fn rampa_pelo_motor_final_e_janela() {
+        use crate::edicao::motor::Alvo;
+        use crate::edicao::testes::{aceite, executor, medir};
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = fontes::pasta_temporaria("tempo-rampa-motor");
+        let mut slots = 0;
+        for f in [Fonte::Mp4, Fonte::Mkv30, Fonte::TaxaVariavel, Fonte::Ts5994, Fonte::FaixaCheia] {
+            let m = apoio::medida(&cap, f);
+            let tab = &m.info.quadros;
+            let (j_in, j_out) = (20, 100.min(m.limite));
+            let t = |j: usize| tab.tempo(j);
+            let mut tr = aceite::trecho("c1", "m1", tab, j_in, j_out, 1.0, json!([]));
+            tr["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": t(40), "v": 1.0 }, { "t": t(60), "v": 0.25 }, { "t": t(80), "v": 1.0 }] });
+            let (w, h) = m.info.exibido;
+            let p = aceite::projeto(w, h, (30, 1), vec![aceite::midia("m1", "video", json!([]))], vec![tr], json!({}));
+            let mundo = aceite::Mundo::novo(&cap).com("m1", &m.info);
+            let total = mundo.compilar(&p, &aceite::alvo_final("cpu")).unwrap().total_q;
+            for (alvo, de) in [(aceite::alvo_final("cpu"), 0usize), (Alvo::Previa { altura: h, de_q: 50, ate_q: total.min(120) }, 50)] {
+                let plano = mundo.compilar(&p, &alvo).unwrap_or_else(|e| panic!("{f:?}: {e}"));
+                assert!(plano.blocos[0].grafo.contains("if(lt(PTS") && !plano.blocos[0].grafo.contains("ceil("), "{f:?}: setpts sem tabela");
+                let rodado = executor::rodar(&cap, &plano, &pasta, &executor::Opcoes { sem_perdas: true, ..Default::default() }).unwrap_or_else(|e| panic!("{f:?} ({}): {e}", cap.versao));
+                let numeros = medir::quadros_de_origem(&cap, &rodado.blocos[0]).unwrap();
+                let o = plano.proveniencia.roteiro[0].origem.as_ref().unwrap();
+                let previsto: Vec<u32> = o.quadro_do_slot[de..de + plano.total_q as usize].iter().map(|&j| m.numeros[j as usize]).collect();
+                assert_eq!(numeros, previsto, "{f:?} {alvo:?} ({})", cap.versao);
+                let mapa = mapa_trecho(tab, j_in, j_out, &Velocidade::Rampa { pontos: serde_json::from_value(p_pontos(&p)).unwrap() }, r(30, 1)).unwrap();
+                assert_eq!((o.mapa.kd, &o.slots_da_rampa), (0, &slot_de_cada_lido(&mapa)));
+                slots += numeros.len();
+            }
+        }
+        eprintln!("rampa pelo motor ({}): {slots} slots medidos", cap.versao);
+    }
+
+    /// Os pontos da rampa do primeiro clipe do projeto.
+    fn p_pontos(p: &ProjetoEdicao) -> Value {
+        match &p.principal[0] {
+            Tolerante::Conhecido(ClipePrincipal::Trecho(t)) => json!(t.velocidade)["pontos"].clone(),
+            _ => panic!("trecho"),
+        }
     }
 }

@@ -1240,6 +1240,28 @@ fn fator(v: &Option<Value>) -> Option<f64> {
     v.as_ref().filter(|v| v["tipo"] == "constante").and_then(|v| v["fator"].as_f64())
 }
 
+/// Pontos da rampa (P3.4): (tempo de fonte, fator), na ordem; None = não é rampa.
+fn pontos_da_rampa(v: &Option<Value>) -> Option<Vec<(f64, f64)>> {
+    let v = v.as_ref().filter(|v| v["tipo"] == "rampa")?;
+    Some(v["pontos"].as_array()?.iter().filter_map(|p| Some((p["t"].as_f64()?, p["v"].as_f64()?))).collect())
+}
+
+/// Menor e maior fator da rampa.
+fn faixa_da_rampa(v: &Option<Value>) -> Option<(f64, f64)> {
+    let p = pontos_da_rampa(v)?;
+    let (a, b) = p.iter().fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), x| (a.min(x.1), b.max(x.1)));
+    (a <= b).then_some((a, b))
+}
+
+/// "1× em 00:00:02,000, 0,25× em 00:00:03,000 e 1× em 00:00:04,000" (`tempo_de` formata o instante).
+fn lista_da_rampa(p: &[(f64, f64)], tempo_de: impl Fn(f64) -> String) -> String {
+    let itens: Vec<String> = p.iter().map(|&(t, v)| format!("{}× em {}", num(v, 3), tempo_de(t))).collect();
+    match itens.split_last() {
+        Some((ultimo, resto)) if !resto.is_empty() => format!("{} e {ultimo}", resto.join(", ")),
+        _ => itens.join(""),
+    }
+}
+
 /// Tipos (do catálogo de frases) do que o item traz além dos processamentos: velocidade, quadro parado, cartela, som.
 fn extras_do_item(it: &FItem, com_som: bool) -> Vec<&'static str> {
     let mut v = Vec::new();
@@ -1253,6 +1275,15 @@ fn extras_do_item(it: &FItem, com_som: bool) -> Vec<&'static str> {
         Some(f) if f < 1.0 => v.push(tipo::CAMERA_LENTA),
         Some(f) if f > 1.0 => v.push(tipo::ACELERADO),
         _ => {}
+    }
+    // rampa: a parte lenta e a acelerada
+    if let Some((lento, rapido)) = faixa_da_rampa(&it.velocidade) {
+        if lento < 1.0 {
+            v.push(tipo::CAMERA_LENTA);
+        }
+        if rapido > 1.0 {
+            v.push(tipo::ACELERADO);
+        }
     }
     if it.transicao.is_some() {
         v.push(tipo::TRANSICAO);
@@ -1277,8 +1308,11 @@ fn velocidade_txt(it: &FItem) -> Option<String> {
         Some(f) if (f - 1.0).abs() < 1e-9 => rot("velocidade.normal").to_string(),
         Some(f) if f < 1.0 => frases::preencher(rot("velocidade.lenta"), &[("v", &num(f, 3))]),
         Some(f) => frases::preencher(rot("velocidade.rapida"), &[("v", &num(f, 3))]),
-        None if v.is_object() => rot("velocidade.variavel").to_string(),
-        None => return None,
+        None => match pontos_da_rampa(&it.velocidade) {
+            Some(p) if !p.is_empty() => format!("{}: {}", rot("velocidade.variavel"), lista_da_rampa(&p, tempo)),
+            _ if v.is_object() => rot("velocidade.variavel").to_string(),
+            _ => return None,
+        },
     })
 }
 
@@ -2000,8 +2034,18 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     for it in &f.roteiro {
         let item = it.n.to_string();
         if let Some(o) = &it.origem {
-            let mapa: Vec<String> = ["c", "kn", "kd", "e"].iter().filter_map(|k| o.mapa.get(k).map(|v| format!("{k}={v}"))).collect();
-            let v = fator(&it.velocidade).map(|x| format!("; velocidade {}×", num(x, 3))).unwrap_or_default();
+            // rampa (kd = 0): sem fórmula, o slot de cada quadro lido vai em tabela
+            let rampa = pontos_da_rampa(&it.velocidade);
+            let chaves: &[&str] = if rampa.is_some() { &["c"] } else { &["c", "kn", "kd", "e"] };
+            let mut mapa: Vec<String> = chaves.iter().filter_map(|k| o.mapa.get(k).map(|v| format!("{k}={v}"))).collect();
+            if rampa.is_some() {
+                mapa.push("slot de cada quadro em tabela".into());
+            }
+            let v = match (fator(&it.velocidade), &rampa) {
+                (Some(x), _) => format!("; velocidade {}×", num(x, 3)),
+                (None, Some(p)) => format!("; velocidade em rampa: {}", lista_da_rampa(p, |t| format!("{} s", dec(t, 6)))),
+                _ => String::new(),
+            };
             processamentos.push(Processamento {
                 item: item.clone(),
                 ordem: "0".into(),
@@ -2019,7 +2063,11 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
                 ),
             });
             let fonte = f.midias.iter().find(|m| m.id == o.midia).and_then(|m| por_segundo(m.medido.passo_med, &m.medido.tb)).map(|x| num(x, 2));
-            let v = fator(&it.velocidade).filter(|x| (x - 1.0).abs() > 1e-9).map(|x| format!(", a {}×", num(x, 3))).unwrap_or_default();
+            let v = match (fator(&it.velocidade), faixa_da_rampa(&it.velocidade)) {
+                (Some(x), _) if (x - 1.0).abs() > 1e-9 => format!(", a {}×", num(x, 3)),
+                (None, Some((a, b))) => format!(", em rampa de {}× a {}×", num(a, 3), num(b, 3)),
+                _ => String::new(),
+            };
             diferencas.push(Diferenca {
                 item: item.clone(),
                 imagem: match f.midias.iter().find(|m| m.id == o.midia).filter(|m| m.largura > 0 && m.altura > 0) {
@@ -2737,6 +2785,38 @@ mod testes {
         }
         assert!(!d["ocultacoes"].as_array().unwrap().iter().any(|o| o["conteudo"] == "som"));
         assert_eq!(d["ocultacoes"].as_array().unwrap().len(), 1, "a ocultação de imagem fica");
+    }
+
+    /// Rampa (P3.4): o item diz os pontos (fator e instante do original), a parte lenta e a acelerada entram nas
+    /// mudanças, e o anexo traz os pontos em segundos, a faixa da rampa e o mapa sem fórmula.
+    #[test]
+    fn rampa_listada_no_item_nas_mudancas_e_no_anexo() {
+        let c = Cena::nova("juri");
+        let mut t = tecnico_completo(&c);
+        let rampa = json!({ "tipo": "rampa", "pontos": [{ "t": 1.5, "v": 1.0 }, { "t": 2.0, "v": 0.25 }, { "t": 2.5, "v": 1.0 }, { "t": 2.9, "v": 2.0, "interp": "degrau" }] });
+        t["feito"]["roteiro"][1]["velocidade"] = rampa;
+        t["feito"]["roteiro"][1]["origem"]["mapa"] = json!({ "c": 15360, "kn": 0, "kd": 0, "e": 0 });
+        let d = dados(&t, &[], &[]).unwrap();
+        assert_eq!(
+            d["roteiro"][1]["velocidade"],
+            json!("variável ao longo do trecho: 1× em 0:01,500, 0,25× em 0:02,000, 1× em 0:02,500 e 2× em 0:02,900")
+        );
+        let o_que: Vec<String> = d["mudancas"].as_array().unwrap().iter().map(|l| l["o_que"].as_str().unwrap().to_string()).collect();
+        let (lenta, acelerada) = (frases::rotulo_do_efeito(tipo::CAMERA_LENTA).unwrap(), frases::rotulo_do_efeito(tipo::ACELERADO).unwrap());
+        assert!(o_que.iter().any(|x| x == lenta) && o_que.iter().any(|x| x == acelerada), "{o_que:?}");
+        let corte = d["processamentos"].as_array().unwrap().iter().find(|p| p["item"] == "2" && p["ordem"] == "0").unwrap()["parametros"].as_str().unwrap().to_string();
+        assert!(corte.contains("velocidade em rampa: 1× em 1,500000 s, 0,25× em 2,000000 s, 1× em 2,500000 s e 2× em 2,900000 s"), "{corte}");
+        assert!(corte.ends_with("mapa c=15360 slot de cada quadro em tabela") && !corte.contains("kd="), "{corte}");
+        let dif = d["diferencas"].as_array().unwrap().iter().find(|p| p["item"] == "2").unwrap()["taxa"].as_str().unwrap().to_string();
+        assert!(dif.ends_with(", em rampa de 0,25× a 2×"), "{dif}");
+        // no PDF
+        let (_, texto) = pdf_de(&t, ModoPdf::A3);
+        let plano = texto.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(plano.contains("0,25× em 0:02,000"), "o PDF não lista a rampa");
+        // só desacelera: não acusa aceleração
+        t["feito"]["roteiro"][1]["velocidade"]["pontos"][3]["v"] = json!(0.5);
+        let d = dados(&t, &[], &[]).unwrap();
+        assert!(!d["mudancas"].as_array().unwrap().iter().any(|l| l["o_que"] == acelerada));
     }
 
     /// O enquadramento só é "Ampliação" (seção 5 e item do roteiro) quando mostra parte da imagem; com a imagem inteira,

@@ -4,7 +4,7 @@
  * Mesmas contas, na mesma ordem; as fixtures `tempo-*.json` (P0.3b) conferem.
  */
 
-import type { AlvoQuadro, ClipePrincipal, ClipeResolvido, FaixaFonte, Id, LinhaResolvida, LivreResolvido, Posicao, ProjetoEdicao, QuadroEm, Racional, Seg, TabelaQuadros, Velocidade } from "@domain/edicao";
+import type { AlvoQuadro, Chave, ClipePrincipal, ClipeResolvido, FaixaFonte, Id, LinhaResolvida, LivreResolvido, Posicao, ProjetoEdicao, QuadroEm, Racional, Seg, TabelaQuadros, Velocidade } from "@domain/edicao";
 import { clipeConhecido, sobrepostoConhecido } from "./projeto";
 import { tabelaDoClipe } from "./realce";
 
@@ -186,10 +186,206 @@ export function amostraDoSlot(q: number, fps: Racional): number {
 
 // ---- mapa de um trecho ----
 
-/** Mapa dos quadros `jIn..jOut` (exclusivo; `jOut = n` = fim da mídia) para slots na taxa `fps`. */
+// ---- rampa (P3.4): mesmas contas de `tempo::Rampa`, na mesma ordem (só + − × ÷: os mesmos bits) ----
+
+/** `ln` com redução por potências de 2 e a série de atanh (o `Math.log` muda de um motor para outro no último bit). */
+function ln(x: number): number {
+  let m = x;
+  let e = 0;
+  while (m > Math.SQRT2) {
+    m *= 0.5;
+    e += 1;
+  }
+  while (m < Math.SQRT1_2) {
+    m *= 2;
+    e -= 1;
+  }
+  const z = (m - 1) / (m + 1);
+  return e * Math.LN2 + 2 * z * atanhSobreZ(z * z);
+}
+
+/** atanh(z)/z = Σ z²ᵏ/(2k + 1), |z| ≤ 0,18. */
+function atanhSobreZ(z2: number): number {
+  let s = 0;
+  for (let k = 13; k >= 0; k--) s = s * z2 + 1 / (2 * k + 1);
+  return s;
+}
+
+/** ln(b/a)/(b − a): ∫ dw/v por unidade de w com v linear de a a b. */
+function lnSobreDif(a: number, b: number): number {
+  if (a === b) return 1 / a;
+  const z = (b - a) / (b + a);
+  return Math.abs(z) < 0.125 ? (2 * atanhSobreZ(z * z)) / (a + b) : ln(b / a) / (b - a);
+}
+
+/** Teto de pontos de uma rampa (`tempo::MAX_PONTOS_RAMPA`). */
+export const MAX_PONTOS_RAMPA = 1000;
+
+/** Pontos aceitos (`tempo::pontos_da_rampa_ok`): erro `velocidade` sem ponto, fora de ordem, fator inválido ou suave. */
+export function pontosDaRampaOk(pontos: Chave<number>[]): void {
+  if (pontos.length === 0 || pontos.length > MAX_PONTOS_RAMPA) throw new ErroTempo("velocidade");
+  let antes = -Infinity;
+  for (const k of pontos) {
+    fatorRacional(k.v);
+    if (!Number.isFinite(k.t) || k.t < antes || k.interp === "suave") throw new ErroTempo("velocidade");
+    antes = k.t;
+  }
+}
+
+/** Rampa pronta: pontos [s a partir de t0, fator, degrau]; v linear entre eles, a ponta fora deles. */
+export class Rampa {
+  private readonly p: [number, number, boolean][];
+  constructor(pontos: Chave<number>[], t0: number) {
+    pontosDaRampaOk(pontos);
+    this.p = pontos.map((k) => [k.t - t0, k.v, k.interp === "degrau"]);
+  }
+  /** 0 = até o primeiro ponto; r = entre r−1 e r; n = depois do último. */
+  private regiao(x: number): number {
+    return contar(
+      this.p.map((q) => q[0]),
+      (t) => t < x,
+    );
+  }
+  private pedaco(r: number, x0: number, x1: number): number {
+    const p = this.p;
+    const n = p.length;
+    if (r === 0) return (x1 - x0) / p[0]![1];
+    if (r === n) return (x1 - x0) / p[n - 1]![1];
+    const [t0, v0, degrau] = p[r - 1]!;
+    const [t1, v1] = p[r]!;
+    if (degrau || v0 === v1 || !(t1 > t0)) return (x1 - x0) / v0;
+    const va = v0 + (v1 - v0) * ((x0 - t0) / (t1 - t0));
+    const vb = v0 + (v1 - v0) * ((x1 - t0) / (t1 - t0));
+    return (x1 - x0) * lnSobreDif(va, vb);
+  }
+  /** ∫ dw/v de x a y (x ≤ y) a partir da região r[0], que anda. */
+  private integrar(x: number, y: number, r: [number]): number {
+    const p = this.p;
+    const n = p.length;
+    let total = 0;
+    for (;;) {
+      const fim = r[0] < n ? p[r[0]]![0] : Infinity;
+      const ate = y < fim ? y : fim;
+      if (ate > x) {
+        total += this.pedaco(r[0], x, ate);
+        x = ate;
+      }
+      if (y <= fim || r[0] === n) return total;
+      r[0] += 1;
+    }
+  }
+  /** ∫ dw/v de a a b (a ≤ b). */
+  entre(a: number, b: number): number {
+    const r: [number] = [this.regiao(a)];
+    return this.integrar(a, b, r);
+  }
+  /** Duração na saída (s) da fonte [0, d]. */
+  duracao(d: number): number {
+    const r: [number] = [this.regiao(0)];
+    return d > 0 ? this.integrar(0, d, r) : 0;
+  }
+  /** τ acumulado em cada instante de `us` (crescentes), a partir do primeiro. */
+  taus(us: number[]): number[] {
+    const v: number[] = [];
+    if (us.length === 0) return v;
+    const r: [number] = [this.regiao(us[0]!)];
+    let x = us[0]!;
+    let tau = 0;
+    for (const u of us) {
+      if (u > x) {
+        tau += this.integrar(x, u, r);
+        x = u;
+      }
+      v.push(tau);
+    }
+    return v;
+  }
+}
+
+/** Constantes da conta de 1× (c, R, M, P_jin) e as conferências do trecho, como `Conta::nova` do Rust. */
+function contaDe1x(tab: TabelaQuadros, jIn: number, jOut: number, fps: Racional) {
+  const pts = ptsDaTabela(tab);
+  const n = pts.length;
+  const [tn, td, fnum, fden] = [tab.tb.num, tab.tb.den, fps.num, fps.den].map((x) => BigInt(x)) as [bigint, bigint, bigint, bigint];
+  if (jIn >= jOut || jOut > n || tn <= 0n || td <= 0n || fnum <= 0n || fden <= 0n) throw new ErroTempo("intervalo");
+  const repete = (j: number) => j > 0 && j < n && pts[j - 1] === pts[j];
+  if (repete(jIn) || repete(jOut)) throw new ErroTempo("intervalo");
+  const c = (td / mdc(td, fnum)) * fnum;
+  const r = (tn * c) / td;
+  const m = (c * fden) / fnum;
+  let kn = fnum;
+  let kd = fden * c;
+  const g = mdc(kn, kd);
+  kn /= g;
+  kd /= g;
+  const P = (j: number) => BigInt(pts[j] as number) * r;
+  const p0 = P(jIn);
+  const pfim = jOut < n ? P(jOut) : P(n - 1) + BigInt(Math.max(tab.passo_mediano, 1)) * r;
+  if (pfim <= p0) throw new ErroTempo("intervalo");
+  if (abs(p0) >= LIMITE_DOUBLE || abs(pfim) >= LIMITE_DOUBLE || (pfim - p0) * kn >= LIMITE_DOUBLE) throw new ErroTempo("mapa_grande");
+  for (let j = jIn; j < jOut; j++) if ((j + 1 < jOut ? P(j + 1) : pfim) - P(j) < 0n) throw new ErroTempo("intervalo");
+  return { c, r, m, p0 };
+}
+
+/** Mapa de um trecho em rampa (`tempo::mapa_rampa`): slot(j) = teto(T_j − ε), ε = min(1/2, menor passo de T / 2). */
+function mapaRampa(tab: TabelaQuadros, jIn: number, jOut: number, pontos: Chave<number>[], fps: Racional): MapaQuadros {
+  pontosDaRampaOk(pontos);
+  const k = contaDe1x(tab, jIn, jOut, fps);
+  const pts = ptsDaTabela(tab);
+  const n = pts.length;
+  const [tn, td, fnum, fden] = [tab.tb.num, tab.tb.den, fps.num, fps.den];
+  const pin = pts[jIn] as number;
+  const t0 = (pin * tn) / td;
+  const rampa = new Rampa(pontos, t0);
+  const fim = jOut < n ? (pts[jOut] as number) : (pts[n - 1] as number) + Math.max(tab.passo_mediano, 1);
+  const us: number[] = [];
+  for (let j = jIn; j < jOut; j++) us.push((((pts[j] as number) - pin) * tn) / td);
+  us.push(((fim - pin) * tn) / td);
+  const ts = rampa.taus(us).map((tau) => (tau * fnum) / fden);
+  const tFim = ts[ts.length - 1] as number;
+  if (!Number.isFinite(tFim) || tFim > MAX_SLOTS) throw new ErroTempo("mapa_grande");
+  let menor = Infinity;
+  for (let i = 0; i + 1 < ts.length; i++) {
+    const d = (ts[i + 1] as number) - (ts[i] as number);
+    if (d > 0 && d < menor) menor = d;
+  }
+  const eps = menor / 2 < 0.5 ? menor / 2 : 0.5;
+  const nQ = Math.max(Math.ceil(tFim - eps), 1);
+  if (nQ > MAX_SLOTS || jOut > U32 || BigInt(nQ) * k.m >= LIMITE_DOUBLE) throw new ErroTempo("mapa_grande");
+  const slot = (i: number) => Math.min(Math.max(Math.ceil((ts[i] as number) - eps), 0), nQ);
+  const quadro = new Array<number>(nQ).fill(0);
+  let distintos = 0;
+  let s = 0;
+  for (let j = jIn; j < jOut; j++) {
+    const depois = j + 1 < jOut ? slot(j + 1 - jIn) : nQ;
+    if (depois > s) {
+      quadro.fill(j, s, depois);
+      distintos++;
+      s = depois;
+    }
+  }
+  return { j_in: jIn, j_out: jOut, c: k.c, r: k.r, m: k.m, kn: 0n, kd: 0n, e: 0n, p0: k.p0, n_q: nQ, quadro_do_slot: quadro, repetidos: nQ - distintos, descartados: jOut - jIn - distintos };
+}
+
+/** Segundos de programa, desde o início do clipe, em que o trecho mostra o instante de fonte `t` (`tempo::programa_da_fonte`);
+ *  null = velocidade inválida. */
+export function programaDaFonte(v: Velocidade, inicioS: Seg, t: Seg): number | null {
+  if (v.tipo === "constante") return Number.isFinite(v.fator) && v.fator > 0 ? (t - inicioS) / v.fator : null;
+  let r: Rampa;
+  try {
+    r = new Rampa(v.pontos, inicioS);
+  } catch {
+    return null;
+  }
+  const d = t - inicioS;
+  if (!Number.isFinite(d)) return null;
+  const x = d >= 0 ? r.entre(0, d) : r.entre(d, 0);
+  return d >= 0 ? x : -x;
+}
+
+/** Mapa dos quadros `jIn..jOut` (exclusivo; `jOut = n` = fim da mídia) para slots na taxa `fps`. Rampa: kn = kd = e = 0. */
 export function mapaTrecho(tab: TabelaQuadros, jIn: number, jOut: number, v: Velocidade, fps: Racional): MapaQuadros {
-  // rampa: Fase 3
-  if (v.tipo !== "constante") throw new ErroTempo("nao_suportado", "rampa");
+  if (v.tipo === "rampa") return mapaRampa(tab, jIn, jOut, v.pontos, fps);
   const vel = fatorRacional(v.fator);
   const pts = ptsDaTabela(tab);
   const n = pts.length;
@@ -261,8 +457,16 @@ function medir(c: ClipePrincipal, ctx: ContextoTempo, fps: Racional): [number, F
     if (midia !== undefined) {
       const v = c.velocidade;
       const estimado = () => {
-        const fator = v.tipo === "constante" && Number.isFinite(v.fator) && v.fator > 0 ? v.fator : 1;
-        return nQSemFonte((c.fim_s - c.inicio_s) / fator, fps);
+        const d = c.fim_s - c.inicio_s;
+        let saida = d;
+        if (v.tipo === "constante") saida = Number.isFinite(v.fator) && v.fator > 0 ? d / v.fator : d;
+        else
+          try {
+            saida = new Rampa(v.pontos, c.inicio_s).duracao(d);
+          } catch {
+            saida = d;
+          }
+        return nQSemFonte(saida, fps);
       };
       // a tabela do mapa: a da fonte, ou a de campos no desentrelace por campo (P1.4)
       const daFonte = ctx.tabela(midia);

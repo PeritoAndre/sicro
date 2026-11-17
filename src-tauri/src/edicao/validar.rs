@@ -790,7 +790,8 @@ impl<'a> Validacao<'a> {
         }
     }
 
-    /// Fator em 0,05..16 com até 3 casas; rampa (Fase 3) recusada e conferida: pontos > 0 dentro do trecho.
+    /// Fator em 0,05..16 com até 3 casas; rampa (P3.4): os pontos pela regra do mapa (`tempo::pontos_da_rampa_ok`:
+    /// fator de cada um, ordem, linear ou degrau) e todos dentro do trecho.
     fn velocidade(&mut self, v: &Velocidade, trecho: Option<(f64, f64)>, onde: &Onde) {
         let o = onde.campo("velocidade");
         match v {
@@ -800,11 +801,8 @@ impl<'a> Validacao<'a> {
                 }
             }
             Velocidade::Rampa { pontos } => {
-                self.add(NAO_SUPORTADO, &o, None, Some("rampa"), None);
                 let (a, b) = trecho.unwrap_or((f64::NEG_INFINITY, f64::INFINITY));
-                let ruim = pontos.is_empty()
-                    || !chaves_em_ordem(pontos)
-                    || pontos.iter().any(|k| !(k.v.is_finite() && k.v > 0.0) || k.t < a - EPS || k.t > b + EPS);
+                let ruim = tempo::pontos_da_rampa_ok(pontos).is_err() || !chaves_em_ordem(pontos) || pontos.iter().any(|k| k.t < a - EPS || k.t > b + EPS);
                 if ruim {
                     self.por(VELOCIDADE, &o);
                 }
@@ -881,21 +879,28 @@ impl<'a> Validacao<'a> {
         }
         match tempo::mapa_trecho(tab, a, b, v, self.fps) {
             Ok(m) => {
-                // menos de 1 slot: o trecho todo dura menos que um quadro da saída
+                // menos de 1 slot: o trecho todo dura menos que um quadro da saída (rampa: pela duração na saída)
                 let pfim = if b < tab.pts.len() { tab.pts[b] as i128 * m.r as i128 } else { (*tab.pts.last()? as i128 + tab.passo_mediano.max(1) as i128) * m.r as i128 };
-                if (pfim - m.p0 as i128) * (m.kn as i128) < m.kd as i128 {
+                let curto = if tempo::eh_rampa(&m) {
+                    let fim = if b < tab.pts.len() { tab.tempo(b) } else { tab.fim_s() };
+                    tempo::programa_da_fonte(v, tab.tempo(a), fim).is_some_and(|d| d * (self.fps.num as f64) / (self.fps.den as f64) < 1.0)
+                } else {
+                    (pfim - m.p0 as i128) * (m.kn as i128) < m.kd as i128
+                };
+                if curto {
                     self.por(INTERVALO, &sem);
                 }
-                let fator = match v {
-                    Velocidade::Constante { fator } => *fator,
-                    Velocidade::Rampa { .. } => 1.0,
+                // (nunca acelera, 1× em todo o trecho)
+                let (lento, normal) = match v {
+                    Velocidade::Constante { fator } => (*fator <= 1.0, *fator == 1.0),
+                    Velocidade::Rampa { pontos } => (pontos.iter().all(|k| k.v <= 1.0), false),
                 };
-                if fator <= 1.0 && m.descartados > 0 {
+                if lento && m.descartados > 0 {
                     self.por_n(QUADROS_DESCARTADOS, onde, m.descartados as u64);
                 }
                 let taxa = tab.taxa_nominal();
                 if taxa.num as i128 * self.fps.den as i128 != self.fps.num as i128 * taxa.den as i128 {
-                    let n = (fator == 1.0).then_some(m.repetidos as u64 + m.descartados as u64);
+                    let n = normal.then_some(m.repetidos as u64 + m.descartados as u64);
                     self.add(FPS_DIFERENTE, onde, n, None, None);
                 }
                 if let Some(n) = taxa_variavel(tab, a, b) {
@@ -2636,12 +2641,29 @@ mod testes {
             c.p["principal"][0]["velocidade"]["fator"] = json!(fator);
             c.so(&[VELOCIDADE]);
         }
-        // rampa: Fase 3 (recusada), com ponto fora do trecho
+        // rampa (P3.4): aceita; ponto fora do trecho, fator fora, fora de ordem, suave ou nenhum ponto = `velocidade`
         let mut c = cena();
-        c.p["principal"][0]["velocidade"] = json!({ "tipo": "rampa", "pontos": [ { "t": t(30), "v": 1.0 }, { "t": t(90), "v": 0.5 } ] });
-        c.so(&[NAO_SUPORTADO]);
-        c.p["principal"][0]["velocidade"]["pontos"][1]["t"] = json!(9.0);
-        c.so(&[NAO_SUPORTADO, VELOCIDADE]);
+        let rampa = json!({ "tipo": "rampa", "pontos": [ { "t": t(30), "v": 1.0 }, { "t": t(60), "v": 0.25 }, { "t": t(90), "v": 1.0 } ] });
+        c.p["principal"][0]["velocidade"] = rampa.clone();
+        c.so(&[]);
+        for (k, campo, valor) in [(2, "t", json!(9.0)), (1, "v", json!(0.04)), (1, "v", json!(0.2505)), (1, "t", json!(t(20))), (0, "interp", json!("suave"))] {
+            let mut c = cena();
+            c.p["principal"][0]["velocidade"] = rampa.clone();
+            c.p["principal"][0]["velocidade"]["pontos"][k][campo] = valor.clone();
+            c.so(&[VELOCIDADE]);
+        }
+        c.p["principal"][0]["velocidade"]["pontos"] = json!([]);
+        c.so(&[VELOCIDADE]);
+        // degrau é aceito; rampa que só desacelera não descarta quadro; uma que acelera descarta sem acusar
+        c.p["principal"][0]["velocidade"] = json!({ "tipo": "rampa", "pontos": [ { "t": t(30), "v": 0.5, "interp": "degrau" }, { "t": t(60), "v": 0.25 } ] });
+        c.so(&[]);
+        c.p["principal"][0]["velocidade"] = json!({ "tipo": "rampa", "pontos": [ { "t": t(30), "v": 1.0 }, { "t": t(90), "v": 4.0 } ] });
+        c.so(&[]);
+        // trecho de menos de um slot na saída pela duração da rampa: 2 quadros a 4× = meio slot
+        c.p["principal"][0]["fim_s"] = json!(t(32));
+        c.p["principal"][0]["fim_pts"] = json!(512 * 32);
+        c.p["principal"][0]["velocidade"] = json!({ "tipo": "rampa", "pontos": [ { "t": t(30), "v": 4.0 } ] });
+        c.so(&[INTERVALO]);
     }
 
     #[test]

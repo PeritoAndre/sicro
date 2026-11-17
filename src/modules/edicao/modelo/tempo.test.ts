@@ -88,7 +88,20 @@ describe("mapa de quadros (§3.1)", () => {
     const epoca = tabela([1, 1_000_000], 1_700_000_000_000_000, { n: 10, passo: 33_333 });
     expect(() => mapaTrecho(epoca, 0, 10, constante(1), fps(7))).toThrow("mapa_grande");
     expect(mapaTrecho(epoca, 0, 10, constante(1), fps(30000, 1001)).n_q).toBe(10);
-    expect(() => mapaTrecho(mp4, 0, 10, { tipo: "rampa", pontos: [] }, fps(30))).toThrow("nao_suportado");
+    expect(() => mapaTrecho(mp4, 0, 10, { tipo: "rampa", pontos: [] }, fps(30))).toThrow("velocidade");
+  });
+
+  it("rampa 1× → 0,25× → 1× (P3.4): nada descartado, 4 slots no mais lento, a duração da integral", () => {
+    const t = (j: number) => (j * 512) / 15360;
+    const m = mapaTrecho(mp4, 30, 150, { tipo: "rampa", pontos: [ { t: t(60), v: 1 }, { t: t(90), v: 0.25 }, { t: t(120), v: 1 } ] }, fps(30));
+    const tau = 2 + (2 * Math.log(4)) / 0.75;
+    expect(m.n_q).toBe(Math.ceil(tau * 30 - 0.5));
+    expect([m.quadro_do_slot[0], m.descartados, m.kd]).toEqual([30, 0, 0n]);
+    expect(contagem(m).get(90)).toBe(4);
+    expect(contagem(m).get(40)).toBe(1);
+    // pontos suaves ou fora de ordem: erro de velocidade
+    expect(() => mapaTrecho(mp4, 30, 150, { tipo: "rampa", pontos: [{ t: 1, v: 0.5, interp: "suave" }] }, fps(30))).toThrow("velocidade");
+    expect(() => mapaTrecho(mp4, 30, 150, { tipo: "rampa", pontos: [ { t: 2, v: 1 }, { t: 1, v: 0.5 } ] }, fps(30))).toThrow("velocidade");
   });
 
   it("teto de slots (MAX_SLOTS do Rust): mapa_grande antes de alocar", () => {

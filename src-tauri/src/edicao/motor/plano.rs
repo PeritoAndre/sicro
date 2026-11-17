@@ -401,6 +401,11 @@ pub struct ProvOrigem {
     /// quadro da fonte; o ímpar, o segundo campo dele, que não é pts lido.
     #[serde(default)]
     pub campos: bool,
+    // CONTRATO: acréscimo (P3.4). Vai para o `feito`: a conferência das ocultações acha o slot de cada quadro por ele.
+    /// Rampa (`mapa.kd = 0`): primeiro slot do clipe de cada quadro lido (`tempo::slot_de_cada_lido`); vazio na
+    /// velocidade constante, em que a fórmula do `mapa` dá o slot.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub slots_da_rampa: Vec<u32>,
 }
 
 /// Um processamento aplicado, na ordem da cadeia; `parametros` = objeto JSON com os valores usados.

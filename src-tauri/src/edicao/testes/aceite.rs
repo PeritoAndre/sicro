@@ -430,8 +430,6 @@ fn recusas(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
     let narracao = |abaixa: bool| json!({ "audios": [{ "id": "a1", "nome": "Narração", "papel": "narracao", "volume": 1.0, "mudo": false, "abaixa_original": abaixa,
         "clipes": [{ "id": "ca1", "nome": "", "midia": "n1", "pos": { "ref": "programa", "t": 0.0 }, "de_s": 0.0, "ate_s": null, "volume": 1.0, "entrada_s": 0.0, "saida_s": 0.0 }] }] });
     let mixagem = |normalizar: Value, limitador: bool| json!({ "mixagem": { "volume_original": 1.0, "abaixar": { "db": -12.0, "ataque_s": 0.3, "soltura_s": 0.5 }, "normalizar": normalizar, "limitador": limitador } });
-    let mut rampa = tr("c1", json!([]));
-    rampa["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": 0.0, "v": 1.0 }, { "t": 0.5, "v": 0.5 }] });
     let fim = alvo_final("cpu");
     let whatsapp: Alvo = serde_json::from_value(json!({ "tipo": "final", "exportacao": { "predefinicao": "whatsapp", "codificador": "cpu", "legendas": "nenhuma", "pacote": null, "pdf": "a3", "revisado_por": "", "personalizada": null } })).unwrap();
     let r = |arquivo, motor, codigo, (clipe, efeito, midia): (Option<&'static str>, Option<&'static str>, Option<&'static str>), p: ProjetoEdicao, alvo: &Alvo| Recusa { arquivo, motor, codigo, clipe, efeito, midia, p, alvo: alvo.clone() };
@@ -483,10 +481,9 @@ fn recusas(mundo: &Mundo, midias: &[Value]) -> Vec<Recusa> {
     v.push(r("motor/sobrepor.rs", "item_desconhecido: sobreposto_do_futuro l9", DESC, (Some("l9"), None, None), base(vec![tr("c1", json!([]))], json!({ "sobreposicoes": [{ "id": "t1", "nome": "", "oculta": false, "clipes": [da_fixture("/sobreposicoes/0/clipes/3")] }] })), &fim));
     v.push(r("motor/sobrepor.rs", "item_desconhecido: efeito_do_futuro x9", DESC, (Some("x1"), Some("x9"), None), base(vec![tr("c1", json!([]))], titulo_sob(json!([{ "tipo": "efeito_do_futuro", "id": "x9", "ligado": true }]))), &fim));
     v.push(r("motor/efeitos/enquadramento.rs", "destino variável", NS, (Some("c1"), Some("q1"), None), base(vec![tr("c1", json!([com_id(enquadramento(zoom, "conter"), "q1")]))], json!({})), &fim));
-    // som: `audio::montar` (rampa e tela: Fase 3; o resto sai quando o P1.5 entrega, pela lista `audio::recusa`)
+    // som: `audio::montar` (tela: Fase 3; a rampa com som entrou no P3.4; o resto sai quando o P1.5 entrega, pela
+    // lista `audio::recusa`)
     let a = crate::edicao::motor::audio::recusa;
-    v.push(r("motor/audio.rs", "rampa", NS, (Some("c1"), None, None), com_som(base(vec![rampa.clone()], json!({}))), &fim));
-    v.push(r("motor/audio.rs", "rampa", NS, (Some("c1"), None, None), com_som(base(vec![rampa], json!({}))), &fim));
     if a("volume_animado") {
         v.push(r("motor/audio.rs", "volume animado", NS, (Some("c1"), None, None), com_som(base(vec![volume_animado], json!({}))), &fim));
     }

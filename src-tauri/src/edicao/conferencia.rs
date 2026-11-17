@@ -185,6 +185,9 @@ struct OrigemF {
     mapa: ProvMapa,
     #[serde(default)]
     campos: bool,
+    // P3.4: rampa (`mapa.kd = 0`) traz o slot de cada quadro lido
+    #[serde(default)]
+    slots_da_rampa: Vec<u32>,
 }
 
 /// Estado da ocultação num quadro: None = fora dela; Some(None) = cobre; Some(Some(k)) = fraco (cobre, ou sem região
@@ -398,10 +401,19 @@ fn segmentos_do_clipe(oc: &EfOcultar, r: &Rastreio, denso: Option<&ArquivoDenso>
         return Ok(vec![(0, n_q, estado(o.pts_primeiro))]);
     }
     let mp = &o.mapa;
-    let r_ = (tn as i128).checked_mul(mp.c as i128).filter(|v| mp.kd > 0 && v % td as i128 == 0).ok_or_else(|| erro(format!("{}: mapa", codigo::ESQUEMA)))? / td as i128;
+    let rampa = &o.slots_da_rampa;
+    let r_ = match rampa.is_empty() {
+        true => (tn as i128).checked_mul(mp.c as i128).filter(|v| mp.kd > 0 && v % td as i128 == 0).ok_or_else(|| erro(format!("{}: mapa", codigo::ESQUEMA)))? / td as i128,
+        false => 0,
+    };
     let p0 = o.pts_primeiro as i128 * r_;
-    // primeiro slot do quadro de pts `pts` (§3.1: teto(((P − P_jin)·Kn − E) / Kd)), no clipe
-    let slot = |pts: i64| -> u64 { teto((pts as i128 * r_ - p0) * mp.kn as i128 - mp.e as i128, mp.kd as i128).clamp(0, n_q as i128) as u64 };
+    // primeiro slot do k-ésimo quadro, de pts `pts` (§3.1: teto(((P − P_jin)·Kn − E) / Kd); rampa: a tabela), no clipe
+    let slot = |k: usize, pts: i64| -> u64 {
+        match rampa.get(k).or(rampa.last()) {
+            Some(&s) => (s as u64).min(n_q),
+            None => teto((pts as i128 * r_ - p0) * mp.kn as i128 - mp.e as i128, mp.kd as i128).clamp(0, n_q as i128) as u64,
+        }
+    };
     // por campo (desentrelace) os pts são de campo, metade do passo do quadro
     let passo = if o.campos { (m.passo_min % 2 == 0).then_some(m.passo_min / 2) } else { Some(m.passo_min) };
     let total = o.pts_ultimo as i128 - o.pts_primeiro as i128;
@@ -443,7 +455,7 @@ fn segmentos_do_clipe(oc: &EfOcultar, r: &Rastreio, denso: Option<&ArquivoDenso>
             anterior = pts;
         }
         let e = estado(aval);
-        let de = if k == 0 { 0 } else { slot(pts) };
+        let de = if k == 0 { 0 } else { slot(k, pts) };
         match seg.last_mut() {
             Some(s) if s.2 == e => {}
             Some(s) => {
@@ -630,6 +642,25 @@ mod testes {
         fim_no_60.midias[0].ocultacoes[0].base.ativo.as_mut().unwrap().ate = Some(tab.tempo(60));
         for (caso, p) in [("ativo até depois da lacuna", p), ("ativo até o quadro antes da lacuna", fim_no_60)] {
             comparar_com_a_verdade(caso, &p, &tab, &|_| None, 1);
+        }
+    }
+
+    /// Trechos em rampa (P3.4): o slot de cada quadro sai da tabela que a proveniência leva (`slots_da_rampa`), sem
+    /// fórmula; a conferência bate slot a slot com o arquivo (folga 0), também com passo variável aproximado.
+    #[test]
+    fn rampa_pela_tabela_da_proveniencia() {
+        let rampa = |tab: &crate::edicao::quadros::TabelaQuadros, a: usize, b: usize, c: usize| -> crate::edicao::modelo::Velocidade {
+            serde_json::from_value(json!({ "tipo": "rampa", "pontos": [{ "t": tab.tempo(a), "v": 1.0 }, { "t": tab.tempo(b), "v": 0.25 }, { "t": tab.tempo(c), "v": 1.0 }] })).unwrap()
+        };
+        let regular = apoio::tabela(TB, apoio::pts_regulares(300, (1, 30), TB, 0));
+        let lacuna = apoio::tabela(TB, (0..300i64).map(|k| k * 512 + if k > 60 { 15360 } else { 0 }).collect());
+        for (caso, tab, folga) in [("rampa, passo constante", regular, 0), ("rampa, lacuna", lacuna, 1)] {
+            let mut p = projeto_do_teste(&tab, &ancoras_o1(), "#00ff00ff");
+            for (i, (a, b, c)) in [(0usize, (40, 70, 100)), (1, (55, 70, 85))] {
+                let Tolerante::Conhecido(ClipePrincipal::Trecho(t)) = &mut p.principal[i] else { panic!() };
+                t.velocidade = rampa(&tab, a, b, c);
+            }
+            comparar_com_a_verdade(caso, &p, &tab, &|_| None, folga);
         }
     }
 

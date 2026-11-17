@@ -32,6 +32,7 @@ import { cenaDoClipe, duracaoLocal, instanteDaAncora, instanteDaChave, midiaDoCl
 import { LADO_MINIMO, aDaGirada, aDaOrigem, alcaDaAncora, alcaDeLugar, alcaDoLugarFixo, alcaNaOrigem, alcasDaRegiao, alcasDeCaixa, alcasDePonto, proporcaoDaSaida } from "./alcas";
 import { bordaArrastada, entradaNoCursor, faixaDoClipe, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor } from "./faixa";
 import { QuadroFiel, type Fiel } from "./quadroFiel";
+import { quadroGuiado, slotDoQuadro, tocaGuiado } from "./guiado";
 import { CamadaEdicao, alcasComFerramenta, type Modificadores } from "./camadaEdicao";
 import { Transporte, type EstadoRender, type Fase } from "./Transporte";
 import { alvosDaMedida, atlasDe, garantirMidia, imagemDe, p50, pedirProxy, precisaDeProxy, previaDaMidia, proxyPedido, recursoDe, registrarBusca, spriteDe, urlDoCache, useRecursos } from "./recursos";
@@ -735,6 +736,35 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       }
       const [a, b] = faixaDoClipe(c, tab);
       const j0 = jRef.current ?? a;
+      // P3.4: rampa toca guiada dentro do clipe (elemento parado, quadro do slot do relógio pelo mapa, sem som)
+      const mapa = v.mapa;
+      if (tocaGuiado(c) && mapa && bus && j0 >= a && j0 < b) {
+        const q0 = slotDoQuadro(mapa, j0, v.campos);
+        const t0 = performance.now();
+        let pedido = j0;
+        const passo = () => {
+          if (!tocandoRef.current) return;
+          const agora = performance.now();
+          const j = quadroGuiado(mapa, v.campos, q0, (agora - t0) / 1000, v.fps);
+          if (j === null) {
+            tocandoRef.current = false;
+            setTocando(false);
+            irQuadro(b - 1);
+            return;
+          }
+          if (j !== pedido) {
+            pedido = j;
+            bus.ir(j);
+          }
+          if (agora - ultimoPost >= 250 && jRef.current !== null) {
+            ultimoPost = agora;
+            postar(meioDoQuadro(tab, jRef.current));
+          }
+          laco.current = requestAnimationFrame(passo);
+        };
+        laco.current = requestAnimationFrame(passo);
+        return;
+      }
       // dentro do clipe: para no fim dele; fora: até o fim da mídia
       const limite = j0 >= a && j0 < b ? b : nQuadros(tab);
       void el.tocar().catch(() => parar());

@@ -3194,5 +3194,264 @@
       "por_linha": 51,
       "sob_silencio": []
     }
+  },
+  {
+    "entrada": {
+      "linha": {
+        "clipes": [
+          {
+            "fonte": {
+              "descartados": 0,
+              "j_in": 30,
+              "j_out": 120,
+              "lidos": 90,
+              "midia": "m1",
+              "pts_in": 15360,
+              "pts_out": 61440,
+              "repetidos": 51,
+              "tabela": "decodificador"
+            },
+            "id": "c1",
+            "inicio_q": 0,
+            "n_q": 141,
+            "sobrepoe_q": 0
+          }
+        ],
+        "fps": {
+          "den": 1,
+          "num": 30
+        },
+        "livres": [],
+        "total_q": 141
+      },
+      "projeto": {
+        "audios": [],
+        "created_at": "2026-11-14T00:00:00Z",
+        "esquema": 2,
+        "esquema_menor": 0,
+        "fecho": null,
+        "gravado_por": "",
+        "id": "p-teste",
+        "legendas": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#00ff00ff",
+              "margem": 0.013,
+              "raio": 0.0
+            },
+            "contorno": null,
+            "cor": "#00ff00",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.052
+          },
+          "itens": [
+            {
+              "conferida": true,
+              "id": "l1",
+              "locutor": null,
+              "locutor_auto": false,
+              "origem": "perito",
+              "ref": {
+                "ate": 1.4,
+                "de": 1.2,
+                "midia": "m1",
+                "tipo": "fonte"
+              },
+              "texto": "antes"
+            },
+            {
+              "conferida": true,
+              "id": "l2",
+              "locutor": null,
+              "locutor_auto": false,
+              "origem": "perito",
+              "ref": {
+                "ate": 2.5,
+                "de": 2.0,
+                "midia": "m1",
+                "tipo": "fonte"
+              },
+              "texto": "lenta"
+            },
+            {
+              "conferida": true,
+              "id": "l3",
+              "locutor": null,
+              "locutor_auto": false,
+              "origem": "perito",
+              "ref": {
+                "ate": 3.3,
+                "de": 3.1,
+                "midia": "m1",
+                "tipo": "fonte"
+              },
+              "texto": "calada"
+            }
+          ],
+          "linhas_max": 2,
+          "lugar": {
+            "h": "centro",
+            "v": "base",
+            "x": 0.5,
+            "y": 0.94
+          },
+          "origem": null
+        },
+        "marcadores": [],
+        "midias": [
+          {
+            "altura": null,
+            "cor": null,
+            "decodificacao": null,
+            "derivacao": null,
+            "duracao_s": null,
+            "gravador": null,
+            "id": "m1",
+            "inicio_s": null,
+            "largura": null,
+            "media_id": null,
+            "nome": "m1.mp4",
+            "ocultacoes": [],
+            "origem": "caso",
+            "recebido": {
+              "nativo": null,
+              "obs": ""
+            },
+            "relativo": "Midias/m1.mp4",
+            "relogio_desvio_s": null,
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "taxa": null,
+            "tem_audio": false,
+            "tipo": "video",
+            "vfr": false
+          }
+        ],
+        "mixagem": {
+          "abaixar": {
+            "ataque_s": 0.3,
+            "db": -12.0,
+            "soltura_s": 0.5
+          },
+          "limitador": false,
+          "normalizar": null,
+          "volume_original": 1.0
+        },
+        "principal": [
+          {
+            "audio": {
+              "manter_tom": true,
+              "mudo": false,
+              "silencios": [
+                {
+                  "ate": 3.2,
+                  "de": 3.0,
+                  "id": "s1",
+                  "modo": "tom",
+                  "motivo": ""
+                }
+              ],
+              "volume": 1.0
+            },
+            "desligado": false,
+            "efeitos": [],
+            "fim_pts": 61440,
+            "fim_s": 4.0,
+            "id": "c1",
+            "inicio_pts": 15360,
+            "inicio_s": 1.0,
+            "midia": "m1",
+            "rotulo": "c1",
+            "tipo": "trecho",
+            "transicao_entrada": null,
+            "velocidade": {
+              "pontos": [
+                {
+                  "interp": "linear",
+                  "pts": null,
+                  "t": 1.5,
+                  "v": 1.0
+                },
+                {
+                  "interp": "linear",
+                  "pts": null,
+                  "t": 2.5,
+                  "v": 0.25
+                },
+                {
+                  "interp": "linear",
+                  "pts": null,
+                  "t": 3.5,
+                  "v": 1.0
+                }
+              ],
+              "tipo": "rampa"
+            }
+          }
+        ],
+        "rastreios": [],
+        "saida": {
+          "altura": 180,
+          "audio": false,
+          "auto": false,
+          "cor_fundo": "#202020",
+          "exportacao": {
+            "codificador": "cpu",
+            "legendas": "nenhuma",
+            "pacote": null,
+            "pdf": "a3",
+            "personalizada": null,
+            "predefinicao": "juri",
+            "revisado_por": ""
+          },
+          "fps": {
+            "den": 1,
+            "num": 30
+          },
+          "largura": 320,
+          "selos": {
+            "ampliacao": true,
+            "realce": true,
+            "velocidade": true
+          }
+        },
+        "sincronias": [],
+        "sobreposicoes": [],
+        "titulo": "Teste",
+        "updated_at": "2026-11-14T00:00:00Z"
+      }
+    },
+    "nome": "rampa: legenda de fonte pela integral; silêncio na parte lenta",
+    "saida": {
+      "exibidas": [
+        {
+          "ate_q": 12,
+          "de_q": 6,
+          "linhas": [
+            "antes"
+          ]
+        },
+        {
+          "ate_q": 70,
+          "de_q": 34,
+          "linhas": [
+            "lenta"
+          ]
+        },
+        {
+          "ate_q": 119,
+          "de_q": 112,
+          "linhas": [
+            "calada"
+          ]
+        }
+      ],
+      "por_linha": 51,
+      "sob_silencio": [
+        "l3"
+      ]
+    }
   }
 ]

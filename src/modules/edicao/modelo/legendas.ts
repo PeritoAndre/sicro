@@ -7,6 +7,7 @@
 
 import type { ClipeTrecho, Degravacao, Id, Legenda, LinhaResolvida, ProjetoEdicao } from "@domain/edicao";
 import { novoId } from "./projeto";
+import { pontosDaRampaOk, programaDaFonte } from "./tempo";
 
 export const LARGURA = 0.9;
 export const AVANCO = 0.6;
@@ -45,13 +46,25 @@ function trechos(p: ProjetoEdicao, linha: LinhaResolvida): TrechoNaLinha[] {
   for (const r of linha.clipes) {
     if (!r.fonte) continue;
     const t = p.principal.find((c) => (c as { tipo?: unknown }).tipo === "trecho" && (c as ClipeTrecho).id === r.id && !(c as ClipeTrecho).desligado) as ClipeTrecho | undefined;
-    if (!t || t.velocidade.tipo !== "constante") continue;
-    const fator = t.velocidade.fator;
-    if (!(Number.isFinite(fator) && fator > 0)) continue;
+    if (!t) continue;
+    // rampa (P3.4): fator 0, o tempo de programa pela integral
+    let fator = 0;
+    if (t.velocidade.tipo === "constante") {
+      fator = t.velocidade.fator;
+      if (!(Number.isFinite(fator) && fator > 0)) continue;
+    } else
+      try {
+        pontosDaRampaOk(t.velocidade.pontos);
+      } catch {
+        continue;
+      }
     v.push({ ini_q: r.inicio_q, n_q: r.n_q, ini_s: t.inicio_s, fator, t });
   }
   return v;
 }
+
+/** Segundos de programa, desde o início do trecho, do instante de fonte `s` (fator 0 = rampa). */
+const noTrecho = (x: TrechoNaLinha, s: number) => (x.fator > 0 ? (s - x.ini_s) / x.fator : (programaDaFonte(x.t.velocidade, x.ini_s, s) ?? NaN));
 
 /** A legenda inteira no eixo de slots da janela (0 = primeiro slot dela), sem cortar; null = vazia ou não finita. */
 function inteira(xa: number, xb: number): [number, number] | null {
@@ -89,7 +102,7 @@ function aparicoes(p: ProjetoEdicao, linha: LinhaResolvida): Aparicao[] {
     }
     for (const t of ts) {
       if (t.t.midia !== r.midia) continue;
-      const x = (s: number) => ((s - t.ini_s) * fps.num) / fps.den / t.fator;
+      const x = (s: number) => (t.fator > 0 ? ((s - t.ini_s) * fps.num) / fps.den / t.fator : (noTrecho(t, s) * fps.num) / fps.den);
       const s = inteira(x(r.de), x(r.ate));
       if (!s) continue;
       const ap = { i, xa: s[0], xb: s[1], ini_q: t.ini_q, n_q: t.n_q };
@@ -113,12 +126,12 @@ export function sobSilencio(p: ProjetoEdicao, linha: LinhaResolvida): Id[] {
   if (fps.num <= 0 || fps.den <= 0) return [];
   const agem: [Id, number, number, number, number][] = [];
   for (const x of trechos(p, linha)) {
-    const fim = x.ini_s + ((x.n_q * fps.den) / fps.num) * x.fator;
+    const fim = x.fator > 0 ? x.ini_s + ((x.n_q * fps.den) / fps.num) * x.fator : x.t.fim_s;
     const t0 = (x.ini_q * fps.den) / fps.num;
     for (const s of x.t.audio.silencios) {
       if (!Number.isFinite(s.de) || !Number.isFinite(s.ate)) continue;
       const [a, b] = [Math.max(s.de, x.ini_s), Math.min(s.ate, fim)];
-      if (a < b) agem.push([x.t.midia, a, b, t0 + (a - x.ini_s) / x.fator, t0 + (b - x.ini_s) / x.fator]);
+      if (a < b) agem.push([x.t.midia, a, b, t0 + noTrecho(x, a), t0 + noTrecho(x, b)]);
     }
   }
   const ids: Id[] = [];

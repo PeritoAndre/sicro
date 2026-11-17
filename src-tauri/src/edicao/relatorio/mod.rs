@@ -108,6 +108,7 @@ pub(crate) mod apoio {
             j_in: m.j_in as u32,
             quadro_do_slot: m.quadro_do_slot.clone(),
             pts: tab.pts[m.j_in..m.j_out].to_vec(),
+            slots_da_rampa: if crate::edicao::tempo::eh_rampa(m) { crate::edicao::tempo::slot_de_cada_lido(m) } else { Vec::new() },
         }
     }
 

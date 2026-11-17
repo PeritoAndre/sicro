@@ -1,0 +1,50 @@
+/* Velocidade do trecho: o número com o botão da rampa ao lado; na rampa, uma linha por ponto. */
+.constante {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+.constante > div:first-child {
+  flex: 1;
+  min-width: 0;
+}
+.constante > button {
+  height: 30px;
+  width: 26px;
+}
+
+.rampa {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.topo {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.acoes {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 2px;
+}
+.ponto {
+  display: flex;
+  align-items: flex-end;
+  gap: 6px;
+  min-width: 0;
+}
+.ponto > div:first-child {
+  flex: 1.6;
+  min-width: 0;
+}
+.ponto > div:nth-child(2) {
+  flex: 1;
+  min-width: 0;
+}
+.ponto > button {
+  height: 30px;
+  width: 24px;
+}

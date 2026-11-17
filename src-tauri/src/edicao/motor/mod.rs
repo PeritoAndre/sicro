@@ -452,16 +452,18 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             citadas.insert(midia.to_string());
             let (de_s, ate_s) = (tab.tempo(j_in), if j_out < tab.pts.len() { tab.tempo(j_out) } else { tab.fim_s() });
             usados.entry(midia.to_string()).or_default().push((de_s, ate_s));
-            let (mapa, quadro_do_slot, repetidos, descartados) = match c {
+            let (mapa, quadro_do_slot, repetidos, descartados, slots_da_rampa) = match c {
                 ClipePrincipal::Trecho(t) => {
                     let m = tempo::mapa_trecho(tab, j_in, j_out, &t.velocidade, fps)?;
                     velocidade = Some(t.velocidade.clone());
                     for s in &t.audio.silencios {
                         silencios.push(ProvSilencio { midia: midia.to_string(), de_s: s.de, ate_s: s.ate, modo: s.modo, motivo: s.motivo.clone() });
                     }
-                    (ProvMapa { c: m.c, kn: m.kn, kd: m.kd, e: m.e }, m.quadro_do_slot, m.repetidos, m.descartados)
+                    // P3.4: rampa sem fórmula leva o slot de cada quadro lido
+                    let rampa = if tempo::eh_rampa(&m) { tempo::slot_de_cada_lido(&m) } else { Vec::new() };
+                    (ProvMapa { c: m.c, kn: m.kn, kd: m.kd, e: m.e }, m.quadro_do_slot, m.repetidos, m.descartados, rampa)
                 }
-                _ => (ProvMapa { c: 0, kn: 0, kd: 0, e: 0 }, vec![j_in as u32; res.n_q as usize], res.n_q.saturating_sub(1), 0),
+                _ => (ProvMapa { c: 0, kn: 0, kd: 0, e: 0 }, vec![j_in as u32; res.n_q as usize], res.n_q.saturating_sub(1), 0, Vec::new()),
             };
             origem = Some(ProvOrigem {
                 midia: midia.to_string(),
@@ -477,6 +479,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
                 quadro_do_slot,
                 pts: tab.pts[j_in..j_out].to_vec(),
                 campos: tab.pts.len() != fonte.quadros.pts.len(),
+                slots_da_rampa,
             });
             // ocultações aplicadas neste clipe, por quadro lido (no congelado, com o `ativo` local já resolvido)
             let midia_ref = p.midias.iter().find(|m| m.id == midia);
