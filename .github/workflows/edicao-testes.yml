@@ -38,6 +38,11 @@ jobs:
           & $env:SICRO_FFMPEG -hide_banner -version
           if ($LASTEXITCODE -ne 0) { throw "ffmpeg não roda: $env:SICRO_FFMPEG" }
 
+      # o tauri.windows.conf.json declara o exiftool-win como recurso: sem a pasta o build.rs para
+      - name: ExifTool do instalador
+        shell: pwsh
+        run: scripts/fetch-exiftool-windows.ps1
+
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
