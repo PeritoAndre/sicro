@@ -31,6 +31,7 @@ import type {
 import type {
   CollectFrameInput,
   CollectFrameResult,
+  CopiaGravador,
   CreateVideoEventInput,
   ExportClipInput,
   ExportClipResult,
@@ -38,6 +39,7 @@ import type {
   UpdateStoryboardFrameInput,
   SetVideoClockInput,
   UpdateVideoEventInput,
+  FormatoGravador,
   VideoBundle,
   VideoClockCalibration,
   VideoEvent,
@@ -1578,6 +1580,17 @@ export const commands = {
 
   videoProvenienciaSalvar(workspacePath: string, mediaId: string, proveniencia: ProvenienciaMidia): Promise<ProvenienciaMidia> {
     return safeInvoke<ProvenienciaMidia>("video_proveniencia_salvar", { workspacePath, mediaId, proveniencia });
+  },
+
+  /** Gravadores (P4.6; `video_dvr_commands.rs`): formato do arquivo antes de registrar (null = vídeo comum);
+   *  Hikvision antigo volta como erro `gravador_nao_suportado`. */
+  videoDvrConferir(sourcePath: string): Promise<FormatoGravador | null> {
+    return safeInvoke<FormatoGravador | null>("video_dvr_conferir", { sourcePath });
+  },
+
+  /** Cópia de trabalho (MKV, mesma lista framemd5) do vídeo de gravador já registrado; a que já existe volta igual. */
+  videoDvrCopia(workspacePath: string, mediaId: string): Promise<CopiaGravador> {
+    return safeInvoke<CopiaGravador>("video_dvr_copia", { workspacePath, mediaId });
   },
 
   // --- Fase 2 (contratos-fase2.md): rastreio e conferência das ocultações (`edicao_rastreio_commands.rs`) ---

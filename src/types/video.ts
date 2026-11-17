@@ -212,3 +212,32 @@ export interface UpdateStoryboardFrameInput {
   notes?: string;
   reviewed?: boolean;
 }
+
+// ---- gravadores (DVR, P4.6; `src-tauri/src/video/dvr.rs`) ----
+export type FormatoGravador =
+  | "dahua"
+  | "hikvision_imkh"
+  | "hikvision_antigo"
+  | "ifv"
+  | "lvf"
+  | "h264_cru"
+  | "hevc_cru"
+  | "avi_sem_indice";
+
+/** Intervalo entre quadros vizinhos acima de 1,5× o passo mediano, em tempo do original. */
+export interface LacunaPts {
+  de_s: number;
+  ate_s: number;
+  /** Estimativa dos quadros que faltam. */
+  quadros: number;
+}
+
+/** Cópia de trabalho registrada no caso (mídia derivada do original). */
+export interface CopiaGravador {
+  media: VideoMedia;
+  formato: FormatoGravador;
+  lacunas: LacunaPts[];
+  /** start_time do original quando é data do relógio do gravador. */
+  inicio_epoca_s: number | null;
+  ja_existia: boolean;
+}

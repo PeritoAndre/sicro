@@ -813,7 +813,7 @@ fn recebimento(conn: &Connection, id: &Uuid) -> Result<(Option<bool>, String, Op
 }
 
 /// Retrato de `derived_from_hash` + `derivation_json`, seguindo a cadeia até a raiz. JSON ilegível e erro do banco sobem.
-fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Derivacao>> {
+pub(crate) fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Derivacao>> {
     let Some(de) = m.derived_from_hash.clone() else { return Ok(None) };
     let j: Value = match m.derivation_json.as_deref() {
         None => Value::Null,
@@ -824,9 +824,12 @@ fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Derivacao>> {
         Some("clip") => TipoDerivacao::Trecho,
         Some("estabilizado") => TipoDerivacao::Estabilizado,
         Some("lente_video") => TipoDerivacao::Lente,
+        // P4.6: remux (ou FFV1 do fluxo cru) com a lista `framemd5` igual à do original
+        Some("copia_dvr") => TipoDerivacao::CopiaDvr,
         _ => TipoDerivacao::Outro,
     };
-    let com_perdas = !(tipo == TipoDerivacao::Trecho && j["mode"].as_str() == Some("copy"));
+    let com_perdas = !(tipo == TipoDerivacao::CopiaDvr || (tipo == TipoDerivacao::Trecho && j["mode"].as_str() == Some("copy")));
+    let inicio_epoca_s = j["inicio_epoca_s"].as_f64().filter(|s| tipo == TipoDerivacao::CopiaDvr && s.is_finite());
     let comando = ["ffmpeg_command", "comando", "comandos"]
         .iter()
         .find_map(|k| match &j[*k] {
@@ -851,7 +854,7 @@ fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Derivacao>> {
             None => break,
         }
     }
-    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas }))
+    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas, inicio_epoca_s }))
 }
 
 #[cfg(test)]
@@ -1399,7 +1402,7 @@ mod testes {
         assert_eq!(m.recebido, Recebido { nativo: Some(true), obs: "do DVR".into() });
         assert_eq!((m.relogio_desvio_s, m.gravador.as_deref()), (Some(-2.5), Some("DVR 1")));
         assert_eq!(m.derivacao, Some(Derivacao { tipo: TipoDerivacao::Trecho, de_sha256: meio.clone(), raiz_sha256: raiz.clone(),
-                                                 comando: "ffmpeg -ss 1 -c copy".into(), com_perdas: false }));
+                                                 comando: "ffmpeg -ss 1 -c copy".into(), com_perdas: false, inicio_epoca_s: None }));
         // tamanho exibido (vertical) entra no zoom: h = w × (1080/1920) ÷ (16/9)
         let ClipePrincipal::Trecho(t) = clipes(&p)[0] else { panic!() };
         assert_eq!((t.inicio_pts, t.fim_pts), (None, None), "sem tabela de quadros aqui");

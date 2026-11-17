@@ -86,7 +86,10 @@ export interface MidiaRef {
   ocultacoes: EfOcultar[];               // ocultações da MÍDIA: valem em todo uso dela; `ativo` em tempo de fonte, obrigatório
 }
 export interface Derivacao { tipo: "trecho" | "estabilizado" | "lente" | "copia_dvr" | "superres" | "outro";
-                             de_sha256: string; raiz_sha256: string; comando: string; com_perdas: boolean }
+                             de_sha256: string; raiz_sha256: string; comando: string; com_perdas: boolean;
+                             // CONTRATO: acréscimo (P4.6). start_time do original quando é data do relógio do gravador
+                             // (s desde 1970); a cópia de trabalho começa em zero. Ausente = não há.
+                             inicio_epoca_s?: number }
 
 // ---- posição de clipe livre ----
 export type Posicao =

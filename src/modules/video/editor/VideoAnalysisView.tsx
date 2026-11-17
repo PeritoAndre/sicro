@@ -66,6 +66,7 @@ import styles from "./VideoAnalysisView.module.css";
 import { askConfirm } from "@components/Dialog/ask";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
 import { confirmarExclusaoVideo } from "../excluirVideo";
+import { EXT_GRAVADOR, registrarVideo } from "../gravador";
 
 /** `visivel` falso: a Edição está na frente (§8.1). Fica montada, pausada e sem atalhos. */
 export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}) {
@@ -84,7 +85,6 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
   const mediaList = useVideoStore((s) => s.list);
   const openMedia = useVideoStore((s) => s.openMedia);
   const loadList = useVideoStore((s) => s.loadList);
-  const registerMedia = useVideoStore((s) => s.registerMedia);
   /** Progresso ao registrar vídeos novos pelas abas ("Registrando 1 de 3…"). */
   const [adding, setAdding] = useState<string | null>(null);
 
@@ -266,7 +266,7 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
       picked = await openFileDialog({
         multiple: true,
         title: "Adicionar vídeos ao caso",
-        filters: [{ name: "Vídeos", extensions: ["mp4", "mov", "mkv", "avi", "webm", "m4v"] }],
+        filters: [{ name: "Vídeos", extensions: ["mp4", "mov", "mkv", "avi", "webm", "m4v", ...EXT_GRAVADOR] }],
       });
     } catch {
       return;
@@ -278,7 +278,7 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
     for (const [i, file] of files.entries()) {
       setAdding(files.length > 1 ? `Registrando ${i + 1} de ${files.length}…` : "Registrando…");
       try {
-        last = await registerMedia(workspacePath, file);
+        last = await registrarVideo(workspacePath, file);
       } catch (e) {
         failed.push(`${file.split(/[\\/]/).pop()}: ${toSicroError(e).message}`);
       }

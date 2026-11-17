@@ -343,6 +343,12 @@ pub struct Derivacao {
     pub raiz_sha256: String,
     pub comando: String,
     pub com_perdas: bool,
+    // CONTRATO: acréscimo (P4.6, aceite "start_time em época guardado na Derivacao"); espelho em `types/edicao.ts`.
+    // None = não é cópia de gravador ou o original não traz data; ausente no fio = None (retrato antigo lê igual).
+    /// `start_time` do original quando é data do relógio do gravador (s desde 1970, como o gravador gravou): a cópia
+    /// de trabalho começa em zero.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub inicio_epoca_s: Option<f64>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

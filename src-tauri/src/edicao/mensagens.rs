@@ -112,6 +112,9 @@ pub mod codigo {
     pub const SELO_DESLIGADO: &str = "selo_desligado";
     // Fase 2 (abertura): quadro sem máscara na forma silhueta (cai na elipse da caixa; uso na Fase 5)
     pub const SILHUETA_AUSENTE: &str = "silhueta_ausente";
+    // Fase 4 (P4.6): gravadores (`video/dvr.rs`)
+    pub const GRAVADOR_NAO_SUPORTADO: &str = "gravador_nao_suportado";
+    pub const COPIA_DIVERGENTE: &str = "copia_divergente";
 }
 
 use codigo::*;
@@ -243,6 +246,9 @@ const CATALOGO: &[Entrada] = &[
     e(RETRATO_DESATUALIZADO, Aviso, "Retrato desatualizado"),
     com_n(SELO_DESLIGADO, Aviso, "Selo desligado", "1 selo desligado", "{n} selos desligados"),
     com_n(SILHUETA_AUSENTE, Aviso, "Quadro sem silhueta", "1 quadro sem silhueta", "{n} quadros sem silhueta"),
+    // Fase 4 (P4.6): o detalhe é o rótulo do formato (`dvr::Formato::rotulo`) e a contagem de quadros
+    com_detalhe(GRAVADOR_NAO_SUPORTADO, Erro, "Formato de gravador não suportado"),
+    com_detalhe(COPIA_DIVERGENTE, Erro, "Cópia de trabalho diferente do original"),
 ];
 
 /// Rótulo do que `nao_suportado` recusa (o detalhe dos erros); palavra desconhecida = só a frase.
@@ -388,7 +394,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 96, "constantes de `codigo`");
+        assert_eq!(cods.len(), 98, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {

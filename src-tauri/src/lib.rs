@@ -180,6 +180,9 @@ pub fn run() {
             commands::edicao_commands::edicao_proxy_pedir,
             commands::video_proveniencia_commands::video_proveniencia,
             commands::video_proveniencia_commands::video_proveniencia_salvar,
+            // Fase 4 (P4.6): gravadores
+            commands::video_dvr_commands::video_dvr_conferir,
+            commands::video_dvr_commands::video_dvr_copia,
             // Fase 2 (contratos-fase2.md): rastreio, conferência das ocultações e IA
             commands::edicao_rastreio_commands::edicao_rastreio_ler,
             commands::edicao_rastreio_commands::edicao_rastreio_seguir,

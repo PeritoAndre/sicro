@@ -11,6 +11,7 @@ import type { ResumoProjeto } from "@domain/edicao";
 import { abrirEdicao, duplicarEdicao, excluirEdicao, fraseDoProblema, listarEdicoes, novaEdicao, resumoDaEdicao } from "@modules/edicao/central";
 import { separarErro } from "@modules/edicao/store/edicaoStore";
 import { confirmarExclusaoVideo } from "@modules/video/excluirVideo";
+import { EXT_GRAVADOR, registrarVideo } from "@modules/video/gravador";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { useShortcuts } from "@core/useShortcuts";
@@ -25,7 +26,7 @@ import audioImg from "@modules/video/assets/central/audio.webp";
 import edicaoImg from "@modules/video/assets/central/edicao.webp";
 import thumbStyles from "@components/Central/Central.module.css";
 
-const VIDEO_EXT = ["mp4", "mov", "mkv", "avi", "webm", "m4v"];
+const VIDEO_EXT = ["mp4", "mov", "mkv", "avi", "webm", "m4v", ...EXT_GRAVADOR];
 const AUDIO_EXT = ["opus", "mp3", "m4a", "wav", "amr", "aac", "ogg", "flac", "wma"];
 
 export function MidiaCentral() {
@@ -35,7 +36,6 @@ export function MidiaCentral() {
   const videos = useVideoStore((s) => s.list);
   const loadingVideos = useVideoStore((s) => s.isLoadingList);
   const loadList = useVideoStore((s) => s.loadList);
-  const registerMedia = useVideoStore((s) => s.registerMedia);
   const openMedia = useVideoStore((s) => s.openMedia);
   const deleteMedia = useVideoStore((s) => s.deleteMedia);
   const mostrarEdicao = useVideoStore((s) => s.mostrarEdicao);
@@ -147,7 +147,7 @@ export function MidiaCentral() {
       });
       if (typeof selected !== "string") return;
       setBusy(true);
-      const media = await registerMedia(workspacePath, selected);
+      const media = await registrarVideo(workspacePath, selected);
       await openMedia(workspacePath, media.id);
       mostrarEdicao(false);
       if (pathname !== "/video") navigate("/video");

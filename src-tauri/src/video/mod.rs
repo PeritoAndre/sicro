@@ -2,6 +2,7 @@
 //! é só visualização.
 
 pub mod clip;
+pub mod dvr;
 pub mod frame_export;
 pub mod measure;
 pub mod ort_env;

@@ -55,7 +55,15 @@ function derivacao(m: VideoMedia, lista: VideoMedia[]): Derivacao | null {
     /* sem detalhe */
   }
   const tipo: Derivacao["tipo"] =
-    j.kind === "clip" ? "trecho" : j.kind === "estabilizado" ? "estabilizado" : j.kind === "lente_video" ? "lente" : "outro";
+    j.kind === "clip"
+      ? "trecho"
+      : j.kind === "estabilizado"
+        ? "estabilizado"
+        : j.kind === "lente_video"
+          ? "lente"
+          : j.kind === "copia_dvr"
+            ? "copia_dvr"
+            : "outro";
   const bruto = j.ffmpeg_command ?? j.comando ?? j.comandos;
   const comando = typeof bruto === "string" ? bruto : Array.isArray(bruto) ? bruto.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" ") : "";
   let raiz = de;
@@ -64,7 +72,11 @@ function derivacao(m: VideoMedia, lista: VideoMedia[]): Derivacao | null {
     if (!x || x === raiz) break;
     raiz = x;
   }
-  return { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas: !(tipo === "trecho" && j.mode === "copy") };
+  // cópia de gravador (P4.6): mesma lista framemd5 do original; leva a data do relógio dele quando há
+  const sem_perdas = tipo === "copia_dvr" || (tipo === "trecho" && j.mode === "copy");
+  const d: Derivacao = { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas: !sem_perdas };
+  if (tipo === "copia_dvr" && typeof j.inicio_epoca_s === "number" && Number.isFinite(j.inicio_epoca_s)) d.inicio_epoca_s = j.inicio_epoca_s;
+  return d;
 }
 
 /** `MidiaRef` de um vídeo do caso. `info` (tabela, tamanho exibido) quando o backend já tem; `prov` = a proveniência
