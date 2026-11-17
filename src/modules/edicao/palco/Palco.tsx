@@ -32,7 +32,7 @@ import { cenaDoClipe, duracaoLocal, instanteDaAncora, instanteDaChave, midiaDoCl
 import { LADO_MINIMO, aDaGirada, aDaOrigem, alcaDaAncora, alcaDeLugar, alcaDoLugarFixo, alcaNaOrigem, alcasDaRegiao, alcasDeCaixa, alcasDePonto, proporcaoDaSaida } from "./alcas";
 import { bordaArrastada, entradaNoCursor, faixaDoClipe, marcaLivre, marcarBloqueado, meioDoQuadro, saidaNoCursor } from "./faixa";
 import { QuadroFiel, type Fiel } from "./quadroFiel";
-import { CamadaEdicao, type Modificadores } from "./camadaEdicao";
+import { CamadaEdicao, alcasComFerramenta, type Modificadores } from "./camadaEdicao";
 import { Transporte, type EstadoRender, type Fase } from "./Transporte";
 import { alvosDaMedida, atlasDe, garantirMidia, imagemDe, p50, pedirProxy, precisaDeProxy, previaDaMidia, proxyPedido, recursoDe, registrarBusca, spriteDe, urlDoCache, useRecursos } from "./recursos";
 import { camposPorQuadro, marcaForaDaOrigem, mudaAImagem, previaDoPalco, relogioDaOrigem, slotsDoQuadroDaFonte } from "./origem";
@@ -375,7 +375,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     const novas: Alca[] = [];
     let cont: Caixa | null = null;
     const e = v.efeitoSel?.efeito;
-    if (e && !v.ferramenta && !soLeituraRef.current) {
+    if (e && alcasComFerramenta(v.ferramenta, e.id) && !soLeituraRef.current) {
       if (e.tipo === "enquadramento" && v.modoOrigem) {
         const g = aDaGirada(c.efeitos, origem, canvasSaida);
         const r = e.regiao;

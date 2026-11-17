@@ -41,6 +41,12 @@ export function caixaComProporcao(a: Ponto, b: Ponto, proporcao: number | undefi
 
 const LADO_ALCA = 10;
 
+/** Com a ferramenta de rastreio do próprio efeito ligada (ela segue ligada depois de marcar e depois de o Seguir
+ *  perder o alvo), as alças continuam: arrastar ajusta a caixa; desenhar fora delas marca uma caixa nova. */
+export function alcasComFerramenta(f: PedidoMarcacao | null, efeito: string | null | undefined): boolean {
+  return !f || (!!f.rastreio && (f.tipo === "caixa" || f.tipo === "ponto") && f.efeito === efeito);
+}
+
 export function CamadaEdicao(p: Props) {
   const [rascunho, setRascunho] = useState<Caixa | null>(null);
   const local = (e: { clientX: number; clientY: number }, el: Element) => {
@@ -124,8 +130,7 @@ export function CamadaEdicao(p: Props) {
     <div className={`${styles.camada} ${p.ferramenta ? styles.marcando : ""}`} onPointerDown={noFundo} data-camada="">
       {p.contorno && <div className={styles.contorno} style={caixaNaTela(p.contorno)} />}
       {rascunho && <div className={styles.rascunho} style={caixaNaTela(rascunho)} data-rascunho="" />}
-      {!p.ferramenta &&
-        p.alcas.map((a) => {
+      {p.alcas.map((a) => {
           const q = paraTela(p.vista, p.img, a.em);
           return (
             <div
