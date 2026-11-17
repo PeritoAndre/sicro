@@ -3436,6 +3436,32 @@ mod fila_visivel {
         f.encerrar();
     }
 
+    /// Só o último clipe mudou: o primeiro bloco vem do cache e o segundo não; a fila não marca (não terminou "na
+    /// hora"). A mesma de novo: os dois do cache, marcada.
+    #[test]
+    fn parcial_nao_e_reaproveitada() {
+        let Some(caso) = ponta::caso("p44-parcial") else { return };
+        let (m, tab) = caso.midia("m1", &fontes::gerar(Fonte::Mp4).unwrap());
+        // treze clipes: doze no primeiro bloco (`blocos::MAX_ENTRADAS`), um no segundo
+        let clipe = |k: usize, de: usize| trecho(&format!("c{k}"), "m1", &tab, de, de + 10, 1.0, json!([]));
+        let a = ponta::projeto("Treze", true, vec![m.clone()], (0..13).map(|k| clipe(k, 10 * k)).collect(), json!({}));
+        let mut b = a.clone();
+        b["principal"][12] = clipe(12, 200);
+        let (f, _) = fila_real();
+        let ids = [&a, &b, &b].map(|d| f.enfileirar(pedido(&caso, d, "juri")).unwrap());
+        let s = ids.each_ref().map(|id| caso.saida(&ponta::id_da(&fim(&f, id))));
+        let do_cache = |s: &SaidaRegistrada| -> Vec<bool> {
+            let t: Value = serde_json::from_slice(&fs::read(paths::resolver_relativo(&caso.ws, s.tecnico_rel.as_deref().expect("tecnico"))).unwrap()).unwrap();
+            t["execucao"]["blocos"].as_array().unwrap().iter().map(|b| b["reaproveitado"].as_bool().unwrap()).collect()
+        };
+        assert_eq!(s.each_ref().map(do_cache), [vec![false, false], vec![true, false], vec![true, true]]);
+        assert_eq!(ids.each_ref().map(|id| tarefa(&f, id).reaproveitada), [false, false, true]);
+        let esperado: Vec<u32> = (0..120).chain(200..210).collect();
+        assert_eq!(quadros(&caso, &s[1]), esperado, "o bloco do cache entra com os quadros certos");
+        assert_eq!(quadros(&caso, &s[2]), esperado);
+        f.encerrar();
+    }
+
     /// Fechar o app no meio de uma exportação: ela é cancelada (não fica saída nem saída parcial) e a fila do processo
     /// novo começa vazia, sem retomar nada; a saída feita antes continua listada.
     #[test]

@@ -270,4 +270,14 @@ describe("Fila visível (P4.4)", () => {
     await esperar(() => useToastStore.getState().clear());
     semFrase();
   });
+
+  it("sem a pasta de quando foi pedida e de outro caso que o da Edição aberta: aviso sem Abrir pasta", async () => {
+    await montar(<Fila />);
+    await receber([tarefa("1", rodando(1, 30), { caso: "c2" }), tarefa("2", rodando(1, 30))]);
+    await receber([tarefa("1", { tipo: "concluida", saida_id: "s1" }, { caso: "c2" }), tarefa("2", { tipo: "concluida", saida_id: "s2" })]);
+    expect(toasts().map((t) => [t.message, t.acao?.rotulo ?? null])).toEqual([
+      ["Júri · Pronto", null],
+      ["Júri · Pronto", "Abrir pasta"],
+    ]);
+  });
 });

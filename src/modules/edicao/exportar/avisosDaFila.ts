@@ -16,13 +16,15 @@ const EM_CURSO = new Set<Tarefa["estado"]["tipo"]>(["na_fila", "preparando", "ro
 /** Com botão: tempo de alcançar. */
 const DURACAO_MS = 8000;
 
-/** Pasta do caso da tarefa: a de quando foi pedida; senão a do caso aberto (se for o dela). */
+/** Pasta do caso da tarefa: a de quando foi pedida; senão a do caso aberto ou da Edição aberta, se for o dela. */
 function wsDe(t: Tarefa): string | null {
   const w = wsDaTarefa.get(t.id);
   if (w) return w;
   const ws = useWorkspaceStore.getState();
   if (ws.activeOccurrence?.id === t.caso && ws.activeWorkspacePath) return ws.activeWorkspacePath;
-  return useEdicaoStore.getState().ws;
+  // o cache da Edição termina no id do caso: outro caso daria um "Abrir pasta" que não abre nada
+  const e = useEdicaoStore.getState();
+  return e.ws && e.raizCache?.split(/[\\/]/).filter(Boolean).pop() === t.caso ? e.ws : null;
 }
 
 /** "Abrir pasta" da saída: o arquivo selecionado na pasta dele (como em Saídas). */

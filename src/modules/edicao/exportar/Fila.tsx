@@ -98,6 +98,15 @@ export function Fila() {
   }, [aberta, mostrar]);
   const lista = tarefasDaFila(tarefas, caso);
   const rodando = lista.filter((t) => EM_CURSO.has(t.estado.tipo)).length;
+  // ordem pedida: as terminadas ficam em cima e empurram a que roda (ou a próxima) para baixo da dobra do painel
+  const primeira = lista.find((t) => EM_CURSO.has(t.estado.tipo))?.id ?? null;
+  const painel = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const p = painel.current;
+    const li = primeira ? p?.querySelector<HTMLElement>(`[data-tarefa="${primeira}"]`) : null;
+    if (!p || !li) return;
+    if (li.offsetTop < p.scrollTop || li.offsetTop + li.offsetHeight > p.scrollTop + p.clientHeight) p.scrollTop = Math.max(0, li.offsetTop - 8);
+  }, [aberta, primeira]);
   return (
     <div className={styles.filaRaiz} ref={raiz}>
       <Button
@@ -112,7 +121,7 @@ export function Fila() {
         {rodando > 0 && <span className={styles.badge}>{rodando}</span>}
       </Button>
       {aberta && (
-        <div className={styles.painel} role="dialog" aria-label="Fila">
+        <div className={styles.painel} role="dialog" aria-label="Fila" ref={painel}>
           {lista.length > 0 && (
             <ul className={styles.tarefas} data-tarefas>
               {lista.map((t) => (
