@@ -152,6 +152,7 @@ pub(crate) mod testes {
             origem,
             confirmacao: None,
             ancoras_do_programa: Vec::new(),
+            corridas_do_programa: Vec::new(),
         }
     }
     fn tres() -> Vec<Chave<Caixa>> {

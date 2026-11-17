@@ -1282,6 +1282,7 @@ pub(crate) fn rastreio_de(p: &Pessoa, rastreio_id: &str, midia_id: &str, denso: 
         origem: OrigemRastreio::Pessoas { pessoa_id: p.id.clone(), estado, copiado_em: copiado_em.to_string() },
         confirmacao,
         ancoras_do_programa: Vec::new(),
+        corridas_do_programa: Vec::new(),
     }
 }
 

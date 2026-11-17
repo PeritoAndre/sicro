@@ -1347,6 +1347,11 @@ pub struct Rastreio {
     /// `t` das âncoras escolhidas pelo "Simplificar" e não mexidas pelo perito desde então.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub ancoras_do_programa: Vec<f64>,
+    /// Corridas (como em `ArquivoDenso.corridas`; `null` = sem registro) dos densos que o "Simplificar" trocou por
+    /// essas âncoras: o registro do programa fica no projeto, que o denso sai como órfão (`rastreio::arquivo`).
+    // CONTRATO: acréscimo (17/11, defeito do "Simplificar" que apagava o programa usado); espelho em `types/edicao.ts`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corridas_do_programa: Vec<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

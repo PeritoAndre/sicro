@@ -663,6 +663,8 @@ impl Motor for MotorReal {
         let prep = executar::preparar_com(&pedido.ws, &p, &pedido.cache, final_, final_.then_some(cancelar))?;
         let ctx = prep.contexto();
         if final_ {
+            // o projeto como a predefinição o codifica (taxa e tamanho do WhatsApp): a ciência é a desse
+            let p = super::motor::saida::projeto_da_exportacao(&p, &pedido.alvo, &ctx);
             let linha = super::tempo::resolver(&p, &ctx);
             let problemas = super::validar::validar(&p, &linha, &ctx, Some(&pedido.alvo));
             let faltam = super::validar::sem_ciencia(&problemas, &pedido.ciencias);
@@ -731,9 +733,7 @@ pub(crate) fn compilar_alvo_com(
     serve: &dyn Fn(&Capacidades, u32, u32, super::modelo::Racional) -> bool,
 ) -> Result<Plano> {
     let ctx = prep.contexto();
-    let reduz = matches!(alvo, Alvo::Final { exportacao } if matches!(exportacao.predefinicao, Predefinicao::Whatsapp | Predefinicao::Personalizada));
-    let reduzido = if reduz { super::motor::saida::projeto_do_alvo(p, alvo, super::tempo::resolver(p, &ctx).total_q) } else { None };
-    let p = reduzido.as_ref().unwrap_or(p);
+    let p = &*super::motor::saida::projeto_da_exportacao(p, alvo, &ctx);
     let mut alvo = alvo.clone();
     if cpu {
         if let Alvo::Final { exportacao } = &mut alvo {

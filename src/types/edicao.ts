@@ -301,6 +301,9 @@ export interface Rastreio {
         | { tipo: "deteccao"; classe: "rosto" | "placa" | "cabeca" | "pessoa" | "veiculo" };
   confirmacao: null | { por: string; em: string; denso_sha256: string | null; de_s: Seg; ate_s: Seg };   // vale só para esse conteúdo e intervalo
   ancoras_do_programa?: Seg[];           // t das âncoras do "Simplificar" que o perito não mexeu
+  // CONTRATO: acréscimo (17/11). Corridas dos densos que o "Simplificar" trocou por essas âncoras (null = sem registro,
+  // como em ArquivoDenso.corridas): o registro do programa usado fica no projeto.
+  corridas_do_programa?: Corrida[];
 }
 
 // ---- marcadores e sincronias ----
@@ -532,7 +535,8 @@ export const EVENTO_RASTREIO = "edicao:rastreio";
 /** `edicao_rastreio_editar`: faixas por pts do quadro (`ate_pts` null = até o fim). */
 export type OpRastreio = { tipo: "apagar_faixa"; de_pts: Pts; ate_pts: Pts | null } | { tipo: "simplificar"; tolerancia: number; suavizar_s?: number };
 /** O front grava `ancoras` quando vem e `denso` sempre (null = rastreio sem denso). */
-export interface Editado { ancoras: Chave<Caixa>[] | null; denso: Denso | null }
+export interface Editado { ancoras: Chave<Caixa>[] | null; denso: Denso | null;
+                          corridas_do_programa?: Corrida[] }   // CONTRATO: acréscimo (17/11); ausente = fica como está
 /** "Conferir ocultações" (conferencia.rs, P2.6): segundos do arquivo exportado, `[de_s, ate_s)`. */
 export type ComoFraco = "incerto" | "interpolado" | "ausencia"; // "ausencia": sem região, em ausência aceita
 export interface FaixaFraca { de_s: Seg; ate_s: Seg; como: ComoFraco }

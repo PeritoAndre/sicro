@@ -172,7 +172,14 @@ pub(crate) fn analisar(ws: &Path, projeto: &Value, app_cache: &Path) -> Result<A
     };
     let cache = cache_do_caso(app_cache, ws)?;
     let prep = executar::preparar(ws, &p, &cache, false)?;
-    let mut a = validar::analisar(&p, &prep.contexto(), None);
+    let ctx = prep.contexto();
+    let mut a = validar::analisar(&p, &ctx, None);
+    // WhatsApp e altura máxima: os problemas do projeto como a predefinição o codifica (taxa, tamanho), os mesmos
+    // que a fila cobra; a linha do tempo fica a do projeto (a da tela)
+    let alvo = crate::edicao::motor::Alvo::Final { exportacao: p.saida.exportacao.clone() };
+    if let std::borrow::Cow::Owned(r) = crate::edicao::motor::saida::projeto_da_exportacao(&p, &alvo, &ctx) {
+        a.problemas = validar::analisar(&r, &ctx, None).problemas;
+    }
     // retratos de análise que mudaram depois de gravados no projeto (P1.3)
     a.problemas.extend(medidas::desatualizados(ws, &p));
     // rastreios "Da análise" cuja trilha mudou depois da cópia (P2.5, contratos-fase2 (c))

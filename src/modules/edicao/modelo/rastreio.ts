@@ -139,7 +139,11 @@ export function podarAncorasDoPrograma(
       const fica = podas.get(r.id);
       if (!fica) continue;
       if (fica.length > 0) r.ancoras_do_programa = fica;
-      else delete r.ancoras_do_programa;
+      else {
+        // sem âncora do programa, o registro das corridas dela não diz mais nada
+        delete r.ancoras_do_programa;
+        delete r.corridas_do_programa;
+      }
     }
   });
 }

@@ -6,7 +6,7 @@ use super::plano::{Canvas, Plano};
 use super::Alvo;
 use crate::edicao::ffmpeg::args;
 use crate::edicao::ffmpeg::sonda::{Capacidades, Gpu};
-use crate::edicao::modelo::{Codec, Conteiner, EscolhaCodificador, Exportacao, Personalizada, Predefinicao, ProjetoEdicao};
+use crate::edicao::modelo::{Codec, Conteiner, EscolhaCodificador, Exportacao, Personalizada, Predefinicao, ProjetoEdicao, Racional};
 use crate::error::{Result, SicroError};
 
 /// Maior lado que o H.264 do NVENC aceita (§5.6).
@@ -83,6 +83,8 @@ const WHATSAPP_KBPS_MIN: u32 = 100;
 const WHATSAPP_AUDIO_KBPS: u32 = 128;
 /// Menor lado que a validação aceita (§2.3 `saida`).
 const LADO_MIN: u32 = 64;
+/// Maior taxa do WhatsApp (§5.7: "até 1280×720 e 30 qps").
+const WHATSAPP_FPS_MAX: i128 = 30;
 
 /// Teto de taxa do vídeo do WhatsApp para a duração: `min(3500, 64·8·1024·0,97/duração − 128)` kb/s.
 pub(crate) fn teto_whatsapp_kbps(duracao_s: f64) -> u32 {
@@ -120,19 +122,50 @@ pub(crate) fn tamanho(exportacao: &Exportacao, w: u32, h: u32, duracao_s: f64) -
     }
 }
 
+/// Taxa em que a predefinição codifica um projeto de taxa `fps`. WhatsApp: a do projeto dividida pelo menor inteiro
+/// k que a põe em até 30 qps, k = ⌈fps / 30⌉ (60 → 30, 59,94 → 29,97, 50 → 25, 48 → 24, 120 → 30); até 30, a mesma.
+/// Divisor inteiro: um slot da saída a cada k do projeto, sem cadência irregular.
+pub(crate) fn taxa(exportacao: &Exportacao, fps: Racional) -> Racional {
+    let (n, d) = (fps.num as i128, fps.den as i128);
+    if exportacao.predefinicao != Predefinicao::Whatsapp || n <= 0 || d <= 0 || n <= WHATSAPP_FPS_MAX * d {
+        return fps;
+    }
+    let k = (n + WHATSAPP_FPS_MAX * d - 1) / (WHATSAPP_FPS_MAX * d);
+    let (mut a, mut b) = (n, d * k);
+    while b != 0 {
+        (a, b) = (b, a % b);
+    }
+    match (i64::try_from(n / a), i64::try_from(d * k / a)) {
+        (Ok(num), Ok(den)) => Racional { num, den },
+        _ => fps,
+    }
+}
+
 /// O projeto como a predefinição o codifica: canvas reduzido (as medidas do modelo são frações do canvas, então o
-/// desenho acompanha). None = o próprio. `total_q` = slots do programa (a duração decide o teto do WhatsApp).
+/// desenho acompanha) e, no WhatsApp, a taxa de `taxa` (a linha do tempo, o mapa de quadros, a validação e o
+/// relatório saem dela). None = o próprio. `total_q` = slots do programa (a duração decide o teto do WhatsApp).
 pub(crate) fn projeto_do_alvo(p: &ProjetoEdicao, alvo: &Alvo, total_q: u64) -> Option<ProjetoEdicao> {
     let Alvo::Final { exportacao } = alvo else { return None };
     let fps = p.saida.fps;
     let duracao_s = total_q as f64 * fps.den.max(1) as f64 / fps.num.max(1) as f64;
     let (w, h) = tamanho(exportacao, p.saida.largura, p.saida.altura, duracao_s);
-    if (w, h) == (p.saida.largura, p.saida.altura) {
+    let fps = taxa(exportacao, p.saida.fps);
+    if (w, h, fps) == (p.saida.largura, p.saida.altura, p.saida.fps) {
         return None;
     }
     let mut r = p.clone();
-    (r.saida.largura, r.saida.altura) = (w, h);
+    (r.saida.largura, r.saida.altura, r.saida.fps) = (w, h, fps);
     Some(r)
+}
+
+/// O projeto que a exportação codifica (`projeto_do_alvo` no WhatsApp e na personalizada; o próprio no resto): quem
+/// valida e quem compila a exportação olham este.
+pub(crate) fn projeto_da_exportacao<'a>(p: &'a ProjetoEdicao, alvo: &Alvo, ctx: &super::Contexto) -> std::borrow::Cow<'a, ProjetoEdicao> {
+    let reduz = matches!(alvo, Alvo::Final { exportacao } if matches!(exportacao.predefinicao, Predefinicao::Whatsapp | Predefinicao::Personalizada));
+    match reduz.then(|| projeto_do_alvo(p, alvo, crate::edicao::tempo::resolver(p, ctx).total_q)).flatten() {
+        Some(r) => std::borrow::Cow::Owned(r),
+        None => std::borrow::Cow::Borrowed(p),
+    }
 }
 
 /// Depois de compilar: o teto de taxa do WhatsApp entra nos blocos (`-maxrate`/`-bufsize`, pela duração do programa)
@@ -595,6 +628,70 @@ mod testes {
         let w = compilar_alvo_com(&p, &prep, &alvo("whatsapp", "cpu"), false, &nao).unwrap();
         assert_eq!((w.canvas.w, w.canvas.h, w.total_q), (854, 480, 18000));
         assert!(w.blocos.iter().all(|b| b.codificador.join(" ").contains("-maxrate 719k -bufsize 1438k")));
+    }
+
+    /// Defeito de 17/11: o WhatsApp saía na taxa do projeto (60 qps no caso real); o §5.7 manda até 30. A regra
+    /// (`taxa`) e a fila inteira até o PDF, nos dois binários: projeto a 59,94 com a gravação de 59,94 sai a 29,97
+    /// (lido do arquivo), cada slot com o quadro de origem do mapa (um a cada dois: metade descartada, com ciência
+    /// pedida na análise), e o `tecnico.json` e o PDF dizem 29,97 ("Ritmo" e anexo D); projeto a 60 com gravação de
+    /// 30 sai a 30, cada quadro uma vez.
+    #[test]
+    fn whatsapp_sai_a_no_maximo_30_qps() {
+        use crate::edicao::pacote::{self, ponta};
+        use crate::edicao::testes::aceite::trecho;
+        let r = |num: i64, den: i64| Racional { num, den };
+        let w = exportacao("whatsapp", "cpu");
+        for (de, para) in [((60, 1), (30, 1)), ((60000, 1001), (30000, 1001)), ((50, 1), (25, 1)), ((48, 1), (24, 1)), ((120, 1), (30, 1)), ((90, 1), (30, 1)), ((100, 1), (25, 1)), ((120, 2), (30, 1)), ((30, 1), (30, 1)), ((30000, 1001), (30000, 1001)), ((25, 1), (25, 1)), ((24000, 1001), (24000, 1001))] {
+            assert_eq!(taxa(&w, r(de.0, de.1)), r(para.0, para.1), "{de:?}");
+        }
+        for nome in ["juri", "preservacao", "personalizada"] {
+            assert_eq!(taxa(&exportacao(nome, "cpu"), r(60, 1)), r(60, 1), "{nome}");
+        }
+        let Some(caso) = ponta::caso("whatsapp-30") else { return };
+        let cap = caso.cap.clone();
+        // (gravação, taxa do projeto, taxa da saída, quadros da gravação por slot)
+        for (fonte, fps, saida, passo) in [(Fonte::Ts5994, (60000, 1001), (30000, 1001), 2usize), (Fonte::Mp4, (60, 1), (30, 1), 1)] {
+            let onde = format!("{} {fonte:?}", cap.versao);
+            let numeros = apoio::medida(&cap, fonte).numeros.clone();
+            let (m, tab) = caso.midia("m1", &fontes::gerar(fonte).unwrap());
+            let (j_in, n) = (30usize, 30usize);
+            let mut doc = ponta::projeto("Zap", false, vec![m], vec![trecho("c1", "m1", &tab, j_in, j_in + n * passo, 1.0, serde_json::json!([]))], serde_json::json!({}));
+            let exp = ponta::exportacao("whatsapp", "cpu", serde_json::json!({ "originais": false }), "a3");
+            (doc["saida"]["fps"], doc["saida"]["exportacao"]) = (serde_json::json!({ "num": fps.0, "den": fps.1 }), exp.clone());
+            // a análise da tela e a fila cobram a ciência dos descartados da taxa de saída (60 com gravação de 30: nada)
+            let a = crate::commands::edicao_commands::analisar(&caso.ws, &doc, &caso.app).unwrap();
+            let descartados = a.problemas.iter().find(|x| x.codigo == "quadros_descartados").map(|x| x.n);
+            assert_eq!(descartados, (passo > 1).then_some(Some((n * (passo - 1)) as u64)), "{onde}: {:?}", a.problemas);
+            assert_eq!(a.linha.fps, r(fps.0, fps.1), "{onde}: a linha da tela segue a do projeto");
+            if passo > 1 {
+                let falhou = format!("{:?}", caso.enfileirar(&doc, exp.clone(), &[]));
+                assert!(falhou.contains("ciencia") && falhou.contains("quadros_descartados"), "{onde}: {falhou}");
+            }
+            let (fim, ciencias) = caso.exportar(&doc, exp);
+            assert_eq!(ciencias.contains(&"quadros_descartados".to_string()), passo > 1, "{onde}: {ciencias:?}");
+            let s = caso.saida(&ponta::id_da(&fim));
+            let mp4 = caso.ws.join(&s.arquivo);
+            // a taxa e os quadros do arquivo
+            let o = crate::tools::command(&cap.ffprobe).args(["-v", "error", "-select_streams", "v", "-show_entries", "stream=r_frame_rate,avg_frame_rate", "-of", "json"]).arg(&mp4).output().unwrap();
+            let v: serde_json::Value = serde_json::from_slice(&o.stdout).unwrap();
+            let taxa_lida = format!("{}/{}", saida.0, saida.1);
+            assert_eq!((v["streams"][0]["r_frame_rate"].as_str(), v["streams"][0]["avg_frame_rate"].as_str()), (Some(taxa_lida.as_str()), Some(taxa_lida.as_str())), "{onde}: {v}");
+            let esperados: Vec<u32> = (0..n).map(|k| numeros[j_in + passo * k]).collect();
+            assert_eq!(medir::quadros_de_origem(&cap, &mp4).unwrap(), esperados, "{onde}: quadro de origem de cada slot");
+            // o `tecnico.json`: a taxa da saída e o mapa (lidos, repetidos, descartados)
+            let t: serde_json::Value = serde_json::from_slice(&std::fs::read(caso.ws.join(s.tecnico_rel.as_ref().unwrap())).unwrap()).unwrap();
+            assert_eq!(t["feito"]["saida"]["fps"], serde_json::json!({ "num": saida.0, "den": saida.1 }), "{onde}");
+            let origem = &t["feito"]["roteiro"][0]["origem"];
+            assert_eq!((origem["lidos"].as_u64(), origem["repetidos"].as_u64(), origem["descartados"].as_u64()), (Some((n * passo) as u64), Some(0), Some((n * (passo - 1)) as u64)), "{onde}: {origem}");
+            // o PDF: "Ritmo" do vídeo entregue e a taxa no anexo D
+            let pdf = ponta::texto_do_pdf(&caso.pasta(&s).join(pacote::PDF)).unwrap_or_else(|| panic!("{onde}: sem pdftotext"));
+            if passo > 1 {
+                // a gravação aparece pelo passo medido (59,92)
+                assert!(pdf.contains("Ritmo29,97imagensporsegundo") && pdf.contains("→29,97") && !pdf.contains("→59,94"), "{onde}: o PDF não diz 29,97");
+            } else {
+                assert!(pdf.contains("Ritmo30imagensporsegundo") && !pdf.contains("→60"), "{onde}: o PDF não diz 30");
+            }
+        }
     }
 
     fn sondar(cap: &Capacidades, arquivo: &Path) -> serde_json::Value {

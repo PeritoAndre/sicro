@@ -3,7 +3,8 @@
 //! front (`alterar()`). Dono: P2.2.
 //!
 //! Linhas em ordem de pts, sem pts repetido. Buraco reencontrado dentro de uma corrida = linha ausente (B24).
-//! "Simplificar" troca o denso por âncoras (o rastreio fica sem denso).
+//! "Simplificar" troca o denso por âncoras (o rastreio fica sem denso); as corridas dele ficam no projeto
+//! (`Rastreio.corridas_do_programa`, regra em `corridas_do_programa`): o denso vira órfão e sai ao fechar.
 //!
 //! Quem contribui para cada linha, sem campo novo no formato: toda corrida substitui a faixa inteira que percorreu,
 //! então a linha que existe foi escrita pela corrida mais nova de `corridas` cuja faixa cobre o pts (a ESCRITORA). A
@@ -62,6 +63,10 @@ pub enum OpRastreio {
 pub struct Editado {
     pub ancoras: Option<Vec<Chave<Caixa>>>,
     pub denso: Option<Denso>,
+    /// `Rastreio.corridas_do_programa` novo (vem com `ancoras`; vazio = nenhuma); None = fica como está.
+    // CONTRATO: acréscimo (17/11, o "Simplificar" apagava o programa usado); espelho em `src/types/edicao.ts`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub corridas_do_programa: Option<Vec<serde_json::Value>>,
 }
 
 fn invalido(detalhe: impl std::fmt::Display) -> SicroError {
@@ -513,6 +518,7 @@ pub fn editar(ws: &Path, cache: &Path, projeto: &serde_json::Value, rastreio_id:
     let (_, fonte) = executar::preparar_uma(ws, &p, midia, cache, &std::sync::atomic::AtomicBool::new(false))?;
     let tb = fonte.quadros.tb;
     let (ancoras, novo) = aplicar_com(r, denso.as_ref(), op, tb, Some(&fonte.quadros))?;
+    let corridas_do_programa = corridas_do_programa(r, denso.as_ref(), op, ancoras.as_deref(), tb);
     let denso = match novo {
         Some(mut d) => {
             d.rastreio = r.id.clone();
@@ -521,7 +527,55 @@ pub fn editar(ws: &Path, cache: &Path, projeto: &serde_json::Value, rastreio_id:
         }
         None => None,
     };
-    Ok(Editado { ancoras, denso })
+    Ok(Editado { ancoras, denso, corridas_do_programa })
+}
+
+/// Até onde da âncora do programa vão as amostras que a média do "Simplificar" mistura: metade da maior janela
+/// (`suavizar_s` ≤ 10 s).
+const ALCANCE_S: f64 = 5.0;
+
+/// `Rastreio.corridas_do_programa` depois de `op`, que deixou as âncoras `novas` (None = âncoras sem mudança: fica).
+/// O "Simplificar" com denso acrescenta as corridas dele, todas (`corridas[]` = as que deram alguma linha; o denso sem
+/// nenhuma dá `null`); âncora do programa de antes sem registro vira `null`. Fica a corrida cuja faixa (mais
+/// `ALCANCE_S`) cobre o instante de alguma âncora do programa que sobrou: TODAS as que cobrem, não só a última (a
+/// regra de `juri::corridas_no_video`), que a âncora de um "Simplificar" anterior continua por cima da faixa de uma
+/// corrida mais nova: nunca IA a menos. `null` fica enquanto sobrar âncora do programa.
+pub(crate) fn corridas_do_programa(r: &Rastreio, denso: Option<&ArquivoDenso>, op: &OpRastreio, novas: Option<&[Chave<Caixa>]>, tb: Racional) -> Option<Vec<serde_json::Value>> {
+    let novas = novas?;
+    // a mesma tolerância do motor (`motor::do_programa`)
+    let do_programa = |t: f64| r.ancoras_do_programa.iter().any(|x| (x - t).abs() <= 1e-6);
+    let programa: Vec<&Chave<Caixa>> = match op {
+        // o espelho de `ancorasDoSimplificar` (front): as devolvidas que não são âncora do perito (mesmo `t` e caixa)
+        OpRastreio::Simplificar { .. } => {
+            let perito: Vec<&Chave<Caixa>> = r.ancoras.iter().filter(|k| !do_programa(k.t)).collect();
+            novas.iter().filter(|k| !perito.iter().any(|p| p.t == k.t && p.v == k.v)).collect()
+        }
+        OpRastreio::ApagarFaixa { .. } => novas.iter().filter(|k| do_programa(k.t)).collect(),
+    };
+    let mut lista = r.corridas_do_programa.clone();
+    if lista.is_empty() && r.ancoras.iter().any(|k| do_programa(k.t)) {
+        lista.push(serde_json::Value::Null);
+    }
+    if let (OpRastreio::Simplificar { .. }, Some(d)) = (op, denso) {
+        if d.corridas.is_empty() {
+            lista.push(serde_json::Value::Null);
+        }
+        lista.extend(d.corridas.iter().cloned());
+    }
+    let pts = |k: &Chave<Caixa>| k.pts.unwrap_or_else(|| (k.t * tb.den as f64 / tb.num as f64).round() as i64);
+    let instantes: Vec<i64> = programa.iter().map(|k| pts(k)).collect();
+    let alcance = (ALCANCE_S * tb.den as f64 / tb.num as f64).ceil() as i64;
+    let mut fica: Vec<serde_json::Value> = Vec::new();
+    for c in lista {
+        let cobre = match serde_json::from_value::<Corrida>(c.clone()) {
+            Ok(x) => instantes.iter().any(|&p| p >= x.de_pts.min(x.ate_pts).saturating_sub(alcance) && p <= x.de_pts.max(x.ate_pts).saturating_add(alcance)),
+            Err(_) => !instantes.is_empty(),
+        };
+        if cobre && !fica.contains(&c) {
+            fica.push(c);
+        }
+    }
+    Some(fica)
 }
 
 /// Trechos contínuos das linhas. Com a tabela do decodificador que tem todos os pts do denso: duas linhas seguidas são
@@ -1357,6 +1411,82 @@ pub(crate) mod testes {
         // tabela que não tem os pts do denso (outro espaço): cai na regra do passo mediano
         let outra = tab(&mut (0..=70));
         assert_eq!(aplicar_com(&r, Some(&d), &op, TB, Some(&outra)).unwrap().0.unwrap().len(), sem.len());
+    }
+
+    /// O rastreio como a tela grava o "Simplificar" de `d` (`ancorasDoSimplificar` e o registro das corridas).
+    fn simplificado(r: &Rastreio, d: Option<&ArquivoDenso>, op: &OpRastreio) -> Rastreio {
+        let anc = aplicar(r, d, op, TB).unwrap().0.unwrap();
+        let reg = corridas_do_programa(r, d, op, Some(&anc), TB).unwrap();
+        let perito: Vec<&Chave<Caixa>> = r.ancoras.iter().filter(|k| !r.ancoras_do_programa.contains(&k.t)).collect();
+        let mut s = r.clone();
+        s.ancoras_do_programa = anc.iter().filter(|k| !perito.iter().any(|p| p.t == k.t && p.v == k.v)).map(|k| k.t).collect();
+        (s.ancoras, s.denso, s.corridas_do_programa) = (anc, None, reg);
+        s
+    }
+
+    fn anda(k: i64) -> Option<f64> {
+        Some(0.1 + k as f64 * 0.0005)
+    }
+
+    /// Defeito de 17/11 (caso PINHO, "sem registro do programa usado: 62"): o "Simplificar" trocava o denso por âncoras
+    /// e o registro das corridas sumia com ele. Agora as corridas do denso simplificado (todas) ficam no rastreio; o
+    /// "Simplificar" de novo sem denso não perde nenhuma; "Apagar daqui em diante" tira só a corrida sem âncora do
+    /// programa a até 5 s da faixa dela; apagar tudo zera; faixa sem âncora não mexe no registro (None).
+    #[test]
+    fn simplificar_guarda_as_corridas_do_denso() {
+        // A (VitTrack) nos quadros 0..=100 e, depois de um buraco, B (mancha) nos 400..=900
+        let mut ra = res(Sentido::Frente, 0, 0, 100, &(0..=100).map(|k| (k, anda(k))).collect::<Vec<_>>());
+        (ra.corrida.motor.motor, ra.corrida.motor.modelo.nome) = (MotorRastreio::Vittrack, "VitTrack".into());
+        let rb = res(Sentido::Frente, 400, 400, 900, &(400..=900).map(|k| (k, anda(k))).collect::<Vec<_>>());
+        let d = com_cabecalho(juntar(Some(&com_cabecalho(juntar(None, &ra).unwrap())), &rb).unwrap());
+        assert_eq!(d.corridas.len(), 2);
+        let perito = rastreio(vec![ch(0, Caixa { x: 0.1, y: 0.25, w: 0.1, h: 0.2 }, Interp::Linear)], OrigemRastreio::Assistido);
+        let op = OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(0.5) };
+        let r = simplificado(&perito, Some(&d), &op);
+        assert!(r.ancoras_do_programa.len() > 3);
+        assert_eq!(r.corridas_do_programa, d.corridas, "o registro é o do denso, corrida a corrida");
+        // de novo, sem denso: as duas ficam
+        assert_eq!(simplificado(&r, None, &op).corridas_do_programa, d.corridas);
+        let apagar = |de: i64| {
+            let op = OpRastreio::ApagarFaixa { de_pts: 512 * de, ate_pts: None };
+            corridas_do_programa(&r, None, &op, aplicar(&r, None, &op, TB).unwrap().0.as_deref(), TB)
+        };
+        // do 500: B ainda tem âncora do programa (400..499)
+        assert_eq!(apagar(500), Some(d.corridas.clone()));
+        // do 350: a âncora do programa mais perto de B é a do 100, 10 s antes dele: B sai, A fica
+        assert_eq!(apagar(350), Some(vec![d.corridas[0].clone()]));
+        assert_eq!(apagar(0), Some(vec![]));
+        assert_eq!(apagar(2000), None, "nenhuma âncora sai: o registro fica como está");
+    }
+
+    /// O registro nunca perde programa (nunca IA a menos): a âncora de um "Simplificar" anterior que ficou por cima da
+    /// faixa de uma corrida mais nova mantém a corrida dela (a regra "a última corrida que cobre o instante" a tirava);
+    /// âncora do programa simplificada antes do registro (projeto de antes de 17/11) vira `null`, ao lado das corridas
+    /// novas; denso sem corrida registrada (Fase 0) dá `null`.
+    #[test]
+    fn registro_do_simplificar_nunca_perde_programa() {
+        let op = OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: Some(0.5) };
+        let perito = rastreio(vec![ch(0, Caixa { x: 0.1, y: 0.25, w: 0.1, h: 0.2 }, Interp::Linear)], OrigemRastreio::Assistido);
+        // primeira geração: A (VitTrack) de 0 a 300
+        let mut ra = res(Sentido::Frente, 0, 0, 300, &(0..=300).map(|k| (k, anda(k))).collect::<Vec<_>>());
+        (ra.corrida.motor.motor, ra.corrida.motor.modelo.nome) = (MotorRastreio::Vittrack, "VitTrack".into());
+        let da = com_cabecalho(juntar(None, &ra).unwrap());
+        let r1 = simplificado(&perito, Some(&da), &op);
+        assert_eq!(r1.corridas_do_programa, da.corridas);
+        // segunda geração: B (mancha) segue de novo de 0 a 300; as âncoras de A seguem valendo por cima do denso
+        let rb = res(Sentido::Frente, 0, 0, 300, &(0..=300).map(|k| (k, anda(k).map(|x| x + 0.001))).collect::<Vec<_>>());
+        let db = com_cabecalho(juntar(None, &rb).unwrap());
+        let r2 = simplificado(&r1, Some(&db), &op);
+        assert_eq!(r2.corridas_do_programa, [da.corridas.clone(), db.corridas.clone()].concat(), "A continua: as âncoras dela estão no vídeo");
+        // projeto simplificado antes do registro: as âncoras do programa sem corrida viram `null`
+        let mut velho = r1.clone();
+        velho.corridas_do_programa.clear();
+        assert_eq!(simplificado(&velho, Some(&db), &op).corridas_do_programa, [vec![serde_json::Value::Null], db.corridas.clone()].concat());
+        assert_eq!(simplificado(&velho, None, &op).corridas_do_programa, vec![serde_json::Value::Null]);
+        // denso da Fase 0 (sem `corridas`): `null`
+        let mut fase0 = da.clone();
+        (fase0.esquema, fase0.corridas) = (1, vec![]);
+        assert_eq!(simplificado(&perito, Some(&fase0), &op).corridas_do_programa, vec![serde_json::Value::Null]);
     }
 
     /// Denso imutável com o histórico da tela: cada corrida e cada edição dão um arquivo novo; desfazer e refazer só

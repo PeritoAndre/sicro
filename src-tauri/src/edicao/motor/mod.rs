@@ -732,6 +732,12 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             Some(d) => ctx.rastreios.denso(&r.id, &d.sha256)?.corridas.clone(),
             None => Vec::new(),
         };
+        // âncora do programa sem registro (simplificada antes de `corridas_do_programa`): `null`, corrida ilegível
+        let corridas_do_programa = match (r.ancoras.iter().any(|k| do_programa(r, k.t)), r.corridas_do_programa.is_empty()) {
+            (false, _) => Vec::new(),
+            (true, true) => vec![serde_json::Value::Null],
+            (true, false) => r.corridas_do_programa.clone(),
+        };
         rastreios.push(ProvRastreio {
             id: r.id.clone(),
             origem: r.origem.clone(),
@@ -739,6 +745,7 @@ fn proveniencia(p: &ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto, alvo:
             denso_sha256: r.denso.as_ref().map(|d| d.sha256.clone()),
             silhuetas_sha256: r.silhuetas.as_ref().map(|s| s.sha256.clone()),
             corridas,
+            corridas_do_programa,
             confirmacao: r.confirmacao.clone(),
             ausencias: r.ausencias.clone(),
         });
@@ -864,6 +871,41 @@ mod testes {
         p2.rastreios[0].ancoras_do_programa.clear();
         let q = compilar(&cap, &apoio::fonte(tab.clone(), (320, 180)), &p2, &leitor, &alvo_final("cpu")).unwrap().proveniencia.ocultacoes[0].quadros;
         assert_eq!((q.ancora, q.ancora_do_programa, q.interpolado_entre_marcacoes, q.interpolado_do_programa), (5, 0, 67, 0));
+    }
+
+    /// Defeito de 17/11: depois do "Simplificar" (sem denso) o `feito` não trazia o programa que seguiu o alvo. Agora
+    /// `feito.rastreios[].corridas_do_programa` copia `Rastreio.corridas_do_programa` e `feito.ia` traz o modelo dela;
+    /// âncora do programa sem registro (projeto de antes) = `null`; sem âncora do programa, nada (registro velho não
+    /// fala por âncora que o perito já trocou).
+    #[test]
+    fn proveniencia_leva_as_corridas_do_simplificar() {
+        use crate::edicao::motor::efeitos::regiao::testes::denso::{compilar, Duble};
+        use crate::edicao::quadros::apoio;
+        use crate::edicao::rastreio::{MotorRastreio, Sentido};
+        use crate::edicao::testes::aceite::{alvo_final, ancora, midia, ocultar, projeto, rastreio, trecho};
+        let tb = (1, 15360);
+        let tab = apoio::tabela(tb, apoio::pts_regulares(300, (1, 30), tb, 0));
+        let mut vit = crate::edicao::rastreio::arquivo::testes::corrida(Sentido::Frente, tab.pts[30], tab.pts[30], tab.pts[90]);
+        (vit.motor.motor, vit.motor.modelo.nome, vit.motor.runtime) = (MotorRastreio::Vittrack, "VitTrack".into(), "onnxruntime 1.31.1".into());
+        let vit = serde_json::to_value(&vit).unwrap();
+        // perito no 30 e no 90; o "Simplificar" escolheu o 50 e o 70
+        let ks: Vec<serde_json::Value> = [30usize, 50, 70, 90].iter().map(|&j| ancora(tab.tempo(j), Some(tab.pts[j]), [0.4, 0.4, 0.2, 0.2])).collect();
+        let o1 = ocultar("o1", "r1", "solido", json!({ "ativo": { "de": tab.tempo(30), "ate": tab.tempo(90) } }));
+        let feito = |programa: serde_json::Value, registro: serde_json::Value| {
+            let mut r1 = rastreio("r1", Some("m1"), "fonte", ks.clone());
+            (r1["origem"], r1["ancoras_do_programa"], r1["corridas_do_programa"]) = (json!({ "tipo": "assistido" }), programa, registro);
+            let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([o1.clone()]))], vec![trecho("c1", "m1", &tab, 30, 120, 1.0, json!([]))], json!({ "rastreios": [r1] }));
+            compilar(&apoio::cap_falsa(), &apoio::fonte(tab.clone(), (320, 180)), &p, &Duble(Default::default()), &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}")).proveniencia
+        };
+        let simplificado = json!([tab.tempo(50), tab.tempo(70)]);
+        let pv = feito(simplificado.clone(), json!([vit]));
+        assert_eq!((pv.rastreios[0].corridas.clone(), pv.rastreios[0].corridas_do_programa.clone()), (vec![], vec![vit.clone()]));
+        assert_eq!(pv.ia.iter().map(|m| m.modelo.as_str()).collect::<Vec<_>>(), ["VitTrack"]);
+        // simplificado antes do registro: `null` (o relatório diz "sem registro"), nenhum modelo inventado
+        let pv = feito(simplificado, json!([]));
+        assert_eq!((pv.rastreios[0].corridas_do_programa.clone(), pv.ia.len()), (vec![serde_json::Value::Null], 0));
+        // sem âncora do programa: nada
+        assert!(feito(json!([]), json!([vit])).rastreios[0].corridas_do_programa.is_empty());
     }
 
     /// Ocultação ativa só em ausência aceita (nenhum quadro com região) entra no `feito`: sem isso a exportação não

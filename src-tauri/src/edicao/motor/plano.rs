@@ -584,7 +584,8 @@ fn sem_legendas() -> ModoLegendas {
     ModoLegendas::Nenhuma
 }
 
-/// Rastreio usado (sem o nome). `corridas` = as do arquivo denso.
+/// Rastreio usado (sem o nome). `corridas` = as do arquivo denso; `corridas_do_programa` = as das âncoras do
+/// "Simplificar".
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ProvRastreio {
     pub id: String,
@@ -595,6 +596,11 @@ pub struct ProvRastreio {
     pub denso_sha256: Option<String>,
     pub silhuetas_sha256: Option<String>,
     pub corridas: Vec<serde_json::Value>,
+    /// Corridas das âncoras do "Simplificar" (`Rastreio.corridas_do_programa`); `null` = âncora do programa sem
+    /// registro (simplificada antes dele). Vazio = nenhuma âncora do programa.
+    // CONTRATO: acréscimo (17/11): o "Simplificar" não apaga mais o programa usado.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub corridas_do_programa: Vec<serde_json::Value>,
     pub confirmacao: Option<Confirmacao>,
     /// Ausências aceitas pelo perito (quadros sem ocultação por decisão dele).
     // CONTRATO: abertura da Fase 1 (contratos (i)).

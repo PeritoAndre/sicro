@@ -4,13 +4,14 @@
 use crate::edicao::motor::plano::{ProvIa, ProvRastreio};
 use crate::edicao::rastreio::{Corrida, MotorRastreio};
 
-/// Uma entrada de `feito.ia` por modelo e provedor, a partir de `feito.rastreios[].corridas` (o compilador é puro:
-/// lê só o que já está na proveniência). `uso` = "rastreio". Ordem estável (modelo, provedor, resto), sem
-/// repetição; corrida que não lê como `Corrida` (Fases 0 e 1) e a da mancha (sem modelo) não entram.
+/// Uma entrada de `feito.ia` por modelo e provedor, a partir de `feito.rastreios[].corridas` e
+/// `corridas_do_programa` (o compilador é puro: lê só o que já está na proveniência). `uso` = "rastreio". Ordem
+/// estável (modelo, provedor, resto), sem repetição; corrida que não lê como `Corrida` (Fases 0 e 1) e a da mancha
+/// (sem modelo) não entram.
 pub fn da_proveniencia(rastreios: &[ProvRastreio]) -> Vec<ProvIa> {
     let mut v: Vec<ProvIa> = rastreios
         .iter()
-        .flat_map(|r| r.corridas.iter())
+        .flat_map(|r| r.corridas.iter().chain(&r.corridas_do_programa))
         .filter_map(|c| serde_json::from_value::<Corrida>(c.clone()).ok())
         .filter(|c| c.motor.motor != MotorRastreio::Mancha)
         .map(|c| da_corrida(&c, "rastreio"))
@@ -53,7 +54,7 @@ mod testes {
     }
 
     fn rastreio(id: &str, corridas: Vec<Value>) -> ProvRastreio {
-        ProvRastreio { id: id.into(), origem: OrigemRastreio::Assistido, ancoras: 1, denso_sha256: None, silhuetas_sha256: None, corridas, confirmacao: None, ausencias: vec![] }
+        ProvRastreio { id: id.into(), origem: OrigemRastreio::Assistido, ancoras: 1, denso_sha256: None, silhuetas_sha256: None, corridas, corridas_do_programa: vec![], confirmacao: None, ausencias: vec![] }
     }
 
     /// Agrupa por modelo e provedor (sem repetir), na mesma ordem em qualquer ordem de entrada; mancha e corrida

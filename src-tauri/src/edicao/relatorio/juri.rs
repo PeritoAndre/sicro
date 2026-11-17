@@ -376,7 +376,8 @@ struct FSincronia {
     conferencias: Vec<Value>,
 }
 
-/// `feito.rastreios[]`. `ancoras` sem o campo = não se afirma quantas; `corridas` lê como `rastreio::Corrida` (B2).
+/// `feito.rastreios[]`. `ancoras` sem o campo = não se afirma quantas; `corridas` e `corridas_do_programa` leem
+/// como `rastreio::Corrida` (B2).
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct FRastreio {
@@ -385,6 +386,7 @@ struct FRastreio {
     ancoras: Option<u32>,
     denso_sha256: Option<String>,
     corridas: Vec<Value>,
+    corridas_do_programa: Vec<Value>,
     confirmacao: Option<FConfirmacao>,
     ausencias: Vec<FAusencia>,
 }
@@ -1428,11 +1430,13 @@ fn corridas_no_video(cs: &[Corrida], usos: &[(i64, i64, i64)]) -> Vec<bool> {
     usada
 }
 
-/// Corridas que leem como `rastreio::Corrida` (B2) e quantas não leem (gravadas antes da Fase 2): destas nada se afirma.
-fn corridas_de(r: &FRastreio) -> (Vec<Corrida>, usize) {
-    let lidas: Vec<Corrida> = r.corridas.iter().filter_map(|v| Corrida::deserialize(v).ok()).collect();
-    let ilegiveis = r.corridas.len() - lidas.len();
-    (lidas, ilegiveis)
+/// Corridas que leem como `rastreio::Corrida` (B2), do denso e das âncoras do "Simplificar", e quantas não leem
+/// (gravadas antes da Fase 2, âncora do programa sem registro): destas nada se afirma.
+fn corridas_de(r: &FRastreio) -> (Vec<Corrida>, Vec<Corrida>, usize) {
+    let ler = |v: &[Value]| -> Vec<Corrida> { v.iter().filter_map(|v| Corrida::deserialize(v).ok()).collect() };
+    let (denso, programa) = (ler(&r.corridas), ler(&r.corridas_do_programa));
+    let ilegiveis = r.corridas.len() + r.corridas_do_programa.len() - denso.len() - programa.len();
+    (denso, programa, ilegiveis)
 }
 
 fn neural(c: &Corrida) -> bool {
@@ -1803,25 +1807,29 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
         .rastreios
         .iter()
         .map(|r| (r, corridas_de(r)))
-        .filter(|(r, (lidas, ilegiveis))| automatico(r) || r.origem["tipo"] == "assistido" || !lidas.is_empty() || *ilegiveis > 0)
+        .filter(|(r, (lidas, programa, ilegiveis))| automatico(r) || r.origem["tipo"] == "assistido" || !lidas.is_empty() || !programa.is_empty() || *ilegiveis > 0)
         .enumerate()
-        .map(|(i, (r, (todas, ilegiveis)))| {
+        .map(|(i, (r, (todas, programa, ilegiveis)))| {
             let usada = corridas_no_video(&todas, &faixas_de_uso(f, &r.id));
             let (lidas, fora): (Vec<(Corrida, bool)>, Vec<(Corrida, bool)>) = todas.into_iter().zip(usada).partition(|x| x.1);
-            let lidas: Vec<Corrida> = lidas.into_iter().map(|x| x.0).collect();
+            let mut lidas: Vec<Corrida> = lidas.into_iter().map(|x| x.0).collect();
+            // a âncora do "Simplificar" leva a posição até a vizinha (interpolação) e mistura amostras (média): a faixa
+            // da corrida não diz que quadro ela tocou, então conta sempre (nunca IA a menos)
+            lidas.extend(programa);
             Listado { r, id: format!("R{}", i + 1), lidas, fora: fora.len(), ilegiveis }
         })
         .collect();
     let id_listado = |id: &str| listados.iter().find(|l| l.r.id == id).map(|l| l.id.clone());
     // rastreio assistido: IA só com corrida de motor neural registrada que pode ter dado amostra ao vídeo; sem corrida
-    // legível, ou com posição do "Simplificar" no vídeo (o programa que a escolheu saiu com o denso), não se sabe qual
-    // programa (e então "nenhuma etapa por IA" também não pode ser dito, qualquer que seja a origem); só correlação
-    // (mancha) não é IA; corridas só fora dos trechos usados não dizem nada do vídeo
+    // legível, ou com posição do "Simplificar" no vídeo sem `corridas_do_programa` (`feito` de antes dele: o programa
+    // que a escolheu saiu com o denso), não se sabe qual programa (e então "nenhuma etapa por IA" também não pode ser
+    // dito, qualquer que seja a origem); só correlação (mancha) não é IA; corridas só fora dos trechos usados não
+    // dizem nada do vídeo
     let (mut com_ia, mut sem_registro) = (0usize, 0usize);
     for l in listados.iter().filter(|l| !automatico(l.r)) {
         let assistido = l.r.origem["tipo"] == "assistido";
         let com_neural = l.lidas.iter().any(neural);
-        let do_programa = f.ocultacoes.iter().any(|o| o.rastreio == l.r.id && o.quadros.ancora_do_programa + o.quadros.interpolado_do_programa > 0);
+        let do_programa = l.r.corridas_do_programa.is_empty() && f.ocultacoes.iter().any(|o| o.rastreio == l.r.id && o.quadros.ancora_do_programa + o.quadros.interpolado_do_programa > 0);
         if assistido && com_neural {
             com_ia += 1;
         } else if !com_neural && (l.ilegiveis > 0 || (assistido && l.lidas.is_empty() && l.fora == 0) || do_programa) {
@@ -2367,7 +2375,7 @@ mod testes {
 
     /// Rastreio usado no plano de apoio (`feito.rastreios[]`), sem nome nem confirmação.
     fn prov_rastreio(id: &str, origem: OrigemRastreio, ancoras: u32, corridas: Vec<Value>) -> ProvRastreio {
-        ProvRastreio { id: id.into(), origem, ancoras, denso_sha256: Some(format!("{:x}", Sha256::digest(id.as_bytes()))), silhuetas_sha256: None, corridas, confirmacao: None, ausencias: vec![] }
+        ProvRastreio { id: id.into(), origem, ancoras, denso_sha256: Some(format!("{:x}", Sha256::digest(id.as_bytes()))), silhuetas_sha256: None, corridas, corridas_do_programa: vec![], confirmacao: None, ausencias: vec![] }
     }
 
     /// O `tecnico.json` do plano de apoio, com o que as seções do `/2` pedem: detecção confirmada e seguida pelo

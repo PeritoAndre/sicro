@@ -1895,3 +1895,98 @@ fn rastreio_seguir_ocultar_exportar_conferir() {
         assert_eq!(achado, esperado, "{onde}: fracos {:?}", t.fracos);
     }
 }
+
+/// Defeito de 17/11 (caso PINHO, "sem registro do programa usado: 62"): o "Simplificar" trocava o denso por âncoras e
+/// o registro do programa que seguiu o alvo sumia (e o denso, órfão, sai ao fechar). Nos dois ffmpeg, com a mancha e
+/// (com a lib dos testes) o VitTrack: seguir pelo corpo do comando; "Simplificar" pelo corpo de
+/// `edicao_rastreio_editar`, aplicado como a tela aplica; fechar (o denso, que nada cita, sai); exportar. O
+/// `tecnico.json` traz a corrida (motor, modelo) em `corridas_do_programa` e o modelo em `feito.ia`; o PDF não diz
+/// "sem registro" e lista a corrida no anexo H; resumo de IA, anexo H e modelos iguais aos da exportação do mesmo
+/// projeto com o denso (a referência, exportada depois com o arquivo devolvido).
+#[test]
+fn simplificar_guarda_o_programa_ate_o_pdf() {
+    use crate::commands::edicao_rastreio_commands as rcmd;
+    use crate::commands::settings_commands::AiSettings;
+    use crate::edicao::modelo::{Caixa, Chave, ModoPdf};
+    use crate::edicao::rastreio::arquivo::{self, OpRastreio};
+    use crate::edicao::rastreio::{corrida, EscolhaMotor};
+    use crate::edicao::relatorio::juri;
+    let Some(cap) = fontes::cap() else { return };
+    let v = cap.versao.clone();
+    let c = Caso::novo("simplificar");
+    let f = registrar(&cap, &c.ws, &fontes::gerar(R_FONTE).unwrap());
+    let mut motores: Vec<(&str, AiSettings, EscolhaMotor)> = vec![("mancha", AiSettings::default(), EscolhaMotor::Mancha)];
+    if let Some(ai) = crate::ia::testes::ou_dispensa(crate::ia::testes::ambiente(), "simplificar_guarda_o_programa_ate_o_pdf", "a lib dos testes") {
+        motores.push(("vittrack", ai, EscolhaMotor::Vittrack));
+    }
+    let _vez = corrida::testes::vez();
+    // exporta, confere e monta os dados e o texto do PDF como o pacote faz
+    let exportar_pdf = |doc: &Value, onde: &str| -> (Value, Value, String) {
+        let (doc, _, estado) = exportar(&c, doc, "cpu");
+        let Estado::AConferir { saida_id } = estado else { panic!("{onde}: esperava a conferir, veio {estado:?}") };
+        let s = cmd::conferir(&c.ws, &saida_id, true).expect("edicao_conferir");
+        let tec = ler_json(&c.ws.join(s.tecnico_rel.as_ref().unwrap()));
+        let dados = juri::dados(&tec, &[], &[]).unwrap_or_else(|e| panic!("{onde}: dados do júri: {e}"));
+        let entrada = juri::entrada(&tec, dados.clone(), &[], &serde_json::to_vec(&doc).unwrap(), ModoPdf::A3).unwrap();
+        let saida = crate::relatorio_pdf::gerar(&entrada).unwrap_or_else(|e| panic!("{onde}: PDF: {e}"));
+        let pdf = fontes::pasta_temporaria("simplificar-pdf").join(format!("Relatório-{}.pdf", onde.replace(' ', "-")));
+        std::fs::write(&pdf, &saida.pdf).unwrap();
+        let texto = texto_do_pdf(&pdf).unwrap_or_else(|| {
+            assert!(std::env::var_os("SICRO_EXIGE_FFMPEG").is_none(), "pdftotext ausente: o PDF não foi aberto por fora");
+            crate::relatorio_pdf::texto(&entrada).unwrap()
+        });
+        (tec, dados, texto.split_whitespace().collect::<Vec<_>>().join(" "))
+    };
+    for (nome, ai, motor) in motores {
+        let onde = format!("{v} {nome}");
+        let mut doc = projeto_do_rastreio(&f);
+        let ws = c.ws.clone();
+        let mut iniciar = |cache: &Path, doc: &Value, p: &corrida::PedidoSeguir, emitir: corrida::Emissor| rcmd::seguir(&ws, cache, &ai, doc, &corrida::PedidoSeguir { motor, ..p.clone() }, emitir);
+        let fim = seguir_e_aplicar(&c, &mut doc, &f, &mut iniciar);
+        let pasta = armazem::pasta_projeto(&c.ws, doc["id"].as_str().unwrap());
+        let sha_denso = fim.denso.as_ref().unwrap().sha256.clone();
+        let cs = arquivo::corridas(&arquivo::ler(&pasta, "r1", &sha_denso).unwrap()).unwrap();
+        assert_eq!((cs.len(), serde_json::to_value(cs[0].motor.motor).unwrap()), (1, json!(nome)), "{onde}");
+        let (doc_denso, bytes_denso) = (doc.clone(), std::fs::read(arquivo::caminho(&pasta, "r1", &sha_denso)).unwrap());
+
+        // "Simplificar" (ocultação: sem média) e o que a tela grava (`editarRastreio`, `ancorasDoSimplificar`)
+        let op = OpRastreio::Simplificar { tolerancia: 0.04, suavizar_s: None };
+        let ed = arquivo::editar(&c.ws, &c.cache(), &doc, "r1", &op).expect("edicao_rastreio_editar");
+        assert!(ed.denso.is_none(), "{onde}");
+        let r = rastreio_mut(&mut doc, "r1");
+        let perito: Vec<Chave<Caixa>> = serde_json::from_value(r["ancoras"].clone()).unwrap();
+        let ancoras = ed.ancoras.expect("âncoras do Simplificar");
+        let programa: Vec<f64> = ancoras.iter().filter(|k| !perito.iter().any(|p| p.t == k.t && p.v == k.v)).map(|k| k.t).collect();
+        assert!(programa.len() >= 2, "{onde}: {programa:?}");
+        (r["ancoras"], r["ancoras_do_programa"], r["denso"], r["silhuetas"]) = (json!(ancoras), json!(programa), Value::Null, Value::Null);
+        if let Some(cs) = ed.corridas_do_programa.filter(|cs| !cs.is_empty()) {
+            r["corridas_do_programa"] = json!(cs);
+        }
+        // fechar: o denso trocado não é citado por nenhum estado e sai
+        armazem::salvar(&c.ws, &doc).unwrap();
+        armazem::limpar_orfaos(&c.ws, &armazem::tipado(&doc).unwrap(), &[]).unwrap();
+        assert!(arquivo::ler(&pasta, "r1", &sha_denso).is_err(), "{onde}: o denso órfão saiu");
+
+        let (tec, simplificado, pdf) = exportar_pdf(&doc, &format!("{onde} simplificado"));
+        let r = tec["feito"]["rastreios"].as_array().unwrap().iter().find(|r| r["id"] == "r1").unwrap();
+        assert_eq!((&r["denso_sha256"], &r["corridas"]), (&Value::Null, &json!([])), "{onde}");
+        let registro = &r["corridas_do_programa"][0];
+        assert_eq!((&registro["motor"], &registro["modelo"]), (&json!(nome), &serde_json::to_value(&cs[0].motor.modelo).unwrap()), "{onde}: {r}");
+        let ia: Vec<&str> = tec["feito"]["ia"].as_array().unwrap().iter().map(|m| m["modelo"].as_str().unwrap()).collect();
+        assert_eq!(ia, if nome == "mancha" { vec![] } else { vec![cs[0].motor.modelo.nome.as_str()] }, "{onde}");
+        // o PDF: o programa registrado, nunca "sem registro"
+        assert!(!pdf.contains("sem registro do programa usado") && !pdf.contains("sem registro legível"), "{onde}: o PDF perdeu o programa");
+        let marca = if nome == "mancha" { "correlação, sem inteligência artificial".to_string() } else { cs[0].motor.modelo.nome.clone() };
+        assert!(pdf.contains(&marca), "{onde}: PDF sem a corrida ({marca})");
+        if nome != "mancha" {
+            assert!(pdf.contains("Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1."), "{onde}");
+        }
+        // o que se diz do programa é o que se diria com o denso
+        armazem::gravar_atomico(&arquivo::caminho(&pasta, "r1", &sha_denso), &bytes_denso).unwrap();
+        let (_, com_denso, _) = exportar_pdf(&doc_denso, &format!("{onde} denso"));
+        for campo in ["ia_resumo", "modelos_ia"] {
+            assert_eq!(simplificado[campo], com_denso[campo], "{onde}: {campo}");
+        }
+        assert_eq!(simplificado["rastreios"][0]["corridas"], com_denso["rastreios"][0]["corridas"], "{onde}: anexo H");
+    }
+}

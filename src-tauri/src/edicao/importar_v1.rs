@@ -426,6 +426,7 @@ impl Conversao<'_> {
             origem: OrigemRastreio::Manual,
             confirmacao: None,
             ancoras_do_programa: Vec::new(),
+            corridas_do_programa: Vec::new(),
         });
     }
 

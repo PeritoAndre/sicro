@@ -6,6 +6,8 @@ pub mod juri;
 mod legivel;
 pub mod mapa;
 pub mod tecnico;
+#[cfg(test)]
+mod simplificar_testes;
 
 /// Plano, resultado e ambiente montados à mão (o motor e o executor ainda não existem), e a varredura do texto.
 #[cfg(test)]
@@ -241,6 +243,7 @@ pub(crate) mod apoio {
                     denso_sha256: None,
                     silhuetas_sha256: None,
                     corridas: vec![json!({ "motor": "edgetam", "modelo": { "nome": "EdgeTAM vídeo", "arquivo": format!("{caso}/../modelos/x.onnx") } })],
+                    corridas_do_programa: vec![],
                     confirmacao: Some(Confirmacao { por: "Perito Teste".into(), em: "2026-11-14T09:00:00Z".into(), denso_sha256: None, de_s: 1.0, ate_s: 2.0 }),
                     ausencias: vec![],
                 }],

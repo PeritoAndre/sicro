@@ -609,6 +609,11 @@ export async function editarRastreio(rid: Id, op: OpRastreio, rotulo: string): P
       }
       r.ancoras = ed.ancoras;
     }
+    // o registro das corridas dessas âncoras (o denso trocado sai ao fechar)
+    if (ed.corridas_do_programa) {
+      if (ed.corridas_do_programa.length > 0) r.corridas_do_programa = ed.corridas_do_programa;
+      else delete r.corridas_do_programa;
+    }
     r.denso = ed.denso;
     if (!ed.denso) r.silhuetas = null;
   });

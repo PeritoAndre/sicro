@@ -98,7 +98,7 @@ pub fn feito(plano: &Plano, amb: &Ambiente, fecho: &Fecho) -> Result<Value> {
     // raízes conhecidas primeiro (o caminho pode ter espaço); depois o que sobrou no texto gerado pela máquina.
     // `processamentos` fica de fora: os parâmetros não têm caminho e o texto do perito sai como foi desenhado
     Raizes::de(amb).relativizar(&mut f);
-    for (lista, campo) in [("midias", "/derivacao/comando"), ("rastreios", "/corridas")] {
+    for (lista, campo) in [("midias", "/derivacao/comando"), ("rastreios", "/corridas"), ("rastreios", "/corridas_do_programa")] {
         for x in f[lista].as_array_mut().into_iter().flatten() {
             if let Some(v) = x.pointer_mut(campo) {
                 sem_absolutos(v);

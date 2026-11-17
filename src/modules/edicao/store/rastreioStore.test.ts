@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Efeito, EventoRastreio, ProjetoAberto, ProjetoEdicao, Rastreio } from "@domain/edicao";
+import type { Corrida, Efeito, EventoRastreio, ProjetoAberto, ProjetoEdicao, Rastreio } from "@domain/edicao";
 
 const cmd = vi.hoisted(() => ({
   edicaoAbrir: vi.fn(),
@@ -632,6 +632,33 @@ describe("âncoras do programa (Simplificar)", () => {
     // devolvida no quadro do perito com outra caixa: é do programa (a do perito foi trocada)
     await simplificar([k(30, 0.31), k(45, 0.45), k(60, 0.5), k(70, 0.55)]);
     expect(programa()).toEqual([q(30).t, q(45).t, q(70).t]);
+  });
+
+  it("o registro das corridas do Simplificar vai ao documento no mesmo passo; sem o campo fica; vazio sai; sem âncora do programa sai junto", async () => {
+    const registro = [{ motor: "vittrack" }, null] as unknown as Corrida[];
+    cmd.edicaoRastreioEditar.mockResolvedValueOnce({ ancoras: [k(30), k(45, 0.45), k(60, 0.5)], denso: null, corridas_do_programa: registro });
+    await editarRastreio("r1", { tipo: "simplificar", tolerancia: TOLERANCIA_SIMPLIFICAR }, "Simplificar");
+    expect(r1().corridas_do_programa).toEqual(registro);
+    st().desfazer();
+    expect("corridas_do_programa" in r1()).toBe(false);
+    st().refazer();
+    expect(r1().corridas_do_programa).toEqual(registro);
+    // edição que não mexe nas âncoras (o backend não manda o campo): fica
+    cmd.edicaoRastreioEditar.mockResolvedValueOnce({ ancoras: null, denso: null });
+    await editarRastreio("r1", { tipo: "apagar_faixa", de_pts: 90 * PASSO, ate_pts: null }, "Apagar daqui em diante");
+    expect(r1().corridas_do_programa).toEqual(registro);
+    // o perito mexe nas duas âncoras do programa: sem nenhuma, o registro sai junto (Ctrl+Z devolve)
+    st().alterar("Mover", (d) => void aplicarMudanca(d as ProjetoEdicao, { rastreio: "r1", ancora: k(45, 0.46) }));
+    expect(r1().corridas_do_programa).toEqual(registro);
+    st().alterar("Mover", (d) => void aplicarMudanca(d as ProjetoEdicao, { rastreio: "r1", ancora: k(60, 0.51) }));
+    expect(programa()).toBeUndefined();
+    expect("corridas_do_programa" in r1()).toBe(false);
+    st().desfazer();
+    expect(r1().corridas_do_programa).toEqual(registro);
+    // vazio do backend: sai
+    cmd.edicaoRastreioEditar.mockResolvedValueOnce({ ancoras: [k(30)], denso: null, corridas_do_programa: [] });
+    await editarRastreio("r1", { tipo: "apagar_faixa", de_pts: 40 * PASSO, ate_pts: null }, "Apagar daqui em diante");
+    expect("corridas_do_programa" in r1()).toBe(false);
   });
 });
 
