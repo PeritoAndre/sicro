@@ -238,6 +238,20 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tarefaPredefinicao {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  white-space: nowrap;
+}
+.reaproveitada {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--sicro-accent);
+}
 .tarefaEstado {
   flex-shrink: 0;
   font-size: var(--text-xs);

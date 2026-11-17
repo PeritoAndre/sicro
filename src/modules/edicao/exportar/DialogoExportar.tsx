@@ -36,7 +36,7 @@ export function codificadorDe(e: Exportacao, cap: ResumoCapacidades): { nome: st
   if (e.predefinicao === "whatsapp" || e.codificador === "cpu") return { nome: "libx264", marca: "cpu", gpu: false };
   return { nome: cap.codificador, marca: cap.codificador, gpu: !!cap.gpu };
 }
-const NOMES: Record<Exportacao["predefinicao"], string> = { juri: "Júri", whatsapp: "WhatsApp", preservacao: "Preservação", personalizada: "Personalizada" };
+export const NOMES: Record<Exportacao["predefinicao"], string> = { juri: "Júri", whatsapp: "WhatsApp", preservacao: "Preservação", personalizada: "Personalizada" };
 
 export function DialogoExportar() {
   const aberto = useExportarUi((s) => s.dialogo);

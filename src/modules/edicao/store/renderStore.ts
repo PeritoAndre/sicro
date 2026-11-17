@@ -27,6 +27,8 @@ interface RenderState {
 }
 
 let ouvindo: Promise<void> | null = null;
+/** Pasta do caso de cada tarefa pedida nesta sessão: o aviso de fim abre a pasta da saída mesmo com outro caso aberto. */
+export const wsDaTarefa = new Map<Id, string>();
 /** Já chegou lista por evento: a leitura inicial, se atrasar, é mais velha que ela. */
 let chegouFila = false;
 
@@ -60,7 +62,9 @@ export const useRenderStore = create<RenderState>((set, get) => ({
 
   async enfileirar(ws, projeto, alvo, ciencias) {
     try {
-      return await commands.edicaoEnfileirar(ws, projeto, alvo, ciencias);
+      const id = await commands.edicaoEnfileirar(ws, projeto, alvo, ciencias);
+      if (alvo.tipo === "final") wsDaTarefa.set(id, ws);
+      return id;
     } catch (e) {
       set({ erro: separarErro(e) });
       throw e;

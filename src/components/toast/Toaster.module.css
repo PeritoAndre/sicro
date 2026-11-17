@@ -61,6 +61,21 @@
   word-wrap: break-word;
 }
 
+.acao {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  font-size: 12px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: 3px;
+  color: var(--sicro-fg);
+  cursor: pointer;
+}
+.acao:hover {
+  border-color: var(--sicro-accent, #5aa9e6);
+}
+
 .close {
   flex-shrink: 0;
   width: 20px;

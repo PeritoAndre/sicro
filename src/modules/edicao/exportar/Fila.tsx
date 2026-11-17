@@ -1,10 +1,11 @@
 /**
- * Fila (botão do topo e o painel dele): as exportações do caso com fase, progresso e as ações de cada estado;
- * embaixo, as saídas registradas do projeto. Estado pelos eventos `edicao:fila` e `edicao:progresso` (renderStore).
+ * Fila (botão do topo e o painel dele): as exportações do caso na ordem pedida, cada uma com a predefinição, o estado,
+ * o progresso e as ações; reaproveitada (todos os blocos do cache) por ícone. Embaixo, as saídas registradas do projeto.
+ * Estado pelos eventos `edicao:fila` e `edicao:progresso` (renderStore); fim de exportação avisa (avisosDaFila).
  */
 
 import { useEffect, useRef } from "react";
-import { Ban, CheckCircle2, CircleDashed, FileText, Hourglass, ListVideo, Loader2, ShieldAlert, X, XCircle } from "lucide-react";
+import { Ban, CheckCircle2, CircleDashed, FileText, Hourglass, ListVideo, Loader2, Recycle, ShieldAlert, X, XCircle } from "lucide-react";
 import { Button } from "@components/Button/Button";
 import { revealExported } from "@core/reveal";
 import { selectActiveOccurrence, useWorkspaceStore } from "@stores/workspaceStore";
@@ -15,6 +16,8 @@ import { useRenderStore } from "../store/renderStore";
 import { useExportarUi } from "./avisos";
 import { useMenuAberto } from "../menus";
 import { Saidas, conferirSaida } from "./Saidas";
+import { NOMES } from "./DialogoExportar";
+import { ligarAvisosDaFila } from "./avisosDaFila";
 // Fase 2 (contratos-fase2.md (c)): "Conferir ocultações" do P2.6, só com a bandeira dele
 import { CONFERIR_PRONTO, ConferirSaida } from "./ConferirSaida";
 import styles from "./Exportar.module.css";
@@ -75,6 +78,7 @@ export function Fila() {
   const raiz = useRef<HTMLDivElement>(null);
   useMenuAberto(aberta);
   useEffect(() => {
+    ligarAvisosDaFila();
     void useRenderStore
       .getState()
       .ouvir()
@@ -110,13 +114,10 @@ export function Fila() {
       {aberta && (
         <div className={styles.painel} role="dialog" aria-label="Fila">
           {lista.length > 0 && (
-            <ul className={styles.tarefas}>
-              {lista
-                .slice()
-                .reverse()
-                .map((t) => (
-                  <LinhaTarefa key={t.id} t={t} />
-                ))}
+            <ul className={styles.tarefas} data-tarefas>
+              {lista.map((t) => (
+                <LinhaTarefa key={t.id} t={t} />
+              ))}
             </ul>
           )}
           <Saidas />
@@ -152,13 +153,25 @@ function LinhaTarefa({ t }: { t: Tarefa }) {
   const cancelar = () => void useRenderStore.getState().cancelar(t.id).catch(() => {});
   const fracao = e.tipo === "rodando" && e.total_q > 0 ? Math.min(1, e.feito_q / e.total_q) : null;
   return (
-    <li className={styles.tarefa} data-estado={e.tipo}>
+    <li className={styles.tarefa} data-estado={e.tipo} data-tarefa={t.id}>
       <div className={styles.tarefaTopo}>
         <IconeEstado e={e} />
         <span className={styles.tarefaTitulo} title={t.titulo} data-dado>
           {t.titulo}
         </span>
-        <span className={styles.tarefaEstado}>{rotuloEstado(e)}</span>
+        {t.predefinicao && (
+          <span className={styles.tarefaPredefinicao} data-predefinicao={t.predefinicao}>
+            {NOMES[t.predefinicao]}
+          </span>
+        )}
+        {t.reaproveitada && (
+          <span className={styles.reaproveitada} role="img" title="Reaproveitada" aria-label="Reaproveitada" data-reaproveitada>
+            <Recycle size={13} aria-hidden />
+          </span>
+        )}
+        <span className={styles.tarefaEstado} data-rotulo>
+          {rotuloEstado(e)}
+        </span>
         {EM_CURSO.has(e.tipo) && (
           <button type="button" className={styles.icone} title="Cancelar" aria-label="Cancelar" onClick={cancelar}>
             <X size={13} />

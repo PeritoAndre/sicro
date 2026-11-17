@@ -432,7 +432,10 @@ export type EstadoTarefa =
   | { tipo: "falhou"; mensagem: string; log_rel: string } | { tipo: "cancelada" };
 /** caso = id do caso. */
 export interface Tarefa { id: Id; tipo: "exportar" | "previa" | "quadro_final" | "refazer"; caso: string; projeto_id: Id; titulo: string;
-                          estado: EstadoTarefa; criado_em: string }
+                          estado: EstadoTarefa; criado_em: string;
+                          // CONTRATO: P4.4. Predefinição da exportação (null em prévia e quadro final); reaproveitada = todos os
+                          // blocos de vídeo vieram do cache.
+                          predefinicao?: Exportacao["predefinicao"] | null; reaproveitada?: boolean }
 /** Carga do evento `edicao:progresso` (até 5 por segundo). */
 export interface Progresso { tarefa_id: Id; fase: Fase; feito_q: number; total_q: number; qps: number; restante_s: number }
 export type EstadoFundo = { tipo: "na_fila" } | { tipo: "rodando" } | { tipo: "pronta" } | { tipo: "falhou"; mensagem: string } | { tipo: "cancelada" };

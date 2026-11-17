@@ -91,6 +91,12 @@ pub struct Tarefa {
     pub titulo: String,
     pub estado: Estado,
     pub criado_em: String,
+    // CONTRATO: P4.4. Predefinição da exportação (None em prévia e quadro final) e "todos os blocos de vídeo vieram do
+    // cache" (a exportação repetida termina na hora: a fila mostra por ícone).
+    #[serde(default)]
+    pub predefinicao: Option<Predefinicao>,
+    #[serde(default)]
+    pub reaproveitada: bool,
 }
 
 /// Evento `edicao:progresso`: `{ tarefa_id, fase, feito_q, total_q, qps, restante_s }`, até 5 por segundo.
@@ -300,6 +306,11 @@ impl Fila {
             titulo: texto("titulo"),
             estado: Estado::NaFila,
             criado_em: agora(),
+            predefinicao: match &pedido.alvo {
+                Alvo::Final { exportacao } => Some(exportacao.predefinicao),
+                _ => None,
+            },
+            reaproveitada: false,
         };
         let manter = self.manter;
         let sem_rodar = self.mudar_e_avisar(|g| {
@@ -422,6 +433,17 @@ impl Fila {
     /// A saída ainda está na fila (`AConferir`)?
     pub(crate) fn saida_na_fila(&self, saida_id: &str) -> bool {
         self.trava().itens.iter().any(|i| matches!(&i.tarefa.estado, Estado::AConferir { saida_id: s } if s == saida_id))
+    }
+
+    /// Todos os blocos de vídeo da tarefa vieram do cache (P4.4).
+    pub(crate) fn marcar_reaproveitada(&self, id: &str) {
+        self.mudar_e_avisar(|g| match g.itens.iter_mut().find(|i| i.tarefa.id == id) {
+            Some(i) if !i.tarefa.reaproveitada => {
+                i.tarefa.reaproveitada = true;
+                ((), true)
+            }
+            _ => ((), false),
+        })
     }
 
     /// `AConferir` → `Concluida` depois do `edicao_conferir`.
@@ -1930,6 +1952,9 @@ pub(crate) fn publicar_da_fila(
     progresso: &mut dyn FnMut(Progresso),
     refeita_de: Option<(uuid::Uuid, &super::refazer::Comparacao)>,
 ) -> Result<Estado> {
+    if !res.blocos.is_empty() && res.blocos.iter().all(|b| b.reaproveitado) {
+        fila.marcar_reaproveitada(&tarefa.id);
+    }
     let total = plano.total_q;
     let prog = std::cell::RefCell::new(progresso);
     let fase = |f: Fase| (prog.borrow_mut())(Progresso { fase: f, feito_q: total, total_q: total, qps: 0.0, restante_s: 0 });
@@ -2031,7 +2056,10 @@ mod testes {
         ida_e_volta::<Estado>(json!({ "tipo": "falhou", "mensagem": "disco cheio", "log_rel": "render/t1/b000.log" }));
         ida_e_volta::<Estado>(json!({ "tipo": "cancelada" }));
         ida_e_volta::<Tarefa>(json!({ "id": "t1", "tipo": "quadro_final", "caso": "c1", "projeto_id": "p1", "titulo": "Teste",
-                                       "estado": { "tipo": "na_fila" }, "criado_em": "2026-11-14T03:00:00Z" }));
+                                       "estado": { "tipo": "na_fila" }, "criado_em": "2026-11-14T03:00:00Z", "predefinicao": null, "reaproveitada": false }));
+        ida_e_volta::<Tarefa>(json!({ "id": "t2", "tipo": "exportar", "caso": "c1", "projeto_id": "p1", "titulo": "Teste",
+                                       "estado": { "tipo": "concluida", "saida_id": "s1" }, "criado_em": "2026-11-14T03:00:00Z",
+                                       "predefinicao": "whatsapp", "reaproveitada": true }));
     }
 
     #[test]
@@ -2446,6 +2474,8 @@ mod testes {
             titulo: "e".into(),
             estado: Estado::Rodando { fase: Fase::Conferindo, feito_q: 0, total_q: 0, qps: 0.0, restante_s: 0 },
             criado_em: agora(),
+            predefinicao: Some(Predefinicao::Juri),
+            reaproveitada: false,
         };
         let (sem, _, _) = render_falso(d.path(), "e0", false);
         limpar_depois_de_publicar(&f, &exportacao("e0"), &cache, &sem);
@@ -2491,6 +2521,8 @@ mod testes {
             titulo: "e".into(),
             estado: Estado::Rodando { fase: Fase::Conferindo, feito_q: 0, total_q: 0, qps: 0.0, restante_s: 0 },
             criado_em: agora(),
+            predefinicao: Some(Predefinicao::Juri),
+            reaproveitada: false,
         };
         limpar_depois_de_publicar(&f, &exportacao, &cache, &com);
         assert!(!bloco(&b0).exists(), "o bloco só do plano publicado sai");
@@ -3214,5 +3246,223 @@ mod testes {
         assert!(!linux.is_empty());
         assert_eq!(super::marca_da_cpu().as_deref(), Some(linux));
         assert_eq!(super::modelo_da_cpu(), linux);
+    }
+}
+
+/// P4.4 Fila visível com exportações reais (os dois ffmpeg: `SICRO_FFMPEG`): ordem pedida, uma por vez; cancelar a
+/// que roda e uma na espera sem tocar nas outras; a mesma predefinição de novo sai reaproveitada; fila nova = vazia.
+#[cfg(test)]
+mod fila_visivel {
+    use std::sync::Arc;
+    use std::time::{Duration, Instant};
+
+    use serde_json::json;
+
+    use super::*;
+    use crate::commands::edicao_commands as cmd;
+    use crate::edicao::modelo::Nivel;
+    use crate::edicao::pacote::ponta::{self, Caso};
+    use crate::edicao::quadros::TabelaQuadros;
+    use crate::edicao::testes::aceite::{exportacao, trecho};
+    use crate::edicao::testes::fontes::{self, Fonte};
+    use crate::edicao::testes::medir;
+
+    /// O que a tela recebe: cada lista do evento `edicao:fila`.
+    #[derive(Default)]
+    struct Tela {
+        listas: Mutex<Vec<Vec<Tarefa>>>,
+    }
+
+    impl Ouvinte for Arc<Tela> {
+        fn fila(&self, t: &[Tarefa]) {
+            self.listas.lock().unwrap().push(t.to_vec());
+        }
+        fn progresso(&self, _: &EventoProgresso) {}
+    }
+
+    fn fila_real() -> (Arc<Fila>, Arc<Tela>) {
+        let f = Fila::nova(Arc::new(MotorReal));
+        let tela = Arc::new(Tela::default());
+        f.ouvir(Arc::new(tela.clone()));
+        (f, tela)
+    }
+
+    /// Pedido de exportação final como a tela manda (com a ciência dos avisos periciais).
+    fn pedido(caso: &Caso, doc: &Value, predefinicao: &str) -> PedidoRender {
+        let analise = cmd::analisar(&caso.ws, doc, &caso.app).expect("edicao_analisar");
+        let mut ciencias: Vec<String> = analise.problemas.iter().filter(|p| p.nivel == Nivel::Pericial).map(|p| p.codigo.to_string()).collect();
+        ciencias.dedup();
+        let mut exp = exportacao("cpu");
+        exp["predefinicao"] = json!(predefinicao);
+        let alvo: Alvo = serde_json::from_value(json!({ "tipo": "final", "exportacao": exp })).unwrap();
+        cmd::pedido(&caso.ws, doc.clone(), alvo, ciencias, &caso.app).unwrap()
+    }
+
+    fn tarefa(f: &Fila, id: &str) -> Tarefa {
+        f.listar().into_iter().find(|t| t.id == id).expect("tarefa")
+    }
+
+    /// Espera a tarefa acabar, com teto (um `esperar` preso travaria a suíte).
+    fn fim(f: &Fila, id: &str) -> Estado {
+        let t0 = Instant::now();
+        loop {
+            let e = tarefa(f, id).estado;
+            if e.acabou() {
+                return e;
+            }
+            assert!(t0.elapsed() < Duration::from_secs(600), "tarefa presa em {e:?}");
+            std::thread::sleep(Duration::from_millis(20));
+        }
+    }
+
+    /// Espera a tarefa estar renderizando blocos (ffmpeg rodando) e devolve o total de slots dela.
+    fn em_blocos(f: &Fila, id: &str) -> u64 {
+        let t0 = Instant::now();
+        loop {
+            match tarefa(f, id).estado {
+                Estado::Rodando { fase: Fase::Blocos { .. }, total_q, .. } => return total_q,
+                e => assert!(!e.acabou() && t0.elapsed() < Duration::from_secs(300), "não chegou aos blocos: {e:?}"),
+            }
+            std::thread::sleep(Duration::from_millis(2));
+        }
+    }
+
+    /// Quadro de origem de cada quadro do vídeo entregue.
+    fn quadros(caso: &Caso, s: &SaidaRegistrada) -> Vec<u32> {
+        medir::quadros_de_origem(&caso.cap, &paths::resolver_relativo(&caso.ws, &s.arquivo)).expect("quadros de origem")
+    }
+
+    fn pastas_das_saidas(caso: &Caso) -> usize {
+        fs::read_dir(paths::dir_edicao_saida(&caso.ws)).unwrap().flatten().filter(|e| e.path().is_dir()).count()
+    }
+
+    /// Projeto longo (1080p, 3× a fonte inteira) para pegar a exportação com o ffmpeg rodando.
+    fn longo(m: &Value, tab: &TabelaQuadros) -> Value {
+        let n = tab.pts.len();
+        let principal = (1..=3).map(|k| trecho(&format!("c{k}"), "m1", tab, 0, n, 1.0, json!([]))).collect();
+        let mut doc = ponta::projeto("Fila longa", true, vec![m.clone()], principal, json!({}));
+        doc["saida"]["largura"] = json!(1920);
+        doc["saida"]["altura"] = json!(1080);
+        doc
+    }
+
+    /// Júri longo, Júri, WhatsApp, Preservação (outro projeto) e WhatsApp de novo: rodam uma por vez, na ordem pedida;
+    /// cancelar a segunda na espera e a primeira com o ffmpeg rodando não muda o quadro de nenhuma outra; a repetição
+    /// sai reaproveitada (mesmo composto) e as outras não.
+    #[test]
+    fn ordem_cancelar_e_reaproveitada() {
+        let Some(caso) = ponta::caso("p44-ordem") else { return };
+        let (m, tab) = caso.midia("m1", &fontes::gerar(Fonte::Mp4).unwrap());
+        let a = ponta::projeto("Fila A", true, vec![m.clone()], vec![trecho("c1", "m1", &tab, 30, 60, 1.0, json!([]))], json!({}));
+        let b = ponta::projeto("Fila B", true, vec![m.clone()], vec![trecho("c1", "m1", &tab, 90, 120, 1.0, json!([]))], json!({}));
+        let c = longo(&m, &tab);
+        let (f, tela) = fila_real();
+        let ids: Vec<String> = [(&c, "juri"), (&a, "juri"), (&a, "whatsapp"), (&b, "preservacao"), (&a, "whatsapp")]
+            .iter()
+            .map(|(doc, p)| f.enfileirar(pedido(&caso, doc, p)).unwrap())
+            .collect();
+        let [t1, t2, t3, t4, t5] = <[String; 5]>::try_from(ids).unwrap();
+        f.cancelar(&t2).unwrap();
+        assert_eq!(tarefa(&f, &t2).estado, Estado::Cancelada, "a da espera cancela na hora");
+        let total_longo = em_blocos(&f, &t1);
+        f.cancelar(&t1).unwrap();
+        assert_eq!(fim(&f, &t1), Estado::Cancelada);
+        let fins: Vec<Estado> = [&t3, &t4, &t5].iter().map(|id| fim(&f, id)).collect();
+        let [s3, s4, s5] = <[SaidaRegistrada; 3]>::try_from(fins.iter().map(|e| caso.saida(&ponta::id_da(e))).collect::<Vec<_>>()).unwrap();
+
+        // o que a tela viu: começo na ordem pedida, nunca duas exportações ao mesmo tempo
+        let listas = tela.listas.lock().unwrap().clone();
+        let mut comecos: Vec<String> = Vec::new();
+        for l in &listas {
+            let rodando: Vec<&Tarefa> = l.iter().filter(|t| matches!(t.estado, Estado::Preparando | Estado::Rodando { .. })).collect();
+            assert!(rodando.len() <= 1, "duas exportações juntas: {rodando:?}");
+            for t in rodando {
+                if !comecos.contains(&t.id) {
+                    comecos.push(t.id.clone());
+                }
+            }
+        }
+        assert_eq!(comecos, [t1.clone(), t3.clone(), t4.clone(), t5.clone()], "ordem pedida; a cancelada na espera não roda");
+        // progresso por item: cada uma com o seu total
+        let totais = |id: &str| -> Vec<u64> {
+            let mut v: Vec<u64> = listas
+                .iter()
+                .flatten()
+                .filter(|t| t.id == id)
+                .filter_map(|t| match t.estado {
+                    Estado::Rodando { total_q, .. } => Some(total_q),
+                    _ => None,
+                })
+                .collect();
+            v.dedup();
+            v
+        };
+        assert_eq!(total_longo, 3 * tab.pts.len() as u64);
+        assert_eq!(totais(&t1), [total_longo]);
+        for id in [&t3, &t4, &t5] {
+            assert_eq!(totais(id), [30], "{id}");
+        }
+
+        // quadros entregues: cada uma com os do seu trecho, nenhuma tocada pelo cancelamento das outras
+        assert_eq!(quadros(&caso, &s3), (30..60).collect::<Vec<u32>>(), "WhatsApp de A");
+        assert_eq!(quadros(&caso, &s4), (90..120).collect::<Vec<u32>>(), "Preservação de B");
+        assert_eq!(quadros(&caso, &s5), (30..60).collect::<Vec<u32>>(), "WhatsApp de A, de novo");
+        assert_eq!((s3.predefinicao, s4.predefinicao, s5.predefinicao), (Predefinicao::Whatsapp, Predefinicao::Preservacao, Predefinicao::Whatsapp));
+        // a repetição reaproveitou os blocos: o mesmo composto; só ela vem marcada
+        assert_eq!(s5.composto_sha256, s3.composto_sha256);
+        assert_ne!(s5.id, s3.id);
+        let lista = f.listar();
+        let marca = |id: &str| lista.iter().find(|t| t.id == id).map(|t| (t.predefinicao, t.reaproveitada)).unwrap();
+        assert_eq!(
+            [&t1, &t2, &t3, &t4, &t5].map(|id| marca(id)),
+            [
+                (Some(Predefinicao::Juri), false),
+                (Some(Predefinicao::Juri), false),
+                (Some(Predefinicao::Whatsapp), false),
+                (Some(Predefinicao::Preservacao), false),
+                (Some(Predefinicao::Whatsapp), true),
+            ]
+        );
+        // e a tela recebeu a marca junto com o fim
+        let ultima = listas.iter().rev().find_map(|l| l.iter().find(|t| t.id == t5).cloned()).unwrap();
+        assert!(ultima.reaproveitada && matches!(ultima.estado, Estado::Concluida { .. }), "{ultima:?}");
+        // as canceladas não deixam saída: só as três na lista e nas pastas
+        let mut registradas: Vec<String> = saidas(&caso.ws, None).unwrap().into_iter().map(|s| s.id).collect();
+        registradas.sort();
+        let mut esperadas = vec![s3.id.clone(), s4.id.clone(), s5.id.clone()];
+        esperadas.sort();
+        assert_eq!(registradas, esperadas);
+        assert_eq!(pastas_das_saidas(&caso), 3);
+        f.encerrar();
+    }
+
+    /// Fechar o app no meio de uma exportação: ela é cancelada (não fica saída nem saída parcial) e a fila do processo
+    /// novo começa vazia, sem retomar nada; a saída feita antes continua listada.
+    #[test]
+    fn reabrir_com_a_fila_vazia() {
+        let Some(caso) = ponta::caso("p44-reabrir") else { return };
+        let (m, tab) = caso.midia("m1", &fontes::gerar(Fonte::Mp4).unwrap());
+        let a = ponta::projeto("Feita", true, vec![m.clone()], vec![trecho("c1", "m1", &tab, 30, 60, 1.0, json!([]))], json!({}));
+        let (f1, _) = fila_real();
+        let feita = f1.enfileirar(pedido(&caso, &a, "juri")).unwrap();
+        let s = caso.saida(&ponta::id_da(&fim(&f1, &feita)));
+        let interrompida = f1.enfileirar(pedido(&caso, &longo(&m, &tab), "juri")).unwrap();
+        em_blocos(&f1, &interrompida);
+        // o `ExitRequested` (sem o `matar_todos` do processo: os outros testes rodam junto)
+        f1.encerrar();
+        assert_eq!(tarefa(&f1, &interrompida).estado, Estado::Cancelada);
+        let trabalho = caso.cache().join("render").join(&interrompida);
+        let mut sobrou: Vec<String> = fs::read_dir(&trabalho).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        sobrou.sort();
+        assert_eq!(sobrou, [executar::CHAVES, RETRATO_TAREFA], "nada da saída parcial");
+
+        let (f2, tela2) = fila_real();
+        std::thread::sleep(Duration::from_millis(300));
+        assert!(f2.listar().is_empty() && tela2.listas.lock().unwrap().is_empty(), "a interrompida não volta sozinha");
+        let lista = saidas(&caso.ws, None).unwrap();
+        assert_eq!(lista.iter().map(|x| x.id.as_str()).collect::<Vec<_>>(), [s.id.as_str()]);
+        assert_eq!(pastas_das_saidas(&caso), 1);
+        assert_eq!(quadros(&caso, &lista[0]), (30..60).collect::<Vec<u32>>());
+        f2.encerrar();
     }
 }

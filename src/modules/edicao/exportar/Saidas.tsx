@@ -13,7 +13,7 @@ import { pushToast } from "@components/toast/toastStore";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import type { Comparacao, SaidaRegistrada } from "@domain/edicao";
 import { separarErro, useEdicaoStore } from "../store/edicaoStore";
-import { useRenderStore } from "../store/renderStore";
+import { useRenderStore, wsDaTarefa } from "../store/renderStore";
 import { useExportarUi } from "./avisos";
 import styles from "./Exportar.module.css";
 // Fase 2 (contratos-fase2.md (c)): "Conferir ocultações" do P2.6, só com a bandeira dele
@@ -45,7 +45,7 @@ export function rotuloComparacao(c: Comparacao): string {
 /** `edicao_refazer`: põe a refeita na fila e mostra a fila; o erro (retrato alterado, saída a conferir) vai no aviso. */
 export async function refazerSaida(ws: string, saidaId: string): Promise<void> {
   try {
-    await commands.edicaoRefazer(ws, saidaId);
+    wsDaTarefa.set(await commands.edicaoRefazer(ws, saidaId), ws);
     useExportarUi.getState().mostrarFila(true);
   } catch (e) {
     pushToast("error", separarErro(e).frase);

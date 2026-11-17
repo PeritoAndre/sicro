@@ -12,6 +12,13 @@ export interface Toast {
   /** 0 = fica até ser fechado. */
   durationMs: number;
   createdAt: number;
+  /** Botão do aviso (ex.: "Abrir pasta"); clicar fecha o aviso. */
+  acao?: AcaoToast;
+}
+
+export interface AcaoToast {
+  rotulo: string;
+  fazer: () => void;
 }
 
 interface ToastState {
@@ -44,6 +51,7 @@ export const useToastStore = create<ToastState>((set) => ({
 interface PushOptions {
   title?: string;
   durationMs?: number;
+  acao?: AcaoToast;
 }
 
 export function pushToast(
@@ -57,6 +65,7 @@ export function pushToast(
     message,
     title: options.title,
     durationMs: options.durationMs ?? defaultDuration,
+    ...(options.acao ? { acao: options.acao } : {}),
   });
 }
 

@@ -41,6 +41,18 @@ function ToastItem({ toast, onClose }: ToastItemProps) {
       <div className={styles.body}>
         {toast.title && <strong className={styles.title}>{toast.title}</strong>}
         <span className={styles.message}>{toast.message}</span>
+        {toast.acao && (
+          <button
+            type="button"
+            className={styles.acao}
+            onClick={() => {
+              toast.acao?.fazer();
+              onClose();
+            }}
+          >
+            {toast.acao.rotulo}
+          </button>
+        )}
       </div>
       {toast.kind !== "progress" && (
         <button
