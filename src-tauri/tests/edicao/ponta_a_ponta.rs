@@ -1590,7 +1590,9 @@ fn caso_e_cache_em_pastas_com_caracteres_especiais() {
     };
     let comum = Caso::novo("nomes-comum");
     let (_, s0) = exportar_em(&comum, "Fase 1");
-    let c = Caso::novo_em("nomes", "Casos d'água 100% de [a:b] {c};x=y, #1 & $z", "cache d'app 50% [k:v];,=#");
+    // `:` não cabe em nome no Windows
+    let nome = |s: &str| if cfg!(windows) { s.replace(':', "") } else { s.to_string() };
+    let c = Caso::novo_em("nomes", &nome("Casos d'água 100% de [a:b] {c};x=y, #1 & $z"), &nome("cache d'app 50% [k:v];,=#"));
     let (m1, s) = exportar_em(&c, "Laudo: d'água 100% [a]; x=y, #2");
     assert_eq!(s.estado, EstadoSaida::Concluida, "{v}");
     assert_eq!(s.n_quadros, 225, "{v}");

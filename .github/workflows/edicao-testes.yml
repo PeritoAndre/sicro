@@ -2,6 +2,8 @@
 # - Windows: `cargo test --lib edicao::` em CPU com o ffmpeg do instalador (fetch-ffmpeg-windows.ps1).
 # - Ubuntu 22.04 (ffmpeg 4.4) e 24.04 (6.1): testes da sonda com o ffmpeg da distro e o relatório da
 #   sonda como artefato. Reprovação do binário não falha o job: o objetivo é medir o mínimo (§12.2).
+#   Medido: o 6.1 passa com `-filter_complex_script`; o 4.4 fica abaixo do mínimo (sem `-fps_mode`, `setts`,
+#   `loudnorm` com LRA 50) e o teste exige que a sonda o reprove (SICRO_FFMPEG_ABAIXO_DO_MINIMO).
 name: Edição — testes de plataforma
 
 on:
@@ -54,6 +56,54 @@ jobs:
       - shell: pwsh
         run: New-Item -ItemType Directory -Force dist | Out-Null
 
+      # Amostras reais de gravador (samples.ffmpeg.org), as mesmas do dossiê, conferidas pelo SHA-256.
+      - name: Amostras de gravador (cache)
+        id: dvr
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/dvr
+          key: dvr-amostras-v1
+      - name: Amostras de gravador
+        shell: pwsh
+        run: |
+          $d = Join-Path $env:RUNNER_TEMP "dvr"
+          New-Item -ItemType Directory -Force $d | Out-Null
+          $base = "https://samples.ffmpeg.org"
+          $amostras = @(
+            @("dahua.dav", "ffmpeg-bugs/trac/ticket6144/19.25.00-19.25.50%5BR%5D.dav", "c17602dd3958ef850e8b435a1c23a652a28fd8733ca15ad4661fc1fd15b2da07"),
+            @("hik_ch01.mp4", "camera-dvr/hikvision/ch01_20100903234832.mp4", "84ff7fc1f1984cba18abbaae56681659c78e0b9b6cefef4e49a36413f4df01dc"),
+            @("hik_nvr.mp4", "camera-dvr/hikvision/DVR_NVR_IP%20Camera01_20130321162325_20130321162358_576877.mp4", "589b9727eba8ea193680a9fd6cbbc26db2b29668084cbbdf3794933730470905"),
+            @("hik_test000.mp4", "camera-dvr/hikvision/test000.mp4", "93ab26ce262597df0976f9c1ca520178f4a1b2cc9ef3c83a0a841530b121a565"),
+            @("ifv7.ifv", "ffmpeg-bugs/trac/ticket2956/7.ifv", "58fdaff6cf3c078f84b5662d07a58ecef9ea8d6aee0f9537344625e179c57e36"),
+            @("test.lvf", "camera-dvr/test.lvf", "940dac104a1363b33dc4fab6e089b831a7c229c0dd84783303693d44709a2779")
+          )
+          foreach ($a in $amostras) {
+            $f = Join-Path $d $a[0]
+            if (-not (Test-Path $f)) { Invoke-WebRequest -Uri "$base/$($a[1])" -OutFile $f }
+            $h = (Get-FileHash $f -Algorithm SHA256).Hash.ToLower()
+            if ($h -ne $a[2]) { throw "SHA-256 de $($a[0]) não confere: $h" }
+          }
+          "SICRO_AMOSTRAS_DVR=$d" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+      - if: steps.dvr.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ runner.temp }}/dvr
+          key: dvr-amostras-v1
+
+      - name: "cargo test --lib edicao:: (compilar)"
+        working-directory: src-tauri
+        run: |
+          cargo test --lib --no-run
+
+      # PDF do pacote conferido por fora (qpdf, pdffonts, pdfinfo, pdfdetach, pdftotext), como no Linux.
+      # Depois da compilação: o ucrt64 no PATH não entra no build.
+      - name: Poppler e qpdf
+        shell: pwsh
+        run: |
+          C:\msys64\usr\bin\bash.exe -lc "pacman -Sy --noconfirm --needed mingw-w64-ucrt-x86_64-poppler mingw-w64-ucrt-x86_64-qpdf"
+          if ($LASTEXITCODE -ne 0) { throw "pacman falhou" }
+          "C:\msys64\ucrt64\bin" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
       - name: "cargo test --lib edicao::"
         working-directory: src-tauri
         run: |
@@ -63,12 +113,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-22.04, ubuntu-24.04]
+        include:
+          - os: ubuntu-22.04
+            abaixo_do_minimo: "1"
+          - os: ubuntu-24.04
+            abaixo_do_minimo: "0"
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
     env:
       SICRO_EXIGE_FFMPEG: "1"
       SICRO_FFMPEG: /usr/bin/ffmpeg
+      SICRO_FFMPEG_ABAIXO_DO_MINIMO: ${{ matrix.abaixo_do_minimo }}
     steps:
       - uses: actions/checkout@v4
 
@@ -123,6 +178,8 @@ jobs:
           "$ff" -hide_banner -muxers 2>/dev/null | awk 'f && $1 ~ /^[DEd]+$/ {n=split($2,a,","); for(i=1;i<=n;i++) print a[i]} /^ *--/ {f=1}' > "$out/muxers"
           printf 'color=c=red:s=16x16:d=0.1,format=yuv420p[v]' > "$out/g.txt"
           forma() { "$ff" -hide_banner -nostdin -loglevel error "$1" "$out/g.txt" -map '[v]' -f null - >/dev/null 2>&1 && echo sim || echo não; }
+          fps_mode() { "$ff" -hide_banner -nostdin -loglevel error -/filter_complex "$out/g.txt" -map '[v]' -fps_mode passthrough -f null - >/dev/null 2>&1 \
+            || "$ff" -hide_banner -nostdin -loglevel error -filter_complex_script "$out/g.txt" -map '[v]' -fps_mode passthrough -f null - >/dev/null 2>&1 && echo sim || echo não; }
           {
             echo "== ${{ matrix.os }}: $ff ($(dpkg -S "$ff" 2>/dev/null | cut -d: -f1))"
             "$ff" -version
@@ -131,6 +188,7 @@ jobs:
             echo "ffprobe ao lado: $([ -x "$(dirname "$ff")/ffprobe" ] && echo sim || echo não)"
             echo "grafo em arquivo -/filter_complex: $(forma -/filter_complex)"
             echo "grafo em arquivo -filter_complex_script: $(forma -filter_complex_script)"
+            echo "-fps_mode: $(fps_mode)"
             echo
             confere "filtros obrigatórios" FILTROS_OBRIGATORIOS "$out/filtros"
             confere "filtros opcionais" FILTROS_OPCIONAIS "$out/filtros"

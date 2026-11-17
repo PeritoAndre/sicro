@@ -551,10 +551,12 @@ mod testes {
         let texto = String::from_utf8(bytes(&t)).unwrap();
         // as raízes estão na entrada (argumentos, comando de derivação, corridas, configuração do ffmpeg) e somem na saída
         let entrada = format!("{:?} {:?}", plano.proveniencia, res.passos);
-        assert!(entrada.contains(&*c.caso.to_string_lossy()) && entrada.contains(&*c.cache.to_string_lossy()) && entrada.contains("/usr"));
+        // no `{:?}` a `\` do Windows sai dobrada
+        let dbg = |p: &Path| format!("{:?}", p.to_string_lossy()).trim_matches('"').to_string();
+        assert!(entrada.contains(&dbg(&c.caso)) && entrada.contains(&dbg(&c.cache)) && entrada.contains("/usr"), "{entrada}");
         assert_eq!(absolutos_no_texto(&texto, &c.raizes(), &[apoio::NOME_RASTREIO]), Vec::<String>::new(), "{texto}");
         // e a varredura acusa quando há
-        assert!(!absolutos_no_texto(&format!("[\"x {}\"]", c.caso.to_string_lossy()), &[], &[]).is_empty());
+        assert!(!absolutos_no_texto(&json!([format!("x {}", c.caso.to_string_lossy())]).to_string(), &[], &[]).is_empty());
         assert!(!absolutos_no_texto("[\"-I/opt/x\", \"C:\\\\v\"]", &[], &[]).is_empty());
         // relativos no lugar
         let passo = &t["execucao"]["passos"][0]["argumentos"];

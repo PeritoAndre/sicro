@@ -1155,19 +1155,6 @@ fn gerar(cap: &Capacidades, pasta: &Path, nome: &str, lavfi: &str, codificar: &[
     pasta.join(nome)
 }
 
-/// O outro ffmpeg da máquina (o do sistema ou o 7.0.2 do AppImage); com `SICRO_EXIGE_FFMPEG=1` a falta dele é falha.
-fn outro_ffmpeg(cap: &Capacidades) -> Option<Arc<Capacidades>> {
-    let candidatos = [Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg-linux/ffmpeg"), PathBuf::from("/usr/bin/ffmpeg")];
-    let mesmo = |p: &Path| std::fs::canonicalize(p).ok() == std::fs::canonicalize(&cap.binario).ok();
-    let achado = candidatos.iter().find(|p| p.exists() && !mesmo(p)).and_then(|p| crate::edicao::ffmpeg::sonda::capacidades_de(p, crate::edicao::ffmpeg::sonda::Origem::Configurado, None, false).ok());
-    let achado = achado.filter(|c| c.faltam.is_empty() && c.sha256 != cap.sha256);
-    if achado.is_none() {
-        assert!(!std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1"), "SICRO_EXIGE_FFMPEG=1 e o segundo ffmpeg não foi achado");
-        eprintln!("aviso: teste dispensado, sem o segundo ffmpeg");
-    }
-    achado
-}
-
 // ------------------------------------------------------------------ matriz de fontes e busca
 
 /// Um trecho pela cadeia inteira do compilador, no canvas do tamanho da fonte: número desenhado em cada slot = previsto.
@@ -2003,7 +1990,7 @@ fn hash_do_composto_igual_entre_binarios_e_cpus() {
         conferir(&format!("-cpuflags {flags} ({})", cap.versao), &r.compostos);
     }
     // o outro ffmpeg, com o MESMO plano (as tabelas são as deste)
-    let Some(outro) = outro_ffmpeg(&cap) else { return };
+    let Some(outro) = fontes::outro_ffmpeg(&cap) else { return };
     assert_ne!(outro.versao, cap.versao);
     let r = executor::rodar(&outro, &plano, &pasta("hash-outro"), &sem_perdas()).unwrap_or_else(|e| panic!("{}: {e}", outro.versao));
     conferir(&format!("{} × {}", outro.versao, cap.versao), &r.compostos);

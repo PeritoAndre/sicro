@@ -679,8 +679,8 @@ fn ler_muxers(t: &str) -> BTreeSet<String> {
 }
 
 /// Autoteste de ~1 s (§5.6): grafo em arquivo com `trim` por pts, `settb`, `setpts`, `fps`, `tpad`, `alphamerge`,
-/// `overlay`, `xfade`, `concat`, entrada `.ffconcat`, giro do contêiner e saída `framehash`. Devolve a forma do grafo
-/// em arquivo que este binário aceita.
+/// `overlay`, `xfade`, `concat`, entrada `.ffconcat`, giro do contêiner, `-fps_mode` e saída `framehash`. Devolve a
+/// forma do grafo em arquivo que este binário aceita.
 fn autoteste(bin: &Path, pasta: &Path) -> std::result::Result<GrafoArquivo, String> {
     let rodar = |nome: &str, args: &[&str]| -> std::result::Result<(Termino, PathBuf), String> {
         let cmd = cmd_em(bin, pasta, nome, args.iter().map(|s| s.to_string()).collect(), &[]);
@@ -738,7 +738,7 @@ fn autoteste(bin: &Path, pasta: &Path) -> std::result::Result<GrafoArquivo, Stri
             "autoteste",
             &[
                 "-hide_banner", "-nostdin", "-y", "-nostats", "-loglevel", "verbose", "-i", "a.mp4", "-f", "concat", "-safe", "0", "-i",
-                "lista.ffconcat", opcao, "g.txt", "-map", "[v]", "-f", "framehash", "-hash", "sha256", "s.framehash",
+                "lista.ffconcat", opcao, "g.txt", "-map", "[v]", "-fps_mode", "passthrough", "-f", "framehash", "-hash", "sha256", "s.framehash",
             ],
         )?;
         if t.codigo != Some(0) {
@@ -1257,9 +1257,11 @@ mod testes {
         let c = sondar_listas(&cap.binario, cap.origem, &cap.sha256).unwrap();
         eprintln!("sonda de listas e autoteste ({}): {:.2} s", c.versao, t0.elapsed().as_secs_f64());
         assert!(c.faltam.is_empty(), "{:?} ({})", c.faltam, c.versao);
-        // ffmpeg anterior ao 7 (CI do P0.10) só tem `-filter_complex_script`
-        if ["7.0.2-static", "n9.0.1"].contains(&c.versao.as_str()) {
-            assert_eq!(c.grafo_em_arquivo, GrafoArquivo::BarraFilterComplex);
+        // medido (CI do P0.10, 6.1 da Ubuntu 24.04): antes do 7 só há `-filter_complex_script`
+        let maior: Option<u32> = c.versao.trim_start_matches('n').split('.').next().and_then(|v| v.parse().ok());
+        if let Some(m) = maior {
+            let g = if m >= 7 { GrafoArquivo::BarraFilterComplex } else { GrafoArquivo::FilterComplexScript };
+            assert_eq!(c.grafo_em_arquivo, g, "{}", c.versao);
         }
         for f in FILTROS_OBRIGATORIOS.iter().chain(FILTROS_OPCIONAIS) {
             assert!(c.filtros.contains(*f), "{f} ({})", c.versao);
@@ -1310,6 +1312,71 @@ mod testes {
             "n9.0.1" => assert_ne!(script, Some(0)),
             _ => {}
         }
+    }
+
+    /// Imita o ffmpeg da distro sobre o binário dos testes: recusa `-/filter_complex` como o 6.1 (Ubuntu 24.04) e, com
+    /// `sem_fps_mode`, também `-fps_mode` como o 4.4 (22.04). O `-filter_complex_script` chega ao binário de verdade
+    /// como `-/filter_complex` (o 9.0.1 não tem mais a forma antiga).
+    #[cfg(unix)]
+    fn distro(nome: &str, cap: &Capacidades, sem_fps_mode: bool) -> PathBuf {
+        let recusa = if sem_fps_mode { "-/filter_complex|-fps_mode" } else { "-/filter_complex" };
+        let corpo = format!(
+            r#"a=()
+for x in "$@"; do
+  case "$x" in
+    {recusa}) echo "Unrecognized option '${{x#-}}'." >&2; echo "Error splitting the argument list: Option not found" >&2; exit 8;;
+    -filter_complex_script) a+=("-/filter_complex");;
+    *) a+=("$x");;
+  esac
+done
+set -- "${{a[@]}}""#
+        );
+        falso(nome, cap, &corpo)
+    }
+
+    /// Sem `-/filter_complex` (6.1), a sonda escolhe o `-filter_complex_script` e o comando montado por `args` roda e
+    /// dá os quadros do binário de verdade; a forma nova, nesse binário, é recusada. Sem `-fps_mode` (4.4), que toda
+    /// exportação usa, o autoteste reprova.
+    #[cfg(unix)]
+    #[test]
+    fn ffmpeg_da_distro_usa_o_script_ou_e_reprovado() {
+        let Some(cap) = fontes::cap() else { return };
+        if cap.grafo_em_arquivo != GrafoArquivo::BarraFilterComplex {
+            eprintln!("dispensado ({}): o binário já é anterior ao 7 (ver listas_e_autoteste_do_binario)", cap.versao);
+            return;
+        }
+        let f = distro("distro-6", &cap, false);
+        let seis = sondar_listas(&f, Origem::Configurado, &sha256_arquivo(&f).unwrap()).unwrap();
+        assert!(seis.faltam.is_empty(), "{:?}", seis.faltam);
+        assert_eq!(seis.grafo_em_arquivo, GrafoArquivo::FilterComplexScript);
+        let p = fontes::pasta_temporaria("distro");
+        std::fs::write(p.join("g.txt"), "testsrc2=s=64x48:r=30:d=0.5,format=yuv420p[v]").unwrap();
+        let rodar = |c: &Capacidades| {
+            let mut a: Vec<String> = ["-hide_banner", "-nostdin", "-loglevel", "error"].map(String::from).into();
+            a.extend(super::super::args::grafo_em_arquivo(c, "g.txt"));
+            a.extend(["-map", "[v]", "-fps_mode", "passthrough", "-f", "framehash", "-hash", "sha256", "-"].map(String::from));
+            let (t, out) = exec::rodar_com_saida(&cmd_em(&c.binario, &p, "distro", a, &[]), &AtomicBool::new(false)).unwrap();
+            (t.codigo, String::from_utf8_lossy(&out).lines().filter(|l| !l.starts_with('#')).map(String::from).collect::<Vec<_>>())
+        };
+        let (no_seis, de_verdade) = (rodar(&seis), rodar(&cap));
+        assert_eq!((no_seis.0, de_verdade.0), (Some(0), Some(0)));
+        assert_eq!((no_seis.1.len(), &no_seis.1), (15, &de_verdade.1));
+        assert_ne!(rodar(&Capacidades { binario: f, ..(*cap).clone() }).0, Some(0), "o falso tem de recusar a forma nova");
+        let f = distro("distro-4", &cap, true);
+        assert_eq!(sondar_listas(&f, Origem::Configurado, &sha256_arquivo(&f).unwrap()).unwrap().faltam, ["autoteste"]);
+    }
+
+    /// CI da Ubuntu 22.04 (`SICRO_FFMPEG_ABAIXO_DO_MINIMO=1`): o 4.4 da distro não tem o que a exportação usa
+    /// (`-fps_mode`, o `setts`, `loudnorm` com `LRA` 50) e a sonda o reprova pelo autoteste.
+    #[test]
+    fn ffmpeg_abaixo_do_minimo_e_reprovado() {
+        if !fontes::abaixo_do_minimo() {
+            return;
+        }
+        let (bin, origem) = escolher().unwrap();
+        let c = sondar_listas(&bin, origem, &sha256_arquivo(&bin).unwrap()).unwrap();
+        eprintln!("reprovado ({}): faltam {:?}", c.versao, c.faltam);
+        assert_eq!(c.faltam, ["autoteste"], "{}", c.versao);
     }
 
     fn grafo_em_arquivo_args(cap: &Capacidades) -> String {

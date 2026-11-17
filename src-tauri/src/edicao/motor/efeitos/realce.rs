@@ -478,7 +478,9 @@ pub(crate) fn transformacao(e: &EfEstabilizar, nome: &str) -> Result<String> {
         BordaEstab::Ampliar => format!("optzoom=0:zoom={}", e.zoom_pct),
         BordaEstab::Preta => "optzoom=0:zoom=0".to_string(),
     };
-    Ok(format!("vidstabtransform=input={nome}:{zoom}:crop=black:smoothing={}:interpol=bilinear", e.suavizar.min(SUAVIZAR_MAX)))
+    // `optalgo=gauss` explícito: o vid.stab 1.4 (ffmpeg do instalador do Windows) tem o caminho L1 como padrão, que dá
+    // outra imagem e não imprime o `Final zoom`; no 1.1 (Linux) `opt` já caía no `gauss`, os mesmos quadros
+    Ok(format!("vidstabtransform=input={nome}:{zoom}:crop=black:smoothing={}:optalgo=gauss:interpol=bilinear", e.suavizar.min(SUAVIZAR_MAX)))
 }
 
 /// Filtros que mexem só no quadro (lente, ajustes, nitidez), na ordem da cadeia. Valor neutro não vira filtro.
@@ -1510,7 +1512,8 @@ pub(crate) mod testes {
     fn zoom_do_bloco(r: &Rodado) -> f64 {
         let log = std::fs::read(r.blocos[0].parent().unwrap().join("b000.stderr")).unwrap();
         let log = String::from_utf8_lossy(&log);
-        log.lines().filter_map(|l| l.split("Final zoom:").nth(1)).filter_map(|v| v.trim().parse::<f64>().ok()).next_back().expect("Final zoom no registro do bloco")
+        let fim: Vec<&str> = log.lines().filter(|l| l.contains("vidstab") || l.contains("zoom")).take(20).collect();
+        log.lines().filter_map(|l| l.split("Final zoom:").nth(1)).filter_map(|v| v.trim().parse::<f64>().ok()).next_back().unwrap_or_else(|| panic!("Final zoom no registro do bloco: {fim:#?}"))
     }
 
     /// Lado (px) do quadrado magenta da cena tremida.
@@ -1637,20 +1640,6 @@ pub(crate) mod testes {
         eprintln!("ampliar ({}): zoom {z} gravado = calculado em 30 quadros; lados {:.1}, {:.1} e {:.1} px", cap.versao, lado_do_alvo(&preta[15]), lado_do_alvo(&gravado[15]), lado_do_alvo(&maior[15]));
     }
 
-    /// O outro ffmpeg da máquina (o do sistema ou o 7.0.2 do AppImage); com `SICRO_EXIGE_FFMPEG=1` a falta dele é falha.
-    fn outro_ffmpeg(cap: &Capacidades) -> Option<Arc<Capacidades>> {
-        use crate::edicao::ffmpeg::sonda;
-        let candidatos = [Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg-linux/ffmpeg"), PathBuf::from("/usr/bin/ffmpeg")];
-        let mesmo = |p: &Path| std::fs::canonicalize(p).ok() == std::fs::canonicalize(&cap.binario).ok();
-        let achado = candidatos.iter().find(|p| p.exists() && !mesmo(p)).and_then(|p| sonda::capacidades_de(p, sonda::Origem::Configurado, None, false).ok());
-        let achado = achado.filter(|c| c.faltam.is_empty() && c.sha256 != cap.sha256);
-        if achado.is_none() {
-            assert!(!std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1"), "SICRO_EXIGE_FFMPEG=1 e o segundo ffmpeg não foi achado");
-            eprintln!("aviso: teste dispensado, sem o segundo ffmpeg");
-        }
-        achado
-    }
-
     /// Hash do composto de cada slot, com opções globais a mais (`-cpuflags …`).
     fn compostos(cap: &Capacidades, plano: &Plano, nome: &str, trfs: &[&Path], globais: &[&str]) -> Vec<String> {
         let pasta = fontes::pasta_temporaria(nome);
@@ -1666,7 +1655,7 @@ pub(crate) mod testes {
     #[test]
     fn composto_igual_entre_binarios_e_cpus() {
         let Some(cap) = fontes::cap() else { return };
-        let outro = outro_ffmpeg(&cap);
+        let outro = fontes::outro_ffmpeg(&cap);
         let f = tremido(&cap, &fontes::pasta_temporaria("tremido"));
         let (d0, d1) = ANALISE;
         let tab = &f.quadros;
@@ -1795,7 +1784,7 @@ pub(crate) mod testes {
         };
         let base = hashes(&cap, &[]);
         assert_eq!(hashes(&cap, &["-cpuflags", "0"]), base, "({}) -cpuflags 0", cap.versao);
-        if let Some(outro) = outro_ffmpeg(&cap) {
+        if let Some(outro) = fontes::outro_ffmpeg(&cap) {
             assert_eq!(hashes(&outro, &[]), base, "{} × {}", outro.versao, cap.versao);
         }
     }

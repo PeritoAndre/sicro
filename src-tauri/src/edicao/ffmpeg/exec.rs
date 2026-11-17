@@ -585,7 +585,11 @@ mod testes {
 
         // current_dir: nome simples resolvido na pasta de trabalho; stdout capturado
         std::fs::write(d.join("g.txt"), "color=c=red:s=16x16:d=0.2,format=gray[v]").unwrap();
-        let c = cmd(&d, &cap.binario, &["-hide_banner", "-nostdin", "-/filter_complex", "g.txt", "-map", "[v]", "-f", "rawvideo", "-"]);
+        let mut a = vec!["-hide_banner", "-nostdin"];
+        let ga = args::grafo_em_arquivo(&cap, "g.txt");
+        a.extend(ga.iter().map(String::as_str));
+        a.extend(["-map", "[v]", "-f", "rawvideo", "-"]);
+        let c = cmd(&d, &cap.binario, &a);
         let (t, out) = rodar_com_saida(&c, &AtomicBool::new(false)).unwrap();
         assert_eq!(t.codigo, Some(0), "{:?}", ultimas_linhas(&c.stderr, 5));
         assert_eq!(out.len(), 16 * 16 * 5, "{} ({})", out.len(), cap.versao);

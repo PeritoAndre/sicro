@@ -584,8 +584,9 @@ pub(crate) mod ponta {
     }
 
     /// Texto do PDF sem espaços nem quebras (hash e frase podem quebrar de linha); None sem o `pdftotext`.
+    /// `-enc UTF-8`: o pdftotext do xpdf sai em Latin-1 por padrão.
     pub(crate) fn texto_do_pdf(pdf: &Path) -> Option<String> {
-        let o = std::process::Command::new("pdftotext").arg(pdf).arg("-").output().ok()?;
+        let o = std::process::Command::new("pdftotext").args(["-enc", "UTF-8"]).arg(pdf).arg("-").output().ok()?;
         o.status.success().then(|| String::from_utf8_lossy(&o.stdout).split_whitespace().collect())
     }
 
