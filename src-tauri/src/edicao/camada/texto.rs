@@ -134,11 +134,14 @@ const COMUM: &str = r##"
 /// Sprite: cada bloco com largura natural limitada a `d.largura` (faixa: a largura inteira), caixa de fundo opcional;
 /// blocos empilhados; tamanho final arredondado para cima ao px inteiro. `b.texto`/`b.caixa` falsos escondem o texto
 /// ou a cor da caixa sem mudar o arranjo (as passadas da sombra: caixa, sombra e texto compostos à parte).
+/// Palavra mais larga que a caixa quebra em qualquer letra (antes saía cortada na borda do sprite); sem palavra assim
+/// o conteúdo vai igual (mesmos bytes de antes).
 const MODELO_SPRITE: &str = r##"
+#let quebrar(e, s, w) = s.split("\n").map(l => l.split(" ").map(p => if p != "" and measure(letra(e, black, none, p)).width > w { p.clusters().join("\u{200B}") } else { p }).join(" ")).join("\n")
 #let bloco(b) = context {
   let e = b.estilo
   let largura = if b.faixa { d.largura * 1pt } else { calc.min(measure(letra(e, black, none, b.conteudo)).width, d.largura * 1pt) }
-  let corpo = com-contorno(e, c => block(width: largura, align(alinha.at(e.alinhamento), c)), b.conteudo)
+  let corpo = com-contorno(e, c => block(width: largura, align(alinha.at(e.alinhamento), c)), quebrar(e, b.conteudo, largura))
   let corpo = if b.texto { corpo } else { hide(corpo) }
   if d.fundo and e.caixa != none {
     block(fill: if b.caixa { rgb(e.caixa.cor) } else { none }, inset: e.caixa.margem * d.altura * 1pt, radius: e.caixa.raio * d.altura * 1pt, corpo)
@@ -1097,6 +1100,40 @@ mod testes {
             centro_da_tinta(&bitmap_sprite(&pedido("Texto", faixa(Dir), 0.6)).unwrap().0),
         );
         assert!(e < 0.2 && (c - 0.5).abs() < 0.05 && d > 0.8, "esq {e:.3}, centro {c:.3}, dir {d:.3}");
+    }
+
+    /// Palavra mais larga que a caixa: quebra dentro da caixa (a tinta fica dentro das margens), em vez de sair
+    /// cortada na borda do sprite como no modelo de antes.
+    #[test]
+    fn palavra_longa_quebra_dentro_da_caixa() {
+        let e = estilo(Fonte::Sans, Some("#000000"), None);
+        let margem = (0.01f64 * 1080.0) as u32;
+        let tinta_x = |b: &Bitmap| {
+            let (mut a, mut z) = (u32::MAX, 0u32);
+            for y in 0..b.h {
+                for x in 0..b.w {
+                    if rgba(b, x, y)[0] > 100 {
+                        (a, z) = (a.min(x), z.max(x));
+                    }
+                }
+            }
+            (a, z)
+        };
+        let p = pedido("Inconstitucionalissimamente atravessou", e.clone(), 0.2);
+        let novo = bitmap_sprite(&p).unwrap().0;
+        let (a, z) = tinta_x(&novo);
+        assert!(a >= margem - 1 && z <= novo.w - margem, "tinta {a}..{z} em {} px", novo.w);
+        let antigo = {
+            let blocos: Vec<serde_json::Value> = p.blocos.iter().map(|b| serde_json::json!({ "conteudo": b.conteudo, "estilo": b.estilo })).collect();
+            let dados = serde_json::json!({ "altura": 1080.0, "largura": 0.2 * 1080.0, "fundo": true, "blocos": blocos });
+            rasterizar_modelo(MODELO_ANTES_DA_FASE4, &dados).unwrap()
+        };
+        let (a0, z0) = tinta_x(&antigo);
+        assert!(a0 < margem - 1 || z0 > antigo.w - margem, "o modelo de antes cortava: {a0}..{z0}");
+        assert!(novo.h > antigo.h, "a palavra ocupa mais linhas: {} × {}", novo.h, antigo.h);
+        // acentos e cedilha inteiros na quebra (graphemes)
+        let (b, trocados) = bitmap_sprite(&pedido("ÇÃÉÍÕÚçãéíõúÇÃÉÍÕÚçãéíõú", e, 0.1)).unwrap();
+        assert!(trocados.is_empty() && b.h > 0);
     }
 
     /// Mesmos bytes com sombra, faixa e contorno: duas vezes (cache do Typst limpo entre elas) e em 4 threads.

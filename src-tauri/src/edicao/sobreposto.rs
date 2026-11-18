@@ -284,6 +284,140 @@ mod testes {
         assert!(deslocados >= 12, "{deslocados} slots deslocados");
     }
 
+    /// Texto que desliza na entrada e na saída, girado, atravessando a divisão do render em blocos (13 clipes: o 13.º
+    /// abre bloco novo) e a transição "fundir" que fica ali (dois ffmpeg): o centro segue `transformacao_em` a até 1 px
+    /// em todo slot visível, sem salto na emenda; fora do intervalo, nada.
+    #[test]
+    fn deslizar_atravessa_bloco_e_transicao() {
+        let Some(cap) = fontes::cap() else { return };
+        let cartela = |id: String, cor: &str, dur: f64, transicao: Value| {
+            json!({ "tipo": "titulo", "id": id, "rotulo": "", "duracao_s": dur, "transicao_entrada": transicao,
+                    "titulo": { "modelo": "cartela", "fundo": { "tipo": "cor", "cor": cor }, "blocos": [] } })
+        };
+        // 11 × 3 slots + 15 slots + 30 slots − 6 da transição = 72 slots; o bloco novo abre no slot 42
+        let mut principal: Vec<Value> = (0..11).map(|i| cartela(format!("c{i}"), if i % 2 == 0 { "#303030" } else { "#404040" }, 0.1, Value::Null)).collect();
+        principal.push(cartela("c11".into(), "#383838", 0.5, Value::Null));
+        principal.push(cartela("B".into(), "#585858", 1.0, json!({ "tipo": "fundir", "duracao_s": 0.2, "audio": "acompanhar" })));
+        let mut livre = texto_livre(json!({ "entrada": "deslizar", "saida": "deslizar", "lado": "esq" }));
+        livre["pos"] = json!({ "ref": "programa", "t": 1.0 });
+        livre["transformacao"]["rotacao"] = json!(12.0);
+        let p = aceite::projeto(W, H, (30, 1), vec![], principal, json!({ "sobreposicoes": [{ "id": "s1", "nome": "", "oculta": false, "clipes": [livre.clone()] }] }));
+        let plano = aceite::Mundo::novo(&cap).compilar(&p, &aceite::alvo_final("cpu")).unwrap();
+        let pasta = fontes::pasta_temporaria("tl-blocos");
+        let r = executor::rodar(&cap, &plano, &pasta, &executor::Opcoes { sem_perdas: true, ..Default::default() }).unwrap();
+        let q: Vec<_> = r.blocos.iter().flat_map(|b| medir::quadros(&cap, b).unwrap()).collect();
+        let _ = std::fs::remove_dir_all(pasta);
+        assert!(r.blocos.len() >= 2, "o texto tem de atravessar a divisão em blocos: {} bloco(s)", r.blocos.len());
+        assert_eq!(q.len(), 72, "{}", cap.versao);
+        let (ini, n) = (30usize, 30usize);
+        let c: ClipeSobreposto = serde_json::from_value(livre.clone()).unwrap();
+        let ClipeSobreposto::Titulo(x) = c else { unreachable!() };
+        let (s, _) = bitmap_sprite(&titulo::pedido(&x.titulo, 0, TamanhoPx { w: W, h: H })).unwrap();
+        let (sw, sh) = (s.w as f64, s.h as f64);
+        let (x0, y0) = ((W as f64 * 0.5 - sw * 0.5 + 0.5).floor(), (H as f64 * 0.5 - sh * 0.5 + 0.5).floor());
+        let cheia = centro_do_verde(&q[ini + n / 2]).2;
+        let mut medidos = 0;
+        for (k, quadro) in q.iter().enumerate() {
+            let (mx, my, massa) = centro_do_verde(quadro);
+            if k < ini || k >= ini + n {
+                assert!(massa < cheia * 0.01, "slot {k} fora do texto com tinta {massa}");
+                continue;
+            }
+            let t = transformacao_em(&x.base, (k - ini) as f64 / FPS, 1.0);
+            if t.opacidade < 0.2 {
+                continue;
+            }
+            // centro do sprite girado (horário) em torno do centro do canvas e levado a (x, y)
+            let (dx, dy) = (x0 + sw * 0.5 - W as f64 * 0.5, y0 + sh * 0.5 - H as f64 * 0.5);
+            let (co, sn) = (t.rotacao.to_radians().cos(), t.rotacao.to_radians().sin());
+            let (ex, ey) = (t.x * W as f64 + co * dx - sn * dy, t.y * H as f64 + sn * dx + co * dy);
+            assert!((mx - ex).abs() <= 1.0 && (my - ey).abs() <= 1.0, "({}) slot {k}: centro ({mx:.2}, {my:.2}) × ({ex:.2}, {ey:.2})", cap.versao);
+            assert!((massa / cheia - t.opacidade).abs() < 0.06, "({}) slot {k}: massa {:.3} × opacidade {:.3}", cap.versao, massa / cheia, t.opacidade);
+            medidos += 1;
+        }
+        assert!(medidos >= 24, "{medidos} slots medidos");
+    }
+
+    /// A caixa que o motor pinta (fundo e texto na mesma cor: um retângulo cheio, medido pelos momentos: centro, lados,
+    /// ângulo) com o sprite de verdade, nos dois ffmpeg: grava `texto-caixa-render.json`, que o palco confere contra
+    /// `cantosDoTexto` (`palco/livres.test.ts`, a até 1 px). Faixa e caixa, 1080p e 720p, giro, sombra (que cresce o
+    /// sprite) e o deslize no meio da entrada e da saída.
+    #[test]
+    fn caixa_do_texto_no_render() {
+        let Some(cap) = fontes::cap() else { return };
+        let casos: Vec<(&str, u32, u32, &str, f64, f64, f64, f64, bool, bool, Value, usize)> = vec![
+            // nome, W, H, texto, x, y, giro, largura, faixa, sombra (transparente), animacao, slot
+            ("faixa 1080p", 1920, 1080, "Policiais chegam ao local", 0.5, 0.85, 0.0, 0.6, true, false, Value::Null, 15),
+            ("faixa 720p com sombra", 1280, 720, "Policiais chegam ao local", 0.31, 0.22, 0.0, 0.45, true, true, Value::Null, 15),
+            ("caixa de duas linhas girada 17°", 1920, 1080, "Texto bem longo que quebra em duas linhas na caixa", 0.6, 0.4, 17.0, 0.3, false, false, Value::Null, 15),
+            ("faixa girada −35° com sombra", 1280, 720, "Veículo branco à esquerda", 0.7, 0.55, -35.0, 0.4, true, true, Value::Null, 15),
+            ("faixa girada 90°", 1920, 1080, "Noventa graus", 0.2, 0.5, 90.0, 0.5, true, false, Value::Null, 15),
+            ("deslizando da direita, girada 10°", 1920, 1080, "Entrando", 0.5, 0.5, 10.0, 0.4, true, true, json!({ "entrada": "deslizar", "saida": "deslizar", "lado": "dir" }), 4),
+            ("saindo para cima", 1280, 720, "Saindo", 0.5, 0.5, 0.0, 0.4, true, false, json!({ "entrada": "corte", "saida": "deslizar", "lado": "cima" }), 27),
+        ];
+        let mut saida = Vec::new();
+        for (nome, w, h, texto, x, y, giro, largura, faixa, sombra, animacao, q) in casos {
+            let mut caixa = json!({ "cor": "#00ff00", "margem": 0.012, "raio": 0.0 });
+            if faixa {
+                caixa["faixa"] = json!(true);
+            }
+            let mut e = json!({ "fonte": "sans", "negrito": false, "italico": false, "tamanho": 0.052, "cor": "#00ff00", "alinhamento": "centro", "caixa": caixa, "contorno": null });
+            if sombra {
+                e["sombra"] = json!({ "cor": "#00000000", "dx": 0.0, "dy": 0.003, "desfoque": 0.004 });
+            }
+            let mut c = json!({ "tipo": "titulo", "id": "tl", "rotulo": "", "pos": { "ref": "programa", "t": 0.0 }, "duracao_s": 1.0,
+                "transformacao": { "x": x, "y": y, "escala": 1.0, "rotacao": giro, "opacidade": 1.0 }, "entrada_s": 0.3, "saida_s": 0.3, "efeitos": [],
+                "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [{ "id": "b1", "papel": "corpo", "conteudo": texto, "estilo": e,
+                    "lugar": { "x": 0.5, "y": 0.5, "h": "centro", "v": "meio" }, "largura_max": largura }] } });
+            if !animacao.is_null() {
+                c["animacao"] = animacao;
+            }
+            let fundo = json!({ "tipo": "titulo", "id": "A", "rotulo": "", "duracao_s": 1.0, "transicao_entrada": null,
+                                "titulo": { "modelo": "cartela", "fundo": { "tipo": "cor", "cor": "#808080" }, "blocos": [] } });
+            let p = aceite::projeto(w, h, (30, 1), vec![], vec![fundo], json!({ "sobreposicoes": [{ "id": "s1", "nome": "", "oculta": false, "clipes": [c.clone()] }] }));
+            let plano = aceite::Mundo::novo(&cap).compilar(&p, &aceite::alvo_final("cpu")).unwrap();
+            let pasta = fontes::pasta_temporaria("tl-caixa");
+            let r = executor::rodar(&cap, &plano, &pasta, &executor::Opcoes { sem_perdas: true, ..Default::default() }).unwrap();
+            let qs: Vec<_> = r.blocos.iter().flat_map(|b| medir::quadros(&cap, b).unwrap()).collect();
+            let _ = std::fs::remove_dir_all(pasta);
+            // cobertura do verde sobre o cinza (0..1) e os momentos dela
+            let quadro = &qs[q];
+            let (mut s, mut sx, mut sy, mut sxx, mut syy, mut sxy) = (0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64, 0.0f64);
+            for (i, px) in quadro.px.chunks_exact(3).enumerate() {
+                let cob = (((px[1] as f64 - 128.0) / 127.0 + (128.0 - px[0] as f64) / 128.0 + (128.0 - px[2] as f64) / 128.0) / 3.0).clamp(0.0, 1.0);
+                if cob > 0.02 {
+                    let (a, b) = ((i as u32 % quadro.w) as f64 + 0.5, (i as u32 / quadro.w) as f64 + 0.5);
+                    (s, sx, sy, sxx, syy, sxy) = (s + cob, sx + cob * a, sy + cob * b, sxx + cob * a * a, syy + cob * b * b, sxy + cob * a * b);
+                }
+            }
+            let (cx, cy) = (sx / s, sy / s);
+            let (vxx, vyy, vxy) = (sxx / s - cx * cx, syy / s - cy * cy, sxy / s - cx * cy);
+            let (m, d) = ((vxx + vyy) / 2.0, (((vxx - vyy) / 2.0).powi(2) + vxy * vxy).sqrt());
+            let cs: ClipeSobreposto = serde_json::from_value(c.clone()).unwrap();
+            let ClipeSobreposto::Titulo(xt) = cs else { unreachable!() };
+            let (spr, _) = bitmap_sprite(&titulo::pedido(&xt.titulo, 0, TamanhoPx { w, h })).unwrap();
+            let r2 = |v: f64| (v * 100.0).round() / 100.0;
+            saida.push(json!({ "nome": nome, "entrada": { "clipe": c, "canvas": { "w": w, "h": h }, "q": q, "sprite": { "w": spr.w, "h": spr.h } },
+                "saida": { "cx": r2(cx), "cy": r2(cy), "maior": r2((12.0 * (m + d)).sqrt()), "menor": r2((12.0 * (m - d).max(0.0)).sqrt()),
+                           "angulo": r2(0.5 * (2.0 * vxy).atan2(vxx - vyy).to_degrees()) } }));
+        }
+        // a medida tem de ser estável (os dois ffmpeg dão a mesma): fora da gravação, confere a até 0,05 px
+        let arq = crate::edicao::curva::fixtures::caminho("texto-caixa-render.json");
+        if std::env::var(crate::edicao::curva::fixtures::VARIAVEL).is_ok_and(|v| v == "1") {
+            std::fs::write(&arq, serde_json::to_string_pretty(&Value::Array(saida)).unwrap() + "\n").unwrap();
+            return;
+        }
+        let gravada: Vec<Value> = serde_json::from_str(&std::fs::read_to_string(&arq).unwrap()).unwrap();
+        assert_eq!(gravada.len(), saida.len());
+        for (g, n) in gravada.iter().zip(&saida) {
+            assert_eq!(g["entrada"], n["entrada"], "{}", n["nome"]);
+            for k in ["cx", "cy", "maior", "menor", "angulo"] {
+                let (a, b) = (g["saida"][k].as_f64().unwrap(), n["saida"][k].as_f64().unwrap());
+                assert!((a - b).abs() <= 0.05, "{} ({}): {k} {b} × gravado {a}", n["nome"], cap.versao);
+            }
+        }
+    }
+
     /// Amostras para olhar (não mede): três textos livres com os padrões da tela sobre um vídeo 1280×720, renderizados
     /// pelo motor; grava PNG de quadros do deslize e do texto parado em `SICRO_TL_AMOSTRAS`.
     #[test]

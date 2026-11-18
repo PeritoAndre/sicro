@@ -7,6 +7,7 @@ import { folgaDaSombra, transformacaoEm } from "../modelo/sobreposto";
 import { alcasDoLivre, cantosDoTexto, dentroDoTexto, livresNoQuadro, type LivreNoQuadro } from "./livres";
 import type { FontesCena } from "./cena";
 import { estiloNovo, SOMBRA } from "../inspetor/secoes/textoLivre";
+import { casos } from "../modelo/testeFixtures";
 
 const W = 1920;
 const H = 1080;
@@ -262,5 +263,39 @@ describe("alcasDoLivre", () => {
     const m = a!.arrastar(a!.em, mais(a!.em, -20, 10), { shift: false, alt: false });
     expect(m).toMatchObject({ livre: "i1", trilha: "s1" });
     expect([fixo(novo(m).transformacao.x) * W, fixo(novo(m).transformacao.y) * H]).toEqual([0.25 * W - 20, 0.75 * H + 10]);
+  });
+});
+
+describe("alças × render do motor (texto-caixa-render.json, dois ffmpeg)", () => {
+  it("a caixa das alças é a que o motor pinta: centro, lados e ângulo a até 1 px, com o sprite de verdade", () => {
+    type E = { clipe: SobTitulo; canvas: { w: number; h: number }; q: number; sprite: { w: number; h: number } };
+    type S = { cx: number; cy: number; maior: number; menor: number; angulo: number };
+    const lista = casos<E, S>("texto-caixa-render.json");
+    expect(lista.length).toBeGreaterThanOrEqual(7);
+    for (const { nome, entrada: e, saida: m } of lista) {
+      const doc = novoProjeto();
+      doc.saida.largura = e.canvas.w;
+      doc.saida.altura = e.canvas.h;
+      doc.sobreposicoes = [{ id: "s1", nome: "", oculta: false, clipes: [e.clipe] }];
+      const linha: LinhaResolvida = { fps: { num: 30, den: 1 }, total_q: 30, clipes: [], livres: [{ id: e.clipe.id, trilha: "s1", inicio_q: 0, n_q: 30 }] };
+      const f: FontesCena = { sprite: () => ({ relativo: "sprites/r.png", w: e.sprite.w, h: e.sprite.h }), atlas: () => null, midia: () => null };
+      const it = livresNoQuadro(doc, linha, e.q, f)[0]!;
+      const k = cantosDoTexto(it, e.canvas).map((p) => ({ x: p.x * e.canvas.w, y: p.y * e.canvas.h }));
+      const [no, ne, , so] = k as [{ x: number; y: number }, { x: number; y: number }, unknown, { x: number; y: number }];
+      const c = { x: (k[0]!.x + k[2]!.x) / 2, y: (k[0]!.y + k[2]!.y) / 2 };
+      const lw = Math.hypot(ne.x - no.x, ne.y - no.y);
+      const lh = Math.hypot(so.x - no.x, so.y - no.y);
+      expect(Math.abs(c.x - m.cx), nome).toBeLessThanOrEqual(1);
+      expect(Math.abs(c.y - m.cy), nome).toBeLessThanOrEqual(1);
+      expect(Math.abs(Math.max(lw, lh) - m.maior), nome).toBeLessThanOrEqual(1);
+      expect(Math.abs(Math.min(lw, lh) - m.menor), nome).toBeLessThanOrEqual(1);
+      // o lado de cima da caixa no ângulo medido (momentos: −90..90; o giro de 90° dá ±90)
+      const ang = (Math.atan2(ne.y - no.y, ne.x - no.x) * 180) / Math.PI;
+      const dif = (((ang - m.angulo) % 180) + 180) % 180;
+      expect(Math.min(dif, 180 - dif), nome).toBeLessThanOrEqual(0.5);
+      // a alça "mover" fica no centro da caixa
+      const mover = alcasDoLivre(doc, it, e.canvas).find((a) => a.tipo === "mover")!;
+      expect(Math.hypot(mover.em.x * e.canvas.w - m.cx, mover.em.y * e.canvas.h - m.cy), nome).toBeLessThanOrEqual(1);
+    }
   });
 });

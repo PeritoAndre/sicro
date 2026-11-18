@@ -1,0 +1,561 @@
+[
+  {
+    "entrada": {
+      "canvas": {
+        "h": 1080,
+        "w": 1920
+      },
+      "clipe": {
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Policiais chegam ao local",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "faixa": true,
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.6,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": 0.0,
+          "x": 0.5,
+          "y": 0.85
+        }
+      },
+      "q": 15,
+      "sprite": {
+        "h": 94,
+        "w": 1178
+      }
+    },
+    "nome": "faixa 1080p",
+    "saida": {
+      "angulo": 0.0,
+      "cx": 960.0,
+      "cy": 917.85,
+      "maior": 1178.39,
+      "menor": 94.16
+    }
+  },
+  {
+    "entrada": {
+      "canvas": {
+        "h": 720,
+        "w": 1280
+      },
+      "clipe": {
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Policiais chegam ao local",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "faixa": true,
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "sombra": {
+                  "cor": "#00000000",
+                  "desfoque": 0.004,
+                  "dx": 0.0,
+                  "dy": 0.003
+                },
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.45,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": 0.0,
+          "x": 0.31,
+          "y": 0.22
+        }
+      },
+      "q": 15,
+      "sprite": {
+        "h": 81,
+        "w": 608
+      }
+    },
+    "nome": "faixa 720p com sombra",
+    "saida": {
+      "angulo": -0.0,
+      "cx": 396.65,
+      "cy": 158.26,
+      "maior": 593.62,
+      "menor": 63.0
+    }
+  },
+  {
+    "entrada": {
+      "canvas": {
+        "h": 1080,
+        "w": 1920
+      },
+      "clipe": {
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Texto bem longo que quebra em duas linhas na caixa",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.3,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": 17.0,
+          "x": 0.6,
+          "y": 0.4
+        }
+      },
+      "q": 15,
+      "sprite": {
+        "h": 258,
+        "w": 602
+      }
+    },
+    "nome": "caixa de duas linhas girada 17°",
+    "saida": {
+      "angulo": 17.0,
+      "cx": 1152.01,
+      "cy": 431.89,
+      "maior": 602.31,
+      "menor": 258.11
+    }
+  },
+  {
+    "entrada": {
+      "canvas": {
+        "h": 720,
+        "w": 1280
+      },
+      "clipe": {
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Veículo branco à esquerda",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "faixa": true,
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "sombra": {
+                  "cor": "#00000000",
+                  "desfoque": 0.004,
+                  "dx": 0.0,
+                  "dy": 0.003
+                },
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.4,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": -35.0,
+          "x": 0.7,
+          "y": 0.55
+        }
+      },
+      "q": 15,
+      "sprite": {
+        "h": 81,
+        "w": 544
+      }
+    },
+    "nome": "faixa girada −35° com sombra",
+    "saida": {
+      "angulo": -35.0,
+      "cx": 895.84,
+      "cy": 396.43,
+      "maior": 529.52,
+      "menor": 62.83
+    }
+  },
+  {
+    "entrada": {
+      "canvas": {
+        "h": 1080,
+        "w": 1920
+      },
+      "clipe": {
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Noventa graus",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "faixa": true,
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.5,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": 90.0,
+          "x": 0.2,
+          "y": 0.5
+        }
+      },
+      "q": 15,
+      "sprite": {
+        "h": 94,
+        "w": 986
+      }
+    },
+    "nome": "faixa girada 90°",
+    "saida": {
+      "angulo": 90.0,
+      "cx": 384.15,
+      "cy": 540.0,
+      "maior": 986.39,
+      "menor": 94.16
+    }
+  },
+  {
+    "entrada": {
+      "canvas": {
+        "h": 1080,
+        "w": 1920
+      },
+      "clipe": {
+        "animacao": {
+          "entrada": "deslizar",
+          "lado": "dir",
+          "saida": "deslizar"
+        },
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Entrando",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "faixa": true,
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "sombra": {
+                  "cor": "#00000000",
+                  "desfoque": 0.004,
+                  "dx": 0.0,
+                  "dy": 0.003
+                },
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.4,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": 10.0,
+          "x": 0.5,
+          "y": 0.5
+        }
+      },
+      "q": 4,
+      "sprite": {
+        "h": 122,
+        "w": 816
+      }
+    },
+    "nome": "deslizando da direita, girada 10°",
+    "saida": {
+      "angulo": 10.0,
+      "cx": 1049.58,
+      "cy": 539.87,
+      "maior": 794.14,
+      "menor": 93.92
+    }
+  },
+  {
+    "entrada": {
+      "canvas": {
+        "h": 720,
+        "w": 1280
+      },
+      "clipe": {
+        "animacao": {
+          "entrada": "corte",
+          "lado": "cima",
+          "saida": "deslizar"
+        },
+        "duracao_s": 1.0,
+        "efeitos": [],
+        "entrada_s": 0.3,
+        "id": "tl",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.3,
+        "tipo": "titulo",
+        "titulo": {
+          "blocos": [
+            {
+              "conteudo": "Saindo",
+              "estilo": {
+                "alinhamento": "centro",
+                "caixa": {
+                  "cor": "#00ff00",
+                  "faixa": true,
+                  "margem": 0.012,
+                  "raio": 0.0
+                },
+                "contorno": null,
+                "cor": "#00ff00",
+                "fonte": "sans",
+                "italico": false,
+                "negrito": false,
+                "tamanho": 0.052
+              },
+              "id": "b1",
+              "largura_max": 0.4,
+              "lugar": {
+                "h": "centro",
+                "v": "meio",
+                "x": 0.5,
+                "y": 0.5
+              },
+              "papel": "corpo"
+            }
+          ],
+          "fundo": {
+            "tipo": "transparente"
+          },
+          "modelo": "livre"
+        },
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": 1.0,
+          "rotacao": 0.0,
+          "x": 0.5,
+          "y": 0.5
+        }
+      },
+      "q": 27,
+      "sprite": {
+        "h": 63,
+        "w": 530
+      }
+    },
+    "nome": "saindo para cima",
+    "saida": {
+      "angulo": 0.0,
+      "cx": 639.6,
+      "cy": 317.18,
+      "maior": 529.23,
+      "menor": 62.56
+    }
+  }
+]

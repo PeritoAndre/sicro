@@ -53,6 +53,8 @@ import { useAreaVisivel } from "../../palco/areaVisivel";
 import { useRecursos } from "../../palco/recursos";
 import { LINHA_PRONTA } from "../../linha/LinhaDoTempo";
 import { resolver } from "../../modelo/tempo";
+import { aplicarMudanca } from "../../modelo/projeto";
+import { alcasDoLivre, livresNoQuadro } from "../../palco/livres";
 
 const st = () => useEdicaoStore.getState();
 const doc = () => st().doc!;
@@ -343,5 +345,39 @@ describe("Texto livre no Inspetor", () => {
     expect(textoDe(id).transformacao.rotacao).toBe(-12.5);
     await digitar(entradaDe(raiz, "Largura") as HTMLInputElement, "50");
     expect(textoDe(id).titulo.blocos[0]!.largura_max).toBe(0.5);
+  });
+
+  it("alças no palco: cada arrasto (mover, canto, lado, giro) é um passo; desfazer e refazer andam de um em um", async () => {
+    const id = await criar();
+    await esperar(() => st().alterar("Texto", (d) => void ((d.sobreposicoes[0]!.clipes[0] as SobTitulo).titulo.blocos[0]!.conteudo = "Policiais")));
+    const trilha = doc().sobreposicoes[0]!.id;
+    const linha: LinhaResolvida = { fps: { num: 30, den: 1 }, total_q: 300, clipes: [], livres: [{ id, trilha, inicio_q: 0, n_q: 150 }] };
+    const fontes = { sprite: () => ({ relativo: "sprites/x.png", w: 400, h: 70 }), atlas: () => null, midia: () => null };
+    const canvas = { w: 1920, h: 1080 };
+    const sem = { shift: false, alt: false };
+    const estados = [structuredClone(doc())];
+    for (const [nome, dx, dy] of [["mover", 120, -40], ["se", 60, 20], ["l", 90, 0], ["giro", 200, 150]] as const) {
+      // como o palco: a alça e o ponto de partida ficam os do começo do gesto; vários movimentos, um passo
+      const item = livresNoQuadro(doc(), linha, 30, fontes)[0]!;
+      const a = alcasDoLivre(doc(), item, canvas).find((x) => x.id.endsWith(`:${nome}`))!;
+      const n = passos();
+      const g = st().iniciarGesto("Marcar");
+      for (const k of [0.25, 0.5, 1]) {
+        const m = a.arrastar(a.em, { x: a.em.x + (dx * k) / canvas.w, y: a.em.y + (dy * k) / canvas.h }, sem);
+        g.alterar((d) => void aplicarMudanca(d, m));
+      }
+      g.concluir();
+      expect(passos(), nome).toBe(n + 1);
+      expect(doc(), nome).not.toEqual(estados.at(-1));
+      estados.push(structuredClone(doc()));
+    }
+    for (let i = estados.length - 2; i >= 0; i--) {
+      st().desfazer();
+      expect(doc()).toEqual(estados[i]);
+    }
+    for (let i = 1; i < estados.length; i++) {
+      st().refazer();
+      expect(doc()).toEqual(estados[i]);
+    }
   });
 });
