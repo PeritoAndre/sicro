@@ -559,6 +559,15 @@ describe("ações da linha do efeito", () => {
     st().desfazer();
     expect(st().doc!.rastreios.map((r) => r.id)).toEqual(["r1"]);
   });
+
+  it("Da análise: o rastreio que o zoom acompanha fica", async () => {
+    const z = { id: "z1", ligado: true, nome: "", ativo: null, tipo: "enquadramento", regiao: { x: 0, y: 0, w: 0.5, h: 0.5 }, ajuste: "cobrir",
+      interpolacao: "bilinear", segue: { rastreio: "r1", suavizar_s: 1 } } as unknown as Efeito;
+    st().alterar("Acompanhar rastreio", (x) => void (x.principal[0] as unknown as { efeitos: Efeito[] }).efeitos.push(z));
+    cmd.edicaoRastreioDePessoas.mockResolvedValue({ ...r1(), id: "r9", origem: { tipo: "pessoas", pessoa_id: "p3", estado: "auto", copiado_em: "2026-11-15T09:00:00Z" }, ancoras: [] });
+    await trazerDaAnalise("e1", "m", SHA, "p3", "Da análise");
+    expect(st().doc!.rastreios.map((r) => r.id)).toEqual(["r1", "r9"]);
+  });
 });
 
 

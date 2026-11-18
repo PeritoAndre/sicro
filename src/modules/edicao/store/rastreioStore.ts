@@ -42,7 +42,7 @@ import { acharClipe, acharEfeito, acharMidia, acharRastreio, efeitoConhecido } f
 import { ancorasDoSimplificar, avaliar, emAusencia } from "../modelo/rastreio";
 import { exibido, nQuadros, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 import { recursoDe, useRecursos } from "../palco/recursos";
-import { marcarAncora, rastreioDe } from "../inspetor/acoes";
+import { efeitoUsa, marcarAncora, rastreioDe } from "../inspetor/acoes";
 import { pedirMarcacao } from "../inspetor/contexto";
 import { useInspetorUi } from "../inspetor/ui";
 import { marcacaoParada } from "../palco/origem";
@@ -689,7 +689,7 @@ function apontar(e: Draft<Efeito>, rid: Id) {
 }
 
 function usado(d: ProjetoEdicao, rid: Id, tipos?: readonly Efeito["tipo"][]): boolean {
-  const em = (l: readonly unknown[]) => l.some((e) => efeitoConhecido(e as Efeito) && rastreioDe(e as Efeito) === rid && (!tipos || tipos.includes((e as Efeito).tipo)));
+  const em = (l: readonly unknown[]) => l.some((e) => efeitoConhecido(e as Efeito) && efeitoUsa(e as Efeito, rid) && (!tipos || tipos.includes((e as Efeito).tipo)));
   for (const c of d.principal) if (c && typeof c === "object" && Array.isArray((c as { efeitos?: unknown }).efeitos) && em((c as { efeitos: unknown[] }).efeitos)) return true;
   for (const t of d.sobreposicoes) for (const c of t.clipes) if (Array.isArray(c.efeitos) && em(c.efeitos)) return true;
   return d.midias.some((m) => em(m.ocultacoes));

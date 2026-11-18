@@ -253,6 +253,18 @@ describe("Velocidade", () => {
     expect([e().calculo.id, e().ativo, ultimo()]).toEqual([ID3, { de: 40, ate: 41 }, "Cálculo"]);
   });
 
+  it("Fixa de novo não tira o rastreio que o zoom acompanha", async () => {
+    await adicionar("Velocidade");
+    const linha = () => tela.raiz.querySelector<HTMLElement>('[data-efeito="velocidade_exibida"]')!;
+    await clicar(botao(linha(), "Acompanha"));
+    const r = doc().rastreios.at(-1)!.id;
+    const z = { id: "z1", ligado: true, nome: "", ativo: null, tipo: "enquadramento", regiao: { x: 0, y: 0, w: 0.5, h: 0.5 }, ajuste: "cobrir",
+      interpolacao: "bilinear", segue: { rastreio: r, suavizar_s: 1 } };
+    st().alterar("Acompanhar rastreio", (d) => void (d.principal[1] as ClipeTrecho).efeitos.push(z as unknown as ClipeTrecho["efeitos"][number]));
+    await clicar(botao(linha(), "Fixa"));
+    expect(doc().rastreios.some((x) => x.id === r)).toBe(true);
+  });
+
   it("sem cálculo: nada criado e o aviso com a frase do catálogo", async () => {
     cmd.listSpeedCalculations.mockResolvedValue([]);
     cmd.edicaoRetratoCalculo.mockRejectedValue({ kind: "validation", message: "validation error: calculo_ausente: Cálculo de velocidade não encontrado" });

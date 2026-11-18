@@ -14,7 +14,7 @@ import { acharClipe, acharMidia, efeitoConhecido, novoId } from "../../modelo/pr
 import { exibido, ptsDaTabela, tempoDoQuadro } from "../../modelo/tempo";
 import { recursoDe } from "../../palco/recursos";
 import { textoDaVelocidade } from "../../palco/desenho/medidas";
-import { mudar, noClipe, noEfeito, rastreioDe, selecionarEfeito, tempoNoClipe } from "../acoes";
+import { efeitoUsa, mudar, noClipe, noEfeito, selecionarEfeito, tempoNoClipe } from "../acoes";
 import { Escolha, Grade, Icone, Mini, Posicao } from "../campos";
 import { pedirMarcacao } from "../contexto";
 import { estiloPadrao, novoRastreio, TAMANHO_TEXTO } from "../novos";
@@ -84,7 +84,7 @@ function rastreioNoQuadro(d: ProjetoEdicao, c: Clipe) {
 
 /** Algum efeito do projeto ainda segue o rastreio? */
 function usado(d: Draft<ProjetoEdicao>, rastreio: Id): boolean {
-  const em = (l: readonly (Efeito | Desconhecido)[] | undefined) => (l ?? []).some((e) => efeitoConhecido(e) && rastreioDe(e) === rastreio);
+  const em = (l: readonly (Efeito | Desconhecido)[] | undefined) => (l ?? []).some((e) => efeitoConhecido(e) && efeitoUsa(e, rastreio));
   for (const c of d.principal) {
     const x = c as { efeitos?: (Efeito | Desconhecido)[]; celulas?: { efeitos: (Efeito | Desconhecido)[] }[] };
     if (em(x.efeitos) || (x.celulas ?? []).some((cel) => em(cel.efeitos))) return true;
