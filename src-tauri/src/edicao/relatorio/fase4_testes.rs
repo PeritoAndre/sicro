@@ -2,7 +2,7 @@
 //! Fase 4 que o motor já compila (rampa, zoom com chaves, texto livre com sombra, faixa e entrada animada, sugestões
 //! de detecção confirmadas, marcações do perito e do "Simplificar", cópia de gravador com relógio e taxa suposta).
 //! Cada número esperado sai do PROJETO (e do denso gravado à mão), não do `feito`: o motor, o `tecnico.json`, os
-//! dados e o PDF ficam no meio. O zoom que segue entra quando o pacote dele for juntado (teste `#[ignore]`).
+//! dados e o PDF ficam no meio. O zoom que segue vai pelo motor (`segue::na_cauda`, ZS).
 
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -259,7 +259,6 @@ fn contagens_do_pdf_conferem_com_o_projeto() {
 /// Zoom que segue pelo motor: o `feito` que a compilação grava chega ao PDF ("acompanhando o rastreio R<n>") e o
 /// rastreio entra no anexo H com o uso do item. Depende da entrega do ZS (`segue::na_cauda`).
 #[test]
-#[ignore = "fecho do bloco 6.4: ZS"]
 fn zoom_que_segue_pelo_motor() {
     let tab = tabela();
     let corrida = corrida_da_deteccao(&tab);
