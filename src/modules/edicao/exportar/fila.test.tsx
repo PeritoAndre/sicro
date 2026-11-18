@@ -246,7 +246,10 @@ describe("Fila visível (P4.4)", () => {
     expect(toasts().map((t) => [t.kind, t.message, t.acao?.rotulo])).toEqual([["success", "WhatsApp · Pronto", "Abrir pasta"]]);
     await abrirPainel();
     expect(linhas().map((l) => l.querySelector("[data-reaproveitada]") !== null)).toEqual([false, true, false, false]);
-    expect(linha("2").querySelector("[data-reaproveitada]")?.getAttribute("aria-label")).toBe("Reaproveitada");
+    const icone = linha("2").querySelector("[data-reaproveitada]");
+    expect(icone?.getAttribute("aria-label")).toBe("Reaproveitada");
+    // o rótulo do ícone (tooltip) também é da lista do §8.6
+    expect([icone?.getAttribute("aria-label"), icone?.getAttribute("title")].filter((t) => !textoPermitido(t ?? ""))).toEqual([]);
     // sem ws guardado: a pasta do caso aberto na Edição
     cmd.edicaoSaidas.mockResolvedValue([saida("s2")]);
     await clicar(botao(corpo().querySelector('[role="region"]')!, "Abrir pasta"));

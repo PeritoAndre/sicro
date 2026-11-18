@@ -28,6 +28,8 @@ export const ROTULOS = new Set<string>([
   "Exportar", "Predefinição", "Júri", "WhatsApp", "Preservação", "Personalizada", "Arquivo reprodutível", "Ciente", "Cancelar",
   "Fila", "Na fila", "Preparando", "Camadas", "Juntando", "Conferindo", "A conferir", "Relatório", "Pronto", "Falhou", "Cancelado",
   "Abrir pasta", "Ver registro", "Conferido", "Concluir sem conferir", "Pacote do júri", "Excluir", "Fechar",
+  // Fase 4 (P4.4): ícone da exportação que veio inteira do cache (só tooltip)
+  "Reaproveitada",
   // Fase 1 (§8.6 e contratos-fase1 (f)), já aqui: o pacote que liga a seção não edita este arquivo
   "Acompanhar", "Cortar", "Fecho",
   "Suavizar", "Borda", "Preta", "Ampliar", "Refazer estabilização", "Campo", "Contraste", "Gama", "Saturação",
