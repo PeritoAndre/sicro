@@ -287,6 +287,43 @@ describe("palco no modo Programa", () => {
     expect(tocar.getAttribute("aria-pressed")).toBe("false");
   });
 
+  it("J e L aceleram no palco (Relogio.velocidade): L L a 2×, J ré guiada, K para, L de novo a 1×; no Clipe também", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 20 }));
+    await espera(20);
+    const tocando = () => [...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].filter((v) => !v.paused);
+    await tecla("l", "KeyL");
+    await chegar(t.raiz);
+    await tecla("l", "KeyL");
+    await chegar(t.raiz);
+    expect(tocando().map((v) => v.playbackRate)).toEqual([2]);
+    await tecla("j", "KeyJ");
+    await espera(30);
+    expect(tocando()).toHaveLength(0);
+    await tecla("k", "KeyK");
+    await espera(30);
+    await tecla("l", "KeyL");
+    await chegar(t.raiz);
+    expect(tocando().map((v) => v.playbackRate)).toEqual([1]);
+    await tecla("k", "KeyK");
+    await espera(30);
+    // Clipe: o elemento do palco
+    await clicar(botao(t.raiz, "Clipe"));
+    await espera(20);
+    const el = t.raiz.querySelector<HTMLVideoElement>("video[data-elemento]")!;
+    Object.defineProperty(el, "readyState", { value: 4, configurable: true });
+    let parado = true;
+    Object.defineProperty(el, "paused", { get: () => parado, configurable: true });
+    const play = vi.spyOn(el, "play").mockImplementation(async () => void (parado = false));
+    vi.spyOn(el, "pause").mockImplementation(() => void (parado = true));
+    await tecla("l", "KeyL");
+    await espera(20);
+    await tecla("l", "KeyL");
+    await espera(20);
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(el.playbackRate).toBe(2);
+  });
+
   it("o Inspetor lê o tempo do clipe no slot do cursor (Começar/Terminar no cursor no modo Programa)", async () => {
     await montar(<EditorEdicao ativo />);
     await act(async () => st().posicionar({ modo: "programa", q: 70 }));

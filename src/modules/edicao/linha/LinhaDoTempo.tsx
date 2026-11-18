@@ -65,8 +65,6 @@ export interface AcoesLinha {
   dividir(clipe: Id, q: number): void;
   /** Marca da transição: o clipe em foco e a seção "Entrada" do Inspetor. */
   abrirEntrada(clipe: Id): void;
-  /** J e L, com a velocidade (1, 2, 4, 8: repetir a tecla acelera). */
-  tocar(sentido: 1 | -1, velocidade?: number): void;
   /** Guarda o cursor de agora e devolve quem o põe de volta (Esc no aparar: a borda mostrada no palco desiste junto). */
   guardarCursor?(): () => void;
 }
@@ -176,8 +174,6 @@ export function LinhaDoTempo({ palco, atalhos }: LinhaProps) {
           h?.scrollIntoView?.({ block: "nearest" });
         });
       },
-      // `PalcoApi.tocar` ainda não tem velocidade (a prévia viva, P3.3, traz `Relogio.velocidade`): o ponto é este
-      tocar: (d) => palco()?.tocar(d),
       guardarCursor: () => {
         const c = st().cursor;
         return () => st().posicionar(c);
@@ -267,6 +263,12 @@ export interface EstadoJL {
 /** J e L: repetir no mesmo sentido acelera (1×, 2×, 4×, 8×); trocar de sentido volta a 1× (rótulo do atalho). */
 export function velocidadeJL(atual: EstadoJL | null, sentido: 1 | -1): EstadoJL {
   return { sentido, velocidade: atual && atual.sentido === sentido ? Math.min(8, atual.velocidade * 2) : 1 };
+}
+
+/** J (−1) ou L (1): parte do que o palco faz agora (parado = 1×); o único caminho das duas teclas (EditorEdicao). */
+export function teclaJL(p: Pick<PalcoApi, "tocar" | "velocidade">, d: 1 | -1): void {
+  const v = p.velocidade();
+  p.tocar(d, velocidadeJL(v === 0 ? null : { sentido: v > 0 ? 1 : -1, velocidade: Math.abs(v) }, d).velocidade);
 }
 
 export function VistaLinha(p: VistaLinhaProps) {
@@ -1118,7 +1120,6 @@ export function VistaLinha(p: VistaLinhaProps) {
   };
 
   // ---- atalhos ----
-  const jl = useRef<EstadoJL | null>(null);
   const ferramenta = (f: Ferramenta) => p.definirUi({ ferramenta: f });
   useShortcuts(
     {
@@ -1128,17 +1129,7 @@ export function VistaLinha(p: VistaLinhaProps) {
       "video.timelineZoomIn": () => zoom(1.5),
       "video.timelineZoomOut": () => zoom(1 / 1.5),
       "video.timelineZoomFit": () => zoom("ajustar"),
-      // J e L: ré e à frente (K pausa pelo atalho do palco)
-      "video.reverse": () => {
-        jl.current = velocidadeJL(jl.current, -1);
-        v.current.p.acoes.tocar(-1, jl.current.velocidade);
-      },
-      "video.forward": () => {
-        jl.current = velocidadeJL(jl.current, 1);
-        v.current.p.acoes.tocar(1, jl.current.velocidade);
-      },
-      // K: o palco pausa (atalho do editor); a próxima J ou L recomeça em 1×
-      "video.playPauseK": () => void (jl.current = null),
+      // J, K e L são do editor (teclaJL), com a linha aberta ou não
     },
     { enabled: p.atalhos },
   );

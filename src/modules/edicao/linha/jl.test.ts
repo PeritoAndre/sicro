@@ -1,7 +1,7 @@
 /** J e L como no rótulo do atalho: repetir acelera (1×, 2×, 4×, 8×); K para; trocar de sentido volta a 1×. */
 
 import { describe, expect, it } from "vitest";
-import { velocidadeJL, type EstadoJL } from "./LinhaDoTempo";
+import { teclaJL, velocidadeJL, type EstadoJL } from "./LinhaDoTempo";
 
 const teclas = (s: string) => {
   let e: EstadoJL | null = null;
@@ -23,8 +23,25 @@ describe("J e L", () => {
     expect(teclas("LLKL")).toBe("1 2 1");
   });
 
-  // o palco ainda toca só a 1×: `PalcoApi.tocar(sentido)` sem velocidade; a linha já manda `tocar(sentido, velocidade)`
-  it.skip("fecho do bloco 6.4: P3.3", () => {
-    // com `Relogio.velocidade` (P3.3): L L → o palco toca a 2×; J J J → ré a 4×; K → parado
+  it("o editor parte do que o palco faz agora: L L 2×, J J J ré a 4×, K para; parado sozinho, recomeça em 1×", () => {
+    let v = 0;
+    const palco = { velocidade: () => v, tocar: (d: 1 | -1, vel = 1) => void (v = d * vel) };
+    const k = (s: string) => {
+      for (const c of s) if (c === "K") v = 0;
+      else teclaJL(palco, c === "L" ? 1 : -1);
+    };
+    k("LL");
+    expect(v).toBe(2);
+    k("JJJ");
+    expect(v).toBe(-4);
+    k("K");
+    expect(v).toBe(0);
+    k("L");
+    expect(v).toBe(1);
+    k("LLLL");
+    expect(v).toBe(8);
+    v = 0;
+    k("L");
+    expect(v).toBe(1);
   });
 });

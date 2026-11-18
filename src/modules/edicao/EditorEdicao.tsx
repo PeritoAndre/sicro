@@ -34,7 +34,7 @@ import { capturar } from "./palco/capturar";
 // Fase 2 (contratos-fase2.md (c)): rastreio assistido do P2.4 (sem efeito enquanto RASTREIO_PRONTO = false)
 import { atalhosDoRastreio, pararCorrida, useOuvirRastreio } from "./store/rastreioStore";
 // Fase 4 (contratos-fase4.md (c)): linha do tempo (P4.1) e prévia viva (P3.3), cada uma com a sua bandeira
-import { LINHA_PRONTA, LinhaDoTempo } from "./linha/LinhaDoTempo";
+import { LINHA_PRONTA, LinhaDoTempo, teclaJL } from "./linha/LinhaDoTempo";
 import { PREVIA_VIVA_PRONTA } from "./palco/motor/motor";
 
 /** Atalhos da tela: só na frente, sem diálogo e sem menu aberto (Fila, menu do cartão, menu de contexto). */
@@ -158,9 +158,9 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
       },
       "video.playPause": () => palco.current?.tocarPausar(),
       "video.playPauseK": () => palco.current?.tocarPausar(),
-      // J e L (revisão P3.3: estavam em VIDEO_NA_EDICAO sem ação)
-      "video.reverse": () => palco.current?.tocar(-1),
-      "video.forward": () => palco.current?.tocar(1),
+      // J e L: repetir acelera até 8× (teclaJL); K para
+      "video.reverse": () => palco.current && teclaJL(palco.current, -1),
+      "video.forward": () => palco.current && teclaJL(palco.current, 1),
       "video.prevFrame": () => palco.current?.passo(-1),
       "video.nextFrame": () => palco.current?.passo(1),
       "video.seekStart": () => palco.current?.inicio(),

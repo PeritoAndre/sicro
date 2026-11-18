@@ -64,9 +64,12 @@ export const MEDIDAS_MAX = 3;
 
 export interface PalcoApi {
   tocarPausar(): void;
-  // CONTRATO: acréscimo (fecho da Fase 1, O3; contratos-fase1 F2).
-  /** Toca para a frente (1) ou dá ré (−1, modo guiado) até `pausar`; já tocando nesse sentido, nada muda. */
-  tocar(d: 1 | -1): void;
+  // CONTRATO: acréscimo (fecho da Fase 1, O3; contratos-fase1 F2); `velocidade` e `velocidade()` no fecho do bloco 6.4 (J e L).
+  /** Toca para a frente (1) ou dá ré (−1, modo guiado) até `pausar`, a `velocidade` (padrão 1); já tocando nesse
+   *  sentido (e nessa velocidade, se dada), nada muda. */
+  tocar(d: 1 | -1, velocidade?: number): void;
+  /** Velocidade com sinal em que o palco anda agora; 0 parado. */
+  velocidade(): number;
   /** Para de tocar (a Edição saiu da frente). */
   pausar(): void;
   passo(d: 1 | -1): void;
@@ -708,8 +711,9 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
     }
   }, [irQuadro, irLocal]);
 
-  /** Sentido em que o palco anda agora (1 = tocando, −1 = ré guiada). */
+  /** Sentido em que o palco anda agora (1 = tocando, −1 = ré guiada) e a velocidade (J e L). */
   const sentidoRef = useRef<1 | -1>(1);
+  const velRef = useRef(1);
 
   /** Ré (modo guiado, §7.3): elemento parado; o palco pede por busca o quadro que o relógio de parede manda, um
    *  pedido por vez (busca lenta pula quadros, nunca atrasa o relógio). Para no começo do clipe (ou da mídia). */
@@ -742,7 +746,7 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
       const passo = () => {
         if (!tocandoRef.current) return;
         const agora = performance.now();
-        const j = Math.max(limite, exibido(tab, tDe - (agora - t0) / 1000));
+        const j = Math.max(limite, exibido(tab, tDe - ((agora - t0) / 1000) * velRef.current));
         if (j !== pedido) {
           pedido = j;
           bus.ir(j);
@@ -766,7 +770,7 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
     const de0 = tLocalRef.current;
     const passo = () => {
       if (!tocandoRef.current) return;
-      const t = de0 - (performance.now() - t0) / 1000;
+      const t = de0 - ((performance.now() - t0) / 1000) * velRef.current;
       tLocalRef.current = Math.max(t, 0);
       pintarAgora();
       if (performance.now() - ultimoPost >= 250) {
@@ -818,7 +822,7 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
         const passo = () => {
           if (!tocandoRef.current) return;
           const agora = performance.now();
-          const j = quadroGuiado(mapa, v.campos, q0, (agora - t0) / 1000, v.fps);
+          const j = quadroGuiado(mapa, v.campos, q0, ((agora - t0) / 1000) * velRef.current, v.fps);
           if (j === null) {
             tocandoRef.current = false;
             setTocando(false);
@@ -845,6 +849,8 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
       if (ve) {
         ve.volume = 0.999;
         ve.volume = 1;
+        // parado: o playbackRate só muda com o elemento parado (§7.3)
+        ve.playbackRate = velRef.current;
       }
       void el.tocar().catch(() => parar());
       const passo = () => {
@@ -879,11 +885,11 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
     }
     // sem fonte: relógio de parede
     const dur = duracaoLocal(c);
-    let t0 = performance.now() - tLocalRef.current * 1000;
-    if (tLocalRef.current >= dur) t0 = performance.now();
+    const de0 = tLocalRef.current >= dur ? 0 : tLocalRef.current;
+    const t0 = performance.now();
     const passo = () => {
       if (!tocandoRef.current) return;
-      const t = (performance.now() - t0) / 1000;
+      const t = de0 + ((performance.now() - t0) / 1000) * velRef.current;
       tLocalRef.current = Math.min(t, dur);
       pintarAgora();
       if (performance.now() - ultimoPost >= 250) {
@@ -897,11 +903,12 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
     laco.current = requestAnimationFrame(passo);
   }, [parar, pintarAgora, postar, irQuadro, desmarcarMedida]);
 
-  /** `PalcoApi.tocar`: anda no sentido pedido; já andando nele, nada muda; no outro, troca. */
+  /** `PalcoApi.tocar`: anda no sentido pedido; já andando nele (na velocidade, se dada), nada muda; senão, troca. */
   const tocarNoSentido = useCallback(
-    (d: 1 | -1) => {
-      if (tocandoRef.current && sentidoRef.current === d) return;
+    (d: 1 | -1, velocidade?: number) => {
+      if (tocandoRef.current && sentidoRef.current === d && (velocidade === undefined || velocidade === velRef.current)) return;
       if (tocandoRef.current) parar();
+      velRef.current = velocidade ?? 1;
       if (d === 1) tocarPausar();
       else darRe();
     },
@@ -1126,8 +1133,12 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
   useImperativeHandle(
     ref,
     (): PalcoApi => ({
-      tocarPausar,
+      tocarPausar: () => {
+        if (!tocandoRef.current) velRef.current = 1;
+        tocarPausar();
+      },
       tocar: tocarNoSentido,
+      velocidade: () => (tocandoRef.current ? sentidoRef.current * velRef.current : 0),
       pausar: () => {
         if (tocandoRef.current) parar();
       },

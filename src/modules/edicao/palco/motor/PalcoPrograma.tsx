@@ -489,11 +489,12 @@ export const PalcoPrograma = forwardRef<PalcoApi, Props>(function PalcoPrograma(
     ref,
     (): PalcoApi => ({
       tocarPausar: () => (motor.relogio.estado() === "parado" ? tocar(1) : pausar()),
-      tocar: (d) => {
-        const e = motor.relogio.estado();
-        if (e !== "parado" && Math.sign(motor.relogio.velocidade()) === d) return;
-        tocar(d);
+      tocar: (d, velocidade) => {
+        const atual = motor.relogio.estado() === "parado" ? 0 : motor.relogio.velocidade();
+        if (Math.sign(atual) === d && (velocidade === undefined || Math.abs(atual) === velocidade)) return;
+        tocar(d * (velocidade ?? 1));
       },
+      velocidade: () => (motor.relogio.estado() === "parado" ? 0 : motor.relogio.velocidade()),
       pausar,
       passo: (d) => {
         if (motor.relogio.estado() !== "parado") motor.pausar();
