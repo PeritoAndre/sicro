@@ -37,7 +37,7 @@
   min-width: 0;
 }
 .ponto > div:first-child {
-  flex: 1.6;
+  flex: 1.15;
   min-width: 0;
 }
 .ponto > div:nth-child(2) {

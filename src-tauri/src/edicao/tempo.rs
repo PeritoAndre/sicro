@@ -2093,11 +2093,17 @@ print(json.dumps(saida))
     /// Previsto em inteiros × medido: devolve os slots conferidos, ou o que divergiu.
     #[allow(clippy::too_many_arguments)]
     fn conferir_caso_em(cap: &Capacidades, nome: &str, m: &Medida, caso: &Caso, pasta: &Path, n: usize, em_rampa: bool) -> std::result::Result<(u64, bool), String> {
-        let fps = r(caso.fps.0, caso.fps.1);
         let como = if em_rampa { format!("rampa 1× → {}× → 1×", caso.v) } else { format!("{}×", caso.v) };
-        let rotulo = format!("{nome} quadros [{}, {}) a {como} em {}/{} ({})", caso.j_in, caso.j_out, fps.num, fps.den, cap.versao);
         let v = velocidade_do_caso(&m.info.quadros, caso, em_rampa);
-        let mapa = mapa_trecho(&m.info.quadros, caso.j_in, caso.j_out, &v, fps).map_err(|e| format!("{rotulo}: {e}"))?;
+        conferir_com(cap, nome, m, caso, &v, &como, pasta, n)
+    }
+
+    /// `conferir_caso_em` com a velocidade dada (`caso.v` não é usado).
+    #[allow(clippy::too_many_arguments)]
+    fn conferir_com(cap: &Capacidades, nome: &str, m: &Medida, caso: &Caso, v: &Velocidade, como: &str, pasta: &Path, n: usize) -> std::result::Result<(u64, bool), String> {
+        let fps = r(caso.fps.0, caso.fps.1);
+        let rotulo = format!("{nome} quadros [{}, {}) a {como} em {}/{} ({})", caso.j_in, caso.j_out, fps.num, fps.den, cap.versao);
+        let mapa = mapa_trecho(&m.info.quadros, caso.j_in, caso.j_out, v, fps).map_err(|e| format!("{rotulo}: {e}"))?;
         let s = renderizar(cap, m, &mapa, fps, pasta, n).map_err(|e| format!("{rotulo}: {e}"))?;
         let previsto: Vec<u32> = mapa.quadro_do_slot.iter().map(|&j| m.numeros[j as usize]).collect();
         if s.numeros != previsto {
@@ -2447,6 +2453,84 @@ print(json.dumps(saida))
         let p = rodar_casos_com(&cap, &medidas, &casos, true);
         assert_eq!(p.casos, casos.len());
         fechar(&cap, "rampa", p);
+    }
+
+    /// Rampas extremas em toda fonte da matriz (revisão do P3.4): 0,05× → 16× com os pontos no primeiro e no último
+    /// quadro lido, 16× → 0,05× em 29,97, 41 pontos colados (pares no mesmo instante, degrau, 1 ns de distância) entre
+    /// 0,25× e 3× a 25 qps, e degrau de 0,05× a 60 qps. O quadro previsto em cada slot é o medido, e o `fps@` conta
+    /// todos os lidos.
+    #[test]
+    fn rampa_extrema_previsto_igual_ao_medido() {
+        let Some(cap) = fontes::cap() else { return };
+        let mut s = Sorteio(64);
+        let mut casos: Vec<(Caso, Velocidade, String)> = Vec::new();
+        let mut medidas = Vec::new();
+        let ponto = |t: f64, v: f64, interp: Interp| Chave { t, pts: None, v, interp };
+        for (i, &f) in MATRIZ.iter().enumerate() {
+            let m = apoio::medida(&cap, f);
+            let tab = &m.info.quadros;
+            let n = m.limite;
+            let lidos = 60.min(n - 1);
+            let primeiro = |j: usize| tab.pts.get(j).and_then(|&p| tab.indice_do_pts(p)).unwrap_or(j);
+            let d = fontes::descricao(f);
+            for k in 0..4 {
+                let (j_in, j_out) = match s.ate(4) {
+                    0 => (0, lidos),
+                    1 => (n - lidos, n),
+                    _ => {
+                        let a = s.ate(n - lidos);
+                        (a, a + lidos)
+                    }
+                };
+                let (j_in, j_out) = (primeiro(j_in), primeiro(j_out));
+                let t = |j: usize| tab.tempo(j);
+                let l = Interp::Linear;
+                let (v, fps, como) = match k {
+                    0 => (vec![ponto(t(j_in), 0.05, l), ponto(t(j_out - 1), 16.0, l)], d.fps, "0,05× → 16×"),
+                    1 => (vec![ponto(t(j_in), 16.0, l), ponto(t(j_out - 1), 0.05, l)], (30000, 1001), "16× → 0,05×"),
+                    2 => {
+                        let mut p = Vec::new();
+                        for q in 0..20 {
+                            let x = t(j_in + (j_out - j_in) * q / 20);
+                            let (a, b) = if q % 2 == 0 { (0.25, 3.0) } else { (3.0, 0.25) };
+                            p.push(ponto(x, a, if q % 3 == 0 { Interp::Degrau } else { l }));
+                            p.push(ponto(x + if q % 4 == 1 { 1e-9 } else { 0.0 }, b, l));
+                        }
+                        p.push(ponto(t(j_out - 1), 1.0, l));
+                        (p, (25, 1), "41 pontos colados")
+                    }
+                    _ => (vec![ponto(t(j_in + 5), 1.0, Interp::Degrau), ponto(t(j_in + 10), 0.05, Interp::Degrau), ponto(t(j_in + 12), 2.0, l)], (60, 1), "degraus"),
+                };
+                casos.push((Caso { fonte: i, v: 0.0, fps, j_in, j_out }, Velocidade::Rampa { pontos: v }, como.to_string()));
+            }
+            medidas.push((format!("{f:?}"), m));
+        }
+        let (proximo, placar) = (AtomicUsize::new(0), Mutex::new(Placar::default()));
+        std::thread::scope(|sc| {
+            for _ in 0..std::thread::available_parallelism().map_or(2, |n| n.get() / 3).clamp(2, 6) {
+                sc.spawn(|| {
+                    let pasta = fontes::pasta_temporaria("tempo-rampa-extrema");
+                    loop {
+                        let i = proximo.fetch_add(1, Ordering::Relaxed);
+                        let Some((caso, v, como)) = casos.get(i) else { break };
+                        let (nome, m) = &medidas[caso.fonte];
+                        let res = conferir_com(&cap, nome, m, caso, v, como, &pasta, i);
+                        let mut p = placar.lock().unwrap();
+                        p.casos += 1;
+                        match res {
+                            Ok((slots, com_busca)) => {
+                                p.slots += slots;
+                                p.com_busca += usize::from(com_busca);
+                            }
+                            Err(e) => p.falhas.push(e),
+                        }
+                    }
+                });
+            }
+        });
+        let p = placar.into_inner().unwrap();
+        assert_eq!(p.casos, casos.len());
+        fechar(&cap, "rampa extrema", p);
     }
 
     /// A rampa pela cadeia inteira do compilador (`clipe::trecho`, executor, `fps@` conferido), na exportação final e

@@ -150,16 +150,24 @@ enum Ritmo {
 }
 
 /// Fatia de 0,2 s de fonte da rampa (`receitas-video.md` §10): amostras [de, ate) do recorte que viram `n` amostras
-/// por `atempo` constante, cortadas na amostra.
+/// por `atempo` constante (`estagios`) ou, sem "manter o tom", por `asetrate` + `aresample` (`hz`, exato), cortadas
+/// na amostra. Lê até `ler` (≥ `ate`): o `atempo` segura o fim da entrada e, sem som depois da fatia, ela acabava
+/// em silêncio (de 3 a 178 ms por emenda, medido na revisão do P3.4).
 struct Fatia {
     de: u64,
     ate: u64,
+    ler: u64,
     n: u64,
     estagios: Vec<f64>,
+    hz: Option<u64>,
 }
 
 /// Fonte de cada fatia da rampa: 0,2 s.
 const FATIA_AMOSTRAS: u64 = TAXA_AUDIO as u64 / 5;
+/// Som lido depois da fatia, por unidade de fator ≥ 1 (0,1 s de saída a mais, cortado depois do `atempo`).
+const FATIA_MARGEM: u64 = TAXA_AUDIO as u64 / 10;
+/// Cruzamento entre fatias vizinhas: 5 ms.
+const FATIA_CRUZA: u64 = TAXA_AUDIO as u64 / 200;
 
 /// Clipe da trilha principal no programa: amostras [ini, fim) e o som (None = silêncio).
 struct Item<'a> {
@@ -443,23 +451,56 @@ fn cadeia(g: &mut Grafo, de: &str, s: &Som, n: u64) -> String {
             let _ = write!(c, ",asetrate={hz},aresample={TAXA_AUDIO}");
         }
         Ritmo::Fatias(f) if !f.is_empty() => {
-            // `asplit` do recorte, cada fatia cortada na amostra, `atempo`, completada e cortada no tamanho dela; `concat`
+            // `asplit` do recorte, cada fatia cortada na amostra, `atempo` ou `asetrate`, completada e cortada no
+            // tamanho dela. Com `atempo` de um lado da emenda as fases não casam (salto de até a escala cheia): a da
+            // esquerda continua `cruza` amostras e as duas se cruzam (`afade` linear, soma 1); o exato emenda sem
+            // cruzar. Pares e ímpares vão em `concat` separados, com o silêncio até a vez seguinte (`apad`), e o
+            // `amix` soma os dois.
             let base = format!("s{}", g.aux);
             g.aux += 1;
             let saidas: String = (0..f.len()).map(|k| format!("[{base}f{k}]")).collect();
             let _ = write!(c, ",asplit={}{saidas}", f.len());
             g.linhas.push(c);
-            let mut junta = String::new();
+            let cruza: Vec<u64> = (0..f.len())
+                .map(|k| match f.get(k + 1) {
+                    Some(d) if !(f[k].estagios.is_empty() && d.estagios.is_empty()) => FATIA_CRUZA.min(d.n),
+                    _ => 0,
+                })
+                .collect();
+            let mut juntas = [String::new(), String::new()];
             for (k, x) in f.iter().enumerate() {
-                let mut l = format!("[{base}f{k}]atrim=start_sample={}:end_sample={},asetpts=N/SR/TB", x.de, x.ate);
+                let mut l = format!("[{base}f{k}]atrim=start_sample={}:end_sample={},asetpts=N/SR/TB", x.de, x.ler);
                 for e in &x.estagios {
                     let _ = write!(l, ",atempo={e}");
                 }
-                let _ = write!(l, ",apad,atrim=end_sample={},asetpts=N/SR/TB[{base}g{k}]", x.n);
+                if let Some(hz) = x.hz {
+                    let _ = write!(l, ",asetrate={hz},aresample={TAXA_AUDIO}");
+                }
+                let _ = write!(l, ",apad,atrim=end_sample={},asetpts=N/SR/TB", x.n + cruza[k]);
+                if k > 0 && cruza[k - 1] > 0 {
+                    let _ = write!(l, ",afade=t=in:ss=0:ns={}", cruza[k - 1]);
+                }
+                if cruza[k] > 0 {
+                    let _ = write!(l, ",afade=t=out:ss={}:ns={}", x.n, cruza[k]);
+                }
+                // silêncio até a próxima fatia da mesma paridade
+                let vao = f.get(k + 1).map_or(0, |d| d.n - cruza[k]);
+                if vao > 0 && k + 2 < f.len() {
+                    let _ = write!(l, ",apad=pad_len={vao}");
+                }
+                let _ = write!(l, "[{base}g{k}]");
                 g.linhas.push(l);
-                let _ = write!(junta, "[{base}g{k}]");
+                let _ = write!(juntas[k % 2], "[{base}g{k}]");
             }
-            c = format!("{junta}concat=n={}:v=0:a=1", f.len());
+            let [pares, impares] = juntas;
+            let n_pares = f.len().div_ceil(2);
+            c = if f.len() == 1 {
+                format!("{pares}anull")
+            } else {
+                g.linhas.push(format!("{pares}concat=n={n_pares}:v=0:a=1[{base}p]"));
+                g.linhas.push(format!("{impares}concat=n={}:v=0:a=1,adelay=delays={}S:all=1[{base}i]", f.len() / 2, f[0].n));
+                format!("[{base}p][{base}i]amix=inputs=2:normalize=0:dropout_transition=0")
+            };
         }
         Ritmo::Fatias(_) => {}
     }
@@ -522,9 +563,9 @@ fn tolerancia_real_ms(f: f64) -> f64 {
 }
 
 /// Rampa: o recorte `[de, ate)` em fatias de 0,2 s de fonte; cada uma vira as amostras de saída que a rampa dá a
-/// ela (τ pela mesma conta do vídeo, `tempo::Rampa`), por `atempo` constante. O desvio dentro da fatia é o do
-/// `atempo` do fator dela: a tolerância é a do pior fator da rampa.
-fn fatias(pontos: &[Chave<f64>], de: f64, ate: f64) -> Result<(Ritmo, f64)> {
+/// ela (τ pela mesma conta do vídeo, `tempo::Rampa`), por `atempo` constante (`manter_tom`) ou `asetrate`. O
+/// desvio dentro da fatia é o do `atempo` do fator dela: a tolerância é a do pior fator da rampa (0 no exato).
+fn fatias(pontos: &[Chave<f64>], de: f64, ate: f64, manter_tom: bool) -> Result<(Ritmo, f64)> {
     let rampa = tempo::Rampa::nova(pontos, de)?;
     let total = em_amostras(ate - de);
     let mut bordas: Vec<u64> = (0..total.div_ceil(FATIA_AMOSTRAS)).map(|k| k * FATIA_AMOSTRAS).collect();
@@ -538,10 +579,17 @@ fn fatias(pontos: &[Chave<f64>], de: f64, ate: f64) -> Result<(Ritmo, f64)> {
             continue;
         }
         let fator = (bordas[k + 1] - bordas[k]) as f64 / n as f64;
-        v.push(Fatia { de: bordas[k], ate: bordas[k + 1], n, estagios: estagios_reais(fator) });
+        let ler = total.min(bordas[k + 1] + (FATIA_MARGEM as f64 * fator.max(1.0)).ceil() as u64);
+        // exato: taxa declarada que faz das amostras da fatia as `n` da saída (o resto do arredondamento sai no corte)
+        let (estagios, hz) = match manter_tom {
+            true => (estagios_reais(fator), None),
+            false => (Vec::new(), Some(((bordas[k + 1] - bordas[k]) * TAXA_AUDIO as u64 + n / 2) / n).filter(|&hz| hz != TAXA_AUDIO as u64)),
+        };
+        v.push(Fatia { de: bordas[k], ate: bordas[k + 1], ler, n, estagios, hz });
     }
     let (lento, rapido) = rampa.faixa();
-    Ok((Ritmo::Fatias(v), tolerancia_real_ms(lento).max(tolerancia_real_ms(rapido))))
+    let tol = if manter_tom { tolerancia_real_ms(lento).max(tolerancia_real_ms(rapido)) } else { 0.0 };
+    Ok((Ritmo::Fatias(v), tol))
 }
 
 fn velocidade(v: &Velocidade, manter_tom: bool) -> Result<(Ritmo, f64)> {
@@ -713,7 +761,7 @@ pub(crate) fn tolerancia_atempo_do_programa(p: &ProjetoEdicao, linha: &LinhaReso
         let toca = !t.audio.mudo && volume_de(&t.audio.volume).is_ok_and(|v| !matches!(v, Vol::Fixo(x) if x <= 0.0));
         if toca && ctx.fontes.get(&t.midia).is_some_and(|f| f.audio.is_some()) {
             let tol = match &t.velocidade {
-                Velocidade::Rampa { pontos } => fatias(pontos, 0.0, 0.0).map_or(0.0, |x| x.1),
+                Velocidade::Rampa { pontos } => fatias(pontos, 0.0, 0.0, t.audio.manter_tom).map_or(0.0, |x| x.1),
                 v => velocidade(v, t.audio.manter_tom).map_or(0.0, |x| x.1),
             };
             atempo = atempo.max(tol);
@@ -841,9 +889,9 @@ fn mixar<'a>(p: &'a ProjetoEdicao, linha: &LinhaResolvida, ctx: &Contexto<'a>, (
                     let tab = &fonte.quadros;
                     let tb = |pts: i64| pts as f64 * tab.tb.num as f64 / tab.tb.den as f64;
                     let (de, ate) = (tb(faixa.pts_in), faixa.pts_out.map_or_else(|| tab.fim_s(), tb));
-                    // rampa: fatias com `atempo` (o "manter o tom" não muda nada nela)
+                    // rampa: fatias com `atempo` ou, sem "manter o tom", com `asetrate`
                     let (v, tol) = match &t.velocidade {
-                        Velocidade::Rampa { pontos } => fatias(pontos, de, ate)?,
+                        Velocidade::Rampa { pontos } => fatias(pontos, de, ate, t.audio.manter_tom)?,
                         v => velocidade(v, t.audio.manter_tom)?,
                     };
                     tolerancia = tolerancia.max(tol);
@@ -1621,7 +1669,7 @@ mod testes {
     #[test]
     fn fatias_da_rampa_somam_a_integral() {
         let pontos: Vec<Chave<f64>> = serde_json::from_value(json!([{ "t": 11.0, "v": 1.0 }, { "t": 12.0, "v": 0.25 }, { "t": 13.0, "v": 1.0 }])).unwrap();
-        let (Ritmo::Fatias(f), tol) = fatias(&pontos, 10.3, 13.7).unwrap() else { panic!() };
+        let (Ritmo::Fatias(f), tol) = fatias(&pontos, 10.3, 13.7, true).unwrap() else { panic!() };
         assert_eq!(tol, tolerancia_real_ms(0.25));
         // 3,4 s de fonte: 17 fatias de 0,2 s, emendadas
         assert_eq!(f.len(), 17);
@@ -1633,7 +1681,7 @@ mod testes {
             assert!(x.estagios.iter().all(|e| (0.5..=2.0).contains(e)) && (0.249..=1.001).contains(&fator), "{:?}", x.estagios);
             assert!((fator - (x.ate - x.de) as f64 / x.n as f64).abs() < 1e-9);
         }
-        assert!(fatias(&[], 0.0, 1.0).is_err());
+        assert!(fatias(&[], 0.0, 1.0, true).is_err());
     }
 
     #[test]
@@ -1997,7 +2045,7 @@ mod testes {
 
     /// Rampa com som (P3.4, `receitas-video.md` §10): 1× → 0,25× → 1×. As rajadas da fonte (x,0 s) caem no instante
     /// de programa que a rampa dá a elas (`tempo::programa_da_fonte`, a mesma conta do vídeo), dentro do desvio
-    /// declarado do `atempo`; o clipe tem as amostras exatas dos slots.
+    /// declarado do `atempo` ou, sem "manter o tom", a até 1 ms; o clipe tem as amostras exatas dos slots.
     #[test]
     fn rampa_em_fatias_marcas_no_lugar() {
         let Some(cap) = fontes::cap() else { return };
@@ -2007,35 +2055,104 @@ mod testes {
         let fonte = info(&cap, &src);
         let tab = fonte.quadros.clone();
         let fontes = HashMap::from([("v".to_string(), fonte)]);
-        let mut t = trecho("c0", "v", 0.8, 6.2, 1.0, true);
-        t["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": 1.8, "v": 1.0 }, { "t": 3.4, "v": 0.25 }, { "t": 5.0, "v": 1.0 }] });
-        let v: Velocidade = serde_json::from_value(t["velocidade"].clone()).unwrap();
-        let p = projeto((30, 1), vec![imagem("i0", 0.5), t], vec![], vec![]);
-        let (passo, linha) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
-        // 5,4 s de fonte em 27 fatias; as de 1× (antes de 1,8 s e depois de 5 s) não passam por `atempo`
-        assert!(passo.grafo.contains(",asplit=27[") && passo.grafo.matches("atempo=").count() >= 15, "{}", passo.grafo);
-        let fr = racional((30, 1));
-        let l = rodar(&cap, &passo, &pasta).canal(0);
-        assert_eq!(l.len() as u64, tempo::amostra_do_slot(linha.total_q, fr));
-        let c = &linha.clipes[1];
-        let f = c.fonte.as_ref().unwrap();
-        let t0 = f.pts_in as f64 * tab.tb.num as f64 / tab.tb.den as f64;
-        let a0 = tempo::amostra_do_slot(c.inicio_q, fr) as f64;
-        let tol = passo.tolerancia_atempo_ms * 48.0;
-        let mut d = Vec::new();
-        for marca in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] {
-            let e = a0 + tempo::programa_da_fonte(&v, t0, marca).unwrap() * TAXA_AUDIO as f64;
-            let i = inicio_do_clique(&l, (e - 9600.0) as usize, (e + 9600.0) as usize).unwrap_or_else(|| panic!("rajada de {marca} s não achada ({})", cap.versao));
-            d.push(i as f64 - e);
+        for manter_tom in [true, false] {
+            let mut t = trecho("c0", "v", 0.8, 6.2, 1.0, manter_tom);
+            t["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": 1.8, "v": 1.0 }, { "t": 3.4, "v": 0.25 }, { "t": 5.0, "v": 1.0 }] });
+            let v: Velocidade = serde_json::from_value(t["velocidade"].clone()).unwrap();
+            let p = projeto((30, 1), vec![imagem("i0", 0.5), t], vec![], vec![]);
+            let (passo, linha) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+            // 5,4 s de fonte em 27 fatias; as de 1× (antes de 1,8 s e depois de 5 s) não passam por `atempo` nem `asetrate`
+            let mudar = if manter_tom { "atempo=" } else { "asetrate=" };
+            assert!(passo.grafo.contains(",asplit=27[") && passo.grafo.matches(mudar).count() >= 15, "{}", passo.grafo);
+            assert_eq!(passo.grafo.contains("atempo="), manter_tom);
+            let fr = racional((30, 1));
+            let l = rodar(&cap, &passo, &pasta).canal(0);
+            assert_eq!(l.len() as u64, tempo::amostra_do_slot(linha.total_q, fr));
+            let c = &linha.clipes[1];
+            let f = c.fonte.as_ref().unwrap();
+            let t0 = f.pts_in as f64 * tab.tb.num as f64 / tab.tb.den as f64;
+            let a0 = tempo::amostra_do_slot(c.inicio_q, fr) as f64;
+            // exato: a subida da rajada no tom mais grave (até 1 ms a 0,25×)
+            let tol = if manter_tom { passo.tolerancia_atempo_ms * 48.0 } else { 48.0 };
+            let mut d = Vec::new();
+            for marca in [1.0, 2.0, 3.0, 4.0, 5.0, 6.0] {
+                let e = a0 + tempo::programa_da_fonte(&v, t0, marca).unwrap() * TAXA_AUDIO as f64;
+                let i = inicio_do_clique(&l, (e - 9600.0) as usize, (e + 9600.0) as usize).unwrap_or_else(|| panic!("rajada de {marca} s não achada ({})", cap.versao));
+                d.push(i as f64 - e);
+            }
+            eprintln!("rampa com som ({}, manter o tom {manter_tom}): desvios {d:?} amostras, tolerância {tol}", cap.versao);
+            assert!(passo.tolerancia_atempo_ms > 0.0 || !manter_tom);
+            assert!(d.iter().all(|x| x.abs() <= tol), "{d:?} > {tol} ({})", cap.versao);
+            // antes da rampa (1×) a fatia não muda: o clique de 1,5 s fica na amostra
+            let e = a0 + tempo::programa_da_fonte(&v, t0, 1.5).unwrap() * TAXA_AUDIO as f64;
+            let i = inicio_do_clique(&l, (e - 2400.0) as usize, (e + 2400.0) as usize).unwrap();
+            assert!((i as f64 - e).abs() <= TOL_EXATO, "clique de 1,5 s: {} amostras ({})", i as f64 - e, cap.versao);
         }
-        eprintln!("rampa com som ({}): desvios {d:?} amostras, tolerância {tol}", cap.versao);
-        assert!(d.iter().all(|x| x.abs() <= tol), "{d:?} > {tol} ({})", cap.versao);
-        // medido: as fatias cortadas na amostra seguram o lugar (o início da rajada é ~4 amostras depois do x,0 s)
-        assert!(d.iter().all(|x| (x - 4.0).abs() <= 48.0), "mais de 1 ms: {d:?} ({})", cap.versao);
-        // antes da rampa (1×) a fatia não passa por `atempo`: o clique de 1,5 s fica na amostra
-        let e = a0 + tempo::programa_da_fonte(&v, t0, 1.5).unwrap() * TAXA_AUDIO as f64;
-        let i = inicio_do_clique(&l, (e - 2400.0) as usize, (e + 2400.0) as usize).unwrap();
-        assert!((i as f64 - e).abs() <= TOL_EXATO, "clique de 1,5 s: {} amostras ({})", i as f64 - e, cap.versao);
+    }
+
+    /// Emendas das fatias da rampa (revisão do P3.4): seno contínuo de 440 Hz por 1× → v× → 1×, de 0,05× a 16×, com
+    /// e sem "manter o tom". Sem silêncio no meio do clipe (a fatia lida só até o fim dela acabava muda: até 178 ms
+    /// por emenda), sem salto na emenda (fase do `atempo` de cada fatia: até a escala cheia acelerando) e o
+    /// cruzamento sem buraco de volume.
+    #[test]
+    fn rampa_emendas_sem_vao_nem_salto() {
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = fontes::pasta_temporaria("audio-rampa-emendas");
+        let src = com_video(&cap, &pasta, "seno.mkv", ("30", 8.0), &[], "sine=f=440:r=48000:d=8", &["-c:a", "pcm_s16le"]);
+        let fonte = info(&cap, &src);
+        let tab = fonte.quadros.clone();
+        let fontes = HashMap::from([("v".to_string(), fonte)]);
+        let fr = racional((30, 1));
+        for manter_tom in [true, false] {
+            for lento in [0.05, 0.25, 4.0, 16.0] {
+                let rotulo = format!("{lento}×, manter o tom {manter_tom} ({})", cap.versao);
+                let mut t = trecho("c0", "v", 0.8, 6.2, 1.0, manter_tom);
+                t["velocidade"] = json!({ "tipo": "rampa", "pontos": [{ "t": 1.8, "v": 1.0 }, { "t": 3.4, "v": lento }, { "t": 5.0, "v": 1.0 }] });
+                let pontos: Vec<Chave<f64>> = serde_json::from_value(t["velocidade"]["pontos"].clone()).unwrap();
+                let p = projeto((30, 1), vec![imagem("i0", 0.5), t], vec![], vec![]);
+                let (passo, linha) = montar_com(&p, &fontes, &cap, &final_(&p)).unwrap();
+                let l: Vec<f64> = rodar(&cap, &passo, &pasta).canal(0).into_iter().map(f64::from).collect();
+                let c = &linha.clipes[1];
+                let f = c.fonte.as_ref().unwrap();
+                let tb = |p: i64| p as f64 * tab.tb.num as f64 / tab.tb.den as f64;
+                let (t0, t1) = (tb(f.pts_in), f.pts_out.map_or_else(|| tab.fim_s(), tb));
+                let a0 = tempo::amostra_do_slot(c.inicio_q, fr) as usize;
+                let (Ritmo::Fatias(fs), _) = fatias(&pontos, t0, t1, manter_tom).unwrap() else { panic!() };
+                let bordas: Vec<usize> = fs.iter().scan(a0, |a, x| { *a += x.n as usize; Some(*a) }).collect();
+                // as fatias somam a integral; o clipe tem os slots do vídeo (até meio slot a menos)
+                let fim = bordas[bordas.len() - 1].min(tempo::amostra_do_slot(c.inicio_q + c.n_q as u64, fr) as usize);
+                let emendas: Vec<usize> = bordas.iter().copied().filter(|&b| b + 240 < fim).collect();
+                let a = l[a0..fim].iter().fold(0.0f64, |m, x| m.max(x.abs()));
+                let pico = |i: usize, w: usize| l[i..i + w].iter().fold(0.0f64, |m, x| m.max(x.abs()));
+                // nenhum 1 ms mudo do início ao fim das fatias
+                let mudo = (a0..fim - 48).step_by(48).find(|&i| pico(i, 48) < 0.02 * a);
+                assert!(mudo.is_none(), "{rotulo}: mudo em {:?} ms do clipe", mudo.map(|i| (i - a0) / 48));
+                // salto na emenda: a maior 1ª diferença do seno puro é a·2π·440/48000 (com o tom mantido)
+                let seno = a * 2.0 * std::f64::consts::PI * 440.0 / 48_000.0;
+                let salto = emendas.iter().map(|&b| (b - 4..b + 4).map(|i| (l[i] - l[i - 1]).abs()).fold(0.0, f64::max)).fold(0.0, f64::max) / seno;
+                // volume no cruzamento (picos de 3 ms): o `atempo` de cada lado não casa a fase (medido: 0,59)
+                let vale = emendas.iter().map(|&b| (b - 240..b + 240).step_by(24).map(|i| pico(i, 144)).fold(f64::MAX, f64::min)).fold(f64::MAX, f64::min) / a;
+                if manter_tom {
+                    eprintln!("emendas {rotulo}: {} fatias, salto {salto:.2}× o do seno, vale {vale:.2}", fs.len());
+                    assert!(salto <= 1.3, "{rotulo}: salto de {salto:.2}× o do seno na emenda");
+                    assert!(vale >= 0.5, "{rotulo}: vale de {vale:.2} no cruzamento");
+                    continue;
+                }
+                // exato: cada amostra é o seno da fonte no instante que a fatia dá a ela (taxa declarada `hz`); a primeira
+                // da fatia sai do `aresample` sem o passado (medido: até 0,18 da escala a 16×, 1 amostra; no resto 0,037)
+                let (mut erro, mut primeira): (f64, f64) = (0.0, 0.0);
+                for (x, &b) in fs.iter().zip(&bordas) {
+                    let ini = b - x.n as usize;
+                    for i in ini..b.min(fim) {
+                        let s = t0 + (x.de as f64 + (i - ini) as f64 * x.hz.unwrap_or(48_000) as f64 / 48_000.0) / 48_000.0;
+                        let e = (l[i] - a * (2.0 * std::f64::consts::PI * 440.0 * s).sin()).abs() / a;
+                        if i == ini { primeira = primeira.max(e) } else { erro = erro.max(e) }
+                    }
+                }
+                eprintln!("emendas {rotulo}: {} fatias, erro máx {erro:.3} da escala (primeira amostra {primeira:.3})", fs.len());
+                assert!(erro <= 0.05 && primeira <= 0.25, "{rotulo}: erro de {erro:.3} da escala (primeira amostra {primeira:.3})");
+            }
+        }
     }
 
     #[test]
