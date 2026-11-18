@@ -77,6 +77,9 @@ export function textoPermitido(t: string): boolean {
   // Fase 4: cabeças das trilhas de sobreposição e de áudio (S1, S2…, A1, A2…)
   if (/^[SA]\d+$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;
+  // faixa da linha "PP1 · seta", "PP2 · ocultar": nome do rastreio (dado) e o rótulo do efeito
+  const faixa = /^\S.* · (\S+)$/.exec(t);
+  if (faixa && ROTULOS.has(faixa[1]!)) return true;
   if (/^-?\d+(,\d+)?\s?(%|°|×|px)?$/.test(t)) return true;
   // andamento da detecção (P4.5): quadros feitos/total
   if (/^\d+\/\d+$/.test(t)) return true;

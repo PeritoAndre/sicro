@@ -106,6 +106,7 @@ export const Regua = memo(function Regua(p: ReguaProps) {
           style={{ left: `calc(var(--px) * ${m.q}px)`, background: m.cor }}
           title={m.rotulo}
           data-marcador={m.id}
+          data-dado=""
           onPointerDown={(e) => {
             e.stopPropagation();
             p.onMarcador(m.id, m.q);

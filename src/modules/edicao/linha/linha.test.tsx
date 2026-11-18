@@ -433,7 +433,13 @@ describe("gestos na tela", () => {
     expect(useLinhaUi.getState().ferramenta).toBe("selecionar");
   });
 
-  it("textos e dicas só dos rótulos (nomes de clipe são dado)", async () => {
+  it("textos e dicas só dos rótulos (nomes de clipe, de pessoa e de marcador são dado)", async () => {
+    await act(async () =>
+      st().alterar("teste", (d) => {
+        d.rastreios.find((r) => r.id.endsWith("12"))!.nome = "PP1";
+        d.marcadores.push({ id: "mk1", rotulo: "Disparo", cor: "#5aa9e6", pos: { ref: "programa", t: 1 } });
+      }),
+    );
     const t = await telaComLinha();
     await act(async () => {});
     const painel = t.raiz.querySelector<HTMLElement>("[data-linha-painel]")!;
@@ -447,7 +453,10 @@ describe("gestos na tela", () => {
     expect(textos.filter((s) => !textoPermitido(s))).toEqual([]);
     // cabeças da maquete: "V1 Vídeo", "A1 Som", "A2 Narração"; o zoom "− ▬ +"
     expect(textos).toEqual(expect.arrayContaining(["Selecionar", "Lâmina", "Ímã", "V1", "Vídeo", "A1", "Som", "A2", "Narração", "−", "+", "0:05"]));
-    const dicas = [...painel.querySelectorAll<HTMLElement>("[title]")].filter((e) => !e.closest("[data-item]") && !e.closest("[data-marcador]")).map((e) => e.title);
+    expect(textos).toContain("PP1 · ocultar");
+    const dicas = [...painel.querySelectorAll<HTMLElement>("[title]")].filter((e) => !e.closest("[data-item]") && !e.closest("[data-dado]")).map((e) => e.title);
     expect(dicas.filter((d) => !ROTULOS.has(d) && d !== "Ajustar à tela" && !textoPermitido(d))).toEqual([]);
+    // o marcador leva o rótulo do documento como dica, marcado como dado
+    expect([...painel.querySelectorAll<HTMLElement>("[data-dado][title]")].map((e) => e.title)).toEqual(["Disparo"]);
   });
 });
