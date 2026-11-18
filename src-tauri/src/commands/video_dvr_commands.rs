@@ -97,6 +97,16 @@ pub async fn video_dvr_registrar(workspace_path: String, media_id: String, chave
     .await
 }
 
+/// Esquece a cópia preparada (`chave`) cujo original não entrou no caso; o `.parcial` some.
+#[tauri::command]
+pub async fn video_dvr_descartar(workspace_path: String, chave: String) -> Result<()> {
+    em_fundo(move || {
+        dvr::descartar(&PathBuf::from(workspace_path), &chave);
+        Ok(())
+    })
+    .await
+}
+
 /// Pede o fim da cópia em curso: os ffmpeg morrem e o `.parcial` some.
 #[tauri::command]
 pub async fn video_dvr_cancelar() -> Result<()> {

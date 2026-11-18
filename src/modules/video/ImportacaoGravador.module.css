@@ -1,9 +1,9 @@
+/* canto de baixo à esquerda (os avisos ficam à direita); abaixo dos diálogos, que podem abrir no registro */
 .painel {
   position: fixed;
-  left: 50%;
+  left: 16px;
   bottom: 16px;
-  transform: translateX(-50%);
-  z-index: 9200;
+  z-index: 90;
   display: flex;
   align-items: center;
   gap: 10px;

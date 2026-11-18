@@ -98,7 +98,14 @@ export async function registrarVideo(workspacePath: string, caminho: string): Pr
       throw soFrase(e);
     }
     avanco({ fase: "registro", fracao: null });
-    const original = await useVideoStore.getState().registerMedia(workspacePath, caminho);
+    let original;
+    try {
+      original = await useVideoStore.getState().registerMedia(workspacePath, caminho);
+    } catch (e) {
+      // o original não entrou (arquivo sumiu, por exemplo): a cópia preparada não fica no caso
+      await commands.videoDvrDescartar(workspacePath, preparo.chave).catch(() => undefined);
+      throw e;
+    }
     try {
       const { media } = await commands.videoDvrRegistrar(workspacePath, original.id, preparo.chave);
       useVideoStore.setState((s) => ({ list: [media, ...s.list.filter((m) => m.id !== media.id)] }));

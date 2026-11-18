@@ -14,6 +14,7 @@ const cmd = vi.hoisted(() => ({
   videoDvrPreparar: vi.fn(),
   videoDvrRegistrar: vi.fn(),
   videoDvrCancelar: vi.fn(),
+  videoDvrDescartar: vi.fn(),
   registerVideoMedia: vi.fn(),
   listVideoMedia: vi.fn(),
 }));
@@ -65,6 +66,7 @@ beforeEach(() => {
   useImportacaoGravador.setState({ fase: null, fracao: null });
   cmd.registerVideoMedia.mockResolvedValue(original);
   cmd.videoDvrCancelar.mockResolvedValue(undefined);
+  cmd.videoDvrDescartar.mockResolvedValue(undefined);
 });
 
 describe("importação de gravador", () => {
@@ -125,6 +127,17 @@ describe("importação de gravador", () => {
     expect(useImportacaoGravador.getState().fase).toBe("registro");
     soltarRegistro(original);
     await p;
+    expect(useImportacaoGravador.getState()).toEqual({ fase: null, fracao: null });
+  });
+
+  it("original que não entra depois da cópia preparada (arquivo sumiu): a preparada é descartada, o erro sobe", async () => {
+    cmd.videoDvrConferir.mockResolvedValue("dahua");
+    cmd.videoDvrPreparar.mockResolvedValue({ chave: "k9", formato: "dahua", ja_existia: false });
+    cmd.registerVideoMedia.mockRejectedValue({ kind: "filesystem", message: "video file not found at /ext/cam 1.dav" });
+    const e = await registrarVideo(WS, "/ext/cam 1.dav").catch((x: unknown) => x);
+    expect(String((e as Error).message)).toContain("not found");
+    expect(cmd.videoDvrDescartar).toHaveBeenCalledWith(WS, "k9");
+    expect(cmd.videoDvrRegistrar).not.toHaveBeenCalled();
     expect(useImportacaoGravador.getState()).toEqual({ fase: null, fracao: null });
   });
 

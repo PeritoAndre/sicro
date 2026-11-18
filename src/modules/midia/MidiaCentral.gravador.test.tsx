@@ -20,6 +20,7 @@ const cmd = vi.hoisted(() => ({
   videoDvrPreparar: vi.fn(),
   videoDvrRegistrar: vi.fn(),
   videoDvrCancelar: vi.fn(),
+  videoDvrDescartar: vi.fn(),
   registerVideoMedia: vi.fn(),
   openVideoMedia: vi.fn(),
 }));

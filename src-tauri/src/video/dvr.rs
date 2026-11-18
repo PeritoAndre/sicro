@@ -428,9 +428,10 @@ fn relatar(a: &Andamento, cancelar: &AtomicBool, avanco: AoAvanco) {
         let mudou = match ultimo {
             None => true,
             Some((f, x)) => {
+                // na mesma fase, só para a frente (a cópia mede por tempo ou por bytes, conforme o que o ffmpeg dá)
                 f != atual.0
                     || match (x, atual.1) {
-                        (Some(x), Some(y)) => (y - x).abs() >= PASSO_AVANCO,
+                        (Some(x), Some(y)) => y - x >= PASSO_AVANCO,
                         (x, y) => x.is_some() != y.is_some(),
                     }
             }
@@ -603,6 +604,27 @@ impl<'a> Leitor<'a> {
     }
 }
 
+/// O ffmpeg parou de ler a entrada por erro (pendrive retirado, rede caída: `Error during demuxing: Input/output
+/// error`) e mesmo assim saiu com 0: a leitura acabou ali como se fosse o fim. Duas leituras cortadas no mesmo ponto
+/// dão listas iguais; sem isto, uma cópia pela metade passaria na prova.
+fn leitura_cortada(stderr: &Path) -> bool {
+    use std::io::BufRead;
+    let Ok(f) = File::open(stderr) else { return false };
+    let mut r = std::io::BufReader::new(f);
+    let mut l = Vec::new();
+    while r.read_until(b'\n', &mut l).is_ok_and(|n| n > 0) {
+        if l.windows(22).any(|w| w == b"Error during demuxing:") {
+            return true;
+        }
+        l.clear();
+    }
+    false
+}
+
+fn erro_de_leitura() -> SicroError {
+    validacao(codigo::COPIA_DIVERGENTE, Some("leitura"))
+}
+
 /// Tem fluxo de áudio? `entrada` leva o `-f` do fluxo cru.
 fn tem_audio(cap: &Capacidades, t: &Trabalho, video: &Path, entrada: &[String]) -> Result<bool> {
     let mut a = textos(&["-v", "error"]);
@@ -650,6 +672,7 @@ fn lista(cap: &Capacidades, video: &Path, entrada: &[String], audio: bool, cance
         }
         // 69 = o ffmpeg desistiu por excesso de erros de decodificação: a lista vale até onde ele foi
         match fim.codigo {
+            Some(0 | 69) if leitura_cortada(&cmd.stderr) => Err(erro_de_leitura()),
             Some(0 | 69) => Ok(Some(leitor.fim(com_audio)?)),
             _ if com_audio => Ok(None),
             _ => exec::exigir_sucesso(&cmd, &fim).map(|_| None),
@@ -878,6 +901,10 @@ fn copiar_andando(cap: &Capacidades, origem: &Path, formato: Formato, destino: &
         comando.extend(cmd.args.iter().cloned());
         if let Err(falha) = exec::exigir_sucesso(&cmd, &fim) {
             return Ok(Feita { modo, comando, lista: None, falha: Some(falha) });
+        }
+        // leitura cortada não é divergência que outro modo resolva
+        if leitura_cortada(&cmd.stderr) {
+            return Err(erro_de_leitura());
         }
         // denominador da prova: o tempo gravado (sem ele, a duração que o MKV declara)
         let gravado = (gravado_us > 0).then(|| gravado_us as f64 / 1e6);
@@ -1194,6 +1221,7 @@ pub fn preparar(cap: &Capacidades, ws: &Path, origem: &Path, cancelar: &AtomicBo
     crate::edicao::executar::abrir_banco(ws)?;
     descartar_pendentes(ws);
     let parcial = novo_parcial(ws)?;
+    let antes = identidade(origem);
     let (parar, fim, existente) = (AtomicBool::new(false), AtomicBool::new(false), AtomicBool::new(false));
     let (copia, sha256) = std::thread::scope(|s| {
         let h = s.spawn(|| -> Result<String> {
@@ -1224,19 +1252,57 @@ pub fn preparar(cap: &Capacidades, ws: &Path, origem: &Path, cancelar: &AtomicBo
     });
     let chave = Uuid::new_v4().to_string();
     let pendente = |sha256: String, feita| Pendente { chave: chave.clone(), ws: ws.to_path_buf(), formato, sha256, origem: origem.to_path_buf(), feita };
-    if existente.load(Ordering::SeqCst) {
+    // Cancelar vale mesmo que o SHA-256 tenha achado a cópia no caso
+    if existente.load(Ordering::SeqCst) && !cancelar.load(Ordering::SeqCst) {
         let _ = std::fs::remove_file(&parcial);
         pendentes().push(pendente(sha256?, None));
         return Ok(Preparo { chave, formato, ja_existia: true });
     }
-    if cancelar.load(Ordering::SeqCst) {
-        let _ = std::fs::remove_file(&parcial);
-        return Err(cancelado());
+    let r = (|| {
+        if cancelar.load(Ordering::SeqCst) {
+            return Err(cancelado());
+        }
+        // o SHA-256, a cópia e a lista do original leram o mesmo arquivo: ele não mudou nem sumiu enquanto isso
+        match identidade(origem) {
+            None => Err(validacao(codigo::ARQUIVO_AUSENTE, None)),
+            depois if depois != antes => Err(erro_de_leitura()),
+            _ => Ok((copia?, sha256?)),
+        }
+    })();
+    match r {
+        Ok((copia, sha256)) => {
+            pendentes().push(pendente(sha256, Some((parcial, copia))));
+            Ok(Preparo { chave, formato, ja_existia: false })
+        }
+        Err(e) => {
+            sem_parcial(&parcial);
+            Err(e)
+        }
     }
-    let copia = copia?;
-    let sha256 = apagando(&parcial, sha256)?;
-    pendentes().push(pendente(sha256, Some((parcial, copia))));
-    Ok(Preparo { chave, formato, ja_existia: false })
+}
+
+/// Tamanho e data de modificação do arquivo escolhido (None = sumiu).
+fn identidade(p: &Path) -> Option<(u64, Option<std::time::SystemTime>)> {
+    std::fs::metadata(p).ok().map(|m| (m.len(), m.modified().ok()))
+}
+
+/// Apaga o `.parcial` e, vazia, a pasta das cópias: importação que não registrou não deixa nada no caso.
+fn sem_parcial(parcial: &Path) {
+    let _ = std::fs::remove_file(parcial);
+    if let Some(p) = parcial.parent() {
+        let _ = std::fs::remove_dir(p);
+    }
+}
+
+/// Esquece a cópia preparada (`chave`) que não vai ser registrada (o original não entrou) e apaga o `.parcial`.
+pub fn descartar(ws: &Path, chave: &str) {
+    let p = {
+        let mut v = pendentes();
+        v.iter().position(|p| p.chave == chave && p.ws == ws).map(|i| v.swap_remove(i))
+    };
+    if let Some((parcial, _)) = p.and_then(|p| p.feita) {
+        sem_parcial(&parcial);
+    }
 }
 
 /// Registra a cópia que `preparar` deixou (`chave`) como derivada do original `media_id`, já registrado pela
@@ -1261,7 +1327,7 @@ pub fn registrar_pendente(cap: &Capacidades, ws: &Path, media_id: &str, chave: &
     })();
     // registrada, o `.parcial` já mudou de nome; nos outros casos ele sobra
     if let Some(x) = parcial {
-        let _ = std::fs::remove_file(x);
+        sem_parcial(&x);
     }
     r
 }
@@ -2092,6 +2158,295 @@ mod testes {
         assert!(e.contains(codigo::COPIA_DIVERGENTE) && e.ends_with("original"), "{e}");
         assert_eq!(arquivos_das_copias(&ws), Vec::<String>::new(), "sobrou o .parcial");
         assert_eq!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().len(), n + 1, "só o outro original entrou");
+    }
+
+    /// inotify (Linux) no arquivo escolhido e na pasta dele: o que outro processo faz com eles enquanto a importação lê.
+    #[cfg(target_os = "linux")]
+    struct Vigia {
+        fd: std::os::raw::c_int,
+        arquivo: std::os::raw::c_int,
+    }
+
+    #[cfg(target_os = "linux")]
+    mod inotify {
+        use std::os::raw::{c_char, c_int};
+        extern "C" {
+            pub fn inotify_init1(flags: c_int) -> c_int;
+            pub fn inotify_add_watch(fd: c_int, path: *const c_char, mask: u32) -> c_int;
+            pub fn read(fd: c_int, buf: *mut u8, n: usize) -> isize;
+            pub fn close(fd: c_int) -> c_int;
+        }
+        pub const MODIFY: u32 = 0x2;
+        pub const ATTRIB: u32 = 0x4;
+        pub const CLOSE_WRITE: u32 = 0x8;
+        pub const CLOSE_NOWRITE: u32 = 0x10;
+        pub const OPEN: u32 = 0x20;
+        pub const MOVED_FROM: u32 = 0x40;
+        pub const MOVED_TO: u32 = 0x80;
+        pub const CREATE: u32 = 0x100;
+        pub const DELETE: u32 = 0x200;
+        pub const DELETE_SELF: u32 = 0x400;
+        pub const MOVE_SELF: u32 = 0x800;
+        pub const NONBLOCK: c_int = 0o4000;
+    }
+
+    /// Eventos de um trecho: aberturas e fechamentos só de leitura do arquivo, e o que for proibido (escrita, data,
+    /// permissão, troca ou remoção do arquivo; criação, remoção ou mudança na pasta).
+    #[cfg(target_os = "linux")]
+    #[derive(Debug, Default)]
+    struct Eventos {
+        aberturas: usize,
+        fechamentos_leitura: usize,
+        proibidos: Vec<String>,
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Vigia {
+        fn novo(arquivo: &Path, pasta: &Path) -> Vigia {
+            use std::os::unix::ffi::OsStrExt;
+            let c = |p: &Path| std::ffi::CString::new(p.as_os_str().as_bytes()).unwrap();
+            unsafe {
+                let fd = inotify::inotify_init1(inotify::NONBLOCK);
+                assert!(fd >= 0, "inotify");
+                use inotify::*;
+                let arquivo = inotify_add_watch(fd, c(arquivo).as_ptr(), MODIFY | ATTRIB | CLOSE_WRITE | CLOSE_NOWRITE | OPEN | MOVE_SELF | DELETE_SELF);
+                let p = inotify_add_watch(fd, c(pasta).as_ptr(), MODIFY | ATTRIB | CLOSE_WRITE | CREATE | DELETE | MOVED_FROM | MOVED_TO);
+                assert!(arquivo >= 0 && p >= 0, "inotify_add_watch");
+                Vigia { fd, arquivo }
+            }
+        }
+
+        fn ler(&self) -> Eventos {
+            let mut ev = Eventos::default();
+            let mut buf = vec![0u8; 1 << 16];
+            loop {
+                let n = unsafe { inotify::read(self.fd, buf.as_mut_ptr(), buf.len()) };
+                if n <= 0 {
+                    return ev;
+                }
+                let mut i = 0;
+                while i + 16 <= n as usize {
+                    let u = |k: usize| u32::from_ne_bytes(buf[i + k..i + k + 4].try_into().unwrap());
+                    let (wd, mask, len) = (u(0) as i32, u(4), u(12) as usize);
+                    let nome = String::from_utf8_lossy(&buf[i + 16..i + 16 + len]).trim_end_matches('\0').to_string();
+                    if wd == self.arquivo && mask == inotify::OPEN {
+                        ev.aberturas += 1;
+                    } else if wd == self.arquivo && mask == inotify::CLOSE_NOWRITE {
+                        ev.fechamentos_leitura += 1;
+                    } else {
+                        ev.proibidos.push(format!("wd {wd} máscara {mask:#x} {nome}"));
+                    }
+                    i += 16 + len;
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    impl Drop for Vigia {
+        fn drop(&mut self) {
+            unsafe { inotify::close(self.fd) };
+        }
+    }
+
+    /// Tamanho, inode, modo e as três datas em ns.
+    #[cfg(target_os = "linux")]
+    fn foto(p: &Path) -> [i64; 6] {
+        use std::os::unix::fs::MetadataExt;
+        let m = std::fs::metadata(p).unwrap();
+        let ns = |s: i64, n: i64| s * 1_000_000_000 + n;
+        [m.len() as i64, m.ino() as i64, m.mode() as i64, ns(m.mtime(), m.mtime_nsec()), ns(m.ctime(), m.ctime_nsec()), ns(m.atime(), m.atime_nsec())]
+    }
+
+    /// O arquivo do perito (fora do caso, numa pasta só de leitura) nunca é aberto para escrita, escrito, travado, trocado
+    /// nem tem data ou permissão mudada, em nenhum caminho: Cancelar antes, na Cópia e na Prova; ffmpeg que morre; cópia
+    /// que não confere; leitura cortada no meio (pendrive retirado: o ffmpeg sai com 0 e listas iguais); sucesso e
+    /// reimportação. Fora o sucesso, nada no caso (banco, registro, auditoria, pasta das cópias, pendentes). O SHA-256 do
+    /// original no banco é o do arquivo escolhido. Arquivo que some ou muda no meio (em outra pasta): recusado.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn o_arquivo_escolhido_nunca_e_tocado() {
+        use std::os::unix::fs::PermissionsExt;
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("dvr-intocado");
+        let fonte = fonte_longa(&cap, &d);
+        let pasta = d.join("pendrive só leitura");
+        std::fs::create_dir_all(&pasta).unwrap();
+        let origem = pasta.join(fonte.file_name().unwrap());
+        std::fs::copy(&fonte, &origem).unwrap();
+        // atime depois do mtime: no relatime (padrão do Linux) ler não muda a data; só quem a mudasse de propósito
+        let mtime = std::fs::metadata(&origem).unwrap().modified().unwrap();
+        let tempos = std::fs::FileTimes::new().set_modified(mtime).set_accessed(std::time::SystemTime::now());
+        std::fs::File::options().write(true).open(&origem).unwrap().set_times(tempos).unwrap();
+        // pasta só de leitura; o arquivo não: abrir para escrita daria certo e o vigia veria
+        std::fs::set_permissions(&pasta, std::fs::Permissions::from_mode(0o555)).unwrap();
+        // a pasta volta a ser apagável no fim, mesmo com falha
+        struct Devolve(PathBuf);
+        impl Drop for Devolve {
+            fn drop(&mut self) {
+                let _ = std::fs::set_permissions(&self.0, std::fs::Permissions::from_mode(0o755));
+            }
+        }
+        let _devolve = Devolve(pasta.clone());
+        let b = std::fs::read(&origem).unwrap();
+        let (antes, antes_pasta, sha) = (foto(&origem), foto(&pasta), sha256_file(&origem).unwrap());
+        let vigia = Vigia::novo(&origem, &pasta);
+        // travas (flock/fcntl) no inode do arquivo, olhadas o tempo todo
+        let (fim, travas) = (AtomicBool::new(false), Mutex::new(Vec::<String>::new()));
+        std::thread::scope(|s| {
+            s.spawn(|| {
+                let ino = antes[1].to_string();
+                while !fim.load(Ordering::SeqCst) {
+                    for l in std::fs::read_to_string("/proc/locks").unwrap_or_default().lines() {
+                        if l.split_whitespace().any(|c| c.matches(':').count() == 2 && c.rsplit(':').next() == Some(ino.as_str())) {
+                            travas.lock().unwrap().push(l.to_string());
+                        }
+                    }
+                    std::thread::sleep(Duration::from_millis(1));
+                }
+            });
+            let _fim = AoSair(&fim, std::thread::current());
+            let ws = caso_vazio(&d.join("caso"));
+            let (conn, occ) = crate::edicao::executar::abrir_banco(&ws).unwrap();
+            let contar = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+            let nada_no_caso = |rotulo: &str| {
+                assert!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().is_empty(), "{rotulo}: mídia no caso");
+                assert_eq!(contar("SELECT COUNT(*) FROM video_operation_logs"), 0, "{rotulo}: registro no caso");
+                assert_eq!(contar("SELECT COUNT(*) FROM audit_logs WHERE module = 'video'"), 0, "{rotulo}: auditoria no caso");
+                assert!(!ws.join(REL_COPIAS_DVR).exists(), "{rotulo}: sobrou {:?}", arquivos_das_copias(&ws));
+                assert!(pendentes().iter().all(|p| p.ws != ws), "{rotulo}: pendente");
+            };
+            let intocado = |rotulo: &str| {
+                let ev = vigia.ler();
+                assert_eq!(ev.proibidos, Vec::<String>::new(), "{rotulo}: arquivo ou pasta mexidos");
+                assert_eq!(ev.aberturas, ev.fechamentos_leitura, "{rotulo}: abertura sem fechamento só de leitura");
+                assert!(ev.aberturas > 0, "{rotulo}: o vigia não viu leitura");
+                assert_eq!(foto(&origem), antes, "{rotulo}: tamanho, inode, modo ou datas do arquivo");
+                assert_eq!(foto(&pasta)[..5], antes_pasta[..5], "{rotulo}: pasta");
+                eprintln!("{rotulo} ({}): {} aberturas, todas só de leitura", cap.versao, ev.aberturas);
+            };
+            // leitura cortada na metade, como o ffmpeg faz quando o pendrive sai: lê até ali, avisa e sai com 0
+            let curto = d.join("curto.dav");
+            std::fs::write(&curto, &b[..b.len() / 2]).unwrap();
+            let cortada = d.join("ffmpeg-cortado");
+            std::fs::write(
+                &cortada,
+                format!(
+                    "#!/bin/bash\nreal='{}'; alvo='{}'; curto='{}'\na=(); hit=\nfor x in \"$@\"; do if [ \"$x\" = \"$alvo\" ]; then a+=(\"$curto\"); hit=1; else a+=(\"$x\"); fi; done\n\
+                     \"$real\" \"${{a[@]}}\"; rc=$?\n[ -n \"$hit\" ] && echo '[in#0/dhav @ 0x1] Error during demuxing: Input/output error' >&2\nexit $rc\n",
+                    cap.binario.display(),
+                    origem.display(),
+                    curto.display()
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&cortada, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let cap_cortada = Capacidades { binario: cortada, ..(*cap).clone() };
+            let morre = ffmpeg_com_defeito(&cap, &d, "ffmpeg-morre", r#""$real" "${args[@]}" -frames:v 40 "$fim"; exit 137"#);
+            let quadros = ffmpeg_com_defeito(&cap, &d, "ffmpeg-quadros", r#"exec "$real" "${args[@]}" -frames:v 40 "$fim""#);
+            type Quando = fn(Fase, Option<f64>) -> bool;
+            let nunca: Quando = |_, _| false;
+            let casos: [(&str, &Capacidades, Quando, bool, &str); 6] = [
+                ("Cancelar antes", &cap, nunca, true, "cancelado"),
+                ("Cancelar na Cópia", &cap, |f, _| f == Fase::Copia, false, "cancelado"),
+                ("Cancelar na Prova", &cap, |f, x| f == Fase::Prova && x.is_some_and(|x| x >= 0.2), false, "cancelado"),
+                ("ffmpeg que morre", &morre, nunca, false, "remux"),
+                ("cópia que não confere", &quadros, nunca, false, "copia_divergente"),
+                ("leitura cortada", &cap_cortada, nunca, false, "copia_divergente: leitura"),
+            ];
+            for (rotulo, c, quando, ja, esperado) in casos {
+                let cancelar = AtomicBool::new(ja);
+                let avanco = |f: Fase, x: Option<f64>| {
+                    if quando(f, x) {
+                        cancelar.store(true, Ordering::SeqCst);
+                    }
+                };
+                let e = preparar(c, &ws, &origem, &cancelar, &avanco).map(|_| ()).expect_err(rotulo).to_string();
+                assert!(e.contains(esperado), "{rotulo}: {e}");
+                nada_no_caso(rotulo);
+                intocado(rotulo);
+            }
+            // sucesso: a cópia sai do arquivo escolhido; o original no banco tem o SHA-256 dele e a cópia aponta para o
+            // original do caso
+            let p = preparar(&cap, &ws, &origem, &AtomicBool::new(false), &|_, _| {}).unwrap();
+            let orig = registrar_original(&ws, &origem, false);
+            let r = registrar_pendente(&cap, &ws, &orig.id.to_string(), &p.chave).unwrap();
+            assert_eq!((orig.sha256.as_str(), r.media.derived_from_hash.as_deref()), (sha.as_str(), Some(sha.as_str())));
+            let j: Value = serde_json::from_str(r.media.derivation_json.as_deref().unwrap()).unwrap();
+            assert_eq!((j["source"]["sha256"].as_str(), j["source"]["relative_path"].as_str()), (Some(sha.as_str()), Some(orig.relative_path.as_str())));
+            assert!(!r.media.derivation_json.as_deref().unwrap().contains("pendrive"), "caminho de fora no registro");
+            assert!(!r.media.original_path.as_deref().unwrap_or_default().contains("pendrive"));
+            intocado("sucesso");
+            // reimportação
+            let p2 = preparar(&cap, &ws, &origem, &AtomicBool::new(false), &|_, _| {}).unwrap();
+            assert!(p2.ja_existia);
+            let orig2 = registrar_original(&ws, &origem, true);
+            let r2 = registrar_pendente(&cap, &ws, &orig2.id.to_string(), &p2.chave).unwrap();
+            assert_eq!((r2.ja_existia, r2.media.id), (true, r.media.id));
+            intocado("reimportação");
+            // o que as importações deixaram no caso: dois originais e uma cópia; nenhum log de leitura cortada
+            assert_eq!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().len(), 3);
+        });
+        assert_eq!(travas.into_inner().unwrap(), Vec::<String>::new(), "trava no arquivo escolhido");
+        assert_eq!(sha256_file(&origem).unwrap(), sha);
+        // arquivo que some ou muda no meio (quem apaga ou escreve é o teste, numa pasta comum)
+        let ws = caso_vazio(&d.join("caso 2"));
+        let (conn, occ) = crate::edicao::executar::abrir_banco(&ws).unwrap();
+        for (rotulo, esperado) in [("some no meio", codigo::ARQUIVO_AUSENTE), ("muda no meio", "copia_divergente: leitura")] {
+            let pasta = d.join(rotulo);
+            std::fs::create_dir_all(&pasta).unwrap();
+            let arq = pasta.join("cam.dav");
+            std::fs::copy(&fonte, &arq).unwrap();
+            let feito = AtomicBool::new(false);
+            let avanco = |f: Fase, x: Option<f64>| {
+                // na Prova a lista do original ainda lê o arquivo (a cópia de 25 MB sai em menos de um passo do relator)
+                if f == Fase::Prova && x.is_some_and(|x| x > 0.1) && !feito.swap(true, Ordering::SeqCst) {
+                    if rotulo == "some no meio" {
+                        std::fs::remove_file(&arq).unwrap();
+                    } else {
+                        use std::io::Write;
+                        std::fs::OpenOptions::new().append(true).open(&arq).unwrap().write_all(&b[..b.len() / 3]).unwrap();
+                    }
+                }
+            };
+            let r = preparar(&cap, &ws, &arq, &AtomicBool::new(false), &avanco).map(|_| ());
+            assert!(feito.load(Ordering::SeqCst), "{rotulo}: não chegou a mexer");
+            let e = r.expect_err(rotulo).to_string();
+            assert!(e.contains(esperado), "{rotulo}: {e}");
+            assert!(!ws.join(REL_COPIAS_DVR).exists(), "{rotulo}: sobrou {:?}", arquivos_das_copias(&ws));
+            assert!(pendentes().iter().all(|p| p.ws != ws), "{rotulo}: pendente");
+        }
+        // some depois da cópia provada, antes do original entrar: o registro falha e a tela descarta a preparada
+        let x = d.join("some no meio").join("depois.dav");
+        std::fs::copy(&fonte, &x).unwrap();
+        let p = preparar(&cap, &ws, &x, &AtomicBool::new(false), &|_, _| {}).unwrap();
+        std::fs::remove_file(&x).unwrap();
+        let input = crate::models::RegisterVideoInput { source_path: x.to_string_lossy().into(), allow_duplicate: false };
+        assert!(tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(ws.to_string_lossy().into(), input)).is_err());
+        descartar(&ws, &p.chave);
+        assert!(!ws.join(REL_COPIAS_DVR).exists(), "descartada: sobrou {:?}", arquivos_das_copias(&ws));
+        assert!(pendentes().iter().all(|p| p.ws != ws), "descartada: pendente");
+        assert!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().is_empty());
+    }
+
+    /// O relator só manda a fração para a frente dentro de uma fase (a cópia mede por tempo ou por bytes).
+    #[test]
+    fn relator_nao_volta_na_mesma_fase() {
+        let a = Andamento::novo();
+        a.copia_medida.store(true, Ordering::SeqCst);
+        a.copia.por(0.5);
+        let ev = Mutex::new(Vec::<(Fase, Option<f64>)>::new());
+        std::thread::scope(|s| {
+            let r = s.spawn(|| relatar(&a, &AtomicBool::new(false), &|f, x| ev.lock().unwrap().push((f, x))));
+            let _fim = AoSair(&a.fim, r.thread().clone());
+            std::thread::sleep(RELATOR * 4);
+            for x in [0.3, 0.6] {
+                a.copia.por(x);
+                std::thread::sleep(RELATOR * 4);
+            }
+        });
+        let x: Vec<f64> = ev.into_inner().unwrap().iter().filter_map(|e| e.1).collect();
+        assert_eq!(x, vec![0.5, 0.6]);
     }
 
     /// AVI sem índice com som grava uma cópia só (a sem `+genpts` primeiro); o Dahua e o AVI sem som, a da receita.

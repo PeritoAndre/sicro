@@ -1618,6 +1618,11 @@ export const commands = {
     return safeInvoke<CopiaGravador>("video_dvr_registrar", { workspacePath, mediaId, chave });
   },
 
+  /** P4.6b: esquece a cópia preparada cujo original não entrou no caso (o `.parcial` some). */
+  videoDvrDescartar(workspacePath: string, chave: string): Promise<void> {
+    return safeInvoke<void>("video_dvr_descartar", { workspacePath, chave });
+  },
+
   /** P4.6b: cancela a cópia em curso. */
   videoDvrCancelar(): Promise<void> {
     return safeInvoke<void>("video_dvr_cancelar", {});

@@ -188,6 +188,7 @@ pub fn run() {
             commands::video_dvr_commands::video_dvr_preparar,
             commands::video_dvr_commands::video_dvr_registrar,
             commands::video_dvr_commands::video_dvr_cancelar,
+            commands::video_dvr_commands::video_dvr_descartar,
             // Fase 2 (contratos-fase2.md): rastreio, conferência das ocultações e IA
             commands::edicao_rastreio_commands::edicao_rastreio_ler,
             commands::edicao_rastreio_commands::edicao_rastreio_seguir,
