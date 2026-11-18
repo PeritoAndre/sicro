@@ -1047,6 +1047,19 @@ impl<'a> Validacao<'a> {
                         continue;
                     }
                     self.regiao_do_enquadramento(&q.regiao, q.interpolacao, &onde);
+                    // Fase 4 (contratos-fase4.md B4): a regra é do pacote do zoom que segue; o rastreio seguido passa
+                    // pela mesma conferência do destaque (existe, é da mídia do clipe, está no espaço dele)
+                    if let Some(d) = crate::edicao::segue::recusa(q) {
+                        self.add(NAO_SUPORTADO, &onde.campo("segue"), None, Some(d), None);
+                    }
+                    if let Some(s) = &q.segue {
+                        if let Some(r) = self.rastreio_do_uso(&s.rastreio, uso, &onde, false) {
+                            self.confirmado(r, uso, base, &onde);
+                        }
+                        for (cod, campo) in crate::edicao::segue::problemas(q, self.p, uso.midia) {
+                            self.por(cod, &onde.campo(campo));
+                        }
+                    }
                 }
                 Efeito::Girar(g) => {
                     if g.graus % 90 != 0 || g.graus >= 360 {
@@ -1212,6 +1225,13 @@ impl<'a> Validacao<'a> {
         }
         if let Some(c) = &e.contorno {
             self.cor(&c.cor, &o);
+        }
+        // Fase 4 (contratos-fase4.md B2): sombra e faixa, regra do pacote do texto livre
+        if let Some(c) = e.sombra.as_ref() {
+            self.cor(&c.cor, &o);
+        }
+        if let Some(d) = crate::edicao::camada::texto::recusa_estilo(e) {
+            self.add(NAO_SUPORTADO, &o, None, Some(d), None);
         }
     }
 
@@ -1620,6 +1640,10 @@ impl<'a> Validacao<'a> {
                 if ![&tr.x, &tr.y, &tr.escala, &tr.rotacao, &tr.opacidade].iter().all(|a| animavel_ok(a)) {
                     self.por(ITEM_INVALIDO, &onde.campo("transformacao"));
                     continue;
+                }
+                // Fase 4 (contratos-fase4.md B3): entrada e saída animadas, regra do pacote do texto livre
+                if let Some(d) = crate::edicao::sobreposto::recusa(b) {
+                    self.add(NAO_SUPORTADO, &onde.campo("animacao"), None, Some(d), None);
                 }
                 let n_q = self.linha.livres.iter().find(|l| l.id == b.id).map_or(1, |l| l.n_q);
                 match c {
@@ -2425,7 +2449,7 @@ mod testes {
         c.p["id"] = json!("a/b");
         c.so(&[ESQUEMA]);
         let mut c = cena();
-        c.p["esquema_menor"] = json!(1);
+        c.p["esquema_menor"] = json!(ESQUEMA_MENOR_DOC + 1);
         c.so(&[ESQUEMA_MENOR]);
         // no JSON cru
         let cru = |v: Value| esquema(&v).into_iter().map(|p| (p.codigo, p.campo)).collect::<Vec<_>>();

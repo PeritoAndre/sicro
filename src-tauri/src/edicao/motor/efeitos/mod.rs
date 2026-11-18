@@ -88,6 +88,8 @@ pub(crate) fn rastreio_seguido(e: &Efeito) -> Option<&str> {
             crate::edicao::modelo::OndeVelocidade::Segue { rastreio, .. } => Some(rastreio),
             crate::edicao::modelo::OndeVelocidade::Fixa { .. } => None,
         },
+        // CONTRATO: Fase 4 (B4): o enquadramento que segue usa o rastreio (proveniência, validação do uso)
+        Efeito::Enquadramento(q) => q.segue.as_ref().map(|s| s.rastreio.as_str()),
         _ => None,
     }
 }

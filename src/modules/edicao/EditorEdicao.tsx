@@ -33,6 +33,9 @@ import styles from "./EditorEdicao.module.css";
 import { capturar } from "./palco/capturar";
 // Fase 2 (contratos-fase2.md (c)): rastreio assistido do P2.4 (sem efeito enquanto RASTREIO_PRONTO = false)
 import { atalhosDoRastreio, pararCorrida, useOuvirRastreio } from "./store/rastreioStore";
+// Fase 4 (contratos-fase4.md (c)): linha do tempo (P4.1) e prévia viva (P3.3), cada uma com a sua bandeira
+import { LINHA_PRONTA, LinhaDoTempo } from "./linha/LinhaDoTempo";
+import { PREVIA_VIVA_PRONTA } from "./palco/motor/motor";
 
 /** Atalhos da tela: só na frente, sem diálogo e sem menu aberto (Fila, menu do cartão, menu de contexto). */
 export function atalhosLigados(x: { ativo: boolean; exportando: boolean; modal: boolean; semDialogo: boolean; semMenu: boolean }): boolean {
@@ -58,6 +61,8 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
   const futuro = useEdicaoStore((s) => s.futuro.length);
   const analise = useEdicaoStore((s) => s.analise);
   const avisos = useEdicaoStore((s) => s.avisos);
+  // modo do palco = modo do cursor (D10): "Programa" quando o cursor está no programa e a prévia viva entregou
+  const modoPalco = useEdicaoStore((s) => (PREVIA_VIVA_PRONTA && s.cursor.modo === "programa" ? "programa" : "clipe"));
   const versao = useRecursos((s) => s.versao);
   const [colunas, setColunas] = useColunas();
   const [expandido, setExpandido] = useState(false);
@@ -218,7 +223,7 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
   if (!doc) return null;
   const st = useEdicaoStore.getState;
   return (
-    <div className={styles.editor} data-editor="">
+    <div className={`${styles.editor} ${LINHA_PRONTA && !expandido ? styles.comLinha : ""}`} data-editor="">
       <header className={styles.topo}>
         <button type="button" className={styles.recolher} title="Sequência" aria-label="Sequência" aria-pressed={!colunas.seqFechada} onClick={() => setColunas((c) => ({ ...c, seqFechada: !c.seqFechada }))}>
           {colunas.seqFechada ? <PanelLeftOpen size={15} /> : <PanelLeftClose size={15} />}
@@ -260,7 +265,7 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
         <main className={styles.centro} data-coluna="palco">
           <Palco
             ref={palco}
-            modo="clipe"
+            modo={modoPalco}
             ferramenta={ferramenta}
             onMarcado={onMarcado}
             expandido={expandido}
@@ -273,6 +278,11 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
           <Inspetor />
         </aside>
       </div>
+      {LINHA_PRONTA && !expandido && (
+        <section className={styles.linha} data-linha="">
+          <LinhaDoTempo palco={() => palco.current} atalhos={atalhos} />
+        </section>
+      )}
       <footer className={styles.estado} data-estado-barra="">
         <span className={styles.mono}>{textoDuracaoMs(duracaoDoPrograma(linha))}</span>
         <span className={styles.ponto}>·</span>

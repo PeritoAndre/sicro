@@ -44,6 +44,12 @@ export const ROTULOS = new Set<string>([
   "Apagar daqui em diante", "Simplificar", "Atualizar", "Dessaturar", "Quadro anterior", "Próximo quadro",
   // Fase 4 (§8.6 "sugestões (F4)", P4.5)
   "Sugestões", "Trechos fracos", "Confirmar", "Descartar",
+  // Fase 4 (contratos-fase4.md (h)), já aqui: o pacote que liga a casca não edita este arquivo
+  "Programa", "Começar no cursor", "Terminar no cursor", "Selecionar", "Lâmina", "Ímã", "Ver", "Travar", "V1",
+  "Texto livre", "Nenhum", "Faixa", "Caixa", "Sombra", "Aparecer", "Deslizar", "Lado", "Cima", "Baixo", "Esquerda", "Direita", "Giro",
+  "Chave no cursor", "Tirar chave", "Linear", "Suave", "Degrau", "Escala", "Opacidade", "Volume",
+  "Acompanhar rastreio", "Cena inteira", "Aproximar", "Segurar", "Afastar",
+  "Rastrear pessoas", "Motor", "Automático", "EdgeTAM", "VitTrack", "Mancha",
   // amostras e unidades
   "Aa", "×", "%", "°", "#",
 ]);
@@ -56,6 +62,8 @@ export function textoPermitido(t: string): boolean {
   if (/^Diferente a partir de \d{2}:\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^Perdido em (\d{2}:)?\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^\d+ marcaç(ão|ões)$/.test(t)) return true;
+  // Fase 4: cabeças das trilhas de sobreposição e de áudio (S1, S2…, A1, A2…)
+  if (/^[SA]\d+$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;
   if (/^-?\d+(,\d+)?\s?(%|°|×|px)?$/.test(t)) return true;
   // andamento da detecção (P4.5): quadros feitos/total

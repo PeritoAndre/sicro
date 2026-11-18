@@ -9,10 +9,16 @@ use super::quadros::{Busca, OrigemTabela};
 /// Valor de `esquema` no `projeto.json`.
 pub const ESQUEMA: u32 = 2;
 /// Sobe a cada campo novo com efeito no render; arquivo com valor maior abre só para leitura.
-pub const ESQUEMA_MENOR: u32 = 0;
+// CONTRATO: 1 desde a abertura da Fase 4 (contratos-fase4.md B1): `EstiloTexto.sombra`, `CaixaTexto.faixa`,
+// `SobBase.animacao` e `EfEnquadramento.segue`. Só o documento que usa um deles grava 1 (`menor_necessario`).
+pub const ESQUEMA_MENOR: u32 = 1;
 
 fn sim() -> bool {
     true
+}
+
+fn falso(v: &bool) -> bool {
+    !*v
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +137,45 @@ pub struct ProjetoEdicao {
     pub sincronias: Vec<SincroniaRef>,
     #[serde(default)]
     pub mixagem: Mixagem,
+}
+
+/// Menor `esquema_menor` que lê o documento sem perder nada: 1 se usa um campo da Fase 4 (B1), senão 0.
+/// `armazem::salvar` sobe o do arquivo até ele; quem não usa campo novo segue abrindo na 6.3.
+pub fn menor_necessario(p: &ProjetoEdicao) -> u32 {
+    fn estilo(e: &EstiloTexto) -> bool {
+        e.sombra.is_some() || e.caixa.as_ref().is_some_and(|c| c.faixa)
+    }
+    fn titulo(t: &Titulo) -> bool {
+        t.blocos.iter().any(|b| estilo(&b.estilo))
+    }
+    fn efeito(e: &Tolerante<Efeito>) -> bool {
+        match e {
+            Tolerante::Conhecido(Efeito::Enquadramento(q)) => q.segue.is_some(),
+            Tolerante::Conhecido(Efeito::Texto(t)) => estilo(&t.estilo),
+            Tolerante::Conhecido(Efeito::Carimbo(c)) => estilo(&c.estilo),
+            Tolerante::Conhecido(Efeito::VelocidadeExibida(v)) => estilo(&v.estilo),
+            Tolerante::Conhecido(Efeito::Destaque(d)) => d.rotulo.as_ref().is_some_and(|r| estilo(&r.estilo)),
+            _ => false,
+        }
+    }
+    let principal = p.principal.iter().any(|c| match c {
+        Tolerante::Conhecido(ClipePrincipal::Trecho(x)) => x.base.efeitos.iter().any(efeito),
+        Tolerante::Conhecido(ClipePrincipal::Congelar(x)) => x.base.efeitos.iter().any(efeito),
+        Tolerante::Conhecido(ClipePrincipal::Imagem(x)) => x.base.efeitos.iter().any(efeito),
+        Tolerante::Conhecido(ClipePrincipal::Titulo(x)) => x.base.efeitos.iter().any(efeito) || titulo(&x.titulo),
+        Tolerante::Conhecido(ClipePrincipal::Tela(x)) => x.base.efeitos.iter().chain(x.celulas.iter().flat_map(|c| &c.efeitos)).any(efeito),
+        Tolerante::Desconhecido(_) => false,
+    });
+    let sobrepostos = p.sobreposicoes.iter().flat_map(|t| &t.clipes).any(|c| {
+        let Tolerante::Conhecido(c) = c else { return false };
+        let b = match c {
+            ClipeSobreposto::Video(x) => &x.base,
+            ClipeSobreposto::Imagem(x) => &x.base,
+            ClipeSobreposto::Titulo(x) => &x.base,
+        };
+        b.animacao.is_some() || b.efeitos.iter().any(efeito) || matches!(c, ClipeSobreposto::Titulo(x) if titulo(&x.titulo))
+    });
+    u32::from(principal || sobrepostos || estilo(&p.legendas.estilo))
 }
 
 // ---------------------------------------------------------------------------
@@ -613,6 +658,18 @@ pub struct EstiloTexto {
     pub alinhamento: Alinhamento,
     pub caixa: Option<CaixaTexto>,
     pub contorno: Option<ContornoTexto>,
+    // CONTRATO: acréscimo da Fase 4 (texto livre, contratos-fase4.md B2). None = sem sombra.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sombra: Option<SombraTexto>,
+}
+
+/// Sombra do texto: deslocamento e desfoque em fração da altura do canvas.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SombraTexto {
+    pub cor: String,
+    pub dx: f64,
+    pub dy: f64,
+    pub desfoque: f64,
 }
 
 /// Família tipográfica (não é fonte de mídia).
@@ -646,6 +703,10 @@ pub struct CaixaTexto {
     pub cor: String,
     pub margem: f64,
     pub raio: f64,
+    // CONTRATO: acréscimo da Fase 4 (texto livre, contratos-fase4.md B2). Falso = caixa justa às linhas.
+    /// A caixa ocupa a largura inteira do bloco (`largura_max`).
+    #[serde(default, skip_serializing_if = "falso")]
+    pub faixa: bool,
 }
 
 /// Contorno do texto: `largura` em fração da altura do canvas.
@@ -801,6 +862,17 @@ pub struct EfEnquadramento {
     pub regiao: Animavel<Caixa>,
     pub ajuste: Ajuste,
     pub interpolacao: Interpolacao,
+    // CONTRATO: acréscimo da Fase 4 (zoom que segue, contratos-fase4.md B4). None = a região é a gravada.
+    /// O centro da região acompanha o rastreio (suavizado); o tamanho vem de `regiao`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub segue: Option<SegueRastreio>,
+}
+
+/// Enquadramento que acompanha um rastreio: `suavizar_s` = largura da média móvel centrada, na base do rastreio.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct SegueRastreio {
+    pub rastreio: String,
+    pub suavizar_s: f64,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -1150,6 +1222,26 @@ pub struct SobBase {
     pub saida_s: f64,
     #[serde(default)]
     pub efeitos: Vec<Tolerante<Efeito>>,
+    // CONTRATO: acréscimo da Fase 4 (texto livre, contratos-fase4.md B3). None = aparecer na entrada e na saída.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub animacao: Option<AnimacaoSob>,
+}
+
+/// Como o sobreposto entra (em `entrada_s`) e sai (em `saida_s`); `lado` = de onde vem e para onde vai ao deslizar.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AnimacaoSob {
+    pub entrada: Surgir,
+    pub saida: Surgir,
+    pub lado: Lado,
+}
+
+/// "Corte" ignora a duração; "aparecer" = opacidade linear; "deslizar" = opacidade e posição.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Surgir {
+    Corte,
+    Aparecer,
+    Deslizar,
 }
 
 /// Fase 3.
@@ -1281,8 +1373,9 @@ impl Default for TrilhaLegendas {
                 tamanho: 0.052,
                 cor: "#ffffff".into(),
                 alinhamento: Alinhamento::Centro,
-                caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem: 0.013, raio: 0.0 }),
+                caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem: 0.013, raio: 0.0, faixa: false }),
                 contorno: None,
+                sombra: None,
             },
             lugar: Lugar { x: 0.5, y: 0.94, h: Alinhamento::Centro, v: AlinhamentoV::Base },
             linhas_max: 2,
@@ -2025,6 +2118,7 @@ mod testes {
         lit!(ida_volta, super::OrigemRastreio: Manual = { "tipo": "manual" }, Assistido = { "tipo": "assistido" });
         lit!(ida_volta, super::PapelAudio: Narracao = "narracao", Musica = "musica", Efeitos = "efeitos");
         lit!(ida_volta, super::PapelTexto: Titulo = "titulo", Subtitulo = "subtitulo", Corpo = "corpo", Rodape = "rodape");
+        lit!(ida_volta, super::Surgir: Corte = "corte", Aparecer = "aparecer", Deslizar = "deslizar");
         lit!(ida_volta, super::Predefinicao: Juri = "juri", Whatsapp = "whatsapp", Preservacao = "preservacao", Personalizada = "personalizada");
         lit!(ida, super::SituacaoMidia: Ok = "ok", Ausente = "ausente", Trocada = "trocada");
         lit!(ida_volta, super::TipoDerivacao: Trecho = "trecho", Estabilizado = "estabilizado", Lente = "lente", CopiaDvr = "copia_dvr", Superres = "superres", Outro = "outro");
@@ -2181,5 +2275,116 @@ mod testes {
         let faltam: Vec<&str> = VARIANTES.iter().copied().filter(|e| !vistos.contains(*e)).collect();
         assert!(faltam.is_empty(), "faltam em completo.json: {faltam:?}");
         assert!(desconhecidos.is_empty(), "caíram em Desconhecido: {desconhecidos:?}");
+    }
+
+    // ---- abertura da Fase 4 (contratos-fase4.md B1 a B4)
+
+    /// Chaves que só a Fase 4 grava (os nomes não existem em outro lugar do modelo como chave de objeto, fora
+    /// `faixa`, que também é a faixa de cor da mídia e a do cálculo de velocidade: essa é conferida pelo valor `true`).
+    fn chaves_da_fase4(v: &Value, onde: &str, saida: &mut Vec<String>) {
+        match v {
+            Value::Array(a) => a.iter().enumerate().for_each(|(i, x)| chaves_da_fase4(x, &format!("{onde}/{i}"), saida)),
+            Value::Object(o) => {
+                for (k, x) in o {
+                    if ["sombra", "animacao", "segue"].contains(&k.as_str()) || (k == "faixa" && x == &Value::Bool(true)) {
+                        saida.push(format!("{onde}/{k}"));
+                    }
+                    chaves_da_fase4(x, &format!("{onde}/{k}"), saida);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// `contrato-fase4.json` (o `completo.json` com todo campo novo preenchido: sombra e faixa no texto e na legenda,
+    /// animação com cada `Surgir` na entrada e na saída, enquadramento que segue): lido do TEXTO, nenhum item cai em
+    /// `Desconhecido`, volta igual, e é o que pede `esquema_menor` 1.
+    #[test]
+    fn contrato_fase4_vai_e_volta() {
+        let texto = fixture("contrato-fase4.json");
+        let bruto: Value = serde_json::from_str(&texto).unwrap();
+        let p: ProjetoEdicao = serde_json::from_str(&texto).expect("lê tipado");
+        assert_eq!(serde_json::to_value(&p).unwrap(), bruto, "não voltou igual");
+        let (_, desconhecidos) = cobertura(&p);
+        assert!(desconhecidos.is_empty(), "caíram em Desconhecido: {desconhecidos:?}");
+        let mut novas = Vec::new();
+        chaves_da_fase4(&bruto, "", &mut novas);
+        // 5 sombras, 4 faixas, 1 enquadramento que segue, 3 animações
+        assert_eq!(novas.len(), 13, "{novas:?}");
+        let surgir: std::collections::BTreeSet<String> = p
+            .sobreposicoes
+            .iter()
+            .flat_map(|t| &t.clipes)
+            .filter_map(|c| match c {
+                Tolerante::Conhecido(ClipeSobreposto::Video(x)) => x.base.animacao,
+                Tolerante::Conhecido(ClipeSobreposto::Imagem(x)) => x.base.animacao,
+                Tolerante::Conhecido(ClipeSobreposto::Titulo(x)) => x.base.animacao,
+                _ => None,
+            })
+            .flat_map(|a| [format!("entrada:{:?}", a.entrada), format!("saida:{:?}", a.saida)])
+            .collect();
+        assert_eq!(surgir.len(), 6, "cada Surgir na entrada e na saída: {surgir:?}");
+        assert_eq!(menor_necessario(&p), 1);
+        assert_eq!(p.esquema_menor, ESQUEMA_MENOR);
+    }
+
+    /// Projetos de antes da Fase 4 (as fixtures de projeto das Fases 0 a 2): lidos e regravados sem chave nova e no
+    /// `esquema_menor` 0; os gravados pelo Rust voltam IGUAIS (os do store são conferidos campo a campo, com a
+    /// tolerância M2, em `tests/edicao/contratos.rs`).
+    #[test]
+    fn projetos_de_antes_da_fase4_voltam_iguais_sem_chave_nova() {
+        let iguais = ["completo.json", "contrato-todas-variantes.json"];
+        let do_front = ["projeto-do-store.json", "verif-fase0-do-store.json", "verif-fase1-do-store.json", "projeto-minimo.json", "projeto-desconhecido.json"];
+        for nome in iguais.iter().chain(&do_front) {
+            let bruto: Value = serde_json::from_str(&fixture(nome)).unwrap();
+            let p: ProjetoEdicao = serde_json::from_value(bruto.clone()).unwrap_or_else(|e| panic!("{nome}: {e}"));
+            let volta = serde_json::to_value(&p).unwrap();
+            let mut novas = Vec::new();
+            chaves_da_fase4(&volta, "", &mut novas);
+            assert!(novas.is_empty(), "{nome}: chave da Fase 4 inventada: {novas:?}");
+            assert_eq!(menor_necessario(&p), 0, "{nome}");
+            if iguais.contains(nome) {
+                assert_eq!(volta, bruto, "{nome}: não voltou igual");
+            }
+        }
+    }
+
+    /// Cada campo novo sozinho pede `esquema_menor` 1; o valor de padrão (faixa falsa, sem sombra) não pede.
+    #[test]
+    fn menor_necessario_por_campo() {
+        let base: Value = serde_json::from_str(&fixture("completo.json")).unwrap();
+        let ler = |v: &Value| serde_json::from_value::<ProjetoEdicao>(v.clone()).unwrap();
+        assert_eq!(menor_necessario(&ler(&base)), 0);
+        let sombra = json!({ "cor": "#000000", "dx": 0.0, "dy": 0.002, "desfoque": 0.0 });
+        let mut casos: Vec<(&str, Value)> = Vec::new();
+        let mut v = base.clone();
+        v["legendas"]["estilo"]["sombra"] = sombra.clone();
+        casos.push(("sombra da legenda", v));
+        let mut v = base.clone();
+        v["legendas"]["estilo"]["caixa"]["faixa"] = json!(true);
+        casos.push(("faixa da legenda", v));
+        let mut v = base.clone();
+        v["sobreposicoes"][0]["clipes"][1]["animacao"] = json!({ "entrada": "aparecer", "saida": "aparecer", "lado": "baixo" });
+        casos.push(("animação de imagem sobreposta", v));
+        let enq = base["principal"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .enumerate()
+            .find_map(|(i, c)| c["efeitos"].as_array()?.iter().position(|e| e["tipo"] == "enquadramento").map(|j| (i, j)))
+            .unwrap();
+        let mut v = base.clone();
+        v["principal"][enq.0]["efeitos"][enq.1]["segue"] = json!({ "rastreio": "r-manual", "suavizar_s": 1.0 });
+        casos.push(("enquadramento que segue", v));
+        for (nome, v) in casos {
+            let p = ler(&v);
+            assert_eq!(menor_necessario(&p), 1, "{nome}");
+            assert_eq!(serde_json::to_value(&p).unwrap(), v, "{nome}: não voltou igual");
+        }
+        let mut v = base.clone();
+        v["legendas"]["estilo"]["caixa"]["faixa"] = json!(false);
+        let p = ler(&v);
+        assert_eq!(menor_necessario(&p), 0, "faixa falsa é o padrão");
+        assert!(serde_json::to_value(&p).unwrap()["legendas"]["estilo"]["caixa"].get("faixa").is_none(), "o padrão não é gravado");
     }
 }

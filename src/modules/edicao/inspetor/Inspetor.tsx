@@ -10,7 +10,7 @@ import { useEdicaoStore } from "../store/edicaoStore";
 import { clipeConhecido, sobrepostoConhecido } from "../modelo/projeto";
 import { midiaDoClipe, type ClipeQualquer } from "./acoes";
 import { useContextoClipe, useInvalidos, useMidiaInfo, useShaDe, useTabela } from "./contexto";
-import { secoesDe } from "./registro";
+import { secoesDe, tipoNoInspetor } from "./registro";
 import { SoLeitura } from "./secoes/comum";
 import { AudioSecao } from "./secoes/AudioSecao";
 import { SaidaSecao } from "./secoes/SaidaSecao";
@@ -115,7 +115,8 @@ function AbaClipe() {
   const { onde, item } = achado;
   const tipo = typeof (item as { tipo?: unknown }).tipo === "string" ? (item as { tipo: string }).tipo : "";
   const conhecido = onde === "principal" ? clipeConhecido(item as ClipePrincipal | Desconhecido) : sobrepostoConhecido(item as ClipeSobreposto | Desconhecido);
-  const secoes = conhecido && !invalidos.has((item as { id: string }).id) ? secoesDe(onde, tipo) : null;
+  const tipoSecao = tipo ? tipoNoInspetor(onde, item as { tipo: string; titulo?: { modelo: string; blocos: unknown[] } }) : tipo;
+  const secoes = conhecido && !invalidos.has((item as { id: string }).id) ? secoesDe(onde, tipoSecao) : null;
   if (!secoes) return tipo ? <SoLeitura tipo={tipo} /> : <Vazio icone={<FileQuestion size={20} />} />;
   return <ClipeAberto clipe={item as ClipeQualquer} secoes={secoes} />;
 }

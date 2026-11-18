@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent as PE, type ReactNode, type RefObject } from "react";
-import { CalendarRange, Film, Image as IconeImagem, Snowflake, Type } from "lucide-react";
+import { CalendarRange, Film, Image as IconeImagem, Snowflake, TextCursorInput, Type } from "lucide-react";
 import { open as abrirArquivo } from "@tauri-apps/plugin-dialog";
 import { commands } from "@core/commands";
 import type { Analise, ClipePrincipal, Id, LinhaResolvida, Problema, ProjetoEdicao, Titulo } from "@domain/edicao";
@@ -25,6 +25,8 @@ import { useOrigemStore, type OrigemDoClipe } from "../store/origemStore";
 import { useOrigensDosClipes } from "./origens";
 // as listas que o Rust aceita (`armazem::{EXT_IMAGEM, EXT_AUDIO}`): o diálogo não oferece o que a importação recusa
 import { EXTENSOES } from "../inspetor/secoes/importar";
+// Fase 4 (contratos-fase4.md D4): texto livre (sem efeito enquanto TEXTO_LIVRE_PRONTO = false)
+import { adicionarTextoLivre, TEXTO_LIVRE_PRONTO } from "../inspetor/secoes/textoLivre";
 
 /** Nome mostrado: o "Nome" do clipe, senão o arquivo da mídia sem extensão. */
 function nomeDo(c: ClipePrincipal, midias: { id: Id; nome: string }[]): string {
@@ -224,6 +226,12 @@ export function VistaSequencia(p: VistaSequenciaProps) {
           <CalendarRange size={13} aria-hidden />
           Dos eventos…
         </button>
+        {TEXTO_LIVRE_PRONTO && (
+          <button type="button" className={styles.mini} onClick={() => void adicionarTextoLivre()} disabled={soLeitura} data-acao="texto-livre">
+            <TextCursorInput size={13} aria-hidden />
+            Texto livre
+          </button>
+        )}
       </div>
       <ol ref={p.listaRef} className={styles.lista}>
         {doc.principal.map((c, i) => {

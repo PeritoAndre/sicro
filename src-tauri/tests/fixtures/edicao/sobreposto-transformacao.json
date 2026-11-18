@@ -1,0 +1,1640 @@
+[
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.0
+    },
+    "nome": "sem animação em 0",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.2
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.1
+    },
+    "nome": "sem animação em 0.1",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.19,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.23
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.25
+    },
+    "nome": "sem animação em 0.25",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.4375,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.275
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.5
+    },
+    "nome": "sem animação em 0.5",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.75,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.35000000000000003
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.0
+    },
+    "nome": "sem animação em 1",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.5
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.8
+    },
+    "nome": "sem animação em 1.8",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.3999999999999999,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.7400000000000002
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.9
+    },
+    "nome": "sem animação em 1.9",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.20000000000000018,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.77
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 2.0
+    },
+    "nome": "sem animação em 2",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.8
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 2.5
+    },
+    "nome": "sem animação em 2.5",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.8
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.0
+    },
+    "nome": "aparecer nos dois lados em 0",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.2
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.1
+    },
+    "nome": "aparecer nos dois lados em 0.1",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.19,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.23
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.25
+    },
+    "nome": "aparecer nos dois lados em 0.25",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.4375,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.275
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.5
+    },
+    "nome": "aparecer nos dois lados em 0.5",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.75,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.35000000000000003
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.0
+    },
+    "nome": "aparecer nos dois lados em 1",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.5
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.8
+    },
+    "nome": "aparecer nos dois lados em 1.8",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.3999999999999999,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.7400000000000002
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.9
+    },
+    "nome": "aparecer nos dois lados em 1.9",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.20000000000000018,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.77
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 2.0
+    },
+    "nome": "aparecer nos dois lados em 2",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.8
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "animacao": {
+          "entrada": "aparecer",
+          "lado": "baixo",
+          "saida": "aparecer"
+        },
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.5,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": 0.25,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 2.5
+    },
+    "nome": "aparecer nos dois lados em 2.5",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.8
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.0
+    },
+    "nome": "sem rampa em 0",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 1.0,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.2
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.1
+    },
+    "nome": "sem rampa em 0.1",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.95,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.23
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.25
+    },
+    "nome": "sem rampa em 0.25",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.875,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.275
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 0.5
+    },
+    "nome": "sem rampa em 0.5",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.75,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.35000000000000003
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.0
+    },
+    "nome": "sem rampa em 1",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.5
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.8
+    },
+    "nome": "sem rampa em 1.8",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.7400000000000002
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 1.9
+    },
+    "nome": "sem rampa em 1.9",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.77
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 2.0
+    },
+    "nome": "sem rampa em 2",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.8
+    }
+  },
+  {
+    "entrada": {
+      "base": {
+        "duracao_s": 2.0,
+        "efeitos": [],
+        "entrada_s": 0.0,
+        "id": "s1",
+        "pos": {
+          "ref": "programa",
+          "t": 0.0
+        },
+        "rotulo": "",
+        "saida_s": -1.0,
+        "transformacao": {
+          "escala": 1.0,
+          "opacidade": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 1.0
+            },
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 1.0,
+              "v": 0.5
+            }
+          ],
+          "rotacao": 30.0,
+          "x": 0.25,
+          "y": [
+            {
+              "interp": "linear",
+              "pts": null,
+              "t": 0.0,
+              "v": 0.2
+            },
+            {
+              "interp": "suave",
+              "pts": null,
+              "t": 2.0,
+              "v": 0.8
+            }
+          ]
+        }
+      },
+      "dur": 2.0,
+      "tau": 2.5
+    },
+    "nome": "sem rampa em 2.5",
+    "saida": {
+      "escala": 1.0,
+      "opacidade": 0.5,
+      "rotacao": 30.0,
+      "x": 0.25,
+      "y": 0.8
+    }
+  }
+]

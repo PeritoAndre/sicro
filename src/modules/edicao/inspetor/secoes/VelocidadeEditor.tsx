@@ -17,7 +17,8 @@ import { textoDaVelocidade } from "../../palco/desenho/medidas";
 import { mudar, noClipe, noEfeito, rastreioDe, selecionarEfeito, tempoNoClipe } from "../acoes";
 import { Escolha, Grade, Icone, Mini, Posicao } from "../campos";
 import { pedirMarcacao } from "../contexto";
-import { CAIXA_CENTRO, estiloPadrao, novoRastreio, TAMANHO_TEXTO } from "../novos";
+import { estiloPadrao, novoRastreio, TAMANHO_TEXTO } from "../novos";
+import { caixaNova } from "../../palco/areaVisivel";
 import type { EditorEfeitoProps } from "../registro";
 import { useInspetorUi } from "../ui";
 import { EstiloCampos } from "./comum";
@@ -74,8 +75,10 @@ function rastreioNoQuadro(d: ProjetoEdicao, c: Clipe) {
     const j = exibido(tab, t);
     k = { t: tempoDoQuadro(tab, j), pts: ptsDaTabela(tab)[j] as number };
   }
-  const r = novoRastreio(midia, k ? k.t : t, CAIXA_CENTRO);
-  if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: CAIXA_CENTRO }];
+  // Fase 4 (contratos-fase4.md D9): nasce na área visível do palco
+  const caixa = caixaNova(c.id);
+  const r = novoRastreio(midia, k ? k.t : t, caixa);
+  if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: caixa }];
   return r;
 }
 

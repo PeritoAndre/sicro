@@ -9,6 +9,16 @@
   color: var(--sicro-fg);
   font-size: var(--text-sm);
 }
+/* Fase 4: painel da linha do tempo entre o corpo e a barra de estado (a altura é do painel, P4.1) */
+.editor.comLinha {
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+.linha {
+  min-height: 0;
+  min-width: 0;
+  border-top: 1px solid var(--sicro-border);
+  background: var(--sicro-surface-1);
+}
 .topo {
   display: flex;
   align-items: center;

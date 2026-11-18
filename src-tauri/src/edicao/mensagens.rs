@@ -297,6 +297,11 @@ const NAO_SUPORTADOS: &[(&str, &str)] = &[
     ("silhuetas", "silhuetas do rastreio"),
     ("pessoas", "trilha da análise"),
     ("conferencia", "conferência das ocultações"),
+    // Fase 4 (abertura, contratos-fase4.md (e)): cada um sai quando o dono entrega
+    ("sombra", "sombra do texto"),
+    ("faixa", "faixa atrás do texto"),
+    ("animacao_sobreposto", "entrada ou saída animada"),
+    ("enquadramento_segue", "zoom que acompanha o rastreio"),
 ];
 
 /// Detalhes de `nao_suportado` que têm rótulo (a validação só usa estes).

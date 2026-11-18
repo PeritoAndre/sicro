@@ -85,6 +85,7 @@ fn estilo_do_rotulo(t: &Traco) -> EstiloTexto {
         alinhamento: Alinhamento::Centro,
         caixa: None,
         contorno: t.contorno.then(|| ContornoTexto { cor: "#000000".into(), largura: ROTULO_CONTORNO }),
+        sombra: None,
     }
 }
 

@@ -364,7 +364,7 @@ struct Recusa {
 }
 
 /// Mídias do ensaio: m1 (vídeo com som), pc (nv12 de faixa cheia: sem cadeia de cor), foto e n1 (só som).
-fn mundo_das_recusas() -> (Mundo, Vec<Value>) {
+pub(crate) fn mundo_das_recusas() -> (Mundo, Vec<Value>) {
     let cap = {
         let mut c = apoio::cap_falsa();
         for f in ["perspective", "vidstabdetect", "vidstabtransform", "lenscorrection", "bwdif", "tmix", "unsharp"] {
@@ -1754,9 +1754,9 @@ fn x_que_pula(j: usize) -> f64 {
     0.1 + 0.6 * ((j * 7) % 30) as f64 / 30.0
 }
 
-struct Integrado {
-    p: ProjetoEdicao,
-    mundo: Mundo,
+pub(crate) struct Integrado {
+    pub(crate) p: ProjetoEdicao,
+    pub(crate) mundo: Mundo,
     mp4: Arc<Medida>,
     mkv: Arc<Medida>,
 }
@@ -1764,7 +1764,7 @@ struct Integrado {
 /// Projeto do ensaio integrado, a 30000/1001: trecho a 0,5× com camada que muda a cada quadro e carimbo; título
 /// (ou foto) de 45 slots entrando do preto; trecho de outra mídia com `ocultar`; quadro congelado; faixa cheia com
 /// desfoque e holofote; zoom animado; 9 trechos curtos (15 clipes: 2 blocos); imagem sobreposta; fecho escurecendo.
-fn integrado(cap: &Arc<Capacidades>, com_titulo: bool) -> Integrado {
+pub(crate) fn integrado(cap: &Arc<Capacidades>, com_titulo: bool) -> Integrado {
     let dir = pasta("integrado-img");
     let (mp4, mkv, cheia) = (apoio::medida(cap, Fonte::Mp4), apoio::medida(cap, Fonte::Mkv30), apoio::medida(cap, Fonte::FaixaCheia));
     let (t4, tk, tc) = (&mp4.info.quadros, &mkv.info.quadros, &cheia.info.quadros);

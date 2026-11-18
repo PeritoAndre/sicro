@@ -246,6 +246,8 @@ const QUADRO_TODO: Caixa = Caixa { x: 0.0, y: 0.0, w: 1.0, h: 1.0 };
 /// dono do efeito (realce: P1.4; lupa: P1.2; régua e velocidade: P1.3); a validação pergunta o mesmo.
 pub(crate) fn recusa_do_efeito(e: &Efeito, com_fonte: bool) -> Option<&'static str> {
     match e {
+        // CONTRATO: Fase 4 (contratos-fase4.md B4): enquadramento que segue, regra do pacote do zoom que segue
+        Efeito::Enquadramento(q) => crate::edicao::segue::recusa(q),
         Efeito::Lupa(l) => lupa::recusa(l),
         Efeito::Regua(_) | Efeito::VelocidadeExibida(_) => crate::edicao::medidas::recusa(e),
         e if efeitos::familia(e) == Familia::Origem => realce::recusa(e, com_fonte),
@@ -439,6 +441,9 @@ impl Montagem<'_, '_> {
         let canvas_px = TamanhoPx { w: self.canvas.w, h: self.canvas.h };
         let fps = self.canvas.fps;
         let tempos: Vec<f64> = slots.iter().map(|s| s.tau).collect();
+        // Fase 4 (contratos-fase4.md B4): o enquadramento que segue um rastreio vira chaves nos slots, antes de tudo
+        let seguidos = crate::edicao::segue::na_cauda(efeitos, &tempos, &mut self.rastreios, self.ctx)?;
+        let efeitos: &[Tolerante<Efeito>] = seguidos.as_deref().unwrap_or(efeitos);
         let f = enquadramento::filtros(efeitos, origem, &self.canvas, &tempos, de as usize - antes, antes)?;
         let slots = &slots[antes..antes + (janela.ate - janela.de) as usize];
         let n = slots.len() as u32;

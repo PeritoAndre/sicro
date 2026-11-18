@@ -24,7 +24,9 @@ const ch = (t: number, v: number, pts: number | null = null): Chave<number> => (
 describe("projeto novo", () => {
   it("nasce com saída automática, normalização em −16 LUFS / −1,5 dBTP (§2.4) e os padrões do Rust (M7)", () => {
     const p = novoProjeto("X", "2026-11-14T04:00:00.000Z");
-    expect(p).toMatchObject({ esquema: ESQUEMA_EDICAO, esquema_menor: ESQUEMA_MENOR, titulo: "X", created_at: "2026-11-14T04:00:00.000Z", fecho: null });
+    // menor 0: o arquivo só sobe para ESQUEMA_MENOR quando usa campo da Fase 4 (armazem::salvar, contratos-fase4 B1)
+    expect(ESQUEMA_MENOR).toBe(1);
+    expect(p).toMatchObject({ esquema: ESQUEMA_EDICAO, esquema_menor: 0, titulo: "X", created_at: "2026-11-14T04:00:00.000Z", fecho: null });
     expect(p.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
     expect(p.saida.auto).toBe(true);
     expect(p.mixagem).toEqual({ volume_original: 1, abaixar: { db: -12, ataque_s: 0.3, soltura_s: 0.5 }, normalizar: { lufs: -16, pico_db: -1.5 }, limitador: false });

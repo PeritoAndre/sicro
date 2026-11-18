@@ -25,6 +25,7 @@ import type {
 import { acharMidia, acharRastreio, efeitoConhecido } from "../modelo/projeto";
 import { aDe, type Afim, type Tamanho } from "../modelo/geometria";
 import { avaliar, emAusencia } from "../modelo/rastreio";
+import { efeitosNoInstante } from "../modelo/segue";
 import { densoEmCache } from "../store/rastreioStore";
 import { primitivas } from "./desenho/primitivas";
 
@@ -113,7 +114,8 @@ export function quadroDaCena(
     pts: inst.pts,
     indice: inst.indice,
     programa_s: inst.programa_s,
-    A: A ?? aDe(efeitos, inst.t, origem, canvas),
+    // Fase 4 (contratos-fase4.md B4): o enquadramento que segue vira a região do instante
+    A: A ?? aDe(efeitosNoInstante(doc, efeitos, inst.t), inst.t, origem, canvas),
     canvas,
     rastreio: (id: Id): Caixa | null => {
       const r = acharRastreio(doc, id);

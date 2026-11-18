@@ -82,6 +82,13 @@ describe("tipos × completo.json", () => {
     expect(compilar(fonte(todas, true))).toEqual([]);
   }, 30_000);
 
+  // abertura da Fase 4 (contratos-fase4.md B1 a B4): sombra, faixa, animação do sobreposto e enquadramento que segue
+  it("o compilador aceita contrato-fase4.json (todo campo novo preenchido)", () => {
+    const f4 = lerTexto("contrato-fase4.json");
+    for (const chave of ['"sombra"', '"faixa": true', '"animacao"', '"segue"']) expect(f4).toContain(chave);
+    expect(compilar(fonte(f4))).toEqual([]);
+  }, 30_000);
+
   it("projeto-minimo.json (campos que o Rust lê com padrão) fica completo com `completar`", () => {
     const minimo = completar(ler<ProjetoEdicao>("projeto-minimo.json"));
     expect(compilar(fonte(JSON.stringify(minimo)))).toEqual([]);

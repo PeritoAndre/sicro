@@ -29,6 +29,9 @@ pub mod quadros;
 pub mod rastreio;
 pub mod refazer;
 pub mod relatorio;
+// Fase 4 (contratos-fase4.md): zoom que segue e entrada/saída dos sobrepostos (texto livre)
+pub mod segue;
+pub mod sobreposto;
 pub mod tempo;
 pub mod tiras;
 pub mod validar;

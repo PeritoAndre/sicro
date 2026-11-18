@@ -7,7 +7,9 @@
 
 /** Espelho de src-tauri/src/edicao/modelo.rs (nomes = fio do serde, snake_case). */
 export const ESQUEMA_EDICAO = 2 as const;
-export const ESQUEMA_MENOR = 0;          // sobe a cada campo novo com efeito no render; arquivo com valor maior abre só para leitura
+// CONTRATO: 1 desde a abertura da Fase 4 (contratos-fase4.md B1): campos com efeito no render (sombra, faixa,
+// animação do sobreposto, enquadramento que segue). Só o documento que USA um deles grava 1 (armazem::salvar).
+export const ESQUEMA_MENOR = 1;          // sobe a cada campo novo com efeito no render; arquivo com valor maior abre só para leitura
 
 export type Id = string;                 // UUID v4
 export type Seg = number;                // segundos (f64 inteiro, sem arredondar)
@@ -152,8 +154,10 @@ export interface EstiloTexto {
   fonte: "sans" | "serifa" | "mono"; negrito: boolean; italico: boolean;
   tamanho: number;                       // fração da altura do canvas (v1: p 0,033 · m 0,052 · g 0,078)
   cor: Cor; alinhamento: "esq" | "centro" | "dir";
-  caixa: null | { cor: Cor; margem: number; raio: number };
+  // CONTRATO: `faixa` (Fase 4): a caixa ocupa a largura inteira do bloco (`largura_max`), não só a das linhas.
+  caixa: null | { cor: Cor; margem: number; raio: number; faixa?: boolean };
   contorno: null | { cor: Cor; largura: number };
+  sombra?: SombraTexto;                  // CONTRATO: Fase 4; ausente = sem sombra
 }
 /** Ponto do canvas (0..1) e que ponto da caixa do texto cai nele. */
 export interface Lugar { x: number; y: number; h: "esq" | "centro" | "dir"; v: "topo" | "meio" | "base" }
@@ -181,7 +185,8 @@ export interface EfNitidez extends EfBase { tipo: "nitidez"; quantidade: number 
 // enquadre (fazem parte de A(τ), §3.2)
 export interface EfGirar extends EfBase { tipo: "girar"; graus: 0 | 90 | 180 | 270; espelhar_h: boolean; espelhar_v: boolean }
 export interface EfEnquadramento extends EfBase { tipo: "enquadramento"; regiao: Animavel<Caixa>; ajuste: "conter" | "cobrir";
-                                                  interpolacao: Interpolacao }   // "vizinho" só com região fixa
+                                                  interpolacao: Interpolacao;    // "vizinho" só com região fixa
+                                                  segue?: SegueRastreio }        // CONTRATO: Fase 4; ausente = a região é a gravada
 // regiões
 export interface EfOcultar extends EfBase {
   tipo: "ocultar"; modo: "desfoque" | "mosaico" | "solido"; alvo: AlvoRegiao;
@@ -252,7 +257,8 @@ export interface Transformacao {          // tempo local do clipe
 }
 interface SobBase { id: Id; rotulo: string; pos: Posicao;
                     duracao_s: Seg | null;            // null = até o fim do clipe de âncora (ou do programa): marca fixa, terço inferior do clipe
-                    transformacao: Transformacao; entrada_s: Seg; saida_s: Seg; efeitos: (Efeito | Desconhecido)[] }
+                    transformacao: Transformacao; entrada_s: Seg; saida_s: Seg; efeitos: (Efeito | Desconhecido)[];
+                    animacao?: AnimacaoSob }          // CONTRATO: Fase 4; ausente = aparecer na entrada e na saída
 export interface SobVideo extends SobBase { tipo: "video"; midia: Id; inicio_s: Seg; inicio_pts: Pts | null; velocidade: Velocidade;
                                             audio: AudioClipe | null; moldura: Traco | null; sincronia: Id | null }   // Fase 3
 export interface SobImagem extends SobBase { tipo: "imagem"; midia: Id }
@@ -576,6 +582,16 @@ export interface TiraMiniaturas { relativo: string | null; w: number; h: number;
  *  MPEG-PS e H.264 cru sem a tabela do decodificador: erro `tabela_pendente` (pedir de novo quando `tabela:<sha256>` ficar pronta). */
 export interface RespostaTira { chave: string; tira: TiraMiniaturas | null }
 
+// ---- Fase 4 (contratos-fase4.md): texto livre e zoom que segue ----
+/** Sombra do texto (`EstiloTexto.sombra`): deslocamento e desfoque em fração da altura do canvas. */
+export interface SombraTexto { cor: Cor; dx: number; dy: number; desfoque: number }
+/** "corte" ignora a duração; "aparecer" = opacidade linear; "deslizar" = opacidade e posição (`edicao/sobreposto.rs`). */
+export type Surgir = "corte" | "aparecer" | "deslizar";
+/** Entrada (em `entrada_s`) e saída (em `saida_s`) do sobreposto; `lado` = de onde vem e para onde vai ao deslizar. */
+export interface AnimacaoSob { entrada: Surgir; saida: Surgir; lado: "cima" | "baixo" | "esq" | "dir" }
+/** O centro da região do enquadramento segue o rastreio; `suavizar_s` = média móvel centrada, na base do rastreio. */
+export interface SegueRastreio { rastreio: Id; suavizar_s: Seg }
+
 // ---- palco e desenho (§8.3) ----
 // Unidades: 0..1 do canvas. O pintor (front) e camada::formas (Rust) implementam TODOS os `k` uma vez; efeito novo só devolve primitivas.
 type Traco2 = { cor: Cor; largura: number; contorno?: Cor };
@@ -599,8 +615,11 @@ export interface QuadroPalco { q: number; t: Seg; pts: Pts | null; indice: numbe
                                sprite(pedido: PedidoSprite): SpriteTexto | null;
                                atlas(estilo: EstiloTexto, alturaCanvas: number): AtlasCarimbo | null;
                                midia(id: Id): { w: number; h: number } | null }     // tamanho da imagem em px
-export type Mudanca = { efeito: Efeito } | { rastreio: Id; ancora: Chave<Caixa> } | { clipe: Id; campos: Partial<ClipeTrecho> };
-export interface Alca { id: string; tipo: "mover" | "canto" | "borda" | "ponto"; em: Ponto; cursor: string;
+// CONTRATO: `{ livre, trilha, sobreposto }` (Fase 4, B6): alça do texto livre (ou de outro sobreposto) no palco.
+export type Mudanca = { efeito: Efeito } | { rastreio: Id; ancora: Chave<Caixa> } | { clipe: Id; campos: Partial<ClipeTrecho> }
+                    | { livre: Id; trilha: Id; sobreposto: ClipeSobreposto };
+// CONTRATO: "giro" (Fase 4, B6): alça de rotação do texto livre no palco.
+export interface Alca { id: string; tipo: "mover" | "canto" | "borda" | "ponto" | "giro"; em: Ponto; cursor: string;
                         arrastar(de: Ponto, para: Ponto, mod: { shift: boolean; alt: boolean }): Mudanca }
 export type ItemSel = { k: "clipe" | "livre" | "audio" | "legenda" | "marcador"; id: Id; trilha?: Id };
 export interface Selecao { itens: ItemSel[]; foco: ItemSel | null; efeito: Id | null }

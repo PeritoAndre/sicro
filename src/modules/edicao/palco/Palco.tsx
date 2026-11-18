@@ -24,6 +24,8 @@ import { aDe, caixaNoCanvas, inversa, ponto as aplicar, type Afim } from "../mod
 import { exibido, mapaTrecho, nQuadros, ptsDaTabela, resolver, tempoDoQuadro, type MapaQuadros } from "../modelo/tempo";
 import { tabelaDoClipe } from "../modelo/realce";
 import { avaliar as avaliarCurva } from "../modelo/curva";
+// Fase 4 (contratos-fase4.md B4): todo `aDe` do palco passa pelo zoom que segue
+import { efeitosNoInstante } from "../modelo/segue";
 import { relogioMidia, type RelogioMidia } from "./motor/relogioMidia";
 import { elementoDe, type ElementoBusca } from "./motor/elemento";
 import { Buscador } from "./motor/busca";
@@ -357,7 +359,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     if (v.modoOrigem) {
       A = aDaOrigem(c.efeitos, origem, canvasSaida);
     } else {
-      A = aDe(c.efeitos, inst.t, origem, canvasSaida);
+      A = aDe(efeitosNoInstante(v.doc, c.efeitos, inst.t), inst.t, origem, canvasSaida);
       const cena = cenaDoClipe(v.doc, c, inst, origem, fontes, A);
       prims = [...primitivasProprias(c, canvasSaida.w, canvasSaida.h, fontes), ...cena.primitivas];
     }
@@ -937,7 +939,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       const origem = vivo.current.info ? { w: vivo.current.info.exibido.w, h: vivo.current.info.exibido.h } : vivo.current.saida;
       const canvas = vivo.current.saida;
       // canvas → espaço do dado: região pela origem girada; caixa e ponto pela inversa de A
-      const m0 = f.tipo === "regiao" ? aDaGirada(c.efeitos, origem, canvas) : aDe(c.efeitos, inst.t, origem, canvas);
+      const m0 = f.tipo === "regiao" ? aDaGirada(c.efeitos, origem, canvas) : aDe(efeitosNoInstante(doc0, c.efeitos, inst.t), inst.t, origem, canvas);
       const inv = inversa(m0);
       if (f.tipo === "lugar") {
         const l: Lugar = { x: (v as Ponto).x, y: (v as Ponto).y, h: "centro", v: "meio" };

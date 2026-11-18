@@ -12,7 +12,8 @@ import { FATOR_MAX, FATOR_MIN } from "../../palco/desenho/lupa";
 import { midiaDoClipe, mudar, noEfeito, selecionarEfeito, tempoNoClipe, type ClipeQualquer } from "../acoes";
 import { Cor, Escolha, Grade, Marca, Mini, Numero, Posicao } from "../campos";
 import { pedirMarcacao } from "../contexto";
-import { CAIXA_CENTRO, COR_DESENHO, novoRastreio } from "../novos";
+import { COR_DESENHO, novoRastreio } from "../novos";
+import { caixaNova } from "../../palco/areaVisivel";
 import type { EditorEfeitoProps } from "../registro";
 import { useInspetorUi } from "../ui";
 import { round } from "./comum";
@@ -63,8 +64,10 @@ export function adicionarLupa(clipeId: Id, rotulo: string): Promise<Id | null> {
   if (!d || !c) return Promise.resolve(null);
   const t = tempoNoClipe(c);
   const k = quadroMostrado(d, c, t);
-  const r = novoRastreio(midiaDoClipe(c), k ? k.t : t, CAIXA_CENTRO);
-  if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: CAIXA_CENTRO }];
+  // Fase 4 (contratos-fase4.md D9): nasce na área visível do palco
+  const caixa = caixaNova(clipeId);
+  const r = novoRastreio(midiaDoClipe(c), k ? k.t : t, caixa);
+  if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: caixa }];
   const ef = lupaPadrao(r.id);
   mudar(rotulo, (dd) => {
     dd.rastreios.push(r);

@@ -154,7 +154,7 @@ fn arr(x: f64, y: f64, h: Alinhamento, v: AlinhamentoV, largura_max: f64, tamanh
         negrito,
         alinhamento: h,
         cor,
-        caixa: faixa.map(|margem| CaixaTexto { cor: FAIXA.into(), margem, raio: 0.0 }),
+        caixa: faixa.map(|margem| CaixaTexto { cor: FAIXA.into(), margem, raio: 0.0, faixa: false }),
     }
 }
 
@@ -264,6 +264,7 @@ pub fn bloco_no_modelo(t: &Titulo, papel: PapelTexto, id: &str, conteudo: &str, 
         alinhamento: a.alinhamento,
         caixa: a.caixa.clone(),
         contorno: None,
+        sombra: None,
     };
     if let Some(r) = t.blocos.first() {
         let ar = na_escala(arranjo(t.modelo, r.papel), k);
@@ -1717,7 +1718,7 @@ mod testes {
         b.conteudo = "SICRO".into();
         b.lugar = Lugar { x: 0.97, y: 0.04, h: Alinhamento::Dir, v: AlinhamentoV::Topo };
         b.estilo.tamanho = 0.08;
-        b.estilo.caixa = Some(CaixaTexto { cor: cor_marca.into(), margem: 0.02, raio: 0.0 });
+        b.estilo.caixa = Some(CaixaTexto { cor: cor_marca.into(), margem: 0.02, raio: 0.0, faixa: false });
         let escurecer = json!({ "tipo": "escurecer", "duracao_s": 0.2, "audio": "acompanhar" });
         let principal = vec![
             cartao("A", AMARELO, 0.5, Value::Null),

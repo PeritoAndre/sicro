@@ -687,3 +687,178 @@ fn titulo_do_pdf_de_caso_sem_numero_nao_fica_pendurado() {
     assert!(titulo.starts_with("Relatório da edição demonstrativa de vídeo"), "{info}");
     assert!(!titulo.ends_with('—'), "DEFEITO: título do PDF pendurado: {titulo:?}");
 }
+
+// ------------------------------------------------------------------ Fase 4 (abertura): recusas dos pacotes
+
+/// O que a abertura da Fase 4 recusa até o dono entregar (contratos-fase4.md (e)): a validação acusa no item, com o
+/// rótulo do catálogo, e `compilar` para nela; o motor sozinho também recusa (zoom que segue, animação do
+/// sobreposto) e o rasterizador de texto não desenha sombra nem faixa calado. Cada caso some quando a regra do dono
+/// deixa de recusar (a mesma função que a validação e o motor perguntam).
+#[test]
+fn recusas_da_abertura_da_fase4() {
+    use crate::edicao::camada::texto::{self, PedidoSprite};
+    use crate::edicao::modelo::{BlocoTexto, EfEnquadramento, EstiloTexto};
+    use crate::edicao::motor::{compilar, compilar_video, Contexto};
+    use crate::edicao::quadros::apoio::SemRastreios;
+    use crate::edicao::testes::aceite::{self, ancora, efeito, projeto, rastreio, trecho};
+    use crate::edicao::{segue, sobreposto, tempo, validar};
+
+    let (mundo, midias) = aceite::mundo_das_recusas();
+    let ctx = Contexto { fontes: &mundo.fontes, cap: &mundo.cap, rastreios: &SemRastreios, pasta_projeto: Path::new("/nao/existe"), midias: &[] };
+    let t = &mundo.fontes["m1"].quadros;
+    let fim = aceite::alvo_final("cpu");
+    let r1 = rastreio("r1", Some("m1"), "fonte", vec![ancora(0.0, Some(0), [0.1, 0.1, 0.2, 0.2])]);
+    let estilo = |extra: Value| {
+        let mut e = json!({ "fonte": "sans", "negrito": false, "italico": false, "tamanho": 0.05, "cor": "#ffffff", "alinhamento": "centro",
+                            "caixa": { "cor": "#0000008c", "margem": 0.01, "raio": 0.0 }, "contorno": null });
+        for (k, x) in extra.as_object().unwrap() {
+            if k == "faixa" {
+                e["caixa"]["faixa"] = x.clone();
+            } else {
+                e[k] = x.clone();
+            }
+        }
+        e
+    };
+    let texto_livre = |estilo: Value, animacao: Value| {
+        let mut c = json!({ "tipo": "titulo", "id": "x9", "rotulo": "", "pos": { "ref": "programa", "t": 0.0 }, "duracao_s": 0.5,
+            "transformacao": { "x": 0.3, "y": 0.7, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": 0.2, "saida_s": 0.2, "efeitos": [],
+            "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" },
+                        "blocos": [{ "id": "b1", "papel": "corpo", "conteudo": "Texto", "estilo": estilo, "lugar": { "x": 0.5, "y": 0.5, "h": "centro", "v": "meio" }, "largura_max": 0.5 }] } });
+        if !animacao.is_null() {
+            c["animacao"] = animacao;
+        }
+        json!({ "sobreposicoes": [{ "id": "t1", "nome": "Textos", "oculta": false, "clipes": [c] }], "rastreios": [r1.clone()] })
+    };
+    let principal = || vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([]))];
+    let enq = efeito("enquadramento", "q9", json!({ "regiao": { "x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5 }, "ajuste": "cobrir", "interpolacao": "bilinear",
+                                                     "segue": { "rastreio": "r1", "suavizar_s": segue::SUAVIZAR_PADRAO_S } }));
+    let q9: EfEnquadramento = match serde_json::from_value(enq.clone()).unwrap() {
+        Efeito::Enquadramento(q) => q,
+        _ => unreachable!(),
+    };
+    let p_segue = projeto(320, 180, (30, 1), midias.clone(), vec![trecho("c1", "m1", t, 0, 30, 1.0, json!([enq]))], json!({ "rastreios": [r1.clone()] }));
+    let anima = json!({ "entrada": "deslizar", "saida": "corte", "lado": "baixo" });
+    let p_anima = projeto(320, 180, (30, 1), midias.clone(), principal(), texto_livre(estilo(json!({})), anima));
+    let base_anima = match &p_anima.sobreposicoes[0].clipes[0] {
+        Tolerante::Conhecido(ClipeSobreposto::Titulo(x)) => x.base.clone(),
+        _ => unreachable!(),
+    };
+    let (com_sombra, com_faixa) = (estilo(json!({ "sombra": { "cor": "#000000", "dx": 0.0, "dy": 0.003, "desfoque": 0.0 } })), estilo(json!({ "faixa": true })));
+    let (e_sombra, e_faixa): (EstiloTexto, EstiloTexto) = (serde_json::from_value(com_sombra.clone()).unwrap(), serde_json::from_value(com_faixa.clone()).unwrap());
+    // (detalhe, item, efeito, projeto, a regra ainda recusa, o motor sozinho recusa ao compilar, estilo do sprite)
+    let casos: Vec<(&str, &str, Option<&str>, ProjetoEdicao, bool, bool, Option<EstiloTexto>)> = vec![
+        ("enquadramento_segue", "c1", Some("q9"), p_segue, segue::recusa(&q9).is_some(), true, None),
+        ("animacao_sobreposto", "x9", None, p_anima, sobreposto::recusa(&base_anima).is_some(), true, None),
+        ("sombra", "x9", None, projeto(320, 180, (30, 1), midias.clone(), principal(), texto_livre(com_sombra, Value::Null)), texto::recusa_estilo(&e_sombra).is_some(), false, Some(e_sombra)),
+        ("faixa", "x9", None, projeto(320, 180, (30, 1), midias.clone(), principal(), texto_livre(com_faixa, Value::Null)), texto::recusa_estilo(&e_faixa).is_some(), false, Some(e_faixa)),
+    ];
+    let mut vistos = 0;
+    for (detalhe, item, ef, p, recusa, motor_sozinho, estilo_do_caso) in casos {
+        if !recusa {
+            continue;
+        }
+        vistos += 1;
+        let linha = tempo::resolver(&p, &ctx);
+        let problemas = validar::validar(&p, &linha, &ctx, Some(&fim));
+        let rotulo = crate::edicao::mensagens::frase(crate::edicao::mensagens::codigo::NAO_SUPORTADO, None, Some(detalhe));
+        assert!(rotulo.starts_with("Ainda não suportado: ") && rotulo.len() > "Ainda não suportado: ".len(), "{detalhe}: sem rótulo no catálogo");
+        let achado = problemas
+            .iter()
+            .find(|x| x.nivel == Nivel::Erro && x.mensagem == rotulo && x.clipe.as_deref() == Some(item) && ef.is_none_or(|e| x.efeito.as_deref() == Some(e)))
+            .unwrap_or_else(|| panic!("{detalhe}: a validação não acusa no item: {problemas:#?}"));
+        let primeiro = problemas.iter().find(|x| x.nivel == Nivel::Erro).unwrap();
+        let e = compilar(&p, &ctx, &fim).expect_err(detalhe).to_string();
+        assert_eq!(e, motor::erro_da_validacao(primeiro).to_string(), "{detalhe}: compilar para na validação");
+        if motor_sozinho {
+            let m = compilar_video(&p, &linha, &ctx, &fim).expect_err(detalhe).to_string();
+            assert!(m.contains("nao_suportado"), "{detalhe}: o motor deu {m}");
+        }
+        if let Some(e) = estilo_do_caso {
+            let bloco = BlocoTexto { id: "b1".into(), papel: crate::edicao::modelo::PapelTexto::Corpo, conteudo: "Texto".into(), estilo: e,
+                                     lugar: crate::edicao::modelo::Lugar { x: 0.5, y: 0.5, h: crate::edicao::modelo::Alinhamento::Centro, v: crate::edicao::modelo::AlinhamentoV::Meio },
+                                     largura_max: 0.5 };
+            let m = texto::bitmap_sprite(&PedidoSprite { blocos: vec![bloco], largura_max: 0.9, altura_canvas: 180, fundo: true }).map(|_| ()).expect_err(detalhe).to_string();
+            assert!(m.contains(&format!("nao_suportado: {detalhe}")), "{detalhe}: o sprite deu {m}");
+        }
+        assert_eq!(achado.campo.as_deref(), Some(match detalhe { "enquadramento_segue" => "segue", "animacao_sobreposto" => "animacao", _ => "estilo" }), "{detalhe}");
+    }
+    eprintln!("abertura da Fase 4: {vistos} recusas acusadas pela validação (as que sumiram já foram entregues)");
+}
+
+// ------------------------------------------------------------------ Fase 4 (abertura): projetos antigos, composto igual
+
+/// Hash do composto (todos os slots, na ordem) dos projetos de antes da Fase 4, gravado no `3c7c58a` por versão do
+/// ffmpeg (`SICRO_GRAVAR_FIXTURES=1` regrava a versão que roda).
+const COMPOSTOS_ANTIGOS: &str = "contrato-fase4-compostos.json";
+
+fn composto_do_plano(cap: &crate::edicao::ffmpeg::sonda::Capacidades, plano: &crate::edicao::motor::plano::Plano, nome: &str) -> String {
+    use crate::edicao::testes::executor;
+    use sha2::{Digest, Sha256};
+    let pasta = fontes::pasta_temporaria(&format!("f4-composto-{nome}"));
+    let r = executor::rodar(cap, plano, &pasta, &executor::Opcoes { sem_perdas: true, ..Default::default() }).unwrap_or_else(|e| panic!("{nome} ({}): {e}", cap.versao));
+    assert_eq!(r.compostos.len() as u64, plano.total_q, "{nome}");
+    let _ = std::fs::remove_dir_all(&pasta);
+    let mut h = Sha256::new();
+    for q in &r.compostos {
+        h.update(q.as_bytes());
+        h.update(b"\n");
+    }
+    format!("{}:{:x}", plano.total_q, h.finalize())
+}
+
+/// Projeto do store no caso, pelas portas da tela (prender, análise sem erro), exportado pela fila como a tela pede:
+/// `n_quadros` e o `composto_sha256` da saída registrada.
+fn composto_do_store(c: &Caso, v: Value, nome: &str) -> String {
+    armazem::salvar(&c.ws, &v).expect("edicao_salvar");
+    let id = v["id"].as_str().unwrap().to_string();
+    let aberto = cmd::abrir(&c.ws, &id, &c.app, &fila::projeto_ocupado).expect("edicao_abrir");
+    let (doc, analise) = analisar_como_a_tela(c, aberto.projeto);
+    let erros: Vec<_> = analise.problemas.iter().filter(|p| p.nivel == Nivel::Erro).collect();
+    assert!(erros.is_empty(), "{nome}: {erros:?}");
+    armazem::salvar(&c.ws, &doc).unwrap();
+    let p = armazem::tipado(&doc).unwrap();
+    let mut ciencias: Vec<String> = analise.problemas.iter().filter(|p| p.nivel == Nivel::Pericial).map(|p| p.codigo.to_string()).collect();
+    ciencias.dedup();
+    let alvo = Alvo::Final { exportacao: p.saida.exportacao.clone() };
+    let tarefa = fila::enfileirar(cmd::pedido(&c.ws, doc, alvo, ciencias, &c.app).unwrap()).unwrap();
+    let saida_id = match esperar(&tarefa) {
+        Estado::AConferir { saida_id } | Estado::Concluida { saida_id } => saida_id,
+        e => panic!("{nome}: terminou em {e:?}"),
+    };
+    let s = fila::saidas(&c.ws, Some(&id)).unwrap().into_iter().find(|s| s.id == saida_id).expect("saída registrada");
+    format!("{}:{}", s.n_quadros, s.composto_sha256)
+}
+
+/// Os projetos gravados antes da Fase 4 (os do store das Fases 0 e 1 e o integrado do motor) exportam o MESMO
+/// composto que no `3c7c58a`: os campos novos (`serde(default)`) não mudam o render de quem não os usa.
+#[test]
+fn projetos_de_antes_da_fase4_exportam_o_mesmo_composto() {
+    let Some(cap) = fontes::cap() else { return };
+    let ver = cap.versao.clone();
+    let mut agora = serde_json::Map::new();
+    let c = caso();
+    let (v0, _) = montar(&cap, &c);
+    agora.insert("fase0_do_store".into(), json!(composto_do_store(&c, v0, "fase0")));
+    let c1 = caso();
+    let (mut v1, _, [m1, _]) = montar_de(&cap, &c1, doc1());
+    let (cal, calc) = analise_no_banco(&c1, &m1.sha256);
+    retratos_do_rust(&mut v1, &cal, &calc);
+    v1["legendas"]["origem"]["audio_sha256"] = json!(m1.sha256);
+    agora.insert("fase1_do_store".into(), json!(composto_do_store(&c1, v1, "fase1")));
+    let it = crate::edicao::testes::aceite::integrado(&cap, true);
+    let plano = it.mundo.compilar(&it.p, &crate::edicao::testes::aceite::alvo_final("cpu")).unwrap();
+    agora.insert("integrado".into(), json!(composto_do_plano(&cap, &plano, "integrado")));
+
+    let caminho = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/edicao").join(COMPOSTOS_ANTIGOS);
+    let mut gravado: Value = std::fs::read_to_string(&caminho).ok().and_then(|t| serde_json::from_str(&t).ok()).unwrap_or_else(|| json!({}));
+    if std::env::var_os("SICRO_GRAVAR_FIXTURES").is_some() {
+        gravado[&ver] = Value::Object(agora);
+        std::fs::write(&caminho, serde_json::to_string_pretty(&gravado).unwrap() + "\n").unwrap();
+        return;
+    }
+    let Some(antes) = gravado.get(&ver) else {
+        panic!("{COMPOSTOS_ANTIGOS} sem o ffmpeg {ver}: gravar na base 3c7c58a (SICRO_GRAVAR_FIXTURES=1), nunca depois da mudança");
+    };
+    assert_eq!(antes, &Value::Object(agora), "composto de projeto antigo mudou no ffmpeg {ver}");
+}

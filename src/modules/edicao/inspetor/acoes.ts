@@ -35,7 +35,6 @@ import { ehChaves } from "../modelo/curva";
 import { exibido, ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
 import { recursoDe } from "../palco/recursos";
 import {
-  CAIXA_CENTRO,
   novaTrilhaNarracao,
   novoCarimbo,
   novoClipeAudio,
@@ -47,6 +46,7 @@ import {
   novoRastreio,
   novoTexto,
 } from "./novos";
+import { caixaNova } from "../palco/areaVisivel";
 
 const st = () => useEdicaoStore.getState();
 type Mut = (d: Draft<ProjetoEdicao>) => void;
@@ -131,8 +131,10 @@ export function adicionarEfeito(clipeId: Id, tipo: Exclude<TipoAdicionar, "image
     // congelado: rastreio de base fonte amostrado no instante dele (não no tempo local do cursor)
     const q = c.tipo === "congelar" ? quadroDoCongelado(c) : null;
     const k = q ?? (c.tipo === "trecho" ? quadroDoTrecho(c, t) : null);
-    const r = novoRastreio(midia, k ? k.t : t, CAIXA_CENTRO);
-    if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: CAIXA_CENTRO }];
+    // Fase 4 (contratos-fase4.md D9): nasce na área visível do palco
+    const caixa = caixaNova(c.id);
+    const r = novoRastreio(midia, k ? k.t : t, caixa);
+    if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: caixa }];
     extra.push((d) => void d.rastreios.push(r));
     if (tipo === "destaque") novoEf = novoDestaque(r.id);
     else if (c.tipo === "trecho" || q) {

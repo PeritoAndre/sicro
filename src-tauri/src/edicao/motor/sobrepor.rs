@@ -11,9 +11,9 @@ use super::plano::{Desenho, Entrada, ImagemCamada, ItemCamada, Papel, PedidoCama
 use super::{Alvo, Contexto};
 use crate::edicao::camada;
 use crate::edicao::camada::formas::QuadroCamada;
-use crate::edicao::curva;
 use crate::edicao::geometria::Afim;
 use crate::edicao::modelo::{ClipeSobreposto, LinhaResolvida, ProjetoEdicao, SobBase, TamanhoPx, Tolerante};
+use crate::edicao::sobreposto;
 use crate::edicao::tempo;
 use crate::edicao::validar;
 use crate::error::Result;
@@ -26,12 +26,10 @@ pub struct Sobreposto {
     pub camada: Option<PedidoCamada>,
 }
 
-/// `Transformacao` no tempo local `tau` de um clipe de `dur` s, com a entrada e a saída na opacidade.
+// CONTRATO: Fase 4 (contratos-fase4.md B3): a transformação com entrada e saída mora em `edicao::sobreposto`
+// (pacote do texto livre, espelho em `modelo/sobreposto.ts`); aqui só chama.
 fn avaliada(b: &SobBase, tau: f64, dur: f64) -> TransformacaoAvaliada {
-    let t = &b.transformacao;
-    let rampa = |v: f64, d: f64| if d > 0.0 && d.is_finite() { (v / d).clamp(0.0, 1.0) } else { 1.0 };
-    let opacidade = curva::avaliar(&t.opacidade, tau).clamp(0.0, 1.0) * rampa(tau, b.entrada_s) * rampa(dur - tau, b.saida_s);
-    TransformacaoAvaliada { x: curva::avaliar(&t.x, tau), y: curva::avaliar(&t.y, tau), escala: curva::avaliar(&t.escala, tau), rotacao: curva::avaliar(&t.rotacao, tau), opacidade }
+    sobreposto::transformacao_em(b, tau, dur)
 }
 
 /// Aplica sobre `base` os clipes livres visíveis nos slots [de_q, de_q + n_q).
@@ -69,6 +67,7 @@ pub fn aplicar(
             if a >= z {
                 continue;
             }
+            sobreposto::conferir(b)?;
             // efeito ligado em clipe sobreposto é de outra fase: nunca ignorado calado; desligado não pesa
             for e in &b.efeitos {
                 match e {

@@ -314,7 +314,7 @@ mod testes {
         Tolerante::Conhecido(Efeito::Girar(EfGirar { base: base("g"), graus, espelhar_h: h, espelhar_v: v }))
     }
     fn enq(regiao: Animavel<Caixa>, ajuste: Ajuste) -> Tolerante<Efeito> {
-        Tolerante::Conhecido(Efeito::Enquadramento(EfEnquadramento { base: base("q"), regiao, ajuste, interpolacao: Interpolacao::Bilinear }))
+        Tolerante::Conhecido(Efeito::Enquadramento(EfEnquadramento { base: base("q"), regiao, ajuste, interpolacao: Interpolacao::Bilinear, segue: None }))
     }
     fn cx(x: f64, y: f64, w: f64, h: f64) -> Caixa {
         Caixa { x, y, w, h }

@@ -20,7 +20,7 @@ use super::modelo::{
     Exportacao, Fonte, FormaDestaque, FormaRegiao, FormatoCarimbo, Fundo, Interp, Interpolacao, Intervalo, Lugar, MidiaRef,
     Mixagem, ModeloTitulo, ModoLegendas, ModoOcultar, ModoPdf, MostraCarimbo, OrigemMidia, OrigemRastreio, PapelAudio,
     PapelTexto, Posicao, Predefinicao, ProjetoEdicao, Racional, Rastreio, Recebido, Saida, Selos, TipoDerivacao, TipoMidia,
-    TipoRastreio, Titulo, Tolerante, Traco, TrilhaAudio, TrilhaLegendas, Transicao, Velocidade, ESQUEMA, ESQUEMA_MENOR,
+    TipoRastreio, Titulo, Tolerante, Traco, TrilhaAudio, TrilhaLegendas, Transicao, Velocidade, ESQUEMA,
 };
 use crate::database::repositories::video_repo;
 use crate::error::{Result, SicroError};
@@ -239,7 +239,8 @@ impl Conversao<'_> {
         let quando = |s: &str| if s.is_empty() { agora.to_string() } else { s.to_string() };
         Ok(ProjetoEdicao {
             esquema: ESQUEMA,
-            esquema_menor: ESQUEMA_MENOR,
+            // CONTRATO: Fase 4 (B1): o v1 não tem campo novo; o menor 1 é só de quem usa um
+            esquema_menor: 0,
             id: m.id.clone(),
             titulo: m.titulo.clone(),
             created_at: quando(&m.created_at),
@@ -312,6 +313,7 @@ impl Conversao<'_> {
                         ]),
                         ajuste: Ajuste::Cobrir,
                         interpolacao: Interpolacao::Bicubica,
+                        segue: None,
                     }));
                 }
                 for d in destaques {
@@ -348,6 +350,7 @@ impl Conversao<'_> {
                             alinhamento: Alinhamento::Centro,
                             caixa: None,
                             contorno: None,
+                            sombra: None,
                         },
                         lugar: Lugar { x: 0.5, y: 0.5, h: Alinhamento::Centro, v: AlinhamentoV::Meio },
                         largura_max: 0.9,
@@ -598,8 +601,9 @@ fn estilo(fonte: Fonte, tamanho: f64, alinhamento: Alinhamento, margem: f64) -> 
         tamanho,
         cor: "#ffffff".into(),
         alinhamento,
-        caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem, raio: 0.0 }),
+        caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem, raio: 0.0, faixa: false }),
         contorno: None,
+        sombra: None,
     }
 }
 
@@ -934,7 +938,7 @@ mod testes {
     #[test]
     fn velocidade_cartela_e_congelado() {
         let p = converte("v1-velocidade.json");
-        assert_eq!((p.esquema, p.esquema_menor, p.id.as_str(), p.titulo.as_str()), (2, ESQUEMA_MENOR, "a0000000-0000-4000-8000-000000000001", "Velocidade"));
+        assert_eq!((p.esquema, p.esquema_menor, p.id.as_str(), p.titulo.as_str()), (2, 0, "a0000000-0000-4000-8000-000000000001", "Velocidade"));
         assert_eq!((p.created_at.as_str(), p.updated_at.as_str(), p.gravado_por.as_str()), ("2026-11-01T10:00:00.000Z", "2026-11-01T10:05:00.000Z", "6.0.0"));
         assert_eq!(p.saida, Saida {
             largura: 1920, altura: 1080, fps: Racional { num: 30, den: 1 }, auto: false, cor_fundo: "#000000".into(), audio: true,
@@ -963,7 +967,7 @@ mod testes {
         let b = &k.titulo.blocos[0];
         assert_eq!((b.papel, b.conteudo.as_str(), b.largura_max), (PapelTexto::Corpo, "x", 0.9));
         assert_eq!(b.estilo, EstiloTexto { fonte: Fonte::Sans, negrito: false, italico: false, tamanho: 0.052, cor: "#ffffff".into(),
-                                           alinhamento: Alinhamento::Centro, caixa: None, contorno: None });
+                                           alinhamento: Alinhamento::Centro, caixa: None, contorno: None, sombra: None });
         assert_eq!(b.lugar, Lugar { x: 0.5, y: 0.5, h: Alinhamento::Centro, v: AlinhamentoV::Meio });
         let ClipePrincipal::Congelar(g) = c[2] else { panic!() };
         assert_eq!((g.base.id.as_str(), g.midia.as_str(), g.instante_s, g.instante_pts, g.duracao_s), ("a3", m.id.as_str(), 1.0, Some(1000), 1.5));
@@ -1083,12 +1087,12 @@ mod testes {
         let Efeito::Carimbo(cb) = e[4] else { panic!() };
         assert_eq!((cb.mostra, cb.formato, cb.relogio.clone()), (MostraCarimbo::TempoFonte, FormatoCarimbo::HmsMs, None));
         assert_eq!(cb.estilo, EstiloTexto { fonte: Fonte::Mono, negrito: false, italico: false, tamanho: 0.033, cor: "#ffffff".into(),
-            alinhamento: Alinhamento::Dir, caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem: 0.0074, raio: 0.0 }), contorno: None });
+            alinhamento: Alinhamento::Dir, caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem: 0.0074, raio: 0.0, faixa: false }), contorno: None, sombra: None });
         assert_eq!(cb.lugar, Lugar { x: 0.984, y: 0.028, h: Alinhamento::Dir, v: AlinhamentoV::Topo });
         let Efeito::Texto(tx) = e[5] else { panic!() };
         assert_eq!((tx.conteudo.as_str(), tx.largura_max), ("Câmera 1 — entrada", 0.92));
         assert_eq!(tx.estilo, EstiloTexto { fonte: Fonte::Sans, negrito: false, italico: false, tamanho: 0.078, cor: "#ffffff".into(),
-            alinhamento: Alinhamento::Centro, caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem: 0.013, raio: 0.0 }), contorno: None });
+            alinhamento: Alinhamento::Centro, caixa: Some(CaixaTexto { cor: "#0000008c".into(), margem: 0.013, raio: 0.0, faixa: false }), contorno: None, sombra: None });
         assert_eq!(tx.lugar, Lugar { x: 0.5, y: 0.06, h: Alinhamento::Centro, v: AlinhamentoV::Topo });
         // cartela: tamanho p, cores da v1
         let ClipePrincipal::Titulo(k) = c[1] else { panic!() };

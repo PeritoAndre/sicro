@@ -243,7 +243,8 @@ pub fn tipado(projeto: &Value) -> Result<ProjetoEdicao> {
         .map_err(|e| SicroError::Validation(format!("{}: {e}", codigo::ITEM_INVALIDO)))
 }
 
-/// Grava o documento como chegou (`.tmp` + rename), carimbando só `updated_at` e `gravado_por`.
+/// Grava o documento como chegou (`.tmp` + rename), carimbando `updated_at`, `gravado_por` e, se ele usa campo
+/// da Fase 4, `esquema_menor` (`modelo::menor_necessario`).
 pub fn salvar(ws: &Path, projeto: &Value) -> Result<Salvo> {
     let id = projeto
         .get("id")
@@ -266,6 +267,13 @@ pub fn salvar(ws: &Path, projeto: &Value) -> Result<Salvo> {
     let mut doc = projeto.clone();
     doc["updated_at"] = Value::String(updated_at.clone());
     doc["gravado_por"] = Value::String(APP_VERSION.into());
+    // CONTRATO: Fase 4 (B1). Documento que usa campo novo sobe o `esquema_menor`: a 6.3 o abriria e ignoraria calada.
+    if let Ok(p) = serde_json::from_value::<crate::edicao::modelo::ProjetoEdicao>(doc.clone()) {
+        let n = crate::edicao::modelo::menor_necessario(&p) as u64;
+        if n > esquema_menor(&doc) {
+            doc["esquema_menor"] = Value::from(n);
+        }
+    }
     gravar_atomico(&pasta.join(PROJETO), &serde_json::to_vec_pretty(&doc)?)?;
     Ok(Salvo { updated_at, raiz_cache: String::new() })
 }
@@ -1406,6 +1414,27 @@ mod testes {
         sem_carimbo["updated_at"] = original["updated_at"].clone();
         sem_carimbo["gravado_por"] = original["gravado_por"].clone();
         assert!(bit_a_bit(&sem_carimbo, &original));
+    }
+
+    /// Fase 4 (contratos-fase4.md B1): `salvar` sobe o `esquema_menor` do ARQUIVO só quando o documento usa campo
+    /// novo (a 6.3 abriria e ignoraria calada); documento antigo fica com o que trouxe.
+    #[test]
+    fn salvar_sobe_o_esquema_menor_so_com_campo_da_fase4() {
+        let (_t, ws) = caso();
+        let antigo: Value = serde_json::from_str(&fixture("completo.json")).unwrap();
+        let id = antigo["id"].as_str().unwrap().to_string();
+        salvar(&ws, &antigo).unwrap();
+        assert_eq!(ler(&pasta_projeto(&ws, &id).join(PROJETO))["esquema_menor"], json!(0));
+        let mut novo = antigo.clone();
+        novo["legendas"]["estilo"]["sombra"] = json!({ "cor": "#000000", "dx": 0.0, "dy": 0.002, "desfoque": 0.0 });
+        salvar(&ws, &novo).unwrap();
+        let gravado = ler(&pasta_projeto(&ws, &id).join(PROJETO));
+        assert_eq!(gravado["esquema_menor"], json!(ESQUEMA_MENOR));
+        assert_eq!(gravado["legendas"]["estilo"]["sombra"], novo["legendas"]["estilo"]["sombra"]);
+        assert!(!abrir(&ws, &id).unwrap().so_leitura, "este programa lê o que gravou");
+        // sem o campo, o arquivo volta ao que o documento traz: a 6.3 abre de novo sem perder nada
+        salvar(&ws, &antigo).unwrap();
+        assert_eq!(ler(&pasta_projeto(&ws, &id).join(PROJETO))["esquema_menor"], json!(0));
     }
 
     #[test]

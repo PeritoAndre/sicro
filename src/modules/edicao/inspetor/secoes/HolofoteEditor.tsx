@@ -7,7 +7,8 @@ import type { Draft } from "immer";
 import type { ContextoClipe, EfHolofote, Id } from "@domain/edicao";
 import { midiaDoClipe, mudar, noEfeito, quadroDoCongelado, quadroDoTrecho, selecionarEfeito, tempoNoClipe, type ClipeQualquer } from "../acoes";
 import { Deslizante, Escolha, Grade, Marca, Numero } from "../campos";
-import { CAIXA_CENTRO, novoRastreio } from "../novos";
+import { novoRastreio } from "../novos";
+import { caixaNova } from "../../palco/areaVisivel";
 import type { EditorEfeitoProps } from "../registro";
 import { acharClipe, novoId } from "../../modelo/projeto";
 import { useEdicaoStore } from "../../store/edicaoStore";
@@ -49,8 +50,10 @@ export function adicionarHolofote(clipeId: Id, rotulo: string): Promise<Id | nul
   const t = tempoNoClipe(c);
   // congelado: o rastreio de base fonte é amostrado no instante dele
   const k = c.tipo === "congelar" ? quadroDoCongelado(c) : c.tipo === "trecho" ? quadroDoTrecho(c, t) : null;
-  const r = novoRastreio(midiaDoClipe(c), k ? k.t : t, CAIXA_CENTRO);
-  if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: CAIXA_CENTRO }];
+  // Fase 4 (contratos-fase4.md D9): nasce na área visível do palco
+  const caixa = caixaNova(clipeId);
+  const r = novoRastreio(midiaDoClipe(c), k ? k.t : t, caixa);
+  if (k) r.ancoras = [{ t: k.t, pts: k.pts, v: caixa }];
   const ef = holofotePadrao(r.id);
   mudar(rotulo, (dd) => {
     dd.rastreios.push(r);

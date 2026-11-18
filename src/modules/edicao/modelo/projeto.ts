@@ -26,7 +26,7 @@ import type {
   Seg,
   TrilhaLegendas,
 } from "@domain/edicao";
-import { ESQUEMA_EDICAO, ESQUEMA_MENOR } from "@domain/edicao";
+import { ESQUEMA_EDICAO } from "@domain/edicao";
 
 // ---- itens conhecidos (o resto é de versão futura: preservado e mostrado apagado) ----
 
@@ -163,7 +163,8 @@ export const audioPadrao = (): AudioClipe => ({ volume: 1, mudo: false, manter_t
 export function novoProjeto(titulo: string = TITULO_NOVO, agora: string = new Date().toISOString()): ProjetoEdicao {
   return {
     esquema: ESQUEMA_EDICAO,
-    esquema_menor: ESQUEMA_MENOR,
+    // CONTRATO: Fase 4 (B1): nasce no menor 0; `armazem::salvar` sobe para ESQUEMA_MENOR só se usar campo novo
+    esquema_menor: 0,
     id: novoId(),
     titulo,
     created_at: agora,
@@ -393,6 +394,14 @@ export function aplicarMudanca(d: ProjetoEdicao, m: Mudanca): boolean {
     const r = acharRastreio(d, m.rastreio);
     if (!r) return false;
     r.ancoras = porChave<Caixa>(r.ancoras, m.ancora);
+    return true;
+  }
+  // CONTRATO: Fase 4 (contratos-fase4.md B6): sobreposto inteiro trocado na trilha dele (alças do texto livre)
+  if ("livre" in m) {
+    const t = d.sobreposicoes.find((x) => x.id === m.trilha);
+    const i = t ? t.clipes.findIndex((c) => ehObj(c) && c.id === m.livre) : -1;
+    if (!t || i < 0) return false;
+    t.clipes[i] = m.sobreposto;
     return true;
   }
   const c = acharClipe(d, m.clipe);

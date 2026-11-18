@@ -66,6 +66,9 @@ import { adicionarHolofote, HOLOFOTE_PRONTO, HolofoteEditor, novoHolofote } from
 import { alcasDoAlvo } from "./secoes/alvoRegiao";
 // Fase 4 (P4.5): ocultação assistida, depois das Marcações do trecho
 import { SUGESTOES_PRONTO, SugestoesSecao } from "../rastreio/Sugestoes";
+// Fase 4 (contratos-fase4.md): texto livre (sem efeito enquanto TEXTO_LIVRE_PRONTO = false)
+import { ehTextoLivre, TEXTO_LIVRE_PRONTO } from "./secoes/textoLivre";
+import { TextoLivreSecao } from "./secoes/TextoLivreSecao";
 
 // ---- efeitos ----
 
@@ -279,7 +282,14 @@ export interface SecaoProps<C> {
   tabela: TabelaQuadros | null;
 }
 
-type TipoItem = `principal:${ClipePrincipal["tipo"]}` | `livre:${ClipeSobreposto["tipo"]}`;
+// CONTRATO: `livre:texto` (Fase 4, contratos-fase4.md D4): o título sobreposto de modelo "livre" com um bloco, com
+// `TEXTO_LIVRE_PRONTO`; o Inspetor escolhe o tipo por `tipoNoInspetor`.
+type TipoItem = `principal:${ClipePrincipal["tipo"]}` | `livre:${ClipeSobreposto["tipo"]}` | "livre:texto";
+
+/** Tipo do item para as seções: o texto livre tem as dele (quando o pacote entrega); o resto, o `tipo` do fio. */
+export function tipoNoInspetor(onde: "principal" | "livre", item: { tipo: string; titulo?: { modelo: string; blocos: unknown[] } }): string {
+  return onde === "livre" && TEXTO_LIVRE_PRONTO && ehTextoLivre(item) ? "texto" : item.tipo;
+}
 
 /** Realce: o do P1.4 quando ele liga; até lá, os efeitos de origem só para leitura. */
 const Realce = REALCE_PRONTO ? RealceSecao : RealceSoLeitura;
@@ -292,6 +302,7 @@ export const SECOES: Partial<Record<TipoItem, FC<SecaoProps<never>>[]>> = {
   "principal:titulo": [TituloSecao, EntradaSecao, MarcacoesSecao] as FC<SecaoProps<never>>[],
   "livre:titulo": [TituloSecao] as FC<SecaoProps<never>>[],
   "livre:imagem": [SobImagemSecao] as FC<SecaoProps<never>>[],
+  "livre:texto": [TextoLivreSecao] as FC<SecaoProps<never>>[],
 };
 
 export function secoesDe(onde: "principal" | "livre", tipo: string): FC<SecaoProps<never>>[] | null {

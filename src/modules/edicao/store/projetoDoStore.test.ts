@@ -333,7 +333,9 @@ function padraoEsperado(tipoRust: string, attr: string): unknown {
 
 describe("completar() põe os padrões do Rust (contratos (g) 12)", () => {
   const rust = padroesDoRust();
-  const alvo = [...rust.keys()].filter((k) => !SO_NO_RUST.has(k));
+  // campo com `skip_serializing_if`: a falta É o padrão e o Rust não o grava (L5 da Fase 1; contratos-fase4 B1):
+  // o front não completa (sombra, faixa, animação, segue, âncoras e corridas do programa)
+  const alvo = [...rust.keys()].filter((k) => !SO_NO_RUST.has(k) && !(rust.get(k) as string).includes("skip_serializing_if"));
 
   it("toda struct com padrão no Rust tem onde ser achada no documento", () => {
     const semLugar = alvo.map((k) => k.split(".")[0] as string).filter((s) => !(s in ONDE));

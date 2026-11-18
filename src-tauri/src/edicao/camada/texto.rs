@@ -369,6 +369,19 @@ fn conferir_cores(e: &EstiloTexto) -> Result<()> {
     Ok(())
 }
 
+// CONTRATO: acréscimo da abertura da Fase 4 (contratos-fase4.md B2): regra única do pacote do texto livre.
+/// Detalhe do `nao_suportado` enquanto o modelo de sprite não desenha `sombra` ou `faixa`; None = desenha.
+/// A validação e o rasterizador perguntam aqui; o pacote converte trocando só esta função e o modelo.
+pub fn recusa_estilo(e: &EstiloTexto) -> Option<&'static str> {
+    if e.sombra.is_some() {
+        return Some("sombra");
+    }
+    if e.caixa.as_ref().is_some_and(|c| c.faixa) {
+        return Some("faixa");
+    }
+    None
+}
+
 /// Bitmap do sprite (sem cache): o que `sprite` grava.
 pub(crate) fn bitmap_sprite(pedido: &PedidoSprite) -> Result<(Bitmap, Vec<char>)> {
     let altura = pedido.altura_canvas as f64;
@@ -378,6 +391,9 @@ pub(crate) fn bitmap_sprite(pedido: &PedidoSprite) -> Result<(Bitmap, Vec<char>)
     }
     for b in &pedido.blocos {
         conferir_cores(&b.estilo)?;
+        if let Some(d) = recusa_estilo(&b.estilo) {
+            return Err(SicroError::Validation(format!("{}: {d}", codigo::NAO_SUPORTADO)));
+        }
     }
     if pedido.blocos.iter().map(|b| b.conteudo.chars().count()).sum::<usize>() > LIMITE_TEXTO {
         return Err(SicroError::Validation(format!("{}: texto longo demais", codigo::ITEM_INVALIDO)));
@@ -473,8 +489,9 @@ mod testes {
             tamanho: 0.05,
             cor: "#ffffff".into(),
             alinhamento: Alinhamento::Centro,
-            caixa: caixa.map(|c| CaixaTexto { cor: c.into(), margem: 0.01, raio: 0.005 }),
+            caixa: caixa.map(|c| CaixaTexto { cor: c.into(), margem: 0.01, raio: 0.005, faixa: false }),
             contorno: contorno.map(|c| ContornoTexto { cor: c.into(), largura: 0.003 }),
+            sombra: None,
         }
     }
 
