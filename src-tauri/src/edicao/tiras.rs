@@ -32,7 +32,7 @@ use crate::edicao::fundo::{self, TipoFundo};
 use crate::edicao::modelo::{Faixa, Matriz, Racional};
 use crate::edicao::motor::FonteInfo;
 use crate::edicao::previa;
-use crate::edicao::quadros::{conteiner_de_imagem, TabelaQuadros};
+use crate::edicao::quadros::{conteiner_de_imagem, OrigemTabela, TabelaQuadros};
 use crate::error::{Result, SicroError};
 
 /// Versão da receita: mudar invalida as tiras em cache.
@@ -54,8 +54,8 @@ const FOLGA_T0_S: f64 = 1e-4;
 const FOLGA_JANELA: f64 = 1e-6;
 
 /// Pedido da tira. Faixa `[de_s, ate_s)` em tempo de fonte; `n` miniaturas ou `largura` da faixa na tela (px; n =
-/// largura ÷ largura da célula); `altura` de cada miniatura (px). `canal` = quem pede (o clipe na linha do tempo): o
-/// pedido novo do mesmo canal cancela o anterior que ainda roda. Vazio = sem cancelamento.
+/// largura ÷ largura da célula, preso aos tetos); `altura` de cada miniatura (px). `canal` = quem pede (o clipe na linha
+/// do tempo): o pedido novo do mesmo canal cancela o anterior que ainda roda. Vazio = sem cancelamento.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PedidoTira {
     pub sha256: String,
@@ -78,7 +78,7 @@ pub struct CelulaTira {
 /// `celulas.len()` pretas. `miniaturas[k]` = célula da janela k (`n` itens). Nenhum quadro-chave na faixa: `relativo`
 /// nulo e listas vazias.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct Tira {
+pub struct TiraMiniaturas {
     pub relativo: Option<String>,
     pub w: u32,
     pub h: u32,
@@ -94,7 +94,7 @@ pub struct Tira {
 #[derive(Debug, Clone, Serialize, PartialEq)]
 pub struct RespostaTira {
     pub chave: String,
-    pub tira: Option<Tira>,
+    pub tira: Option<TiraMiniaturas>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -118,6 +118,8 @@ struct Plano {
     /// `-ss` (s, relativo ao início do arquivo) pela regra do §5.3; None = sem busca.
     busca: Option<f64>,
     modo: Modo,
+    /// Modo Tempo com a tabela do decodificador: os quadros-chave que a regra escolhe nela (a leitura tem de dar esses).
+    esperado: Option<Vec<usize>>,
     hash: String,
 }
 
@@ -166,7 +168,8 @@ fn planejar(cap_sha256: &str, fonte: &FonteInfo, p: &PedidoTira) -> Result<Plano
     let w = par(h as f64 * ew as f64 / eh as f64);
     let n = match (p.n, p.largura) {
         (Some(n), _) => n,
-        (None, Some(l)) => ((l as f64 / w as f64).round() as u32).max(1),
+        // clipe largo na tela (zoom): menos miniaturas, não erro
+        (None, Some(l)) => ((l as f64 / w as f64).round() as u32).clamp(1, MAX_MINIATURAS.min(MAX_LARGURA / w)),
         (None, None) => return Err(erro("item_invalido: n ou largura")),
     };
     if n == 0 || n > MAX_MINIATURAS {
@@ -184,17 +187,24 @@ fn planejar(cap_sha256: &str, fonte: &FonteInfo, p: &PedidoTira) -> Result<Plano
     let passo = (ate - de) / n as f64;
     let k0 = tab.chave_ate(tab.exibido(de)).filter(|&k| tab.tempo(k) <= de);
     let t0 = k0.map_or(de, |k| tab.tempo(k));
-    let (modo, busca) = if sem_tempo_nos_pacotes(&fonte.conteiner) {
+    let (modo, busca, esperado) = if sem_tempo_nos_pacotes(&fonte.conteiner) {
         let escolhidos = escolher(tab, k0, de, ate, passo, n);
-        let ordinais = escolhidos.iter().map(|&j| tab.chave[..j].iter().filter(|&&k| k).count()).collect();
+        // os escolhidos vêm em ordem: uma passada só (gravação de 24 h tem milhões de quadros, a cada pedido da tela)
+        let (mut ordinais, mut conta, mut j0) = (Vec::with_capacity(escolhidos.len()), 0, 0);
+        for &j in &escolhidos {
+            conta += tab.chave[j0..j].iter().filter(|&&k| k).count();
+            j0 = j;
+            ordinais.push(conta);
+        }
         let celulas = escolhidos.iter().map(|&j| CelulaTira { pts: tab.pts[j], t: tab.tempo(j) }).collect();
-        (Modo::Ordem { ordinais, celulas }, None)
+        (Modo::Ordem { ordinais, celulas }, None, None)
     } else {
-        (Modo::Tempo, k0.and_then(|k| tab.busca_em(fonte.inicio_s, k)))
+        let esperado = (tab.origem == OrigemTabela::Decodificador).then(|| escolher(tab, k0, de, ate, passo, n));
+        (Modo::Tempo, k0.and_then(|k| tab.busca_em(fonte.inicio_s, k)), esperado)
     };
     let letra = if modo == Modo::Tempo { "tempo" } else { "ordem" };
     let hash = sha256_bytes(format!("{FORMATO}\n{VERSAO}\n{}\n{cap_sha256}\n{letra}\n{t0}\n{de}\n{ate}\n{n}\n{w}x{h}\n", fonte.sha256).as_bytes());
-    Ok(Plano { de, ate, t0, passo, n, w, h, busca, modo, hash })
+    Ok(Plano { de, ate, t0, passo, n, w, h, busca, modo, esperado, hash })
 }
 
 /// O grafo da receita B. Tempo: `trim` acaba a leitura no fim da faixa e o `select` guarda em `ld(0)` a próxima
@@ -283,11 +293,11 @@ struct Arquivo {
     formato: String,
     midia: String,
     chave: String,
-    tira: Tira,
+    tira: TiraMiniaturas,
 }
 
 /// Tira no cache: o `.json` (gravado por último) e o JPEG que ele cita.
-fn consultar(cache: &Path, sha256: &str, hash: &str) -> Option<Tira> {
+fn consultar(cache: &Path, sha256: &str, hash: &str) -> Option<TiraMiniaturas> {
     if !sha_valido(sha256) || !sha_valido(hash) {
         return None;
     }
@@ -321,7 +331,7 @@ impl Drop for Trabalho {
 }
 
 /// Faz e guarda a tira (bloqueia a thread). A do cache volta sem ffmpeg.
-fn produzir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, p: &Plano, cancelar: &AtomicBool) -> Result<Tira> {
+fn produzir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, p: &Plano, cancelar: &AtomicBool) -> Result<TiraMiniaturas> {
     if let Some(t) = consultar(cache, &fonte.sha256, &p.hash) {
         return Ok(t);
     }
@@ -366,14 +376,23 @@ fn produzir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, p: &Plano, cance
                         return Err(erro(format!("leitura_divergente: tira com {} células para {} janelas", pts.len(), p.n)));
                     }
                     let tb = base_do_showinfo(&cmd.stderr).unwrap_or(fonte.quadros.tb);
-                    let q = tb.num as f64 / tb.den as f64;
-                    (pts.iter().map(|&x| CelulaTira { pts: x, t: x as f64 * tb.num as f64 / tb.den as f64 }).collect(), pts.iter().map(|&x| x as f64 * q).collect())
+                    let ts: Vec<f64> = pts.iter().map(|&x| x as f64 * tb.num as f64 / tb.den as f64).collect();
+                    // com a tabela do decodificador, as células são as que a regra escolhe nela: pts que o `-skip_frame`
+                    // entregue errado (como no MPEG-PS e no H.264 cru) vira erro, não miniatura faltando ou fora do lugar
+                    if let Some(js) = &p.esperado {
+                        let tab = &fonte.quadros;
+                        let meio_tique = 0.5 * tab.tb.num as f64 / tab.tb.den as f64;
+                        if js.len() != ts.len() || js.iter().zip(&ts).any(|(&j, &t)| (tab.tempo(j) - t).abs() > meio_tique) {
+                            return Err(erro(format!("leitura_divergente: tira com {} células, a tabela pede {}", ts.len(), js.len())));
+                        }
+                    }
+                    (pts.iter().zip(&ts).map(|(&x, &t)| CelulaTira { pts: x, t }).collect(), ts)
                 }
             }
         }
     };
     let (jpg, json, rel) = arquivos(cache, &fonte.sha256, &p.hash);
-    let tira = Tira {
+    let tira = TiraMiniaturas {
         relativo: (!celulas.is_empty()).then_some(rel),
         w: p.w,
         h: p.h,
@@ -394,23 +413,23 @@ fn produzir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, p: &Plano, cance
     Ok(a.tira)
 }
 
-/// Chave pedida por último em cada canal (o clipe na tela).
+/// Chave que cada canal (o clipe na tela) ainda espera da fila de fundo.
 fn canais() -> &'static Mutex<HashMap<String, String>> {
     static C: OnceLock<Mutex<HashMap<String, String>>> = OnceLock::new();
     C.get_or_init(Default::default)
 }
 
-/// Registra a chave do canal e cancela a que ele pediu antes, se nenhum outro canal ainda a quer.
-fn vigiar(canal: &str, chave: &str) {
+/// Troca o que o canal espera (`None` = nada: tira do cache ou pedido recusado) e cancela o que ele esperava antes, se
+/// nenhum outro canal ainda o quer.
+fn trocar(m: &mut HashMap<String, String>, canal: &str, chave: Option<&str>) {
     if canal.is_empty() {
         return;
     }
-    let velha = {
-        let mut m = canais().lock().unwrap_or_else(|e| e.into_inner());
-        let velha = m.insert(canal.to_string(), chave.to_string());
-        velha.filter(|v| v != chave && !m.values().any(|x| x == v))
+    let velha = match chave {
+        Some(c) => m.insert(canal.to_string(), c.to_string()),
+        None => m.remove(canal),
     };
-    if let Some(v) = velha {
+    if let Some(v) = velha.filter(|v| Some(v.as_str()) != chave && !m.values().any(|x| x == v)) {
         fundo::cancelar(&v);
     }
 }
@@ -429,12 +448,23 @@ pub fn pedir(ws: &Path, cache: &Path, pedido: &PedidoTira) -> Result<RespostaTir
 }
 
 fn pedir_com(cap: Arc<Capacidades>, cache: &Path, fonte: FonteInfo, pedido: &PedidoTira) -> Result<RespostaTira> {
-    let p = planejar(&cap.sha256, &fonte, pedido)?;
+    let plano = planejar(&cap.sha256, &fonte, pedido);
+    // troca e fila sob a mesma trava: a tela manda o pedido seguinte do canal sem esperar a resposta, e o que entrasse
+    // na fila depois da troca do outro ficava rodando sem dono
+    let mut m = canais().lock().unwrap_or_else(|e| e.into_inner());
+    let p = match plano {
+        Ok(p) => p,
+        Err(e) => {
+            trocar(&mut m, &pedido.canal, None);
+            return Err(e);
+        }
+    };
     let chave = fundo::chave(TipoFundo::Tira, &p.hash);
-    vigiar(&pedido.canal, &chave);
     if let Some(t) = consultar(cache, &fonte.sha256, &p.hash) {
+        trocar(&mut m, &pedido.canal, None);
         return Ok(RespostaTira { chave, tira: Some(t) });
     }
+    trocar(&mut m, &pedido.canal, Some(&chave));
     let (cache, ch) = (cache.to_path_buf(), chave.clone());
     fundo::pedir_com_prioridade(
         TipoFundo::Tira,
@@ -491,6 +521,13 @@ mod testes {
         let por_largura = PedidoTira { n: None, largura: Some(9600), ..pedido(&sha, 0.0, 30.0, 1, 90) };
         assert_eq!(planejar("f", &f, &por_largura).unwrap().n, 60);
         assert_eq!(planejar("f", &f, &PedidoTira { n: Some(7), ..por_largura.clone() }).unwrap().n, 7);
+        // clipe largo na tela (zoom): a largura dá menos miniaturas, nunca erro; `n` pedido acima do teto é recusado
+        for l in [40_000, u32::MAX] {
+            let p = planejar("f", &f, &PedidoTira { largura: Some(l), ..por_largura.clone() }).unwrap();
+            assert_eq!((p.n, p.n * p.w), (102, 16_320), "{l}");
+        }
+        let baixa = planejar("f", &f, &PedidoTira { largura: Some(u32::MAX), altura: 16, ..por_largura.clone() }).unwrap();
+        assert_eq!((baixa.w, baixa.n), (28, MAX_MINIATURAS));
         // nunca amplia; vertical e pixel não quadrado pela proporção exibida
         let pequena = FonteInfo { exibido: (320, 180), ..f.clone() };
         assert_eq!(planejar("f", &pequena, &pedido(&sha, 0.0, 30.0, 10, 360)).map(|p| (p.w, p.h)).unwrap(), (320, 180));
@@ -574,7 +611,7 @@ mod testes {
         let (sha, hash) = ("ab".repeat(32), "cd".repeat(32));
         let (jpg, json, rel) = arquivos(&cache, &sha, &hash);
         std::fs::create_dir_all(jpg.parent().unwrap()).unwrap();
-        let tira = Tira {
+        let tira = TiraMiniaturas {
             relativo: Some(rel.clone()),
             w: 160,
             h: 90,
@@ -584,7 +621,7 @@ mod testes {
             celulas: vec![CelulaTira { pts: 0, t: 0.0 }],
             miniaturas: vec![0, 0],
         };
-        let grava = |formato: &str, midia: &str, chave: &str, t: &Tira| {
+        let grava = |formato: &str, midia: &str, chave: &str, t: &TiraMiniaturas| {
             let a = Arquivo { formato: formato.into(), midia: midia.into(), chave: chave.into(), tira: t.clone() };
             std::fs::write(&json, serde_json::to_vec(&a).unwrap()).unwrap();
         };
@@ -599,7 +636,7 @@ mod testes {
         assert_eq!(consultar(&cache, &sha, &hash), None);
         grava(FORMATO, &sha, &"ef".repeat(32), &tira);
         assert_eq!(consultar(&cache, &sha, &hash), None);
-        grava(FORMATO, &sha, &hash, &Tira { relativo: Some("../../x.jpg".into()), ..tira.clone() });
+        grava(FORMATO, &sha, &hash, &TiraMiniaturas { relativo: Some("../../x.jpg".into()), ..tira.clone() });
         assert_eq!(consultar(&cache, &sha, &hash), None);
         std::fs::write(&json, b"{").unwrap();
         assert_eq!(consultar(&cache, &sha, &hash), None);
@@ -622,7 +659,7 @@ mod testes {
     }
 
     /// Luma de cada célula da tira (o Y do JPEG, sem conversão), na ordem.
-    fn lumas(cap: &Capacidades, cache: &Path, t: &Tira) -> Vec<Vec<u8>> {
+    fn lumas(cap: &Capacidades, cache: &Path, t: &TiraMiniaturas) -> Vec<Vec<u8>> {
         let Some(rel) = &t.relativo else { return Vec::new() };
         let jpg = cache.join(rel).to_string_lossy().into_owned();
         let cmd = comando_de_teste(cap, "ler", &["-hide_banner", "-nostdin", "-loglevel", "error", "-i", &jpg, "-vf", "extractplanes=y", "-f", "rawvideo", "-pix_fmt", "gray", "-"]);
@@ -683,7 +720,7 @@ mod testes {
     /// Roda a tira e confere: as células são os quadros-chave esperados (pelo pts e pelo número desenhado), o mapa é o
     /// esperado e a célula tem a proporção exibida.
     #[allow(clippy::too_many_arguments)]
-    fn conferir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, numeros: &[u32], de: f64, ate: f64, n: u32, altura: u32, nome: &str) -> Tira {
+    fn conferir(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, numeros: &[u32], de: f64, ate: f64, n: u32, altura: u32, nome: &str) -> TiraMiniaturas {
         let p = planejar(&cap.sha256, fonte, &pedido(&fonte.sha256, de, ate, n, altura)).unwrap();
         let t = produzir(cap, cache, fonte, &p, &AtomicBool::new(false)).unwrap_or_else(|e| panic!("{nome} ({}): {e}", cap.versao));
         let tab = &fonte.quadros;
@@ -784,8 +821,20 @@ mod testes {
         let (de, ate) = faixa(&fonte.quadros, chaves[1] + 4, 1e9, 30);
         conferir(&cap, &cache, &fonte, &numeros, de, ate, 30, 90, "AVI sem índice");
 
+        // H.264 cru (modo Ordem), pelo número desenhado
+        let cru = h264_cru(&cap);
+        let tab = TabelaQuadros::do_decodificador(&cap, &cru, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let numeros = medir::quadros_de_origem(&cap, &cru).unwrap();
+        assert_eq!(numeros.len(), tab.pts.len());
+        let fonte = fonte_info(&cap, &cru, &sonda::sha256_arquivo(&cru).unwrap(), Arc::new(tab), None).unwrap();
+        let chaves: Vec<usize> = (0..fonte.quadros.pts.len()).filter(|&j| fonte.quadros.chave[j]).collect();
+        let (de, ate) = faixa(&fonte.quadros, chaves[1] + 4, 1e9, 20);
+        assert!(matches!(planejar(&cap.sha256, &fonte, &pedido(&fonte.sha256, de, ate, 20, 90)).unwrap().modo, Modo::Ordem { .. }));
+        let t = conferir(&cap, &cache, &fonte, &numeros, de, ate, 20, 90, "H.264 cru");
+        assert!(t.celulas.len() >= 5, "{}", t.celulas.len());
+
         let amostras = fontes::amostras_de_gravador();
-        for prefixo in ["ifv", "dahua", "hik_nvr"] {
+        for prefixo in ["ifv", "dahua", "hik_nvr", "test.lvf"] {
             let Some(arq) = amostras.iter().find(|a| a.file_name().is_some_and(|n| n.to_string_lossy().starts_with(prefixo))) else {
                 eprintln!("aviso: amostra {prefixo} ausente (p1b/dl/dvr/amostras): dispensada");
                 continue;
@@ -825,6 +874,35 @@ mod testes {
                 let (mn, mx) = (y.iter().min().unwrap(), y.iter().max().unwrap());
                 assert!(mx - mn > 40, "{msg}: célula {c} lisa");
             }
+        }
+    }
+
+    /// H.264 cru (Anexo B) tirado do MP4 da matriz: mesmos quadros e números desenhados, sem tempo nos pacotes.
+    fn h264_cru(cap: &Capacidades) -> PathBuf {
+        let mp4 = fontes::gerar(Fonte::Mp4).unwrap().to_string_lossy().into_owned();
+        let cmd = comando_de_teste(cap, "cru", &["-hide_banner", "-nostdin", "-y", "-loglevel", "error", "-i", &mp4, "-map", "0:v:0", "-c", "copy", "-bsf:v", "h264_mp4toannexb", "-f", "h264", "cru.h264"]);
+        let fim = exec::rodar(&cmd, &AtomicBool::new(false)).unwrap();
+        exec::exigir_sucesso(&cmd, &fim).unwrap();
+        cmd.pasta.join("cru.h264")
+    }
+
+    /// Mídia sem tempo nos pacotes lida como se tivesse (modo Tempo): o `-skip_frame` entrega pts errados, e a tira,
+    /// conferida com a tabela do decodificador, dá `leitura_divergente` em vez de miniatura faltando ou fora do lugar.
+    #[test]
+    fn pts_errado_do_skip_frame_vira_erro() {
+        let Some(cap) = fontes::cap() else { return };
+        let cache = fontes::pasta_temporaria("tiras-pts-errado");
+        for video in [fontes::gerar(Fonte::MpegPs).unwrap(), h264_cru(&cap)] {
+            let tab = Arc::new(TabelaQuadros::do_decodificador(&cap, &video, &AtomicBool::new(false), &mut |_| {}).unwrap());
+            let fonte = fonte_info(&cap, &video, &sonda::sha256_arquivo(&video).unwrap(), tab, None).unwrap();
+            assert!(sem_tempo_nos_pacotes(&fonte.conteiner), "{}", fonte.conteiner);
+            let como_tempo = FonteInfo { conteiner: "mpegts".into(), ..fonte.clone() };
+            let chaves: Vec<usize> = (0..fonte.quadros.pts.len()).filter(|&j| fonte.quadros.chave[j]).collect();
+            let (de, ate) = faixa(&fonte.quadros, chaves[1] + 3, 1e9, 12);
+            let p = planejar(&cap.sha256, &como_tempo, &pedido(&fonte.sha256, de, ate, 12, 90)).unwrap();
+            assert!(p.modo == Modo::Tempo && p.esperado.as_ref().is_some_and(|e| e.len() >= 5), "{p:?}");
+            let r = produzir(&cap, &cache, &como_tempo, &p, &AtomicBool::new(false));
+            assert_eq!(codigo(r), "leitura_divergente", "{} ({})", fonte.conteiner, cap.versao);
         }
     }
 
@@ -909,6 +987,8 @@ mod testes {
         assert_eq!(r2.chave, r.chave);
         let t = r2.tira.expect("do cache");
         assert_eq!(fundo::estado(&r.chave).map(|e| (e.id, e.estado)), Some((id, EstadoFundo::Pronta)), "tarefa nova para tira em cache");
+        // tira do cache: o canal não fica esperando nada (registro velho impedia cancelar a tira de outro canal)
+        assert!(!canais().lock().unwrap().contains_key("clipe-fila"));
         // quadros-chave do MP4 (a cada 30), lidos na imagem, no tempo da célula
         let lidos: Vec<u32> = lumas(&cap, &cache, &t).iter().map(|y| medir::identificar(y, t.w as usize, t.h as usize)).collect();
         assert!(lidos.len() >= 10 && lidos.iter().zip(&t.celulas).all(|(&n, c)| n % 30 == 0 && n as f64 == (c.t * 30.0).round()), "{lidos:?}");
@@ -933,24 +1013,32 @@ mod testes {
         }
     }
 
+    /// Entrada que prende o ffmpeg em qualquer sistema (o FIFO é só Unix): conexão TCP local que nunca manda nada.
+    fn entrada_presa() -> (std::net::TcpListener, PathBuf) {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = format!("tcp://127.0.0.1:{}", l.local_addr().unwrap().port());
+        (l, PathBuf::from(url))
+    }
+
+    fn vivo(e: &EstadoFundo) -> bool {
+        matches!(e, EstadoFundo::NaFila | EstadoFundo::Rodando)
+    }
+
     /// O front pede outra faixa (zoom): o pedido velho do mesmo canal morre em menos de 0,5 s, com o ffmpeg de verdade
-    /// preso abrindo a entrada (um FIFO sem quem escreva). Pedido que outro canal ainda quer não morre.
-    #[cfg(unix)]
+    /// preso lendo a entrada. Pedido que outro canal ainda quer não morre. Roda também no Windows (CI).
     #[test]
     fn pedido_novo_do_canal_cancela_o_velho() {
         let Some(cap) = fontes::cap() else { return };
-        let pasta = fontes::pasta_temporaria("tiras-fifo");
-        let fifo = pasta.join("entrada presa.mp4");
-        assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
-        let fonte = FonteInfo { caminho: fifo, sha256: "f1".repeat(32), ..apoio::medida(&cap, Fonte::Mp4).info.clone() };
+        let (_escuta, entrada) = entrada_presa();
+        let pasta = fontes::pasta_temporaria("tiras-presa");
+        let fonte = FonteInfo { caminho: entrada, sha256: "f1".repeat(32), ..apoio::medida(&cap, Fonte::Mp4).info.clone() };
         let cache = pasta.join("cache");
         let ped = |canal: &str, de: f64| PedidoTira { canal: canal.into(), ..pedido(&fonte.sha256, de, 14.0, 10, 90) };
-        let vivo = |e: &EstadoFundo| matches!(e, EstadoFundo::NaFila | EstadoFundo::Rodando);
         let a = pedir_com(cap.clone(), &cache, fonte.clone(), &ped("clipe-a", 1.1)).unwrap();
         let b = pedir_com(cap.clone(), &cache, fonte.clone(), &ped("clipe-b", 1.1)).unwrap();
         assert!(a.tira.is_none() && a.chave == b.chave);
         ate_o_estado(&a.chave, |e| *e == EstadoFundo::Rodando, Duration::from_secs(120));
-        // o ffmpeg nasce e fica preso no `open` do FIFO
+        // o ffmpeg nasce e fica preso lendo a entrada
         std::thread::sleep(Duration::from_millis(300));
         // "clipe-a" muda de faixa; "clipe-b" ainda quer a velha
         let a2 = pedir_com(cap.clone(), &cache, fonte.clone(), &ped("clipe-a", 2.1)).unwrap();
@@ -965,11 +1053,63 @@ mod testes {
         assert_eq!(fim, EstadoFundo::Cancelada, "{}", cap.versao);
         eprintln!("pedido velho morto em {:.0} ms ({})", gasto * 1000.0, cap.versao);
         assert!(gasto < CANCELAR_S * FOLGA, "{gasto:.3} s ({})", cap.versao);
-        for c in [&a2.chave, &b2.chave] {
-            fundo::cancelar(c);
-            assert_eq!(ate_o_estado(c, |e| !vivo(e), Duration::from_secs(10)), EstadoFundo::Cancelada);
-        }
+        // pedido recusado (faixa vazia) também larga o que o canal esperava
+        assert_eq!(codigo(pedir_com(cap.clone(), &cache, fonte.clone(), &ped("clipe-a", 14.0))), "item_invalido");
+        assert_eq!(ate_o_estado(&a2.chave, |e| !vivo(e), Duration::from_secs(10)), EstadoFundo::Cancelada);
+        fundo::cancelar(&b2.chave);
+        assert_eq!(ate_o_estado(&b2.chave, |e| !vivo(e), Duration::from_secs(10)), EstadoFundo::Cancelada);
         // nada no cache nem pasta de trabalho das canceladas
+        let resto: Vec<_> = std::fs::read_dir(cache.join(PASTA)).map(|r| r.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
+        assert!(resto.is_empty(), "{resto:?}");
+    }
+
+    /// Rajada da linha do tempo (zoom e rolagem): 8 linhas de pedidos ao mesmo tempo, 12 cada, sem esperar resposta,
+    /// duas a duas no mesmo canal (4 canais). No fim cada canal tem viva só uma tira; todas as outras acabam `cancelada`
+    /// (nenhuma órfã rodando), cada pedido volta logo e, canceladas as últimas, não sobra nada na fila nem no cache.
+    #[test]
+    fn rajada_deixa_viva_uma_tira_por_canal() {
+        let Some(cap) = fontes::cap() else { return };
+        let (_escuta, entrada) = entrada_presa();
+        let fonte = FonteInfo { caminho: entrada, sha256: "f3".repeat(32), ..apoio::medida(&cap, Fonte::Mp4).info.clone() };
+        let cache = fontes::pasta_temporaria("tiras-rajada").join("cache");
+        let (linhas, pedidos, canais_n) = (8usize, 12usize, 4usize);
+        let pedidas: Vec<(usize, String)> = std::thread::scope(|s| {
+            let hs: Vec<_> = (0..linhas)
+                .map(|l| {
+                    let (cap, fonte, cache) = (cap.clone(), fonte.clone(), cache.clone());
+                    s.spawn(move || {
+                        (0..pedidos)
+                            .map(|k| {
+                                let de = 0.5 + 0.01 * (l * pedidos + k) as f64;
+                                let ped = PedidoTira { canal: format!("rajada-{}", l % canais_n), ..pedido(&fonte.sha256, de, 14.0, 10, 90) };
+                                let t0 = Instant::now();
+                                let r = pedir_com(cap.clone(), &cache, fonte.clone(), &ped).unwrap();
+                                assert!(t0.elapsed() < Duration::from_secs(1), "pedido em {:?}", t0.elapsed());
+                                (l % canais_n, r.chave)
+                            })
+                            .collect::<Vec<_>>()
+                    })
+                })
+                .collect();
+            hs.into_iter().flat_map(|h| h.join().unwrap()).collect()
+        });
+        let t0 = Instant::now();
+        let vivas = loop {
+            let vivas: Vec<(usize, String)> = pedidas.iter().filter(|(_, c)| vivo(&fundo::estado(c).unwrap().estado)).cloned().collect();
+            if vivas.len() <= canais_n || t0.elapsed() > Duration::from_secs(10) {
+                break vivas;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        };
+        let mut por_canal: Vec<usize> = vivas.iter().map(|(c, _)| *c).collect();
+        por_canal.sort();
+        assert_eq!(por_canal, (0..canais_n).collect::<Vec<_>>(), "vivas: {vivas:?}");
+        for (_, c) in &vivas {
+            fundo::cancelar(c);
+        }
+        for (_, c) in &pedidas {
+            assert_eq!(ate_o_estado(c, |e| !vivo(e), Duration::from_secs(10)), EstadoFundo::Cancelada, "{c}");
+        }
         let resto: Vec<_> = std::fs::read_dir(cache.join(PASTA)).map(|r| r.flatten().map(|e| e.file_name()).collect()).unwrap_or_default();
         assert!(resto.is_empty(), "{resto:?}");
     }

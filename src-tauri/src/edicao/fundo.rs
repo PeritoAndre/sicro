@@ -67,6 +67,8 @@ struct Item {
     trabalho: Option<Trabalho>,
     cancelar: Arc<AtomicBool>,
     terminada: Option<Instant>,
+    /// Pedida por `pedir_na_frente` (a exportação espera por ela): pedido "na frente" da tela não passa dela.
+    firme: bool,
 }
 
 #[derive(Default)]
@@ -120,6 +122,14 @@ impl Fundo {
         g.itens.retain(|i| i.terminada.is_none_or(|t| t.elapsed() < MANTER_TERMINADA));
     }
 
+    /// Onde entra o pedido "na frente": o firme na cabeça; o da tela (tira a cada zoom) atrás dos firmes que esperam.
+    fn na_frente(g: &Interno, firme: bool) -> usize {
+        if firme {
+            return 0;
+        }
+        g.itens.iter().rposition(|i| i.firme && i.tarefa.estado == EstadoFundo::NaFila).map_or(0, |k| k + 1)
+    }
+
     fn lista(g: &Interno) -> Vec<TarefaFundo> {
         g.itens.iter().map(|i| i.tarefa.clone()).collect()
     }
@@ -153,7 +163,9 @@ impl Fundo {
         self.pedir_com(tipo, chave, trabalho, frente, frente)
     }
 
-    /// `frente` = passa à frente das que esperam; `refazer` = roda de novo o que falhou há pouco.
+    /// `frente` = passa à frente das que esperam; `refazer` = roda de novo o que falhou há pouco. `frente` com `refazer`
+    /// (a exportação) não é passado por pedido "na frente" sem `refazer` (a tela).
+    // CONTRATO: acréscimo (revisão P4.3): a tira, pedida na frente a cada zoom, passava a tabela que a exportação espera.
     pub(crate) fn pedir_com(self: &Arc<Self>, tipo: TipoFundo, chave: &str, trabalho: Trabalho, frente: bool, refazer: bool) -> String {
         let mut g = self.trava();
         Self::podar(&mut g);
@@ -161,8 +173,10 @@ impl Fundo {
             let id = g.itens[i].tarefa.id.clone();
             // pedido repetido na frente: a que espera passa à frente
             if frente && g.itens[i].tarefa.estado == EstadoFundo::NaFila {
-                let it = g.itens.remove(i);
-                g.itens.insert(0, it);
+                let mut it = g.itens.remove(i);
+                it.firme |= frente && refazer;
+                let k = Self::na_frente(&g, it.firme);
+                g.itens.insert(k, it);
             }
             return id;
         }
@@ -179,9 +193,11 @@ impl Fundo {
             trabalho: Some(trabalho),
             cancelar: Arc::new(AtomicBool::new(false)),
             terminada: None,
+            firme: frente && refazer,
         };
         if frente {
-            g.itens.insert(0, item);
+            let k = Self::na_frente(&g, item.firme);
+            g.itens.insert(k, item);
         } else {
             g.itens.push(item);
         }
@@ -506,6 +522,34 @@ mod testes {
         assert!(!rodou.load(Ordering::SeqCst) && prioridade == mesmo, "prioridade refez o que falhou há pouco");
         let id = f.pedir(TipoFundo::Sonda, "sonda:gpu", Box::new(|_, _| Ok(())), true);
         ate(&f, |l| l.iter().any(|t| t.id == id && t.estado == EstadoFundo::Pronta));
+        f.encerrar();
+    }
+
+    /// A tabela que a exportação espera (`pedir_na_frente`) não é passada pelos pedidos "na frente" da tela (tiras a
+    /// cada zoom, tabela de mídia sem tempo nos pacotes), nem quando a tela repete um pedido que já espera.
+    #[test]
+    fn pedido_da_tela_nao_passa_a_exportacao() {
+        let f = Fundo::nova(1);
+        let eventos = Arc::new(Mutex::new(Vec::<Vec<TarefaFundo>>::new()));
+        let ev = eventos.clone();
+        f.ouvir(Arc::new(move |l: &[TarefaFundo]| ev.lock().unwrap().push(l.to_vec())));
+        let (liberar, juntos, maximo) = (Arc::new(AtomicBool::new(false)), Arc::new(AtomicUsize::new(0)), Arc::new(AtomicUsize::new(0)));
+        f.pedir(TipoFundo::Proxy, "proxy:ocupa", trabalho_preso(liberar.clone(), juntos, maximo), false);
+        ate(&f, |l| l.iter().any(|t| t.estado == EstadoFundo::Rodando));
+        f.pedir_com(TipoFundo::Tira, "tira:0", Box::new(|_, _| Ok(())), true, false);
+        f.pedir(TipoFundo::Tabela, "tabela:exp", Box::new(|_, _| Ok(())), true);
+        for k in 1..4 {
+            f.pedir_com(TipoFundo::Tira, &format!("tira:{k}"), Box::new(|_, _| Ok(())), true, false);
+        }
+        f.pedir_com(TipoFundo::Tabela, "tabela:ps", Box::new(|_, _| Ok(())), true, false);
+        f.pedir_com(TipoFundo::Tira, "tira:0", Box::new(|_, _| Ok(())), true, false);
+        let ordem: Vec<String> = f.listar().iter().filter(|t| t.estado == EstadoFundo::NaFila).map(|t| t.chave.clone()).collect();
+        assert_eq!(ordem, ["tabela:exp", "tira:0", "tabela:ps", "tira:3", "tira:2", "tira:1"], "{ordem:?}");
+        liberar.store(true, Ordering::SeqCst);
+        ate(&f, |l| l.iter().all(|t| terminal(&t.estado)));
+        let ev = eventos.lock().unwrap().clone();
+        let comecou = |id: &str| ev.iter().position(|l| l.iter().any(|t| t.chave == id && t.estado != EstadoFundo::NaFila)).unwrap();
+        assert!(["tira:0", "tira:1", "tira:2", "tira:3", "tabela:ps"].iter().all(|c| comecou("tabela:exp") < comecou(c)));
         f.encerrar();
     }
 

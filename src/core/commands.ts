@@ -1661,8 +1661,8 @@ export const commands = {
   },
 
   // --- Fase 4 (P4.3): tiras de miniaturas (`tiras.rs`) ---
-  /** Tira de miniaturas; `tira` null = pedida à fila de fundo (pedir de novo quando `edicao:fundo` der `pronta` ou
-   *  `cancelada` para `chave`). O pedido novo do mesmo `canal` cancela o anterior. Erro `tabela_pendente` (MPEG-PS,
+  /** Tira de miniaturas; `tira` null = pedida à fila de fundo (pedir de novo quando `edicao:fundo` der `pronta`, ou
+   *  `cancelada` se ainda for a última do canal, para `chave`). O pedido novo do mesmo `canal` cancela o anterior. Erro `tabela_pendente` (MPEG-PS,
    *  H.264 cru): pedir de novo quando `tabela:<sha256>` ficar pronta. */
   edicaoTira(workspacePath: string, pedido: PedidoTira): Promise<RespostaTira> {
     return safeInvoke<RespostaTira>("edicao_tira", { workspacePath, pedido });
