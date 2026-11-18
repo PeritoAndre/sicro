@@ -222,7 +222,8 @@ export const rastreioDe = (e: Efeito): Id | null =>
         : null;
 
 function usaRastreio(d: ProjetoEdicao, r: Id): boolean {
-  const em = (l: (Efeito | Desconhecido)[]) => l.some((e) => efeitoConhecido(e) && rastreioDe(e) === r);
+  // Fase 4 (ZS): o zoom que acompanha também usa o rastreio
+  const em = (l: (Efeito | Desconhecido)[]) => l.some((e) => efeitoConhecido(e) && (rastreioDe(e) === r || (e.tipo === "enquadramento" && e.segue?.rastreio === r)));
   for (const c of d.principal) if ("efeitos" in c && Array.isArray(c.efeitos) && em(c.efeitos as (Efeito | Desconhecido)[])) return true;
   for (const t of d.sobreposicoes) for (const c of t.clipes) if (Array.isArray(c.efeitos) && em(c.efeitos as (Efeito | Desconhecido)[])) return true;
   return d.midias.some((m) => em(m.ocultacoes));

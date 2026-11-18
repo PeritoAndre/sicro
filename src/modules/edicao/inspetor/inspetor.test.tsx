@@ -226,7 +226,7 @@ describe("Clipe · Entrada", () => {
 });
 
 describe("Clipe · Enquadramento", () => {
-  it("Girar, Espelhar, Ajuste, Interpolação, Marcar início/fim", async () => {
+  it("Girar, Espelhar, Ajuste, Interpolação, chaves do zoom", async () => {
     const id = principal()[2].id;
     await esperar(() => selecionar("clipe", id));
     const efs = () => principal()[2].efeitos;
@@ -246,19 +246,23 @@ describe("Clipe · Enquadramento", () => {
     await clicar(botao(campo(tela.raiz, "Interpolação"), "Bicúbica"));
     expect(e().interpolacao).toBe("bicubica");
     expect(passos()).toBe(n + 4);
-    // marcar o fim de novo pelo palco
-    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="marcar-fim"]')!);
+    // Fase 4 (ZS): chave no cursor (sem dividir o trecho) e marcar pelo palco gravam a chave do instante
+    await esperar(() => st().posicionar({ modo: "clipe", clipe: id, t: 5 }));
+    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="chave-no-cursor"]')!);
+    const ks = () => e().regiao as { t: number; v: { x: number; y: number; w: number; h: number } }[];
+    expect(ks().map((k) => k.t)).toEqual([3, 5, 7.5]);
+    expect([passos(), ultimo(), st().selecao.efeito]).toEqual([n + 5, "Chave no cursor", e().id]);
+    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="marcar-regiao"]')!);
     expect(useInspetorUi.getState().ferramenta).toMatchObject({ tipo: "regiao", efeito: e().id, proporcao: 16 / 9 });
-    await esperar(() => useInspetorUi.getState().marcado({ x: 0.1, y: 0.1, w: 0.3, h: 0.3 }, 7, null));
-    expect(e().regiao).toEqual([
-      { t: 3, v: { x: 0, y: 0, w: 1, h: 1 } },
-      { t: 7, v: { x: 0.1, y: 0.1, w: 0.3, h: 0.3 } },
-    ]);
-    expect([passos(), ultimo()]).toEqual([n + 5, "Marcar fim"]);
-    // tirar a animação volta a valor fixo (nunca lista vazia)
-    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-acao="marcar-fim"]')!.parentElement!.querySelector<HTMLButtonElement>('[aria-label="Remover"]')!);
+    await esperar(() => useInspetorUi.getState().marcado({ x: 0.1, y: 0.1, w: 0.3, h: 0.3 }, 7.5, null));
+    expect(ks()[2]).toEqual({ t: 7.5, v: { x: 0.1, y: 0.1, w: 0.3, h: 0.3 } });
+    expect([passos(), ultimo()]).toEqual([n + 6, "Marcar"]);
+    // tirar as chaves até a última volta a valor fixo (nunca lista vazia)
+    for (let i = 0; i < 2; i++) await clicar(tela.raiz.querySelector('[data-chave="1"]')!.querySelector<HTMLButtonElement>('[aria-label="Tirar chave"]')!);
+    expect(ks()).toHaveLength(1);
+    await clicar(tela.raiz.querySelector('[data-chave="0"]')!.querySelector<HTMLButtonElement>('[aria-label="Tirar chave"]')!);
     expect(e().regiao).toEqual({ x: 0, y: 0, w: 1, h: 1 });
-    expect(ultimo()).toBe("Marcar fim");
+    expect(ultimo()).toBe("Tirar chave");
   });
 
   it("girar a 0° sem espelho tira o efeito", async () => {
@@ -1044,7 +1048,7 @@ describe("rótulos", () => {
     }
     expect([...fora]).toEqual([]);
     // cobertura: os rótulos centrais apareceram
-    for (const r of ["Nome", "Vídeo", "Início", "Fim", "Velocidade", "Manter o tom", "Transição", "Girar", "Espelhar", "Marcar início", "Marcar fim", "Ajuste", "Interpolação", "Adicionar", "De", "Até", "Marcar", "Forma", "Cor", "Espessura", "Contorno", "Rótulo", "Conteúdo", "Modo", "Intensidade", "Borda suave", "Margem", "Inverter", "Motivo", "Só neste clipe", "Texto", "Fonte", "Tamanho", "Posição", "Modelo", "Título", "Subtítulo", "Rodapé", "Fundo", "Volume do original", "Narração", "Preso a", "Entrada (s)", "Saída (s)", "Importar…", "Gravar", "Automática", "Largura", "Altura", "Quadros/s", "Áudio"])
+    for (const r of ["Nome", "Vídeo", "Início", "Fim", "Velocidade", "Manter o tom", "Transição", "Girar", "Espelhar", "Chave no cursor", "Acompanhar rastreio", "Ajuste", "Interpolação", "Adicionar", "De", "Até", "Marcar", "Forma", "Cor", "Espessura", "Contorno", "Rótulo", "Conteúdo", "Modo", "Intensidade", "Borda suave", "Margem", "Inverter", "Motivo", "Só neste clipe", "Texto", "Fonte", "Tamanho", "Posição", "Modelo", "Título", "Subtítulo", "Rodapé", "Fundo", "Volume do original", "Narração", "Preso a", "Entrada (s)", "Saída (s)", "Importar…", "Gravar", "Automática", "Largura", "Altura", "Quadros/s", "Áudio"])
       expect(vistos.has(r), r).toBe(true);
     // Fase 1: cada casca no lugar dela (§8.6), com os rótulos dela na tela
     const FASE_1: Record<string, string[]> = {

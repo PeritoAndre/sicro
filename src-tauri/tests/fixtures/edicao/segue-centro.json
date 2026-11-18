@@ -1,0 +1,163 @@
+[
+  {
+    "entrada": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.3,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "efeitos": []
+    },
+    "nome": "sem giro",
+    "saida": {
+      "x": 0.25,
+      "y": 0.25
+    }
+  },
+  {
+    "entrada": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.3,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "efeitos": [
+        {
+          "ativo": null,
+          "espelhar_h": false,
+          "espelhar_v": false,
+          "graus": 90,
+          "id": "g",
+          "ligado": true,
+          "nome": "",
+          "tipo": "girar"
+        }
+      ]
+    },
+    "nome": "90",
+    "saida": {
+      "x": 0.75,
+      "y": 0.25
+    }
+  },
+  {
+    "entrada": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.3,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "efeitos": [
+        {
+          "ativo": null,
+          "espelhar_h": true,
+          "espelhar_v": false,
+          "graus": 180,
+          "id": "g",
+          "ligado": true,
+          "nome": "",
+          "tipo": "girar"
+        }
+      ]
+    },
+    "nome": "180 espelhado",
+    "saida": {
+      "x": 0.25,
+      "y": 0.75
+    }
+  },
+  {
+    "entrada": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.3,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "efeitos": [
+        {
+          "ativo": null,
+          "espelhar_h": false,
+          "espelhar_v": true,
+          "graus": 270,
+          "id": "g",
+          "ligado": true,
+          "nome": "",
+          "tipo": "girar"
+        }
+      ]
+    },
+    "nome": "270 e espelho vertical",
+    "saida": {
+      "x": 0.25,
+      "y": 0.25
+    }
+  },
+  {
+    "entrada": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.3,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "efeitos": [
+        {
+          "ativo": null,
+          "espelhar_h": true,
+          "espelhar_v": false,
+          "graus": 90,
+          "id": "g",
+          "ligado": true,
+          "nome": "",
+          "tipo": "girar"
+        },
+        {
+          "ativo": null,
+          "espelhar_h": false,
+          "espelhar_v": false,
+          "graus": 90,
+          "id": "g",
+          "ligado": true,
+          "nome": "",
+          "tipo": "girar"
+        }
+      ]
+    },
+    "nome": "dois giros",
+    "saida": {
+      "x": 0.75,
+      "y": 0.25
+    }
+  },
+  {
+    "entrada": {
+      "caixa": {
+        "h": 0.1,
+        "w": 0.3,
+        "x": 0.1,
+        "y": 0.2
+      },
+      "efeitos": [
+        {
+          "ativo": null,
+          "espelhar_h": false,
+          "espelhar_v": false,
+          "graus": 90,
+          "id": "g",
+          "ligado": false,
+          "nome": "",
+          "tipo": "girar"
+        }
+      ]
+    },
+    "nome": "giro desligado",
+    "saida": {
+      "x": 0.25,
+      "y": 0.25
+    }
+  }
+]

@@ -1,11 +1,12 @@
 /**
- * Alças do palco (§8.3 `Alca`): caixa e ponto de rastreio (âncora no quadro mostrado) e região do enquadramento.
+ * Alças do palco (§8.3 `Alca`): caixa e ponto de rastreio (âncora no quadro mostrado) e região do enquadramento
+ * (Fase 4, ZS: na proporção da saída; zoom animado em "Preencher"; no que acompanha o rastreio, só o tamanho).
  * `em`, `de` e `para` em 0..1 do canvas; a conta volta ao espaço do dado pela inversa de A. `arrastar` sempre parte
  * do valor do começo do gesto (o palco chama com o `de` do pointerdown), então o mesmo gesto pode ser repetido.
  * Shift: mantém a proporção (na região, solta a proporção da saída). Alt: a partir do centro.
  */
 
-import type { Alca, Caixa, Chave, Efeito, EfEnquadramento, EfLupa, EfRegua, EfVelocidadeExibida, Id, Mudanca, Ponto, Pts, Seg } from "@domain/edicao";
+import type { Alca, Animavel, Caixa, Chave, Efeito, EfEnquadramento, EfLupa, EfRegua, EfVelocidadeExibida, Id, Mudanca, Ponto, Pts, Seg } from "@domain/edicao";
 import { efeitoConhecido, porChave } from "../modelo/projeto";
 import { aDe, inversa, ponto, seguidaDe, type Afim, type Tamanho } from "../modelo/geometria";
 import { ehChaves } from "../modelo/curva";
@@ -102,19 +103,21 @@ export function caixaArrastada(c: Caixa, s: [Lado, Lado], de: Ponto, para: Ponto
   return r.w >= LADO_MINIMO && r.h >= LADO_MINIMO ? r : c;
 }
 
-/** Alças de uma caixa no espaço `m` (dado → canvas). `mudanca` recebe a caixa nova. */
-function alcasDaCaixa(prefixo: string, c: Caixa, m: Afim, proporcao: (mod: { shift: boolean }) => number | null, mudanca: (c: Caixa) => Mudanca): Alca[] {
+/** Alças de uma caixa no espaço `m` (dado → canvas). `mudanca` recebe a caixa nova. `centrada`: sem "mover" e
+ *  o tamanho sempre a partir do centro (a posição é de outro: o zoom que acompanha o rastreio). */
+function alcasDaCaixa(prefixo: string, c: Caixa, m: Afim, proporcao: (mod: { shift: boolean }) => number | null, mudanca: (c: Caixa) => Mudanca, centrada = false): Alca[] {
   const inv = inversa(m);
   if (!inv) return [];
   const centro = ponto(m, { x: c.x + c.w / 2, y: c.y + c.h / 2 });
-  return POSICOES.map(({ id, tipo, s }) => {
+  return POSICOES.filter((p) => !centrada || p.tipo !== "mover").map(({ id, tipo, s }) => {
     const em = ponto(m, naCaixa(c, s[0], s[1]));
     return {
       id: `${prefixo}:${id}`,
       tipo,
       em,
       cursor: cursorDe(tipo, em.x - centro.x, em.y - centro.y),
-      arrastar: (de, para, mod) => mudanca(caixaArrastada(c, s, ponto(inv, de), ponto(inv, para), mod, tipo === "canto" || tipo === "borda" ? proporcao(mod) : null)),
+      arrastar: (de, para, mod) =>
+        mudanca(caixaArrastada(c, s, ponto(inv, de), ponto(inv, para), centrada ? { ...mod, alt: true } : mod, tipo === "canto" || tipo === "borda" ? proporcao(mod) : null)),
     };
   });
 }
@@ -176,15 +179,49 @@ export function aDaOrigem(efeitos: readonly (Efeito | { tipo: string })[], orige
   return seguidaDe(g, aDaGirada(efeitos, origem, canvas));
 }
 
-/** Região do enquadramento no instante `tau` e as alças dela, no espaço da origem girada (`m` = girada → canvas). */
+/** Região do enquadramento no instante `tau` e as alças dela, no espaço da origem girada (`m` = girada → canvas).
+ *  No zoom que acompanha o rastreio, só o tamanho (a partir do centro). */
 export function alcasDaRegiao(e: EfEnquadramento, regiao: Caixa, tau: Seg, pts: Pts | null, m: Afim, proporcao: number | null): Alca[] {
-  return alcasDaCaixa(`regiao:${e.id}`, regiao, m, (mod) => (mod.shift ? null : proporcao), (v) => ({ efeito: comRegiao(e, v, tau, pts) }));
+  return alcasDaCaixa(`regiao:${e.id}`, regiao, m, (mod) => (mod.shift ? null : proporcao), (v) => ({ efeito: comRegiao(e, v, tau, pts) }), !!e.segue);
 }
 
-/** Efeito com a região nova: fixa troca o valor; animada ganha (ou troca) a chave do instante. */
+const mesmaCaixa = (a: Caixa, b: Caixa) => a.x === b.x && a.y === b.y && a.w === b.w && a.h === b.h;
+
+/** Região animada de verdade: chaves com valores diferentes (todas iguais valem como fixa, como no motor). */
+export function regiaoAnimada(r: Animavel<Caixa>): boolean {
+  return ehChaves(r) && r.some((k, i) => i > 0 && !mesmaCaixa(k.v, (r[i - 1] as Chave<Caixa>).v));
+}
+
+/** Zoom animado (ou que acompanha) sai sempre em "Preencher", e "Vizinho" só vale com região fixa (D8). */
+export function comAjusteDoZoom(e: EfEnquadramento): EfEnquadramento {
+  if (!regiaoAnimada(e.regiao) && !e.segue) return e;
+  if (e.ajuste === "cobrir" && e.interpolacao !== "vizinho") return e;
+  return { ...e, ajuste: "cobrir", interpolacao: e.interpolacao === "vizinho" ? "bilinear" : e.interpolacao };
+}
+
+/** Efeito com a região nova: fixa troca o valor; animada ganha (ou troca) a chave do instante (e fica em "Preencher"). */
 export function comRegiao(e: EfEnquadramento, v: Caixa, tau: Seg, pts: Pts | null): EfEnquadramento {
-  if (ehChaves(e.regiao)) return { ...e, regiao: porChave(e.regiao, { t: tau, pts, v }) };
+  // chave sem quadro de mídia (clipe de tempo local) sai sem `pts`, como as do Inspetor
+  if (ehChaves(e.regiao)) return comAjusteDoZoom({ ...e, regiao: porChave(e.regiao, pts === null ? { t: tau, v } : { t: tau, pts, v }) });
   return { ...e, regiao: v };
+}
+
+/** Região marcada na proporção da saída (`proporcao`, a de `proporcaoDaSaida`; null = como veio), com o mesmo
+ *  centro e inteira dentro da imagem: o que passa da borda encolhe os dois lados juntos. */
+export function regiaoNaSaida(c: Caixa, proporcao: number | null): Caixa {
+  let w = c.w;
+  let h = c.h;
+  if (proporcao !== null && proporcao > 0 && w > 0 && h > 0) {
+    // vale o lado que sobra (a caixa nova contém a marcada)
+    if (w / h >= proporcao) h = w / proporcao;
+    else w = h * proporcao;
+  }
+  const k = Math.min(1, w > 0 ? 1 / w : 1, h > 0 ? 1 / h : 1);
+  w *= k;
+  h *= k;
+  const cx = c.x + c.w / 2;
+  const cy = c.y + c.h / 2;
+  return { x: Math.min(Math.max(cx - w / 2, 0), 1 - w), y: Math.min(Math.max(cy - h / 2, 0), 1 - h), w, h };
 }
 
 /** Proporção da saída no espaço 0..1 da origem girada (largura/altura de uma região que enche o canvas sem barras). */
