@@ -25,7 +25,8 @@ import { garantirMidia, useRecursos } from "../recursos";
 import { useFundoStore } from "../../store/fundoStore";
 import { useAreaVisivel } from "../areaVisivel";
 import { meioDoQuadro } from "../faixa";
-import { adicionarEfeito } from "../../inspetor/acoes";
+import { adicionarEfeito, selecionarEfeito } from "../../inspetor/acoes";
+import { novoEnquadramento } from "../../inspetor/novos";
 import { adicionarLupa } from "../../inspetor/secoes/LupaEditor";
 import { adicionarTextoLivre } from "../../inspetor/secoes/textoLivre";
 import { botao, clicar, desmontarTudo, esperar, montar } from "../../inspetor/testeTela";
@@ -132,4 +133,28 @@ describe("área visível do palco × itens novos", () => {
       expect(x).toBeCloseTo(area.x + area.w / 2, 3);
       expect(y).toBeCloseTo(area.y + area.h / 2, 3);
     });
+
+  // verificação 6.4: com o enquadramento selecionado o palco mostra a origem inteira; o destaque novo fica selecionado
+  // e aparece na imagem ampliada, então nasce dentro da região (antes: no centro da origem, fora do quadro)
+  it("enquadramento selecionado (vista de origem): destaque e lupa novos nascem dentro da região ampliada", async () => {
+    const regiao: Caixa = { x: 0.05, y: 0.05, w: 0.3, h: 0.3 };
+    const enq = { ...novoEnquadramento(regiao), ajuste: "cobrir" as const };
+    await act(async () => st().alterar("Enquadramento", (d) => void (d.principal[0] as ClipeTrecho).efeitos.push(enq)));
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 30 }));
+    await espera(20);
+    await clicar(botao(t.raiz, "Clipe"));
+    await espera(20);
+    await act(async () => selecionarEfeito(enq.id));
+    await espera(30);
+    // a vista de origem está na tela (alças da região)
+    expect(t.raiz.querySelector(`[data-alca^="regiao:${enq.id}"]`)).not.toBeNull();
+    const efeitos = () => (st().doc!.principal[0] as ClipeTrecho).efeitos;
+    const idD = await act(async () => adicionarEfeito("a", "destaque", "Destaque"));
+    dentro(caixaDoRastreio((efeitos().find((e) => (e as EfDestaque).id === idD) as EfDestaque).rastreio), regiao);
+    await act(async () => selecionarEfeito(enq.id));
+    await espera(30);
+    const idL = await act(async () => adicionarLupa("a", "Lupa"));
+    dentro(caixaDoRastreio((efeitos().find((e) => (e as EfLupa).id === idL) as EfLupa).rastreio), regiao);
+  });
 });

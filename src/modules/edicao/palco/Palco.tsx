@@ -476,15 +476,16 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
   soLeituraRef.current = soLeitura;
 
   // área visível do clipe (D9, D12): vista (zoom, deslocamento: arrastar a vista não repinta), tamanho do palco,
-  // clipe, instante e modo de origem; a A é a da pintura
+  // clipe e instante. Sempre a da vista com o enquadramento: o item novo fica selecionado e o palco sai da vista de
+  // origem; com a A da origem ele nascia fora da imagem ampliada (verificação 6.4)
   useEffect(() => {
     const v = vivo.current;
     const pub = useAreaVisivel.getState().publicar;
     if (!clipe || !v.doc || caixa.w <= 0 || caixa.h <= 0) return pub(null, null);
     const origemPx = v.info ? { w: v.info.exibido.w, h: v.info.exibido.h } : v.saida;
-    const A = modoOrigem ? aDaOrigem(clipe.efeitos, origemPx, v.saida) : aDe(efeitosNoInstante(v.doc, clipe.efeitos, mostra.t), mostra.t, origemPx, v.saida);
+    const A = aDe(efeitosNoInstante(v.doc, clipe.efeitos, mostra.t), mostra.t, origemPx, v.saida);
     pub(clipe.id, areaVisivelNaOrigem(vista, caixa, v.saida, A));
-  }, [clipe, vista, caixa, mostra.t, modoOrigem, info]);
+  }, [doc, clipe, vista, caixa, mostra.t, info]);
 
   // ---- elemento, relógio e busca ----
   useEffect(() => {

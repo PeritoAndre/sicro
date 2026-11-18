@@ -74,6 +74,28 @@ describe("Trecho…", () => {
     t.desmontar();
   });
 
+  // verificação 6.4: no app, "Adicionar" clicado logo depois de escolher um vídeo que começa depois de 0 (gravador)
+  // gravava o Fim = duração em tempo de fonte (perdia o fim da mídia)
+  it("sem a faixa da mídia, 'Adicionar' espera; chegando, o trecho é a mídia inteira (1 a 41 s)", async () => {
+    const recebidos: TrechoNovo[][] = [];
+    const t = await montar(<NovoClipe qual="trecho" ws="/c4" onFechar={() => {}} onTrechos={(x) => recebidos.push(x)} onTitulo={() => {}} />);
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    const raiz = document.body;
+    await escolher(raiz.querySelector("select")!, "v1");
+    await esperar(() => new Promise((r) => setTimeout(r, 0)));
+    expect(botao(raiz, "Adicionar").disabled).toBe(true);
+    await clicar(botao(raiz, "Adicionar"));
+    expect(recebidos).toEqual([]);
+    await esperar(async () => {
+      soltar();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(botao(raiz, "Adicionar").disabled).toBe(false);
+    await clicar(botao(raiz, "Adicionar"));
+    expect(recebidos[0]).toEqual([expect.objectContaining({ inicio_s: 1, inicio_pts: 30, fim_s: 41, fim_pts: null })]);
+    t.desmontar();
+  });
+
   it("mídia não marcável (h 17): Início, Fim e Evento desligados, nenhum pts da tabela de pacotes; Dos eventos não adiciona", async () => {
     const recebidos: TrechoNovo[][] = [];
     cmd.edicaoMidiaInfo.mockResolvedValue({ ...info, tabela: "pacotes", marcavel: false });

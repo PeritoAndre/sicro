@@ -189,15 +189,24 @@ export function chaveDaFaixaDe(e: Efeito | Desconhecido, doc?: ProjetoEdicao): s
   const r = rastreioSeguido(e);
   if (!doc) return r ? `${e.tipo}:${r}` : e.tipo;
   if (SO_PELO_TIPO.has(e.tipo) || !r) return e.tipo;
-  const quem = doc.rastreios.find((x) => x.id === r)?.nome || r;
+  const quem = quemNaFaixa(e, doc) || r;
   return e.tipo === "destaque" ? `destaque:${quem}:${e.forma}` : `${e.tipo}:${quem}`;
+}
+
+/** A pessoa da faixa: o nome do rastreio; sem ele, o rótulo do destaque ("PP1"), que é onde o perito escreve quem é
+ *  (verificação 6.4: o caso PINHO tinha 71 faixas "Seta" iguais, todos os rastreios sem nome). */
+function quemNaFaixa(e: Efeito, doc: ProjetoEdicao): string {
+  const r = rastreioSeguido(e);
+  const nome = r ? doc.rastreios.find((x) => x.id === r)?.nome?.trim() : "";
+  if (nome) return nome;
+  return e.tipo === "destaque" ? (e.rotulo?.texto?.trim() ?? "") : "";
 }
 
 /** Nome da faixa como na maquete: "PP1 · seta", "PP1 · ocultar", "Lupa", "Zoom", "Texto". */
 export function nomeDaFaixa(e: Efeito | Desconhecido, doc: ProjetoEdicao): string {
   if (!efeitoConhecido(e)) return tipoDe(e);
   const rid = SO_PELO_TIPO.has(e.tipo) ? null : rastreioSeguido(e);
-  const quem = rid ? doc.rastreios.find((x) => x.id === rid)?.nome : "";
+  const quem = rid ? quemNaFaixa(e, doc) : "";
   const oque = e.tipo === "destaque" ? (FORMA_NA_FAIXA[e.forma] ?? e.forma) : nomeDoTipo(e.tipo).toLowerCase();
   if (quem) return `${quem} · ${oque}`;
   return e.tipo === "destaque" ? oque.charAt(0).toUpperCase() + oque.slice(1) : nomeDoTipo(e.tipo);

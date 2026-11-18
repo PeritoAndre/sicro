@@ -74,6 +74,19 @@ describe("resolver com a medida guardada", () => {
     }
   });
 
+  // verificação 6.4: o sorteio quase nunca cai numa rampa já criada; aqui a chave da rampa é conferida sozinha
+  it("ponto da rampa mudado no lugar (mesmo número de pontos) mede de novo", () => {
+    const { doc, tab, ctx } = projetoSintetico();
+    const c = { ...trechoNosQuadros("m1", tab, 0, 90), id: "a" } as ClipeTrecho;
+    c.velocidade = { tipo: "rampa", pontos: [{ t: c.inicio_s, v: 1 }] };
+    doc.principal = [c];
+    const antes = resolver(doc, ctx).clipes[0]!.n_q;
+    c.velocidade.pontos[0]!.v = 0.5;
+    const depois = resolver(doc, ctx);
+    expect(depois).toEqual(doZero(doc, ctx));
+    expect(depois.clipes[0]!.n_q).toBe(2 * antes);
+  });
+
   it("o clipe que não mudou devolve a mesma medida; a taxa de saída nova mede de novo", () => {
     const { doc, tab, ctx } = projetoSintetico();
     doc.principal = [{ ...trechoNosQuadros("m1", tab, 0, 90), id: "a" } as ClipeTrecho, { ...trechoNosQuadros("m1", tab, 100, 190), id: "b" } as ClipeTrecho];

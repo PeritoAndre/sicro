@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 import type { Desconhecido, EfOcultar, ProjetoEdicao } from "@domain/edicao";
 import { novoId, novoTrecho } from "../modelo/projeto";
 import { resolver, tempoDoQuadro } from "../modelo/tempo";
-import { novoDestaque, novoEnquadramento, novoOcultar, novoRastreio, novoTexto, novoTitulo, novaTrilhaNarracao, novoClipeAudio } from "../inspetor/novos";
+import { estiloPadrao, novoDestaque, novoEnquadramento, novoOcultar, novoRastreio, novoTexto, novoTitulo, novaTrilhaNarracao, novoClipeAudio } from "../inspetor/novos";
 import { REGISTRO } from "../inspetor/registro";
 import { bordaNoX, donoNaLinha, marcadoresNaLinha, ROTULO_DO_EFEITO, slotDoTempo, slotNoX, slotsNaBase, trilhasDaLinha, TRILHA_LEGENDAS, TRILHA_PRINCIPAL, TRILHA_SOM, xDoSlot } from "./modelo";
 import { midiaSintetica, projetoSintetico, textoLivre, trechoNosQuadros, trilhaS } from "./testeLinha";
@@ -136,6 +136,23 @@ describe("trilhas da linha", () => {
       [a.id, 50, 60, true],
       [b.id, 60, 102, true],
     ]);
+  });
+
+  // verificação 6.4: no caso real os rastreios não têm nome e a pessoa está no rótulo do destaque ("PP1")
+  it("rastreio sem nome: a faixa do destaque é a do rótulo dele; sem rótulo, uma faixa por rastreio", () => {
+    const { doc, ctx, a, b } = montar();
+    const [r1, r2, r3, r4] = [1, 2, 3, 4].map(() => novoRastreio("m1", 1));
+    doc.rastreios.push(r1!, r2!, r3!, r4!);
+    const comRotulo = (r: string, texto: string) => {
+      const e = novoDestaque(r);
+      e.rotulo = { texto, estilo: estiloPadrao(0.04, false), lado: "cima" };
+      return e;
+    };
+    a.efeitos.push(comRotulo(r1!.id, "PP1"), novoDestaque(r3!.id));
+    b.efeitos.push(comRotulo(r2!.id, "PP1 "), novoDestaque(r4!.id));
+    const faixas = trilhasDaLinha(doc, resolver(doc, ctx), ctx).filter((t) => t.tipo === "efeito");
+    expect(faixas.map((f) => f.nome)).toEqual(["PP1 · seta", "Seta", "Seta"]);
+    expect(faixas[0]!.itens.flatMap((i) => i.partes?.map((x) => x.clipe) ?? [i.clipe])).toEqual([a.id, b.id]);
   });
 
   it("losangos: chaves da região do enquadramento e âncoras do rastreio seguido, dentro do clipe", () => {

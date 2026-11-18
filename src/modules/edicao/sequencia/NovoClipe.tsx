@@ -84,13 +84,14 @@ function useEventos(ws: string, video: VideoMedia | null) {
 
 /** `tabela` só quando a mídia é marcável (contratos (h) 17): a de pacotes de contêiner sem tempo não dá pts nem #n;
  *  `travado` = não marcável (Início, Fim e eventos ficam como no Inspetor). */
-function useMidia(ws: string, v: VideoMedia | null): { info: MidiaInfo | null; tabela: TabelaQuadros | null; travado: boolean } {
+function useMidia(ws: string, v: VideoMedia | null): { info: MidiaInfo | null; tabela: TabelaQuadros | null; travado: boolean; lendo: boolean } {
   useRecursos((s) => s.versao);
   useEffect(() => {
     if (v) garantirMidia(ws, v.sha256);
   }, [ws, v]);
   const r = recursoDe(v?.sha256);
-  return { info: r.info, tabela: r.info?.marcavel ? r.tabela : null, travado: r.info?.marcavel === false };
+  // `lendo`: sem a faixa da mídia (de_s, ate_s) e a tabela ainda; o "Fim" seria a duração, não o fim da mídia
+  return { info: r.info, tabela: r.info?.marcavel ? r.tabela : null, travado: r.info?.marcavel === false, lendo: !!v && !r.info && !r.erro };
 }
 
 /** Frase do catálogo (ou a mensagem do erro) de uma falha de comando. */
@@ -129,7 +130,7 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
   const lista = useVideos(ws, true);
   const [id, setId] = useState("");
   const video = lista.find((v) => v.id === id) ?? null;
-  const { info, tabela, travado } = useMidia(ws, video);
+  const { info, tabela, travado, lendo } = useMidia(ws, video);
   const eventos = useEventos(ws, video);
   const de = info?.de_s ?? 0;
   const ate = info?.ate_s ?? video?.duration_s ?? 0;
@@ -147,7 +148,10 @@ function FormTrecho({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo"
     setIni(video ? de : null);
     setFim(video ? ate : null);
   }, [video?.id, de, ate]); // eslint-disable-line react-hooks/exhaustive-deps
-  const p = video && ini !== null && fim !== null ? pontas(tabela, ini, fim) : null;
+  // verificação 6.4: a faixa da mídia chegou e os campos ainda não (o efeito acima roda depois da pintura); com
+  // "Adicionar" ligado nesse meio, um vídeo que começa em 2,5 s perdia os últimos 2,5 s
+  const emDia = tocado.current || (ini === (video ? de : null) && fim === (video ? ate : null));
+  const p = video && !lendo && emDia && ini !== null && fim !== null ? pontas(tabela, ini, fim) : null;
   const [erro, setErro] = useState<string | null>(null);
   useEffect(() => setErro(null), [video?.id]);
   const adicionar = async () => {
@@ -289,7 +293,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
   const lista = useVideos(ws, true);
   const [id, setId] = useState("");
   const video = lista.find((v) => v.id === id) ?? null;
-  const { info, tabela, travado } = useMidia(ws, video);
+  const { info, tabela, travado, lendo } = useMidia(ws, video);
   const eventos = useEventos(ws, video);
   const [marcados, setMarcados] = useState<Set<string>>(new Set());
   useEffect(() => setMarcados(new Set()), [id]);
@@ -319,7 +323,7 @@ function FormEventos({ ws, onFechar, onTrechos }: Omit<Props, "qual" | "onTitulo
           <Button variant="ghost" onClick={onFechar}>
             Cancelar
           </Button>
-          <Button variant="primary" leftIcon={<Plus size={14} />} disabled={pares.length === 0 || travado} onClick={adicionar}>
+          <Button variant="primary" leftIcon={<Plus size={14} />} disabled={pares.length === 0 || travado || lendo} onClick={adicionar}>
             Adicionar
           </Button>
         </>
