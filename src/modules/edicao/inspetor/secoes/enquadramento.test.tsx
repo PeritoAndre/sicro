@@ -114,6 +114,42 @@ describe("Clipe · Enquadramento: zoom com chaves", () => {
     naoHaFrase();
   });
 
+  it("desfazer e refazer: cada chave, alça e tirada é um passo; a lista acompanha", async () => {
+    await esperar(() => removerEfeito(enq()!.id, "Remover"));
+    await cursor(12.5);
+    await clicar(acao(tela, "chave-no-cursor")!);
+    await cursor(13.5);
+    await clicar(acao(tela, "chave-no-cursor")!);
+    await alca(13.5, { x: 0.25, y: 0.25, w: 0.5, h: 0.5 });
+    await cursor(14.5);
+    await clicar(acao(tela, "chave-no-cursor")!);
+    await cursor(15.2);
+    await clicar(acao(tela, "chave-no-cursor")!);
+    await alca(15.2, { x: 0, y: 0, w: 1, h: 1 });
+    const cheio = structuredClone(enq());
+    expect(rotulos(tela)).toEqual(["Cena inteira", "Aproximar", "Segurar", "Afastar"]);
+    await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-chave="2"] button[aria-label="Tirar chave"]')!);
+    expect([rotulos(tela), ultimo()]).toEqual([["Cena inteira", "Aproximar", "Afastar"], "Tirar chave"]);
+    await esperar(() => st().desfazer());
+    expect(enq()).toEqual(cheio);
+    const passos: [string[], string][] = [
+      [["Cena inteira", "Aproximar", "Segurar", "Segurar"], "cobrir"],
+      [["Cena inteira", "Aproximar", "Segurar"], "cobrir"],
+      [["Cena inteira", "Aproximar"], "cobrir"],
+      [["Cena inteira", "Cena inteira"], "conter"],
+      [["Cena inteira"], "conter"],
+    ];
+    for (const [r, ajuste] of passos) {
+      await esperar(() => st().desfazer());
+      expect([rotulos(tela), enq()!.ajuste]).toEqual([r, ajuste]);
+    }
+    await esperar(() => st().desfazer());
+    expect(enq()).toBeUndefined();
+    for (let i = 0; i < 6; i++) await esperar(() => st().refazer());
+    expect(enq()).toEqual(cheio);
+    expect(rotulos(tela)).toEqual(["Cena inteira", "Aproximar", "Segurar", "Afastar"]);
+  });
+
   it("Marcar no palco grava a chave do instante na proporção da saída", async () => {
     await cursor(13);
     await clicar(acao(tela, "marcar-regiao")!);

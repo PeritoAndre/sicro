@@ -23,6 +23,9 @@ export const SUAVIZAR_PADRAO_S = 1;
 export const SUAVIZAR_MAX_S = 10;
 
 const INTEIRA: Caixa = { x: 0, y: 0, w: 1, h: 1 };
+/** Folga (s) nas pontas da janela da média (o `FOLGA_S` do Rust): sem ela o quadro na ponta entrava e saía pelo
+ *  arredondamento de `t ± s/2` e o zoom tremia. */
+const FOLGA_S = 1e-9;
 
 /** Centro da caixa do rastreio num instante da base dele (espaço girado); null = sem caixa ali. */
 export interface AmostraSegue { t: Seg; centro: Ponto | null }
@@ -63,8 +66,8 @@ function particao<T>(v: readonly T[], cond: (x: T) => boolean): number {
 }
 
 function centroEm(amostras: readonly AmostraSegue[], t: Seg, s: number): Ponto | null {
-  const de = t - s / 2;
-  const ate = t + s / 2;
+  const de = t - s / 2 - FOLGA_S;
+  const ate = t + s / 2 + FOLGA_S;
   const lo = particao(amostras, (a) => a.t < de);
   const hi = Math.max(particao(amostras, (a) => a.t <= ate), lo);
   let sx = 0;
@@ -147,8 +150,8 @@ export function amostrasDoSegue(r: Rastreio, tab: TabelaQuadros, denso: ArquivoD
   };
   const usados = new Set<number>();
   for (const t of instantes) {
-    const lo = particao(pts, (p) => tempo(p) < t - s / 2);
-    const hi = Math.max(particao(pts, (p) => tempo(p) <= t + s / 2), lo);
+    const lo = particao(pts, (p) => tempo(p) < t - s / 2 - FOLGA_S);
+    const hi = Math.max(particao(pts, (p) => tempo(p) <= t + s / 2 + FOLGA_S), lo);
     let algum = false;
     for (let j = lo; j < hi; j++) {
       usados.add(j);

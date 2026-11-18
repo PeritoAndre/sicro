@@ -27,6 +27,9 @@ pub const SUAVIZAR_PADRAO_S: f64 = 1.0;
 pub const SUAVIZAR_MAX_S: f64 = 10.0;
 
 const INTEIRA: Caixa = Caixa { x: 0.0, y: 0.0, w: 1.0, h: 1.0 };
+/// Folga (s) nas pontas da janela da média: com a ponta caindo num quadro (s × fps par), o arredondamento de
+/// `t ± s/2` punha e tirava esse quadro de um slot para o outro e o zoom tremia. Espelho: `FOLGA_S` em segue.ts.
+const FOLGA_S: f64 = 1e-9;
 
 /// Detalhe do `nao_suportado`; None = renderiza. Convertida: o motor faz o zoom que segue (a validação e o despacho
 /// do motor continuam perguntando aqui).
@@ -94,7 +97,7 @@ fn dentro(c: f64, lado: f64) -> f64 {
 /// Centro em `t`: média (na ordem das amostras) das que têm centro em [t − s/2, t + s/2]; sem nenhuma, a mais
 /// próxima com centro (empate: a anterior). `amostras` em ordem de `t`.
 fn centro_em(amostras: &[AmostraSegue], t: f64, s: f64) -> Option<Ponto> {
-    let (de, ate) = (t - s / 2.0, t + s / 2.0);
+    let (de, ate) = (t - s / 2.0 - FOLGA_S, t + s / 2.0 + FOLGA_S);
     let lo = amostras.partition_point(|a| a.t < de);
     let hi = amostras.partition_point(|a| a.t <= ate).max(lo);
     let (mut sx, mut sy, mut n) = (0.0, 0.0, 0u32);
@@ -175,8 +178,8 @@ fn amostras(r: &Rastreio, tab: &TabelaQuadros, giro: Afim, instantes: &[f64], s:
     let janelas: Vec<(usize, usize)> = instantes
         .iter()
         .map(|&t| {
-            let lo = tab.pts.partition_point(|&p| tempo(p) < t - s / 2.0);
-            (lo, tab.pts.partition_point(|&p| tempo(p) <= t + s / 2.0).max(lo))
+            let lo = tab.pts.partition_point(|&p| tempo(p) < t - s / 2.0 - FOLGA_S);
+            (lo, tab.pts.partition_point(|&p| tempo(p) <= t + s / 2.0 + FOLGA_S).max(lo))
         })
         .collect();
     let mut c = Centros { r, tab, giro, feitos: HashMap::new() };
@@ -357,13 +360,19 @@ mod testes {
             ("lado de 1 ou mais", com(json!({ "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.2 }), 0.0), andando.clone()),
             ("região vazia: a imagem inteira", com(json!([]), 1.0), andando.clone()),
         ];
-        let lista: Vec<Value> = casos
+        let mut lista: Vec<Value> = casos
             .into_iter()
             .map(|(nome, e, a)| {
                 json!({ "nome": nome, "entrada": { "efeito": serde_json::to_value(&e).unwrap(), "amostras": a, "em": instantes },
                         "saida": regiao_seguida(&e, &a, &instantes) })
             })
             .collect();
+        // ponta da janela caindo em quadro (tempos de pts 512·j em 1/15360): o arredondamento não pode tirar o quadro
+        let (pts_t, e) = (|j: usize| (512 * j) as f64 / 15360.0, com(fixa.clone(), 3.0));
+        let a: Vec<AmostraSegue> = (40..176).map(|j| am(pts_t(j), Some((0.2 + j as f64 * 0.002, 0.5)))).collect();
+        let em: Vec<f64> = (100..112).map(pts_t).collect();
+        lista.push(json!({ "nome": "ponta da janela num quadro (3 s a 30 qps)", "entrada": { "efeito": serde_json::to_value(&e).unwrap(), "amostras": a, "em": em },
+                           "saida": regiao_seguida(&e, &a, &em) }));
         curva::fixtures::conferir("segue-regiao.json", Value::Array(lista));
     }
 
@@ -433,6 +442,26 @@ mod testes {
         // sem média, exatamente a do instante
         let r = regiao_seguida(&com(json!({ "x": 0.0, "y": 0.0, "w": 0.2, "h": 0.2 }), 0.0), &a, &[0.5])[0];
         assert!((r.x + 0.1 - 0.15).abs() < 1e-12, "{r:?}");
+    }
+
+    /// Alvo em velocidade constante: o centro suavizado anda em passos iguais. Com a ponta da janela caindo em quadro
+    /// (s × fps par) e sem folga, o arredondamento de `t ± s/2` punha e tirava o quadro da ponta e o centro tremia
+    /// (revisão ZS: até 5 px por quadro a 2×).
+    #[test]
+    fn ponta_da_janela_nao_faz_tremer() {
+        for (num, den, fps) in [(1i64, 15360i64, 30.0), (1, 90000, 30.0), (1001, 60000, 60000.0 / 1001.0), (1, 1000, 30.0)] {
+            let pts = |j: usize| (j as f64 / fps * den as f64 / num as f64).round() as i64;
+            let t = |j: usize| pts(j) as f64 * num as f64 / den as f64;
+            let a: Vec<AmostraSegue> = (0..900).map(|j| am(t(j), Some((0.2 + j as f64 * 0.0005, 0.5)))).collect();
+            for s in [0.5, 1.0, 2.0, 3.0, 4.0] {
+                let em: Vec<f64> = (300..600).map(t).collect();
+                let xs: Vec<f64> = regiao_seguida(&com(json!({ "x": 0.0, "y": 0.0, "w": 0.5, "h": 0.5 }), s), &a, &em).iter().map(|r| r.x).collect();
+                let d2 = xs.windows(3).map(|p| (p[2] - 2.0 * p[1] + p[0]).abs()).fold(0.0, f64::max);
+                // MKV 1/1000: pts arredondado ao ms, o passo do alvo varia um pouco; o resto é exato
+                let teto = if den == 1000 { 1e-4 } else { 1e-12 };
+                assert!(d2 <= teto, "base {num}/{den}, suavizar {s}: aceleração {d2:e}");
+            }
+        }
     }
 
     // ------------------------------------------------------------------ cauda e motor, sem ffmpeg
@@ -638,7 +667,8 @@ mod testes {
             (c[0] + c[2] / 2.0, c[1] + c[3] / 2.0)
         };
         let t = tab.tempo(j);
-        let na_janela: Vec<usize> = (0..tab.pts.len()).filter(|&i| tab.tempo(i) >= t - s / 2.0 && tab.tempo(i) <= t + s / 2.0).collect();
+        // janela fechada: o quadro na ponta conta (sem folga, o arredondamento o punha e tirava)
+        let na_janela: Vec<usize> = (0..tab.pts.len()).filter(|&i| (tab.tempo(i) - t).abs() <= s / 2.0 + 1e-9).collect();
         let (mx, my) = na_janela.iter().fold((0.0, 0.0), |(a, b), &i| (a + centro(i).0, b + centro(i).1));
         let (mx, my) = (mx / na_janela.len() as f64, my / na_janela.len() as f64);
         let (w, h) = tamanho(t);
@@ -727,5 +757,372 @@ mod testes {
             assert_eq!(medir::pixels_diferentes(&quadros[41 + i], x, 1), 0, "prévia: slot {} ({})", 41 + i, cap.versao);
         }
         eprintln!("zoom que segue ({}): {} slots, pior desvio {pior:.2} px, {na_borda} na borda", cap.versao, quadros.len());
+    }
+
+    // ------------------------------------------------------------------ revisão: o caso do dono e as bordas (os dois ffmpeg)
+
+    /// Fundo verde puro: qualquer pixel dele no quadro é barra ou borda, não imagem (as fontes são cinza e vermelho).
+    const FUNDO_VERDE: &str = "#00ff00";
+
+    fn verde(q: &QuadroRgb) -> u64 {
+        q.px.chunks_exact(3).filter(|p| p[1] as i32 - p[0] as i32 > 150 && p[1] as i32 - p[2] as i32 > 150).count() as u64
+    }
+
+    /// Caixa [x0, y0, x1, y1] (px, inclusiva) dos pixels de `cor` dentro de `area`.
+    fn caixa_de(q: &QuadroRgb, area: [u32; 4], cor: &dyn Fn(&[u8]) -> bool) -> Option<[u32; 4]> {
+        let mut c: Option<[u32; 4]> = None;
+        for y in area[1]..area[3].min(q.h) {
+            for x in area[0]..area[2].min(q.w) {
+                let i = ((y * q.w + x) * 3) as usize;
+                if cor(&q.px[i..i + 3]) {
+                    c = Some(match c {
+                        None => [x, y, x, y],
+                        Some(b) => [b[0].min(x), b[1].min(y), b[2].max(x), b[3].max(y)],
+                    });
+                }
+            }
+        }
+        c
+    }
+
+    fn eh_vermelho(p: &[u8]) -> bool {
+        p[0] as i32 - p[1] as i32 > 90 && p[0] as i32 - p[2] as i32 > 90
+    }
+
+    fn eh_azul(p: &[u8]) -> bool {
+        p[2] as i32 - p[0] as i32 > 90 && p[2] as i32 - p[1] as i32 > 90
+    }
+
+    /// Centro (px) dos pixels vermelhos dentro de `area`.
+    fn centro_vermelho_em(q: &QuadroRgb, area: [u32; 4]) -> Option<(f64, f64)> {
+        let (mut sx, mut sy, mut n) = (0.0, 0.0, 0u64);
+        for y in area[1]..area[3].min(q.h) {
+            for x in area[0]..area[2].min(q.w) {
+                let i = ((y * q.w + x) * 3) as usize;
+                if eh_vermelho(&q.px[i..i + 3]) {
+                    sx += x as f64 + 0.5;
+                    sy += y as f64 + 0.5;
+                    n += 1;
+                }
+            }
+        }
+        (n > 20).then(|| (sx / n as f64, sy / n as f64))
+    }
+
+    /// Caso do dono (PINHO, 17/11: dividiu o trecho para aproximar e afastar), agora num trecho só: cena inteira →
+    /// aproxima → segura → afasta à cena inteira, nos tempos dele em escala, com a região dele (no alto, 5,3×) e com
+    /// uma do meio (onde a marca passa). Sai nos dois ffmpeg sem erro nem problema; nenhum quadro com barra ou
+    /// borda; a marca cai, em todo slot em que aparece inteira, onde a interpolação linear das chaves (refeita aqui)
+    /// manda: centro a até 1,5 px e lado a até 2 px, sem salto entre chaves.
+    #[test]
+    fn aproxima_segura_afasta_num_trecho_so() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::Mp4);
+        let tab = &m.info.quadros;
+        let mundo = Mundo::novo(&cap).com("m1", &m.info);
+        let inteira = [0.0, 0.0, 1.0, 1.0];
+        let js = [30usize, 120, 210, 330];
+        for (nome, r) in [("dono", [0.17837, 0.0, 0.18853, 0.18853]), ("meio", [0.4, 0.5, 0.4, 0.4])] {
+            let vs = [inteira, r, r, inteira];
+            let chaves: Vec<Value> = js.iter().zip(&vs).map(|(&j, v)| json!({ "t": tab.tempo(j), "pts": tab.pts[j], "v": { "x": v[0], "y": v[1], "w": v[2], "h": v[3] } })).collect();
+            let e = efeito("enquadramento", "q1", json!({ "regiao": chaves, "ajuste": "cobrir", "interpolacao": "bilinear" }));
+            let mut p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", tab, 0, 450, 1.0, json!([e]))], json!({}));
+            p.saida.cor_fundo = FUNDO_VERDE.into();
+            let erros: Vec<String> = problemas_de(&p, &mundo).into_iter().filter(|x| x.nivel == Nivel::Erro).map(|x| format!("{} {:?}", x.codigo, x.campo)).collect();
+            assert!(erros.is_empty(), "{nome}: {erros:?}");
+            let plano = mundo.compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{nome} ({}): {e}", cap.versao));
+            let quadros = renderizar(&cap, &plano, &format!("zs-dono-{nome}"));
+            let regiao = |t: f64| -> [f64; 4] {
+                let ts: Vec<f64> = js.iter().map(|&j| tab.tempo(j)).collect();
+                if t <= ts[0] {
+                    return vs[0];
+                }
+                for i in 0..3 {
+                    if t <= ts[i + 1] {
+                        let u = (t - ts[i]) / (ts[i + 1] - ts[i]);
+                        return [0, 1, 2, 3].map(|k| vs[i][k] + (vs[i + 1][k] - vs[i][k]) * u);
+                    }
+                }
+                vs[3]
+            };
+            let (mut medidos, mut pior, mut pior_lado) = (0, 0.0f64, 0.0f64);
+            for (k, q) in quadros.iter().enumerate() {
+                assert_eq!(verde(q), 0, "{nome} slot {k} ({}): barra ou borda", cap.versao);
+                let r = regiao(tab.tempo(k));
+                let c = fontes::marca_esperada(Fonte::Mp4, m.numeros[k]);
+                let (x0, x1) = ((c[0] - r[0]) / r[2] * 320.0, (c[0] + c[2] - r[0]) / r[2] * 320.0);
+                let (y0, y1) = ((c[1] - r[1]) / r[3] * 180.0, (c[1] + c[3] - r[1]) / r[3] * 180.0);
+                if x0 < 3.0 || y0 < 3.0 || x1 > 317.0 || y1 > 177.0 {
+                    continue;
+                }
+                let b = caixa_de(q, [0, 0, 320, 180], &eh_vermelho).unwrap_or_else(|| panic!("{nome} slot {k}: sem a marca"));
+                let (mx, my) = centro_vermelho(q).unwrap();
+                let d = (mx - (x0 + x1) / 2.0).abs().max((my - (y0 + y1) / 2.0).abs());
+                let dl = ((b[2] + 1 - b[0]) as f64 - (x1 - x0)).abs().max(((b[3] + 1 - b[1]) as f64 - (y1 - y0)).abs());
+                assert!(d <= 1.5 && dl <= 3.0, "{nome} slot {k} ({}): marca em ({mx:.2}, {my:.2}) lado {:?}, prevista ({:.2}, {:.2}) lado ({:.2}, {:.2})", cap.versao, b, (x0 + x1) / 2.0, (y0 + y1) / 2.0, x1 - x0, y1 - y0);
+                pior = pior.max(d);
+                pior_lado = pior_lado.max(dl);
+                medidos += 1;
+            }
+            if nome == "meio" {
+                assert!(medidos > 150, "{nome}: poucos slots com a marca inteira: {medidos}");
+            }
+            eprintln!("dono/{nome} ({}): {} slots sem borda, {medidos} medidos, pior centro {pior:.2} px, pior lado {pior_lado:.2} px", cap.versao, quadros.len());
+        }
+    }
+
+    /// Regra D9 refeita aqui, sem o código do motor: média dos centros dos quadros da mídia com tempo em
+    /// [t − s/2, t + s/2] (quadro na ponta conta); sem nenhum, o mais próximo com centro (empate: o anterior).
+    fn centro_pela_regra(tab: &TabelaQuadros, centros: &[Option<(f64, f64)>], t: f64, s: f64) -> Option<(f64, f64)> {
+        let na: Vec<(f64, f64)> = (0..centros.len()).filter(|&i| (tab.tempo(i) - t).abs() <= s / 2.0 + 1e-9).filter_map(|i| centros[i]).collect();
+        if !na.is_empty() {
+            let n = na.len() as f64;
+            return Some((na.iter().map(|c| c.0).sum::<f64>() / n, na.iter().map(|c| c.1).sum::<f64>() / n));
+        }
+        let mut melhor: Option<(f64, (f64, f64))> = None;
+        for (i, c) in centros.iter().enumerate() {
+            let Some(c) = c else { continue };
+            let d = (tab.tempo(i) - t).abs();
+            if melhor.is_none_or(|(m, _)| d < m) {
+                melhor = Some((d, *c));
+            }
+        }
+        melhor.map(|(_, c)| c)
+    }
+
+    /// Por slot: marca medida e prevista (px do canvas 320×180) e o centro da região que o render usou e o previsto
+    /// (px do canvas, deduzido da marca: a marca verdadeira é conhecida).
+    #[derive(Debug, Clone, Copy)]
+    struct Slot {
+        medida: Option<(f64, f64)>,
+        prevista: (f64, f64),
+        regiao_usada: (f64, f64),
+        regiao_prevista: (f64, f64),
+        /// A marca prevista cabe inteira no canvas (o centro dos pixels dela só vale assim).
+        inteira: bool,
+    }
+
+    struct CasoSegue<'a> {
+        nome: &'a str,
+        fonte: Fonte,
+        fps: (i64, i64),
+        girar90: bool,
+        trecho: (usize, usize),
+        /// Altura da região (fração da origem girada); a largura sai da proporção da saída.
+        altura: f64,
+        suavizar_s: f64,
+        /// Centro do rastreio por quadro da mídia (espaço de origem); None = sem caixa.
+        centros: Vec<Option<(f64, f64)>>,
+        origem: Value,
+        extra: Vec<Value>,
+    }
+
+    /// Renderiza o zoom que segue (região de tamanho fixo na proporção da saída, 2× ou o maior que cabe) e mede
+    /// cada slot contra a regra refeita aqui; a marca (verdadeira) e o rastreio (`centros`) podem diferir.
+    fn rodar_segue(cap: &Arc<Capacidades>, c: &CasoSegue) -> (Vec<QuadroRgb>, Vec<Slot>) {
+        let m = apoio::medida(cap, c.fonte);
+        let tab = &m.info.quadros;
+        let (we, he) = (m.info.exibido.0 as f64, m.info.exibido.1 as f64);
+        let (wg, hg) = if c.girar90 { (he, we) } else { (we, he) };
+        // 90° horário: (x, y) da origem → (1 − y, x) da girada
+        let girar = |p: (f64, f64)| if c.girar90 { (1.0 - p.1, p.0) } else { p };
+        let prop = (320.0 / 180.0) / (wg / hg);
+        let (mut w, mut h) = (c.altura * prop, c.altura);
+        if w > 1.0 {
+            h /= w;
+            w = 1.0;
+        }
+        let ancoras: Vec<Value> = c
+            .centros
+            .iter()
+            .enumerate()
+            .filter_map(|(j, x)| x.map(|(cx, cy)| (j, cx, cy)))
+            .map(|(j, cx, cy)| {
+                let mk = fontes::marca_esperada(c.fonte, m.numeros[j]);
+                ancora(tab.tempo(j), Some(tab.pts[j]), [cx - mk[2] / 2.0, cy - mk[3] / 2.0, mk[2], mk[3]])
+            })
+            .collect();
+        let mut r = rastreio("r1", Some("m1"), "fonte", ancoras);
+        r["origem"] = c.origem.clone();
+        let mut efs = Vec::new();
+        if c.girar90 {
+            efs.push(efeito("girar", "g1", json!({ "graus": 90, "espelhar_h": false, "espelhar_v": false })));
+        }
+        efs.push(enq_segue(json!({ "x": 0.0, "y": 0.0, "w": w, "h": h }), c.suavizar_s, "cobrir"));
+        efs.extend(c.extra.iter().cloned());
+        let mut p = projeto(320, 180, c.fps, vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", tab, c.trecho.0, c.trecho.1, 1.0, Value::Array(efs))], json!({ "rastreios": [r] }));
+        p.saida.cor_fundo = FUNDO_VERDE.into();
+        let mundo = Mundo::novo(cap).com("m1", &m.info);
+        let plano = mundo.compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{} ({}): {e}", c.nome, cap.versao));
+        let quadros = renderizar(cap, &plano, &format!("zs-rev-{}", c.nome));
+        let centros_g: Vec<Option<(f64, f64)>> = c.centros.iter().map(|x| x.map(girar)).collect();
+        let slots = quadros
+            .iter()
+            .enumerate()
+            .map(|(k, q)| {
+                let j = c.trecho.0 + k;
+                let t = tab.tempo(j);
+                let ce = centro_pela_regra(tab, &centros_g, t, c.suavizar_s).expect("centro");
+                let x = (ce.0 - w / 2.0).clamp(0.0, (1.0 - w).max(0.0));
+                let y = (ce.1 - h / 2.0).clamp(0.0, (1.0 - h).max(0.0));
+                let mk = fontes::marca_esperada(c.fonte, m.numeros[j]);
+                let verdade = girar((mk[0] + mk[2] / 2.0, mk[1] + mk[3] / 2.0));
+                let prevista = ((verdade.0 - x) / w * 320.0, (verdade.1 - y) / h * 180.0);
+                let lado = if c.girar90 { (mk[3] / w * 320.0, mk[2] / h * 180.0) } else { (mk[2] / w * 320.0, mk[3] / h * 180.0) };
+                let inteira = prevista.0 - lado.0 / 2.0 >= 2.0 && prevista.0 + lado.0 / 2.0 <= 318.0 && prevista.1 - lado.1 / 2.0 >= 2.0 && prevista.1 + lado.1 / 2.0 <= 178.0;
+                let medida = centro_vermelho_em(q, [0, 0, 320, 180]);
+                assert_eq!(verde(q), 0, "{} slot {k} ({}): barra ou borda", c.nome, cap.versao);
+                let inteira = inteira && medida.is_some();
+                let m = medida.unwrap_or(prevista);
+                let usada = ((verdade.0 - m.0 / 320.0 * w + w / 2.0) / w * 320.0, (verdade.1 - m.1 / 180.0 * h + h / 2.0) / h * 180.0);
+                Slot { medida, prevista, regiao_usada: usada, regiao_prevista: ((x + w / 2.0) / w * 320.0, (y + h / 2.0) / h * 180.0), inteira }
+            })
+            .collect();
+        (quadros, slots)
+    }
+
+    /// Pior desvio medido × previsto (px), nos slots com a marca inteira no canvas.
+    fn pior_desvio(s: &[Slot]) -> f64 {
+        assert!(s.iter().filter(|x| x.inteira).count() * 3 > s.len(), "poucos slots com a marca inteira");
+        s.iter().filter(|x| x.inteira).map(|x| x.medida.map_or(0.0, |m| (m.0 - x.prevista.0).abs().max((m.1 - x.prevista.1).abs()))).fold(0.0, f64::max)
+    }
+
+    /// Maior passo e maior aceleração (px do canvas por quadro) do centro da região, num eixo.
+    fn passos(v: &[f64]) -> (f64, f64, f64) {
+        let d: Vec<f64> = v.windows(2).map(|p| p[1] - p[0]).collect();
+        let d2: Vec<f64> = d.windows(2).map(|p| p[1] - p[0]).collect();
+        let rms = (d2.iter().map(|x| x * x).sum::<f64>() / d2.len().max(1) as f64).sqrt();
+        (d.iter().map(|x| x.abs()).fold(0.0, f64::max), d2.iter().map(|x| x.abs()).fold(0.0, f64::max), rms)
+    }
+
+    /// Gerador congruencial: o mesmo ruído sempre.
+    fn ruido(semente: u64) -> impl FnMut() -> f64 {
+        let mut x = semente;
+        move || {
+            x = x.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            (x >> 11) as f64 / (1u64 << 53) as f64 * 2.0 - 1.0
+        }
+    }
+
+    fn centros_da_marca(cap: &Capacidades, f: Fonte, quadros: std::ops::Range<usize>, tremor: f64) -> Vec<Option<(f64, f64)>> {
+        let m = apoio::medida(cap, f);
+        let mut r = ruido(0x5eed);
+        (0..m.info.quadros.pts.len())
+            .map(|j| {
+                let mk = fontes::marca_esperada(f, m.numeros[j]);
+                let (a, b) = (r(), r());
+                quadros.contains(&j).then(|| (mk[0] + mk[2] / 2.0 + a * tremor, mk[1] + mk[3] / 2.0 + b * tremor))
+            })
+            .collect()
+    }
+
+    /// Rastreio que treme (±1,2 % por quadro, o que um seguidor real faz): com suavizar 0 o zoom treme junto; com 1 s
+    /// e 3 s a média tira o tremor. O render bate com a regra (até 2 px) e a aceleração do centro da região cai.
+    #[test]
+    fn tremor_com_suavizar_0_1_e_3() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let mut acel = Vec::new();
+        for s in [0.0, 1.0, 3.0] {
+            let centros = centros_da_marca(&cap, Fonte::Mp4, 0..450, 0.012);
+            let caso = CasoSegue { nome: &format!("tremor-{s}"), fonte: Fonte::Mp4, fps: (30, 1), girar90: false, trecho: (90, 300), altura: 0.5, suavizar_s: s, centros, origem: json!({ "tipo": "manual" }), extra: vec![] };
+            let (_, slots) = rodar_segue(&cap, &caso);
+            let pior = pior_desvio(&slots);
+            assert!(pior <= 2.0, "suavizar {s} ({}): render × regra {pior:.2} px", cap.versao);
+            let (px, ax, rx) = passos(&slots.iter().map(|x| x.regiao_prevista.0).collect::<Vec<_>>());
+            let (_, ay, ry) = passos(&slots.iter().map(|x| x.regiao_prevista.1).collect::<Vec<_>>());
+            // no render: aceleração do centro da região deduzido da marca, só com a marca inteira nos três slots
+            let am: Vec<f64> = slots.windows(3).filter(|w| w.iter().all(|x| x.inteira)).map(|w| (w[2].regiao_usada.0 - 2.0 * w[1].regiao_usada.0 + w[0].regiao_usada.0).abs()).collect();
+            let rm = (am.iter().map(|x| x * x).sum::<f64>() / am.len().max(1) as f64).sqrt();
+            eprintln!("tremor s={s} ({}): render×regra {pior:.2} px; regra: passo {px:.2} acel {ax:.2} (y {ay:.2}) rms {rx:.3} (y {ry:.3}); render: acel rms {rm:.3} em {} trincas", cap.versao, am.len());
+            acel.push((rx.max(ry), ax.max(ay), rm));
+        }
+        // tremor de ±1,2 % a 2× é ±7,7 px por quadro: sem média passa inteiro; 1 s (31 quadros) e 3 s o tiram. A
+        // aceleração máxima com 1 s é a da região parando na borda da imagem (regra do contrato), não tremor.
+        assert!(acel[0].0 > 5.0 && acel[0].2 > 5.0, "{acel:?}");
+        assert!(acel[1].0 < 1.0 && acel[1].2 < 1.5, "{acel:?}");
+        assert!(acel[2].0 < acel[1].0 && acel[2].1 < 1.0 && acel[2].2 < 1.0, "{acel:?}");
+    }
+
+    /// Pessoa some 5 s (rastreio seguido: âncoras longe, sem caixa no meio) e volta noutro lugar; rastreio que começa
+    /// depois do início do trecho. O render bate com a regra onde a marca aparece inteira, sem borda em nenhum slot.
+    /// O salto no meio da lacuna é a regra D9 ("a mais próxima"): medido no relato, a decisão é do orquestrador.
+    #[test]
+    fn lacuna_longa_e_rastreio_que_comeca_depois() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let mut centros = centros_da_marca(&cap, Fonte::Mp4, 0..450, 0.0);
+        for c in &mut centros[120..270] {
+            *c = None;
+        }
+        let caso = CasoSegue { nome: "lacuna", fonte: Fonte::Mp4, fps: (30, 1), girar90: false, trecho: (0, 450), altura: 0.5, suavizar_s: 1.0, centros, origem: json!({ "tipo": "assistido" }), extra: vec![] };
+        let (_, slots) = rodar_segue(&cap, &caso);
+        let pior = pior_desvio(&slots);
+        let xs: Vec<f64> = slots.iter().map(|x| x.regiao_prevista.0).collect();
+        let saltos: Vec<(usize, f64)> = xs.windows(2).enumerate().map(|(k, p)| (k + 1, p[1] - p[0])).filter(|(_, d)| d.abs() > 10.0).collect();
+        eprintln!("lacuna ({}): render×regra {pior:.2} px; saltos > 10 px (slot, px): {saltos:?}", cap.versao);
+        assert!(pior <= 2.0, "lacuna ({}): {pior:.2}", cap.versao);
+        let centros = centros_da_marca(&cap, Fonte::Mp4, 150..450, 0.0);
+        let caso = CasoSegue { nome: "depois", fonte: Fonte::Mp4, fps: (30, 1), girar90: false, trecho: (30, 300), altura: 0.5, suavizar_s: 1.0, centros, origem: json!({ "tipo": "manual" }), extra: vec![] };
+        let (_, slots) = rodar_segue(&cap, &caso);
+        let pior = pior_desvio(&slots);
+        let xs: Vec<f64> = slots.iter().map(|x| x.regiao_prevista.0).collect();
+        eprintln!("começa depois ({}): render×regra {pior:.2} px; passo máx {:.2}", cap.versao, passos(&xs).0);
+        assert!(pior <= 2.0, "começa depois ({}): {pior:.2}", cap.versao);
+        assert!(passos(&xs).0 < 10.0, "começa depois: salto");
+    }
+
+    /// Giro de 90° (efeito e contêiner), 59,94 com início ≠ 0, 29,97 de pixel 10:11: a marca no lugar da regra.
+    #[test]
+    fn segue_em_giro_taxa_e_inicio() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        for (nome, f, fps, girar90, tr) in [
+            ("girar-90", Fonte::Mp4, (30, 1), true, (60usize, 240usize)),
+            ("conteiner-90", Fonte::Giro90, (30, 1), false, (60, 240)),
+            ("ts-5994", Fonte::Ts5994, (60000, 1001), false, (100, 400)),
+            ("pixel-2997", Fonte::PixelNaoQuadrado, (30000, 1001), false, (20, 170)),
+        ] {
+            let m = apoio::medida(&cap, f);
+            let centros = centros_da_marca(&cap, f, 0..m.info.quadros.pts.len(), 0.0);
+            let caso = CasoSegue { nome, fonte: f, fps, girar90, trecho: tr, altura: 0.5, suavizar_s: 1.0, centros, origem: json!({ "tipo": "manual" }), extra: vec![] };
+            let (_, slots) = rodar_segue(&cap, &caso);
+            let pior = pior_desvio(&slots);
+            let (pa, aa, _) = passos(&slots.iter().map(|x| if girar90 { x.regiao_usada.1 } else { x.regiao_usada.0 }).collect::<Vec<_>>());
+            eprintln!("{nome} ({}): {} slots, início {:.3} s, render×regra {pior:.2} px, passo {pa:.2} acel {aa:.2}", cap.versao, slots.len(), m.info.quadros.tempo(0));
+            assert!(pior <= 2.0, "{nome} ({}): {pior:.2} px", cap.versao);
+        }
+    }
+
+    /// Destaque e lupa do mesmo rastreio dentro do zoom que segue: o retângulo em volta da marca e a lupa com a
+    /// marca no centro dela, em todo slot.
+    #[test]
+    fn destaque_e_lupa_no_lugar_dentro_do_zoom_que_segue() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let destaque = efeito("destaque", "d1", json!({ "forma": "retangulo", "rastreio": "r1", "traco": { "cor": "#0000ff", "espessura": 0.006, "contorno": false }, "tamanho": 0.1, "angulo_graus": 0.0, "margem": 0.1, "rotulo": null }));
+        // janela 45 px da origem, 56 px no canvas (1,25×), lupa de 84 px no alto à esquerda: longe da marca (y ≥ 98)
+        let lupa = efeito("lupa", "L1", json!({ "rastreio": "r1", "janela": 0.25, "fator": 1.5, "forma": "retangulo", "interpolacao": "bilinear", "onde": { "modo": "fixa", "x": 0.15, "y": 0.2 }, "moldura": { "cor": "#00ffff", "espessura": 0.012, "contorno": false }, "ligacao": false }));
+        let centros = centros_da_marca(&cap, Fonte::Mp4, 0..450, 0.0);
+        let caso = CasoSegue { nome: "destaque", fonte: Fonte::Mp4, fps: (30, 1), girar90: false, trecho: (60, 240), altura: 0.8, suavizar_s: 1.0, centros, origem: json!({ "tipo": "manual" }), extra: vec![destaque, lupa] };
+        let (quadros, slots) = rodar_segue(&cap, &caso);
+        let (mut pior_d, mut pior_l, mut n) = (0.0f64, 0.0f64, 0);
+        for (k, (q, s)) in quadros.iter().zip(&slots).enumerate() {
+            let marca = centro_vermelho_em(q, [0, 88, 320, 180]).unwrap_or_else(|| panic!("slot {k}: sem a marca"));
+            let dm = (marca.0 - s.prevista.0).abs().max((marca.1 - s.prevista.1).abs());
+            let b = caixa_de(q, [0, 88, 320, 180], &eh_azul).unwrap_or_else(|| panic!("slot {k} ({}): sem o destaque", cap.versao));
+            let d = ((b[0] + b[2] + 1) as f64 / 2.0 - marca.0).abs().max(((b[1] + b[3] + 1) as f64 / 2.0 - marca.1).abs());
+            assert!(d <= 2.0 && dm <= 2.0, "slot {k} ({}): destaque {b:?} × marca {marca:?} (prevista {:?})", cap.versao, s.prevista);
+            pior_d = pior_d.max(d);
+            // a lupa encosta no alto do canvas: o centro dela é o da moldura (ciano)
+            let mo = caixa_de(q, [0, 0, 110, 88], &|p: &[u8]| p[0] < 100 && p[1] > 150 && p[2] > 150).unwrap_or_else(|| panic!("slot {k}: sem a moldura da lupa"));
+            let l = centro_vermelho_em(q, [mo[0] + 2, mo[1] + 2, mo[2] - 1, mo[3] - 1]).unwrap_or_else(|| panic!("slot {k} ({}): lupa sem a marca", cap.versao));
+            let dl = (l.0 - (mo[0] + mo[2] + 1) as f64 / 2.0).abs().max((l.1 - (mo[1] + mo[3] + 1) as f64 / 2.0).abs());
+            pior_l = pior_l.max(dl);
+            assert!(dl <= 2.0, "slot {k} ({}): marca na lupa em {l:?}", cap.versao);
+            n += 1;
+        }
+        eprintln!("destaque e lupa ({}): {n} slots, destaque × marca {pior_d:.2} px, lupa × centro {pior_l:.2} px", cap.versao);
     }
 }
