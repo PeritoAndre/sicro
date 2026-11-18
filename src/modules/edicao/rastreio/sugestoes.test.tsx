@@ -202,6 +202,10 @@ describe("Sugestões (ocultação assistida)", () => {
     await clicar(botao(linha("r2"), "Descartar"));
     expect(doc().rastreios.some((r) => r.id === "r2")).toBe(true);
     expect(doc().midias.flatMap((x) => x.ocultacoes).some((o) => (o as { alvo?: { rastreio: string } }).alvo?.rastreio === "r2")).toBe(false);
+    // a sugestão some da lista; Ctrl+Z traz de volta
+    expect(linhas().map((l) => l.getAttribute("data-sugestao"))).toEqual(["r1"]);
+    await esperar(() => st().desfazer());
+    expect(linhas().map((l) => l.getAttribute("data-sugestao"))).toEqual(["r1", "r2"]);
   });
 
   it("conteúdo trocado depois de confirmar: a folha vista de outro conteúdo não habilita; sem folha nada grava", async () => {

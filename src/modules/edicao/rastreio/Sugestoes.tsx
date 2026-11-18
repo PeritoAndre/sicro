@@ -145,11 +145,13 @@ export function aplicarSugestoes(fim: FimDeteccao): void {
 
 // ---------------------------------------------------------------- sugestões do clipe
 
-/** As propostas da mídia do clipe que cruzam o trecho dele, na ordem do início. */
+/** As propostas da mídia do clipe que cruzam o trecho dele, na ordem do início. Proposta = rastreio de detecção com a
+ *  ocultação da mídia apontando para ele: descartada, sai da lista mesmo que outro efeito siga o rastreio. */
 export function sugestoesDoClipe(doc: ProjetoEdicao, clipe: ClipePrincipal | ClipeSobreposto): Rastreio[] {
   if (clipe.tipo !== "trecho") return [];
+  const ocultados = new Set(acharMidia(doc, clipe.midia)?.ocultacoes.map((o) => ("alvo" in o ? (o as EfOcultar).alvo?.rastreio : null)));
   return doc.rastreios
-    .filter((r) => r.origem.tipo === "deteccao" && r.midia === clipe.midia && r.denso && r.denso.de_s <= clipe.fim_s && r.denso.ate_s >= clipe.inicio_s)
+    .filter((r) => r.origem.tipo === "deteccao" && r.midia === clipe.midia && ocultados.has(r.id) && r.denso && r.denso.de_s <= clipe.fim_s && r.denso.ate_s >= clipe.inicio_s)
     .sort((a, b) => (a.denso?.de_s ?? 0) - (b.denso?.de_s ?? 0));
 }
 
