@@ -158,6 +158,9 @@ export function EditorEdicao({ ativo = true }: { ativo?: boolean } = {}) {
       },
       "video.playPause": () => palco.current?.tocarPausar(),
       "video.playPauseK": () => palco.current?.tocarPausar(),
+      // J e L (revisão P3.3: estavam em VIDEO_NA_EDICAO sem ação)
+      "video.reverse": () => palco.current?.tocar(-1),
+      "video.forward": () => palco.current?.tocar(1),
       "video.prevFrame": () => palco.current?.passo(-1),
       "video.nextFrame": () => palco.current?.passo(1),
       "video.seekStart": () => palco.current?.inicio(),

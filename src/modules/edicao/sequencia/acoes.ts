@@ -10,6 +10,9 @@ import { exibido } from "../modelo/tempo";
 import { meioDoQuadro, faixaDoClipe, marcarBloqueado } from "../palco/faixa";
 import { recursoDe } from "../palco/recursos";
 import { congelarAqui, dividirTrecho, duplicarClipe } from "./contas";
+// revisão P3.3: Ctrl+B e "Congelar aqui" no modo Programa (o trecho sob o cursor do programa)
+import { planoDoDoc } from "../palco/motor/cursor";
+import { segmentoDoSlot, tempoNoSegmento } from "../palco/motor/plano";
 import type { TrechoNovo } from "./NovoClipe";
 
 const st = () => useEdicaoStore.getState();
@@ -146,6 +149,7 @@ export function duplicar(id: Id | null = clipeAlvo()): void {
 /** Quadro exibido no cursor dentro do trecho em foco, com a tabela dele. */
 function noCursor(): { id: Id; j: number; tab: NonNullable<ReturnType<typeof recursoDe>["tabela"]> } | null {
   const s = st();
+  if (s.doc && s.cursor.modo === "programa") return noPrograma(s.doc, s.cursor.q);
   if (!s.doc || s.cursor.modo !== "clipe") return null;
   const id = s.cursor.clipe;
   const c = s.doc.principal.find((x) => (x as { id?: Id }).id === id);
@@ -162,6 +166,19 @@ function noCursor(): { id: Id; j: number; tab: NonNullable<ReturnType<typeof rec
     if (outro) return { id: (outro as { id: Id }).id, j, tab };
   }
   return { id, j, tab };
+}
+
+/** Modo Programa: o trecho dono do slot e o quadro da fonte que o slot mostra. */
+function noPrograma(d: ProjetoEdicao, q: number): { id: Id; j: number; tab: NonNullable<ReturnType<typeof recursoDe>["tabela"]> } | null {
+  const p = planoDoDoc(d);
+  const seg = segmentoDoSlot(p, q);
+  const c = seg ? d.principal.find((x) => (x as { id?: Id }).id === seg.clipe) : undefined;
+  if (!seg || !c || !clipeConhecido(c) || c.tipo !== "trecho") return null;
+  const rec = recursoDe(acharMidia(d, c.midia)?.sha256);
+  const tab = rec.tabela;
+  if (!tab || marcarBloqueado(rec.info, tab)) return null;
+  const j = tempoNoSegmento(seg, q - seg.de_q, p.fps).indice;
+  return j === null ? null : { id: c.id, j, tab };
 }
 
 /** "Congelar aqui" é possível agora? (cursor dentro de um trecho com tabela) */

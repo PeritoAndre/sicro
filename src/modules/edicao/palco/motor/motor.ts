@@ -170,9 +170,7 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
         busca.emCurso = null;
         busca.pinturas = PINTURAS;
         sujo = true;
-        const p = busca.pendente;
-        busca.pendente = null;
-        if (p !== null && p !== busca.mostrado) buscar(e.el, busca, p);
+        // o pendente sai em `encadear`, depois de a imagem ir à tela (encadear aqui deixava o guiado sem pintar nada)
       });
       e.el.addEventListener("loadeddata", () => void (sujo = true));
     }
@@ -181,13 +179,16 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
       b.rel = m.relogio;
       b.mostrado = null;
       b.emCurso = null;
+      b.pendente = null;
+      b.pinturas = 0;
     }
     return { e, rel: m.relogio };
   }
 
   function buscar(el: HTMLVideoElement, b: Busca, j: number) {
     if (!b.rel) return;
-    if (b.emCurso !== null) {
+    // um seek por vez, e o seguinte só depois das pinturas do anterior (como o `Buscador` do modo clipe)
+    if (b.emCurso !== null || b.pinturas > 0) {
       b.pendente = j;
       return;
     }
@@ -225,6 +226,10 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
   const calibra = new WeakMap<HTMLMediaElement, { p0: number; desvio: number; medindo: boolean }>();
   function tocarEl(el: HTMLMediaElement) {
     if (el.ended) return;
+    // tocando, o quadro da última busca deixa de ser o da imagem: sem isso, pedir de novo esse quadro (repetir o
+    // programa) não buscava, e o elemento tocava de onde tinha parado (o relógio pulava o clipe)
+    const b = buscas.get(el as HTMLVideoElement);
+    if (b) b.mostrado = null;
     calibra.set(el, { p0: tempoDoElemento(el), desvio: 0, medindo: true });
     void el.play().catch(() => {});
   }
@@ -563,7 +568,27 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
       ultimaPintura = chave;
       pintar(estado);
     }
+    encadear(estado);
     laco = requestAnimationFrame(passo);
+  }
+
+  /** Busca pendente sai depois das pinturas da anterior; elemento que não está na tela não espera pintura. */
+  function encadear(estado: EstadoPrevia) {
+    const naTela = new Set<HTMLVideoElement>();
+    for (const c of estado.camadas) {
+      const v = videoDe(c.segmento.clipe);
+      if (v) naTela.add(v);
+    }
+    for (const [el, b] of buscas) {
+      if (b.pendente === null || b.emCurso !== null) continue;
+      if (b.pinturas > 0) {
+        if (naTela.has(el)) continue;
+        b.pinturas = 0;
+      }
+      const p = b.pendente;
+      b.pendente = null;
+      buscar(el, b, p);
+    }
   }
 
   const agendar = () => {

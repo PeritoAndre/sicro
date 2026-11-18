@@ -59,7 +59,7 @@ const info: MidiaInfo = {
   tabela: "decodificador", erros: 0, marcavel: true, cor: { matriz: "bt709", faixa: "tv" },
 };
 const espera = (ms: number) => esperar(() => new Promise((r) => setTimeout(r, ms)));
-const tecla = (key: string, code: string) => act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true })));
+const tecla = (key: string, code: string, extra: KeyboardEventInit = {}) => act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true, ...extra })));
 
 beforeEach(async () => {
   for (const f of Object.values(cmd)) f.mockReset();
@@ -202,6 +202,44 @@ describe("palco no modo Programa", () => {
     expect(st().doc!.sobreposicoes[0]!.clipes[0]).toMatchObject({ transformacao: { x: 0.6 } });
     expect(t.raiz.querySelector('[data-alca="livre:s1:giro"]')).toBeTruthy();
     HTMLCanvasElement.prototype.getContext = getContext;
+  });
+
+  it("Ctrl+B e Congelar aqui no Programa: o trecho sob o cursor, no quadro do slot (revisão P3.3)", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 75 }));
+    await espera(20);
+    expect(botao(t.raiz, "Congelar aqui").disabled).toBe(false);
+    await tecla("b", "KeyB", { ctrlKey: true });
+    await espera(20);
+    const [a, b1, b2] = st().doc!.principal as ClipeTrecho[];
+    expect(st().doc!.principal).toHaveLength(3);
+    expect(a!.id).toBe("a");
+    // b = quadros 100..160; o slot 75 mostra o 115: [100, 115) e [115, 160)
+    expect(b1!.id).toBe("b");
+    expect(b1!.fim_pts).toBe(115 * 512);
+    expect(b2!.inicio_pts).toBe(115 * 512);
+    expect(b2!.fim_pts).toBe(160 * 512);
+  });
+
+  it("J dá ré (guiado, elementos parados) e L toca no Programa; K para (revisão P3.3)", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 30 }));
+    await espera(20);
+    const tocar = t.raiz.querySelector<HTMLButtonElement>('button[aria-label="Reproduzir"]')!;
+    await tecla("l", "KeyL");
+    await chegar(t.raiz);
+    expect(tocar.getAttribute("aria-pressed")).toBe("true");
+    expect([...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].filter((v) => !v.paused)).toHaveLength(1);
+    await tecla("k", "KeyK");
+    await espera(30);
+    expect(tocar.getAttribute("aria-pressed")).toBe("false");
+    await tecla("j", "KeyJ");
+    await espera(30);
+    expect(tocar.getAttribute("aria-pressed")).toBe("true");
+    expect([...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].every((v) => v.paused)).toBe(true);
+    await tecla("k", "KeyK");
+    await espera(30);
+    expect(tocar.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("o Inspetor lê o tempo do clipe no slot do cursor (Começar/Terminar no cursor no modo Programa)", async () => {
