@@ -2,7 +2,8 @@
  * Corrida do rastreio na Edição (§6.3, §8.4): pede "Seguir", acompanha o evento `edicao:rastreio`, aplica o fim
  * (denso e silhuetas) por `alterar()` e guarda os densos lidos para o palco e a faixa. Também as ações da linha do
  * efeito (Retomar, Aceitar ausência, Próximo trecho fraco, Apagar daqui em diante, Simplificar, Da análise), que o
- * painel, o palco e os atalhos chamam igual. Dono: P2.4 (contratos-fase2.md).
+ * painel, o palco e os atalhos chamam igual, e o "Motor" escolhido (Fase 4, D12), que vai em todo `PedidoSeguir`.
+ * Dono: P2.4 (contratos-fase2.md); na Fase 4, o pacote "Pessoas na Edição e pequenos".
  */
 
 import { useEffect } from "react";
@@ -21,6 +22,7 @@ import type {
   ClipeTrecho,
   Efeito,
   Editado,
+  EscolhaMotor,
   EventoRastreio,
   FimRastreio,
   Id,
@@ -34,6 +36,7 @@ import type {
   Sentido,
   TabelaQuadros,
 } from "@domain/edicao";
+import type { AiSettings } from "@domain/app_settings";
 import { separarErro, useEdicaoStore } from "./edicaoStore";
 import { acharClipe, acharEfeito, acharMidia, acharRastreio, efeitoConhecido } from "../modelo/projeto";
 import { ancorasDoSimplificar, avaliar, emAusencia } from "../modelo/rastreio";
@@ -56,6 +59,45 @@ export const SUAVIZAR_ANOTACAO_S = 0.5;
 /** Densos guardados em memória (o resto é relido do disco). */
 export const MAX_DENSOS = 32;
 
+// ---- "Motor" (Fase 4, contratos-fase4.md D12) ----
+
+/** Escolhas na ordem da tela ("Automático", "EdgeTAM", "VitTrack", "Mancha"). */
+export const MOTORES: readonly (readonly [EscolhaMotor, string])[] = [
+  ["auto", "Automático"],
+  ["edgetam", "EdgeTAM"],
+  ["vittrack", "VitTrack"],
+  ["mancha", "Mancha"],
+];
+/** Escolha guardada no navegador (conveniência de quem usa; não vai ao projeto). */
+export const CHAVE_MOTOR = "sicro.edicao.motor.v1";
+
+export function lerMotor(): EscolhaMotor {
+  try {
+    const v = localStorage.getItem(CHAVE_MOTOR);
+    return MOTORES.some(([m]) => m === v) ? (v as EscolhaMotor) : "auto";
+  } catch {
+    return "auto";
+  }
+}
+
+/** Estado do motor nas Configurações: "pronto"; "ausente" (item do Gerenciador não instalado); "desligada" (interruptor
+ *  "Usar modelos de IA"). O Rust confere de novo ao seguir (`corrida::escolher`). */
+export type EstadoMotor = "pronto" | "ausente" | "desligada";
+
+export function estadoDoMotor(m: EscolhaMotor, ai: Pick<AiSettings, "modelos_desligados" | "rastreio_dir" | "ort_lib_path" | "sr_ort_lib_path" | "gpu_dir">): EstadoMotor {
+  if (m === "auto" || m === "mancha") return "pronto";
+  if (ai.modelos_desligados) return "desligada";
+  // EdgeTAM: o item "Rastreador"; VitTrack vem no instalador e só precisa de um onnxruntime (Pessoas, super-resolução
+  // ou o da GPU, `ia::sessao::biblioteca`)
+  const tem = m === "edgetam" ? !!ai.rastreio_dir : !!(ai.ort_lib_path || ai.sr_ort_lib_path || ai.gpu_dir);
+  return tem ? "pronto" : "ausente";
+}
+
+/** O motor que vai no pedido: o escolhido, se está pronto; senão o automático (a regra do §6.2 escolhe). */
+export function motorDoPedido(escolhido: EscolhaMotor = useRastreioStore.getState().motor, ai: AiSettings = useSettingsStore.getState().settings.ai): EscolhaMotor {
+  return estadoDoMotor(escolhido, ai) === "pronto" ? escolhido : "auto";
+}
+
 /** Corrida em andamento (uma por vez, §6.3); `ultimo` = último andamento recebido (miniatura, caixa, estado).
  *  `tarefa` vazia: o comando ainda não respondeu (os eventos podem chegar antes). */
 export interface CorridaNaTela {
@@ -72,6 +114,9 @@ export interface RastreioState {
   // CONTRATO: acréscimo do P2.4. Onde parou a corrida que gravou cada denso (por SHA-256 do denso): "Perdido em…" e
   // "Retomar" valem enquanto o rastreio aponta para ele (Ctrl+Z devolve o ponteiro e a parada junto).
   paradas: Record<string, ParouSentido[]>;
+  // CONTRATO: acréscimo da Fase 4 (D12). "Motor" escolhido no painel (guardado em `CHAVE_MOTOR`).
+  motor: EscolhaMotor;
+  escolherMotor(m: EscolhaMotor): void;
   /** "Seguir" / "Seguir para trás" / "Retomar". */
   seguir(p: PedidoSeguir): Promise<void>;
   /** "Parar". */
@@ -120,6 +165,16 @@ export const useRastreioStore = create<RastreioState>((set, get) => ({
   corrida: null,
   densos: {},
   paradas: {},
+  motor: lerMotor(),
+
+  escolherMotor(m) {
+    set({ motor: m });
+    try {
+      localStorage.setItem(CHAVE_MOTOR, m);
+    } catch {
+      /* sem armazenamento: vale nesta sessão */
+    }
+  },
 
   async seguir(p) {
     const e = edicao();
@@ -274,7 +329,7 @@ export function esquecerRastreios(): void {
   acabadas.clear();
   avisadas.clear();
   pararAoChegar = false;
-  useRastreioStore.setState({ corrida: null, densos: {}, paradas: {} });
+  useRastreioStore.setState({ corrida: null, densos: {}, paradas: {}, motor: "auto" });
 }
 
 /** Editor desmontado (projeto fechado ou trocado) no meio da corrida: o fim não seria ouvido e a tela ficaria presa
@@ -483,7 +538,7 @@ export function pedidoDe(x: AlvoRastreio, sentido: Sentido, modo: "seguir" | "re
   const q = x.tabela ? quadrosDaFaixa(x.tabela, x.de, x.ate, x.ateExclusivo) : null;
   const fim = sentido === "frente" ? (q && x.tabela ? tempoDoQuadro(x.tabela, q[1]) : x.ate) : q && x.tabela ? tempoDoQuadro(x.tabela, q[0]) : x.de;
   if (sentido === "frente" ? ancora.t >= fim - DIF : ancora.t <= fim + DIF) return null;
-  return { rastreio_id: x.rastreio.id, clipe_id: x.clipe.id, ancora, sentido, ate_s: fim, motor: "auto" };
+  return { rastreio_id: x.rastreio.id, clipe_id: x.clipe.id, ancora, sentido, ate_s: fim, motor: motorDoPedido() };
 }
 
 /** Intermediário de origem do clipe em preparo: "Seguir" desligado nas anotações (§7.5). */

@@ -3,17 +3,21 @@
  * "Aceitar ausência" (Oculto, Fora de cena, Perdido), "Próximo trecho fraco", "Apagar daqui em diante",
  * "Simplificar" e "Da análise" (trilhas de Pessoas da mídia), com "Atualizar" quando a trilha mudou. Estado por ícone;
  * "Perdido em 00:12,345" quando parou. Só em trecho com mídia: é a mídia que se segue.
- * Dono: P2.4. Montado em `MarcacoesSecao` (com a bandeira `RASTREIO_PRONTO`).
+ * Fase 4 (contratos-fase4.md D11, D12): "Motor" antes do "Seguir", o contador de marcações à mão (ícone de mão +
+ * número) e "Rastrear pessoas" ao lado do "Da análise".
+ * Dono: P2.4; na Fase 4, o pacote "Pessoas na Edição e pequenos". Montado em `MarcacoesSecao` (com a bandeira
+ * `RASTREIO_PRONTO`).
  */
 
-import { useState, type MouseEvent } from "react";
-import { ChevronsLeft, ChevronsRight, CircleDashed, CircleOff, Eraser, EyeOff, Loader2, Play, RefreshCw, SkipForward, Spline, Square, TriangleAlert, Users } from "lucide-react";
+import { useId, useState, type MouseEvent } from "react";
+import { ChevronsLeft, ChevronsRight, CircleDashed, CircleOff, Download, Eraser, EyeOff, Hand, Loader2, Play, RefreshCw, SkipForward, Spline, Square, TriangleAlert, Users } from "lucide-react";
 import type { ClipePrincipal, ClipeSobreposto, ContextoClipe, Efeito, Id, Rastreio, TabelaQuadros } from "@domain/edicao";
 import { ESTADO_AUSENTE, ESTADO_INCERTO } from "@domain/edicao";
 import { commands } from "@core/commands";
 import { pushToast } from "@components/toast/toastStore";
 import { useContextMenu, type MenuItem } from "@components/ContextMenu/ContextMenu";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
+import { useSettingsStore } from "@stores/settingsStore";
 import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { acharMidia } from "../modelo/projeto";
 import { exibido, ptsDaTabela } from "../modelo/tempo";
@@ -26,8 +30,11 @@ import {
   ausenciaNoCursor,
   desatualizado,
   editarRastreio,
+  estadoDoMotor,
   irAoProximoFraco,
   marcasDoAlvo,
+  MOTORES,
+  motorDoPedido,
   paradaDe,
   pedidoDe,
   RASTREIO_PRONTO,
@@ -38,6 +45,8 @@ import {
   trazerDaAnalise,
   useRastreioStore,
 } from "../store/rastreioStore";
+import { PESSOAS_NA_EDICAO_PRONTO, RastrearPessoas, usePessoasNaEdicao } from "./RastrearPessoas";
+import { marcadasAMao } from "./contagem";
 import styles from "../inspetor/Inspetor.module.css";
 
 export interface PainelRastreioProps {
@@ -74,6 +83,69 @@ export function IconeEstado({ estado, tamanho = 13 }: { estado: number; tamanho?
   return null;
 }
 
+/** "Motor" (D12): a escolha fica no `rastreioStore` (e no navegador); item não instalado desligado com o ícone de
+ *  baixar; com "Usar modelos de IA" desligado os neurais somem (§6.6). Marcada = o que vai no pedido. */
+function EscolhaDoMotor({ desligado }: { desligado: boolean }) {
+  const escolhido = useRastreioStore((s) => s.motor);
+  const ai = useSettingsStore((s) => s.settings.ai);
+  const soLeitura = useEdicaoStore((s) => s.soLeitura);
+  const id = useId();
+  const vai = motorDoPedido(escolhido, ai);
+  return (
+    <div className={styles.campo} data-campo="Motor">
+      <span className={styles.rotulo} id={id}>
+        Motor
+      </span>
+      <div className={styles.seg} role="group" aria-labelledby={id} style={{ flexWrap: "wrap" }}>
+        {MOTORES.map(([m, rotulo]) => {
+          const estado = estadoDoMotor(m, ai);
+          if (estado === "desligada") return null;
+          return (
+            <button
+              key={m}
+              type="button"
+              className={`${styles.segBtn} ${m === vai ? styles.segOn : ""}`}
+              style={{ flex: "1 0 auto" }}
+              aria-pressed={m === vai}
+              data-valor={m}
+              data-estado={estado === "ausente" ? "ausente" : undefined}
+              disabled={soLeitura || desligado || estado !== "pronto"}
+              onClick={() => m !== escolhido && useRastreioStore.getState().escolherMotor(m)}
+            >
+              {estado === "ausente" && <Download size={11} aria-hidden />}
+              {rotulo}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** Marcações do perito (D12): ícone de mão + número (o mesmo do "marcações do perito" do PDF). */
+function MarcadasAMao({ r }: { r: Rastreio }) {
+  const n = marcadasAMao(r);
+  return (
+    <div
+      data-marcadas-a-mao={n}
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 8,
+        padding: "4px 8px",
+        borderRadius: "var(--radius-sm)",
+        background: "var(--sicro-surface-2)",
+        border: "1px solid var(--sicro-border)",
+      }}
+    >
+      <Hand size={15} className={styles.dim} aria-hidden />
+      <b data-dado="" style={{ fontFamily: "var(--font-mono)", fontSize: 14, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>
+        {n}
+      </b>
+    </div>
+  );
+}
+
 export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }: PainelRastreioProps) {
   const doc = useEdicaoStore((s) => s.doc);
   const ws = useEdicaoStore((s) => s.ws);
@@ -91,13 +163,17 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
   const [trazendo, setTrazendo] = useState(false);
   /** Mídias sem trilha na análise ("Da análise" desliga depois de perguntar). */
   const [semTrilha, setSemTrilha] = useState<string | null>(null);
+  /** Mídia com trilhas novas do "Rastrear pessoas" ainda não abertas: "Da análise" em destaque. */
+  const [novas, setNovas] = useState<string | null>(null);
+  const pessoasAqui = usePessoasNaEdicao((s) => !!s.tarefa);
 
   const x = doc ? alvoDoEfeito(doc, efeito.id, clipe.id, tabela) : null;
   const r: Rastreio | null = x?.rastreio ?? null;
   const mm = x ? marcasDoAlvo(x) : null;
   if (!RASTREIO_PRONTO || !x || !r || !doc || r.id !== rastreio) return null;
 
-  const sha = acharMidia(doc, x.clipe.midia)?.sha256 ?? null;
+  const midiaRef = acharMidia(doc, x.clipe.midia);
+  const sha = midiaRef?.sha256 ?? null;
   const minha = corrida?.rastreio === r.id;
   const livre = !soLeitura && !parada && !corrida && !ocupado;
   const frente = pedidoDe(x, "frente", "seguir", paradas);
@@ -129,6 +205,7 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
   const daAnalise = (ev: MouseEvent<HTMLButtonElement>) => {
     if (!ws || !sha) return;
     const alvo = ev.currentTarget;
+    setNovas(null);
     setOcupado(true);
     void commands
       .pessoasListar(ws, sha)
@@ -151,10 +228,29 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
       })
       .finally(() => setOcupado(false));
   };
+  /** "Rastrear pessoas" acabou: a lista da análise de novo (vazia desliga o "Da análise"; com trilhas, destaque). */
+  const depoisDePessoas = () => {
+    if (!ws || !sha) return;
+    const m = sha;
+    setSemTrilha(null);
+    void commands
+      .pessoasListar(ws, m)
+      .then((e) => {
+        if (e.pessoas.length === 0) setSemTrilha(m);
+        else setNovas(m);
+      })
+      .catch(() => {});
+  };
 
   return (
     <div className={styles.som} data-rastreio={r.id}>
       {menu.element}
+      {PESSOAS_NA_EDICAO_PRONTO && (
+        <>
+          <EscolhaDoMotor desligado={!!corrida} />
+          <MarcadasAMao r={r} />
+        </>
+      )}
       <div className={styles.barra}>
         {minha ? (
           <>
@@ -235,7 +331,8 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
         </Mini>
       </div>
       <div className={styles.barra}>
-        <Mini disabled={!livre || !sha || semTrilha === sha} onClick={daAnalise} data-acao="da-analise">
+        {PESSOAS_NA_EDICAO_PRONTO && ws && midiaRef && <RastrearPessoas ws={ws} midia={midiaRef} aoTerminar={depoisDePessoas} />}
+        <Mini disabled={!livre || !sha || semTrilha === sha || pessoasAqui} ativo={!!sha && novas === sha} onClick={daAnalise} data-acao="da-analise">
           <Users size={12} /> Da análise
         </Mini>
         {velho && r.origem.tipo === "pessoas" && sha && (
