@@ -273,16 +273,20 @@ fn numero(v: &Value) -> Option<f64> {
     v.as_f64().or_else(|| v.as_str().and_then(|s| s.parse().ok())).filter(|x: &f64| x.is_finite())
 }
 
-fn ffprobe_json(cap: &Capacidades, t: &Trabalho, nome: &str, args: Vec<String>) -> Result<Value> {
+/// `parar` mata a sonda: num arquivo de rede lento ela leva segundos antes da cópia começar.
+fn ffprobe_json(cap: &Capacidades, t: &Trabalho, nome: &str, args: Vec<String>, parar: &AtomicBool) -> Result<Value> {
     let cmd = t.comando(nome, &cap.ffprobe, args);
-    let (fim, out) = exec::rodar_com_saida(&cmd, &AtomicBool::new(false))?;
+    let (fim, out) = exec::rodar_com_saida(&cmd, parar)?;
+    if fim.cancelado {
+        return Err(cancelado());
+    }
     exec::exigir_sucesso(&cmd, &fim)?;
     Ok(serde_json::from_slice(&out)?)
 }
 
 /// `format.start_time` e `format.duration` (s); None no que o contêiner não traz.
-fn inicio_e_duracao(cap: &Capacidades, t: &Trabalho, video: &Path) -> Result<(Option<f64>, Option<f64>)> {
-    let j = ffprobe_json(cap, t, "inicio", textos(&["-v", "error", "-show_entries", "format=start_time,duration", "-of", "json", &video.to_string_lossy()]))?;
+fn inicio_e_duracao(cap: &Capacidades, t: &Trabalho, video: &Path, parar: &AtomicBool) -> Result<(Option<f64>, Option<f64>)> {
+    let j = ffprobe_json(cap, t, "inicio", textos(&["-v", "error", "-show_entries", "format=start_time,duration", "-of", "json", &video.to_string_lossy()]), parar)?;
     Ok((numero(&j["format"]["start_time"]), numero(&j["format"]["duration"]).filter(|d| *d > 0.0)))
 }
 
@@ -292,7 +296,7 @@ const TAXA_PADRAO: Racional = Racional { num: 25, den: 1 };
 /// Taxa do fluxo cru pela duração que o analisador dá ao primeiro pacote com `-framerate` posto. Medida com duas taxas
 /// postas: a temporização do SPS vence o `-framerate`; sem ela, a duração segue o que foi posto (25 ≠ 7) e a taxa é
 /// suposta (a padrão, 25). Fora de 1 a 240 qps: 25, suposta. Volta (taxa, suposta).
-fn taxa_do_fluxo(cap: &Capacidades, t: &Trabalho, video: &Path, f: Formato) -> Result<(Racional, bool)> {
+fn taxa_do_fluxo(cap: &Capacidades, t: &Trabalho, video: &Path, f: Formato, parar: &AtomicBool) -> Result<(Racional, bool)> {
     let demuxer = f.demuxer().unwrap_or("h264");
     let medir = |posta: &str| -> Result<Option<Racional>> {
         let j = ffprobe_json(
@@ -303,6 +307,7 @@ fn taxa_do_fluxo(cap: &Capacidades, t: &Trabalho, video: &Path, f: Formato) -> R
                 "-v", "error", "-framerate", posta, "-f", demuxer, "-select_streams", "v:0", "-show_entries", "stream=time_base:packet=duration",
                 "-read_intervals", "%+#2", "-of", "json", &video.to_string_lossy(),
             ]),
+            parar,
         )?;
         let tb = j["streams"][0]["time_base"].as_str().and_then(fracao);
         let dur = j["packets"].as_array().and_then(|p| p.iter().find_map(|x| numero(&x["duration"]))).filter(|d| *d >= 1.0).map(|d| d as i64);
@@ -626,20 +631,20 @@ fn erro_de_leitura() -> SicroError {
 }
 
 /// Tem fluxo de áudio? `entrada` leva o `-f` do fluxo cru.
-fn tem_audio(cap: &Capacidades, t: &Trabalho, video: &Path, entrada: &[String]) -> Result<bool> {
+fn tem_audio(cap: &Capacidades, t: &Trabalho, video: &Path, entrada: &[String], parar: &AtomicBool) -> Result<bool> {
     let mut a = textos(&["-v", "error"]);
     if let Some(i) = entrada.iter().position(|x| x == "-f") {
         a.extend(entrada.iter().skip(i).take(2).cloned());
     }
     a.extend(textos(&["-select_streams", "a", "-show_entries", "stream=index", "-of", "json", &video.to_string_lossy()]));
-    let j = ffprobe_json(cap, t, "audio", a)?;
+    let j = ffprobe_json(cap, t, "audio", a, parar)?;
     Ok(j["streams"].as_array().is_some_and(|s| !s.is_empty()))
 }
 
 /// Lista `framemd5` decodificando em uma thread (o decodificador com várias threads entrega outros quadros em fluxo
 /// danificado: LVF truncado), pts sem arredondar (`-enc_time_base demux`), `-copyts`. Áudio que não decodifica: só o vídeo.
 pub fn lista_framemd5(cap: &Capacidades, video: &Path, entrada: &[String], cancelar: &AtomicBool) -> Result<Lista> {
-    let audio = tem_audio(cap, &Trabalho::nova()?, video, entrada)?;
+    let audio = tem_audio(cap, &Trabalho::nova()?, video, entrada, cancelar)?;
     lista(cap, video, entrada, audio, cancelar, None)
 }
 
@@ -836,12 +841,12 @@ fn copiar_andando(cap: &Capacidades, origem: &Path, formato: Formato, destino: &
     let cancelar = &a.parar;
     let t = Trabalho::nova()?;
     let (taxa, taxa_suposta) = match formato.cru() {
-        true => taxa_do_fluxo(cap, &t, origem, formato).map(|(r, s)| (Some(r), s))?,
+        true => taxa_do_fluxo(cap, &t, origem, formato, cancelar).map(|(r, s)| (Some(r), s))?,
         false => (None, false),
     };
     let ent = entrada(formato, taxa);
-    let (inicio, duracao) = if formato.cru() { (None, None) } else { inicio_e_duracao(cap, &t, origem)? };
-    let audio = tem_audio(cap, &t, origem, &ent)?;
+    let (inicio, duracao) = if formato.cru() { (None, None) } else { inicio_e_duracao(cap, &t, origem, cancelar)? };
+    let audio = tem_audio(cap, &t, origem, &ent, cancelar)?;
     let tamanho = std::fs::metadata(origem).map(|m| m.len()).unwrap_or(0).max(1);
     // AVI sem índice com som: o `+genpts` põe o vídeo um quadro depois do som e a receita nunca prova
     let modos = match (formato, audio) {
@@ -908,10 +913,10 @@ fn copiar_andando(cap: &Capacidades, origem: &Path, formato: Formato, destino: &
         }
         // denominador da prova: o tempo gravado (sem ele, a duração que o MKV declara)
         let gravado = (gravado_us > 0).then(|| gravado_us as f64 / 1e6);
-        a.duracao.por(gravado.or_else(|| inicio_e_duracao(cap, &t, destino).ok().and_then(|x| x.1)).unwrap_or(0.0));
+        a.duracao.por(gravado.or_else(|| inicio_e_duracao(cap, &t, destino, cancelar).ok().and_then(|x| x.1)).unwrap_or(0.0));
         a.prova.store(true, Ordering::SeqCst);
         // cópia que nem se lê (IFV sem `-copyinkf`: 0 pacotes de vídeo, código 0) é cópia divergente
-        let lista = match tem_audio(cap, &t, destino, &[]).and_then(|au| lista(cap, destino, &[], au, cancelar, Some(&a.lida))) {
+        let lista = match tem_audio(cap, &t, destino, &[], cancelar).and_then(|au| lista(cap, destino, &[], au, cancelar, Some(&a.lida))) {
             Ok(l) => Some(l),
             Err(e) if cancelar.load(Ordering::Relaxed) => return Err(e),
             Err(_) => None,
@@ -1582,7 +1587,7 @@ mod testes {
     fn conteiner(cap: &Capacidades, video: &Path) -> (String, String) {
         let t = Trabalho::nova().unwrap();
         let a = textos(&["-v", "error", "-select_streams", "v:0", "-show_entries", "format=format_name:stream=codec_name", "-of", "json", &video.to_string_lossy()]);
-        let j = ffprobe_json(cap, &t, "c", a).unwrap();
+        let j = ffprobe_json(cap, &t, "c", a, &AtomicBool::new(false)).unwrap();
         (j["format"]["format_name"].as_str().unwrap_or("").into(), j["streams"][0]["codec_name"].as_str().unwrap_or("").into())
     }
 
@@ -2086,6 +2091,41 @@ mod testes {
         }
     }
 
+    /// As sondas antes da cópia (taxa do fluxo cru; início, duração e som do resto) param no Cancelar: num arquivo de
+    /// rede lento elas levam segundos, e antes o pedido só valia depois delas. Aqui o ffprobe dorme 20 s.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cancelar_para_as_sondas_antes_da_copia() {
+        use std::os::unix::fs::PermissionsExt;
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("dvr-sondas");
+        let lento = d.join("ffprobe-lento");
+        std::fs::write(&lento, format!("#!/bin/bash\nexec -a '{}' sleep 20\n", lento.display())).unwrap();
+        std::fs::set_permissions(&lento, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let lenta = Capacidades { ffprobe: lento.clone(), ..(*cap).clone() };
+        let fontes = sinteticos(&cap, &d);
+        for formato in [Formato::H264Cru, Formato::AviSemIndice] {
+            let origem = &fontes.iter().find(|x| x.1 == formato).unwrap().0;
+            let cancelar = AtomicBool::new(false);
+            let destino = d.join(format!("{formato:?}.mkv"));
+            let (r, espera) = std::thread::scope(|s| {
+                let pediu = s.spawn(|| {
+                    std::thread::sleep(Duration::from_millis(300));
+                    cancelar.store(true, Ordering::SeqCst);
+                    std::time::Instant::now()
+                });
+                let r = copiar_com(&lenta, origem, formato, &destino, &cancelar, &|_, _| {});
+                (r, pediu.join().unwrap().elapsed().as_secs_f64())
+            });
+            let e = r.map(|_| ()).unwrap_err().to_string();
+            eprintln!("cancelar na sonda ({formato:?}): {espera:.3} s: {e}");
+            assert!(e.contains("cancelado"), "{formato:?}: {e}");
+            assert!(espera < CANCELAR_MAX_S, "{formato:?}: {espera} s do pedido à volta");
+            assert_eq!(filhos_com(&lento), Vec::<String>::new(), "{formato:?}: sonda viva");
+            assert!(!destino.exists(), "{formato:?}: sobrou a cópia");
+        }
+    }
+
     /// A importação: a cópia sai do arquivo escolhido antes de o original entrar no caso (nada no banco até lá), com
     /// avanço real (Cópia, depois Prova, sem voltar, com passos no meio); registrado o original, a cópia entra derivada
     /// dele e o comando gravado lê o original do caso. Reimportar o mesmo arquivo para logo e devolve a mesma cópia;
@@ -2487,8 +2527,8 @@ mod testes {
         ffmpeg(&cap, &d, &a);
         let t = Trabalho::nova().unwrap();
         let quinze = Racional { num: 15, den: 1 };
-        assert_eq!(taxa_do_fluxo(&cap, &t, &d.join("sem.h265"), Formato::HevcCru).unwrap(), (TAXA_PADRAO, true), "{}", cap.versao);
-        assert_eq!(taxa_do_fluxo(&cap, &t, &d.join("com.264"), Formato::H264Cru).unwrap(), (quinze, false), "{}", cap.versao);
+        assert_eq!(taxa_do_fluxo(&cap, &t, &d.join("sem.h265"), Formato::HevcCru, &AtomicBool::new(false)).unwrap(), (TAXA_PADRAO, true), "{}", cap.versao);
+        assert_eq!(taxa_do_fluxo(&cap, &t, &d.join("com.264"), Formato::H264Cru, &AtomicBool::new(false)).unwrap(), (quinze, false), "{}", cap.versao);
         for (nome, f, taxa, suposta) in [("sem.h265", Formato::HevcCru, TAXA_PADRAO, true), ("com.264", Formato::H264Cru, quinze, false)] {
             let origem = d.join(nome);
             let destino = d.join(format!("{nome}.mkv"));
