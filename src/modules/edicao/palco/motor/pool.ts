@@ -1,12 +1,11 @@
 /**
  * Elementos `<video>` da prévia viva (§7.2): `tamanhoDoPool` elementos criados uma vez, `preload="auto"`, dentro do
- * palco com 2×2 px e opacidade ≈ 0, ligados ao Web Audio antes do `src`; chave = arquivo (trocar o `src` custa
- * 210 a 410 ms). O seguinte é preparado quando o segmento atual COMEÇA (§7.3). O som de trilha de áudio usa o mesmo
+ * palco com 2×2 px e opacidade ≈ 0; o som sai por eles mesmos (volume posto pelo motor, `audio.ts`); chave = arquivo
+ * (trocar o `src` custa 210 a 410 ms). O seguinte é preparado quando o segmento atual COMEÇA (§7.3). O som de trilha de áudio usa o mesmo
  * elemento (um `<video>` toca arquivo só de som).
  */
 
 import type { Seg } from "@domain/edicao";
-import type { Barra, MisturaAudio } from "./audio";
 import { porNoTempo, tempoDoElemento } from "./elemento";
 
 export const POOL_MIN = 4;
@@ -22,9 +21,7 @@ export interface ElementoPool {
   el: HTMLVideoElement;
   /** Arquivo que ele tem (null = livre). */
   chave: string | null;
-  // CONTRATO: acréscimos (P3.3)
-  /** Ganho do elemento na mistura (null = sem Web Audio). */
-  ganho: GainNode | null;
+  // CONTRATO: acréscimos (P3.3; `ganho` saiu na rodada 2: o volume é do elemento)
   /** Endereço que ele toca. */
   src: string | null;
   /** Em uso pelo plano (não é trocado). */
@@ -75,7 +72,8 @@ function aposDados(el: HTMLVideoElement, ms = 5000): Promise<void> {
   });
 }
 
-export function criarPool(op: { tamanho: number; host: HTMLElement; mistura: MisturaAudio | null; barra?: Barra; criar?: () => HTMLVideoElement }): Pool {
+// CONTRATO: `mistura` e `barra` saíram (rodada 2): o som não passa pelo Web Audio.
+export function criarPool(op: { tamanho: number; host: HTMLElement; criar?: () => HTMLVideoElement }): Pool {
   let relogio = 0;
   const lista: ElementoPool[] = [];
   for (let i = 0; i < Math.min(Math.max(op.tamanho, 1), POOL_MAX); i++) {
@@ -86,11 +84,8 @@ export function criarPool(op: { tamanho: number; host: HTMLElement; mistura: Mis
     el.setAttribute("data-pool", String(i));
     // dentro do palco, quase invisível: o WebKit pode pausar vídeo mudo fora da área visível
     Object.assign(el.style, { position: "absolute", left: "0", top: "0", width: "2px", height: "2px", opacity: "0.01", pointerEvents: "none" });
-    // ligado ao Web Audio ANTES do src (no WebKitGTK o ligado depois fica mudo e parado)
-    const ganho = op.mistura?.ligar(el, op.barra ?? "original") ?? null;
-    if (!op.mistura) el.muted = true;
     op.host.appendChild(el);
-    lista.push({ el, chave: null, ganho, src: null, preso: false, usado: 0 });
+    lista.push({ el, chave: null, src: null, preso: false, usado: 0 });
   }
   const achar = (chave: string) => lista.find((e) => e.chave === chave) ?? null;
   const pedir = (chave: string, src: string): ElementoPool => {
@@ -131,7 +126,8 @@ export function criarPool(op: { tamanho: number; host: HTMLElement; mistura: Mis
       if (!e) return;
       e.preso = false;
       if (!e.el.paused) e.el.pause();
-      if (e.ganho) op.mistura?.ganho(e.ganho, 0);
+      // parado, volume 1: o servidor de som guarda o último valor do aplicativo (`audio.ts`)
+      e.el.volume = 1;
     },
     destruir: () => {
       for (const e of lista) {

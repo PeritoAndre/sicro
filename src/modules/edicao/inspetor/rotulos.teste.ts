@@ -46,6 +46,8 @@ export const ROTULOS = new Set<string>([
   "Sugestões", "Trechos fracos", "Confirmar", "Descartar",
   // Fase 4 (contratos-fase4.md (h)), já aqui: o pacote que liga a casca não edita este arquivo
   "Programa", "Começar no cursor", "Terminar no cursor", "Selecionar", "Lâmina", "Ímã", "Ver", "Travar", "V1",
+  // P3.3: pontas do transporte no modo Programa (só `title`/`aria-label`; no Clipe seguem "Início do clipe"/"Fim do clipe")
+  "Início", "Fim",
   "Texto livre", "Nenhum", "Faixa", "Caixa", "Sombra", "Aparecer", "Deslizar", "Lado", "Cima", "Baixo", "Esquerda", "Direita", "Giro",
   "Chave no cursor", "Tirar chave", "Linear", "Suave", "Degrau", "Escala", "Opacidade", "Volume",
   "Acompanhar rastreio", "Cena inteira", "Aproximar", "Segurar", "Afastar",

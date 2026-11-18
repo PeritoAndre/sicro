@@ -33,10 +33,6 @@ const PINTURAS = 2;
 const SONS = 3;
 /** Nível do apito do "Silenciar trecho" (o `TOM` do `motor/audio.rs`). */
 const APITO = 0.125;
-/** Medido no WebKitGTK 2.52 (bancada do P3.3): com o elemento ligado ao Web Audio, o `currentTime` tocando corre
- *  ~1 s à frente da imagem (a fila de som já entregue), sem mudar parado. O primeiro avanço depois do `play()` (ou de
- *  uma busca tocando) acima disto é esse desvio, e sai do tempo do elemento até ele parar. */
-export const DESVIO_DO_SOM_MIN_S = 0.15;
 
 /** O que o motor pede de fora (o palco liga aos recursos; a bancada, a arquivos). */
 export interface FontesMotor {
@@ -222,65 +218,30 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
     return x;
   }
 
-  /** Desvio do tempo do elemento tocando (WebKitGTK com Web Audio): medido no primeiro avanço depois de tocar. */
-  const calibra = new WeakMap<HTMLMediaElement, { p0: number; desvio: number; medindo: boolean }>();
   function tocarEl(el: HTMLMediaElement) {
     if (el.ended) return;
     // tocando, o quadro da última busca deixa de ser o da imagem: sem isso, pedir de novo esse quadro (repetir o
     // programa) não buscava, e o elemento tocava de onde tinha parado (o relógio pulava o clipe)
     const b = buscas.get(el as HTMLVideoElement);
     if (b) b.mostrado = null;
-    calibra.set(el, { p0: tempoDoElemento(el), desvio: 0, medindo: true });
+    recemTocados.add(el);
     void el.play().catch(() => {});
   }
-  function buscarTocando(el: HTMLMediaElement, t: number) {
-    porNoTempo(el, t);
-    calibra.set(el, { p0: t, desvio: 0, medindo: true });
-  }
-  /** Tempo do elemento (do arquivo) sem o desvio do som. */
-  function tempoReal(el: HTMLMediaElement): number {
-    const bruto = tempoDoElemento(el);
-    const c = calibra.get(el);
-    if (!c || el.paused) return bruto;
-    if (c.medindo) {
-      if (Math.abs(bruto - c.p0) < 1e-6 || el.seeking) return c.p0;
-      c.medindo = false;
-      const d = bruto - c.p0;
-      c.desvio = d > DESVIO_DO_SOM_MIN_S ? d : 0;
-    }
-    return bruto - c.desvio;
-  }
-
-  /** Medido no Chromium (bancada do P3.3): a imagem tocando fica à frente do `currentTime` do elemento ligado ao Web
-   *  Audio pela latência de saída do som (1 a 2 quadros); o relógio soma essa latência. */
-  const latencia = () => {
-    const c = mistura?.contexto as (AudioContext & { outputLatency?: number }) | undefined;
-    const v = (c?.outputLatency ?? 0) + (c?.baseLatency ?? 0);
-    return Number.isFinite(v) && v > 0 && v < 0.5 ? v : 0;
+  /** Elementos que acabaram de tocar: o volume deles vai ao fluxo mesmo igual (o fluxo novo herda o guardado). */
+  const recemTocados = new Set<HTMLMediaElement>();
+  const volume = (el: HTMLMediaElement, v: number) => {
+    if (!mistura) return;
+    mistura.volume(el, v, recemTocados.delete(el));
   };
+  const buscarTocando = (el: HTMLMediaElement, t: number) => porNoTempo(el, t);
+  /** O som sai pelo próprio elemento (`audio.ts`): o `currentTime` dele é o da imagem e do som. */
+  const tempoReal = (el: HTMLMediaElement): number => tempoDoElemento(el);
 
-  /** O elemento manda no relógio. Com o desvio do som, o tempo dele anda aos pulos (um bloco de som por vez) e para
-   *  no fim do arquivo um desvio antes da imagem: entre um avanço e outro, o relógio de parede completa, até o tempo
-   *  bruto (que nunca fica para trás da imagem). */
-  const mestreDoElemento = (el: HTMLVideoElement, rel: RelogioMidia): Mestre => {
-    let ultimo = NaN;
-    let desde = 0;
-    return {
-      tempo: () => {
-        const bruto = tempoDoElemento(el);
-        const t = tempoReal(el);
-        const c = calibra.get(el);
-        if (bruto !== ultimo) {
-          ultimo = bruto;
-          desde = agora();
-          return rel.paraFonte(c && c.desvio > 0 ? t : t + latencia() * el.playbackRate);
-        }
-        if (!c || c.desvio <= 0 || el.paused) return rel.paraFonte(t + latencia() * el.playbackRate);
-        return rel.paraFonte(Math.min(bruto, t + ((agora() - desde) / 1000) * el.playbackRate));
-      },
-      pronto: () => !el.seeking && el.readyState >= 3 && !el.paused,
-    };
-  };
+  /** O elemento manda no relógio. */
+  const mestreDoElemento = (el: HTMLVideoElement, rel: RelogioMidia): Mestre => ({
+    tempo: () => rel.paraFonte(tempoReal(el)),
+    pronto: () => !el.seeking && el.readyState >= 3 && !el.paused,
+  });
 
   /** O segmento dono do slot manda no relógio (o elemento dele, ou o relógio de parede). */
   function trocarMestre(s: SegmentoPrevia | null) {
@@ -369,35 +330,20 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
     return a?.onde === "principal" ? a.clipe.transicao_entrada : null;
   }
 
+  /** Ganho da barra do original (abaixar sob a narração), andado a cada volta pela constante do ataque ou da soltura. */
+  let barraOriginal = 1;
+  let ultimoSom = -1;
+
+  /** Volume de cada elemento (o som sai por ele): o do item, a transição em potência constante, o escurecer e o
+   *  abaixar; o apito do "Silenciar trecho" à parte. */
   function atualizarSom(estado: EstadoPrevia) {
     if (!mistura) return;
     const q = estado.q;
     const tocando = tocandoAgora() && relogio.estado() !== "guiado";
-    let apito = false;
-    const vivos = new Set<GainNode>();
-    // o som do trecho mora no elemento do vídeo
-    for (const c of estado.camadas) {
-      const s = c.segmento;
-      if (!toca(s)) continue;
-      const m = midiaDe(s);
-      const e = m && pool ? pool.achar(chaveDe(s, m.src)) : null;
-      if (!e?.ganho) continue;
-      const som = plano.sons.find((x) => x.id === s.clipe && x.barra === "original");
-      let g = som && tocando ? ganhoDoSom(som, q, c.t) : 0;
-      if (som && tocando) for (const x of som.silencios) if (x.tom && c.t >= x.de && c.t < x.ate) apito = true;
-      // transição: potência constante ("acompanhar") ou troca no meio ("cortar")
-      if (estado.transicao) {
-        const p = estado.transicao.progresso;
-        const entra = estado.transicao.fundo === "sai" || (estado.transicao.fundo === null && c === estado.camadas[1]);
-        const cortar = transicaoDe(estado.transicao.fundo === "entra" ? s.clipe : (estado.camadas[1]?.segmento.clipe ?? s.clipe))?.audio === "cortar";
-        g *= cortar ? ((entra ? p >= 0.5 : p < 0.5) ? 1 : 0) : entra ? Math.sin((p * Math.PI) / 2) : Math.cos((p * Math.PI) / 2);
-      }
-      g *= c.luz;
-      mistura.ganho(e.ganho, g);
-      vivos.add(e.ganho);
-    }
-    for (const e of pool?.elementos ?? []) if (e.ganho && !vivos.has(e.ganho)) mistura.ganho(e.ganho, 0);
-    // trilhas de áudio
+    const t = agora();
+    const dt = ultimoSom < 0 ? 0 : Math.max(0, (t - ultimoSom) / 1000);
+    ultimoSom = t;
+    // trilhas de áudio (e se alguma abaixa o original)
     let abaixa = false;
     const f = fps();
     const ativos = new Set<string>();
@@ -414,17 +360,46 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
       const alvo = s.inicio_s + Math.max(0, ((q - s.de_q) * f.den) / f.num);
       if (dentro && tocando) {
         if (e.el.paused) tocarEl(e.el);
-        else if (!e.el.seeking && !calibra.get(e.el)?.medindo && Math.abs(tempoReal(e.el) - alvo) > DESVIO_MAX_S) buscarTocando(e.el, alvo);
+        else if (!e.el.seeking && Math.abs(tempoReal(e.el) - alvo) > DESVIO_MAX_S) buscarTocando(e.el, alvo);
         if (s.abaixa) abaixa = true;
       } else {
         if (!e.el.paused) e.el.pause();
         if (Math.abs(tempoDoElemento(e.el) - alvo) > 1e-3 && !e.el.seeking && e.el.readyState >= 1) porNoTempo(e.el, alvo);
       }
-      if (e.ganho) mistura.ganho(e.ganho, dentro && tocando ? ganhoDoSom(s, q, alvo) : 0);
+      if (dentro && tocando) volume(e.el, ganhoDoSom(s, q, alvo));
+      else mistura.repouso(e.el);
     }
     for (const e of poolSom?.elementos ?? []) if (e.chave && !ativos.has(e.chave)) poolSom!.soltar(e.chave);
     const ab = doc?.mixagem.abaixar;
-    if (ab) mistura.barra("original", abaixa ? Math.pow(10, ab.db / 20) : 1, (abaixa ? ab.ataque_s : ab.soltura_s) / 3);
+    const alvoBarra = ab && abaixa ? Math.pow(10, ab.db / 20) : 1;
+    const tau = ab ? Math.max((abaixa ? ab.ataque_s : ab.soltura_s) / 3, 1e-3) : 1e-3;
+    barraOriginal = tocando ? barraOriginal + (alvoBarra - barraOriginal) * (1 - Math.exp(-dt / tau)) : alvoBarra;
+    // o som do trecho mora no elemento do vídeo
+    let apito = false;
+    const vivos = new Set<HTMLMediaElement>();
+    for (const c of estado.camadas) {
+      const s = c.segmento;
+      if (!toca(s)) continue;
+      const m = midiaDe(s);
+      const e = m && pool ? pool.achar(chaveDe(s, m.src)) : null;
+      if (!e) continue;
+      const som = plano.sons.find((x) => x.id === s.clipe && x.barra === "original");
+      let g = som && tocando ? ganhoDoSom(som, q, c.t) : 0;
+      if (som && tocando) for (const x of som.silencios) if (x.tom && c.t >= x.de && c.t < x.ate) apito = true;
+      // transição: potência constante ("acompanhar") ou troca no meio ("cortar")
+      if (estado.transicao) {
+        const p = estado.transicao.progresso;
+        const entra = estado.transicao.fundo === "sai" || (estado.transicao.fundo === null && c === estado.camadas[1]);
+        const cortar = transicaoDe(estado.transicao.fundo === "entra" ? s.clipe : (estado.camadas[1]?.segmento.clipe ?? s.clipe))?.audio === "cortar";
+        g *= cortar ? ((entra ? p >= 0.5 : p < 0.5) ? 1 : 0) : entra ? Math.sin((p * Math.PI) / 2) : Math.cos((p * Math.PI) / 2);
+      }
+      // parado (ainda não tocou, ou o relógio parou): o silêncio é a pausa e o volume fica em repouso
+      if (e.el.paused) mistura.repouso(e.el);
+      else volume(e.el, g * c.luz * barraOriginal);
+      vivos.add(e.el);
+    }
+    // fora das camadas: tocando ainda (vai parar), calado; parado, em repouso
+    for (const e of pool?.elementos ?? []) if (!vivos.has(e.el)) (e.el.paused ? mistura.repouso(e.el) : volume(e.el, 0));
     mistura.apito(apito ? APITO : 0);
   }
 
@@ -539,7 +514,7 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
               if (el.playbackRate !== r) el.playbackRate = r;
               tocarEl(el);
             }
-          } else if (s !== mestreDe && !el.paused && !el.seeking && !calibra.get(el)?.medindo) {
+          } else if (s !== mestreDe && !el.paused && !el.seeking) {
             // seguidor (o que entra na transição): corrige por busca acima de 100 ms
             if (Math.abs(x.rel.paraFonte(tempoReal(el)) - c.t) > DESVIO_MAX_S * Math.max(1, fatorDe(s))) buscarTocando(el, x.rel.alvo(c.indice ?? 0));
           }
@@ -596,8 +571,10 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
   };
 
   function pararElementos() {
-    for (const e of pool?.elementos ?? []) if (!e.el.paused) e.el.pause();
-    for (const e of poolSom?.elementos ?? []) if (!e.el.paused) e.el.pause();
+    for (const e of [...(pool?.elementos ?? []), ...(poolSom?.elementos ?? [])]) {
+      if (!e.el.paused) e.el.pause();
+      mistura?.repouso(e.el);
+    }
   }
 
   return {
@@ -610,8 +587,8 @@ export function criarMotor(op?: OpcoesMotor): MotorPrevia {
     ligar: (cv, host) => {
       canvas = cv;
       mistura = op?.mistura !== undefined ? op.mistura : criarMistura();
-      pool = criarPool({ tamanho: tamanhoDoPool(1), host, mistura, barra: "original" });
-      poolSom = criarPool({ tamanho: SONS, host, mistura, barra: "narracao" });
+      pool = criarPool({ tamanho: tamanhoDoPool(1), host });
+      poolSom = criarPool({ tamanho: SONS, host });
       mistura?.mestre(1);
       sujo = true;
       agendar();

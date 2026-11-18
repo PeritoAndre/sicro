@@ -13,6 +13,7 @@ import { resolver, tempoDoQuadro, type ContextoTempo } from "../../modelo/tempo"
 import { planoDe } from "./plano";
 import { relogioMidia } from "./relogioMidia";
 import { criarMotor, type FontesMotor } from "./motor";
+import { criarMistura, type MisturaAudio } from "./audio";
 import { planoDoDoc } from "./cursor";
 import { useRecursos } from "../recursos";
 
@@ -215,5 +216,93 @@ describe("motor da prévia viva", () => {
     expect(quadros.length).toBeGreaterThanOrEqual(8);
     expect(quadros.every((j, i) => i === 0 || j < quadros[i - 1]!)).toBe(true);
     expect(Math.min(...quadros)).toBeLessThan(q + 8);
+  });
+
+  it("som pelo próprio elemento (rodada 2): volume do item, potência constante no fundir e nada passa pelo Web Audio", async () => {
+    // Web Audio vigiado: nenhum elemento pode virar MediaElementSource (no WebKitGTK o som chegava 90 a 160 ms atrasado)
+    let fontesDeElemento = 0;
+    class Ctx {
+      state = "running";
+      destination = {};
+      createMediaElementSource() {
+        fontesDeElemento++;
+        return { connect() {} };
+      }
+      createGain() {
+        return { gain: { value: 0, cancelScheduledValues() {}, setTargetAtTime() {} }, connect() {} };
+      }
+      createOscillator() {
+        return { frequency: { value: 0 }, connect() {}, start() {} };
+      }
+      resume = async () => {};
+      close = async () => {};
+    }
+    vi.stubGlobal("AudioContext", Ctx);
+    const doc = projeto();
+    doc.saida.audio = true;
+    doc.mixagem.volume_original = 0.6;
+    (doc.midias[0] as MidiaRef).tem_audio = true;
+    doc.midias.push({ ...doc.midias[0]!, id: "n", sha256: "b".repeat(64), relativo: "n.mp4" } as MidiaRef);
+    const b = { ...novoTrecho("n", tempoDoQuadro(TAB, 0), tempoDoQuadro(TAB, 90)), id: "b" } as ClipeTrecho;
+    b.transicao_entrada = { tipo: "fundir", duracao_s: 1, audio: "acompanhar" };
+    doc.principal = [{ ...novoTrecho("m", tempoDoQuadro(TAB, 0), tempoDoQuadro(TAB, 60)), id: "a" } as ClipeTrecho, b];
+    const plano = planoDe(doc, resolver(doc, CTX), CTX);
+    const rel = relogioMidia(PREVIA, TAB);
+    const fontes: FontesMotor = {
+      midia: (s) => ({ src: `file:///${s.fonte!.midia}.mp4`, relogio: rel }),
+      som: () => null,
+      pintor: { imagem: () => null, cena: { sprite: () => null, atlas: () => null, midia: () => null }, origem: () => ({ w: 640, h: 360 }), livres: () => [], globais: () => [] },
+    };
+    // a mistura de verdade, com cada volume posto anotado junto do slot do relógio
+    const real = criarMistura();
+    const postos: { el: HTMLMediaElement; v: number; q: number; forcado: boolean; parado: boolean }[] = [];
+    let motorQ = () => 0;
+    const mistura: MisturaAudio = {
+      get contexto() {
+        return real.contexto;
+      },
+      volume: (el, v, forcar) => {
+        real.volume(el, v, forcar);
+        postos.push({ el, v: el.volume, q: motorQ(), forcado: !!forcar, parado: el.paused });
+      },
+      repouso: real.repouso,
+      mestre: real.mestre,
+      apito: real.apito,
+      retomar: real.retomar,
+      fechar: real.fechar,
+    };
+    const motor = criarMotor({ fontes, mistura });
+    motorQ = () => motor.relogio.q();
+    const host = document.createElement("div");
+    motor.ligar(canvasFalso([]), host);
+    for (const v of host.querySelectorAll("video")) tocavel(v);
+    motor.plano(plano, doc);
+    motor.irPara(20);
+    expect(await esperar(() => motor.exato(), 2000)).toBe(true);
+    motor.tocar(1);
+    expect(await esperar(() => motor.relogio.q() >= 75, 6000)).toBe(true);
+    motor.pausar();
+    const doM = [...host.querySelectorAll("video")].find((v) => v.src.endsWith("/m.mp4"))!;
+    const doN = [...host.querySelectorAll("video")].find((v) => v.src.endsWith("/n.mp4"))!;
+    // parado, todo elemento volta a 1 (o PipeWire guarda o último volume do aplicativo para os fluxos novos)
+    expect([...host.querySelectorAll("video")].map((v) => v.volume)).toEqual(Array(host.querySelectorAll("video").length).fill(1));
+    motor.desligar();
+    expect(fontesDeElemento).toBe(0);
+    // o elemento que começa a tocar recebe o volume de novo, mesmo igual (o fluxo novo herda o guardado do aplicativo)
+    for (const el of [doM, doN]) expect(postos.find((x) => x.el === el)?.forcado).toBe(true);
+    // parado, nenhum elemento recebe volume (o silêncio é a pausa; o volume só muda tocando)
+    expect(postos.filter((x) => x.parado).length).toBe(0);
+    // antes da transição: o volume do original (0,6; acima de 1 ficaria em 1, `audio.test.ts`)
+    const antes = postos.filter((x) => x.el === doM && x.q >= 21 && x.q < 30);
+    expect(antes.length).toBeGreaterThan(0);
+    expect(antes.every((x) => Math.abs(x.v - 0.6) < 1e-9)).toBe(true);
+    // no fundir (slots 30..59, d = 30): o que sai em cos, o que entra em sen, × 0,6
+    const naTransicao = postos.filter((x) => x.q >= 31 && x.q < 59 && (x.el === doM || x.el === doN));
+    expect(naTransicao.length).toBeGreaterThan(4);
+    for (const x of naTransicao) {
+      const p = (x.q - 30) / 30;
+      const esperado = 0.6 * (x.el === doN ? Math.sin((p * Math.PI) / 2) : Math.cos((p * Math.PI) / 2));
+      expect(x.v).toBeCloseTo(esperado, 2);
+    }
   });
 });

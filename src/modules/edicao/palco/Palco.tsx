@@ -842,6 +842,12 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
       }
       // dentro do clipe: para no fim dele; fora: até o fim da mídia
       const limite = j0 >= a && j0 < b ? b : nQuadros(tab);
+      // o volume vai ao fluxo de novo: o PipeWire dá ao fluxo novo o último volume guardado do aplicativo
+      const ve = videoRef.current;
+      if (ve) {
+        ve.volume = 0.999;
+        ve.volume = 1;
+      }
       void el.tocar().catch(() => parar());
       const passo = () => {
         if (!tocandoRef.current) return;
