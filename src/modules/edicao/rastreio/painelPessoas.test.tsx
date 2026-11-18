@@ -75,7 +75,7 @@ const PRONTO: Partial<AiSettings> = {
   gpu_dir: "",
 };
 const pessoas = (n: number): PessoasEstado =>
-  ({ run: null, tamanho: null, pessoas: Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, numero: i + 1, nome: "", origem: "auto", estado: "auto" })) }) as unknown as PessoasEstado;
+  ({ run: null, tamanho: null, pessoas: Array.from({ length: n }, (_, i) => ({ id: `p${i + 1}`, numero: i + 1, nome: "", origem: "auto", estado: "auto", primeiro_s: 10 * i, ultimo_s: 10 * i + 7.5 })) }) as unknown as PessoasEstado;
 
 let editor: Tela;
 const painel = () => editor.raiz.querySelector<HTMLElement>('[data-rastreio="r1"]')!;
@@ -234,11 +234,11 @@ describe("Rastrear pessoas no painel", () => {
     await clicar(da);
     await espera(0);
     const menu = editor.raiz.querySelector<HTMLElement>('[role="menu"]')!;
-    expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent?.trim())).toEqual(["#1", "#2"]);
+    expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent?.trim())).toEqual(["#1 0:00–0:07", "#2 0:10–0:17"]);
     expect(acao("da-analise")!.className).not.toContain(styles.miniAtivo);
     // a trilha automática entra sem confirmação (regra da Fase 2)
     cmd.edicaoRastreioDePessoas.mockResolvedValue({ ...r1(), id: "r9", ancoras: [], origem: { tipo: "pessoas", pessoa_id: "p2", estado: "auto", copiado_em: "2026-11-17T10:00:00Z" } });
-    await clicar(botao(menu, "#2"));
+    await clicar(botao(menu, "#2 0:10–0:17"));
     await espera(0);
     expect(cmd.edicaoRastreioDePessoas).toHaveBeenCalledWith(WS, st().aberta!.projetoId, "m", SHA, "p2");
     expect(st().doc!.rastreios.map((r) => [r.id, r.confirmacao])).toEqual([["r9", null]]);

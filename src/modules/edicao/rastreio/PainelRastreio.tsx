@@ -12,6 +12,7 @@
 import { useId, useState, type MouseEvent } from "react";
 import { ChevronsLeft, ChevronsRight, CircleDashed, CircleOff, Download, Eraser, EyeOff, Hand, Loader2, Play, RefreshCw, SkipForward, Spline, Square, TriangleAlert, Users } from "lucide-react";
 import type { ClipePrincipal, ClipeSobreposto, ContextoClipe, Efeito, Id, Rastreio, TabelaQuadros } from "@domain/edicao";
+import type { PessoaView } from "@domain/video_pessoas";
 import { ESTADO_AUSENTE, ESTADO_INCERTO } from "@domain/edicao";
 import { commands } from "@core/commands";
 import { pushToast } from "@components/toast/toastStore";
@@ -47,7 +48,13 @@ import {
 } from "../store/rastreioStore";
 import { PESSOAS_NA_EDICAO_PRONTO, RastrearPessoas, usePessoasNaEdicao } from "./RastrearPessoas";
 import { marcadasAMao } from "./contagem";
+import { textoDaRegua } from "../linha/Regua";
 import styles from "../inspetor/Inspetor.module.css";
+
+/** Item do "Da análise": nome (ou "#n") e o intervalo em que a pessoa aparece, como dado ("#3 0:12–0:41"). */
+export function rotuloDaPessoa(pe: Pick<PessoaView, "nome" | "numero" | "primeiro_s" | "ultimo_s">): string {
+  return `${pe.nome || `#${pe.numero}`} ${textoDaRegua(pe.primeiro_s, false)}–${textoDaRegua(pe.ultimo_s, false)}`;
+}
 
 export interface PainelRastreioProps {
   efeito: Efeito;
@@ -217,7 +224,7 @@ export function PainelRastreio({ efeito, rastreio, clipe, ctx, parada, tabela }:
         abrirMenu(
           alvo,
           e.pessoas.map((pe) => ({
-            label: pe.nome || `#${pe.numero}`,
+            label: rotuloDaPessoa(pe),
             onSelect: () => trazer(pe.id, "Da análise"),
           })),
         );

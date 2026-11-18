@@ -276,15 +276,16 @@ describe("atalhos e Da análise", () => {
   });
 
   it("Da análise: lista as trilhas (rótulo é dado) e aponta o efeito para o rastreio novo", async () => {
-    cmd.pessoasListar.mockResolvedValue({ run: null, tamanho: null, pessoas: [{ id: "p3", numero: 3, nome: "" }, { id: "p7", numero: 7, nome: "Motociclista" }] });
+    cmd.pessoasListar.mockResolvedValue({ run: null, tamanho: null, pessoas: [{ id: "p3", numero: 3, nome: "", primeiro_s: 12.4, ultimo_s: 41.9 }, { id: "p7", numero: 7, nome: "Motociclista", primeiro_s: 0, ultimo_s: 3725 }] });
     const novo: Rastreio = { ...r1(), id: "r9", ancoras: [], origem: { tipo: "pessoas", pessoa_id: "p7", estado: "revisada", copiado_em: "2026-11-15T09:00:00Z" }, denso: ponteiro(SHA_A, A) };
     cmd.edicaoRastreioDePessoas.mockResolvedValue(novo);
     await clicar(acao(painel()!, "da-analise")!);
     await espera(0);
     expect(cmd.pessoasListar).toHaveBeenCalledWith(WS, SHA);
     const menu = editor.raiz.querySelector<HTMLElement>('[role="menu"]')!;
-    expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent?.trim())).toEqual(["#3", "Motociclista"]);
-    await clicar(botao(menu, "Motociclista"));
+    // o intervalo de cada pessoa na mídia é dado do rótulo
+    expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent?.trim())).toEqual(["#3 0:12–0:41", "Motociclista 0:00–1:02:05"]);
+    await clicar(botao(menu, "Motociclista 0:00–1:02:05"));
     await espera(0);
     expect(cmd.edicaoRastreioDePessoas).toHaveBeenCalledWith(WS, st().aberta!.projetoId, "m", SHA, "p7");
     expect(st().doc!.rastreios.map((r) => r.id)).toEqual(["r9"]);
