@@ -875,6 +875,8 @@ export function VistaLinha(p: VistaLinhaProps) {
         const cab = cabecaQ.current;
         const naCabeca = cab !== null && !cabecaFora.current && cab >= it.de_q && cab < it.ate_q && (clipe === null || clipeNoSlot(linha, cab) === clipe);
         if (it.ate_q > it.de_q && !naCabeca) pp.acoes.posicionar(Math.floor(q0), clipe);
+        // no Programa, clicar no clipe (ou numa barra dele) passa o palco ao Clipe no mesmo slot
+        else if (it.ate_q > it.de_q && clipe && cab !== null && useEdicaoStore.getState().cursor.modo === "programa") pp.acoes.posicionar(cab, clipe);
       }
       // barra emendada: só as pontas arrastam (o corpo é de vários efeitos, um por clipe)
       if (travada || it.apagado || it.k === "legenda" || (emendada && alvo === "corpo")) return;
