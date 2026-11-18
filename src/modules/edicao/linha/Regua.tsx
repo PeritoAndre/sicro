@@ -23,28 +23,30 @@ export interface ReguaProps {
   larguraCss?: string;
 }
 
-/** Distância mínima entre dois rótulos (px). */
-const ROTULO_PX = 72;
+/** Distância mínima entre dois rótulos (px): a 14 px/s, uma marca a cada 5 s (maquete). */
+const ROTULO_PX = 60;
+/** Traço menor só com esta folga (maquete: o de 1 s aparece acima de 20 px/s). */
+const MENOR_PX = 20;
 const PASSOS_S = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200];
 
-/** Passo dos traços com rótulo e dos menores, em s: quadros (1, 2, 5, 10) até horas, o menor com rótulo a ≥ 72 px. */
+/** Passo dos traços com rótulo e dos menores, em s: quadros (1, 2, 5, 10) até horas, o menor com rótulo a ≥ 60 px. */
 export function passosDaRegua(pxPorS: number, fps: Racional): { maior: Seg; menor: Seg | null } {
   const quadro = fps.den / fps.num;
   const cands = [...[1, 2, 5, 10].map((n) => n * quadro).filter((s) => s < 1), ...PASSOS_S];
   const maior = cands.find((s) => s * pxPorS >= ROTULO_PX) ?? cands[cands.length - 1]!;
   const div = maior < 1 ? (maior / quadro >= 5 ? 5 : maior / quadro) : maior % 5 === 0 ? 5 : maior % 2 === 0 ? 2 : 4;
   const menor = maior / div;
-  return { maior, menor: menor * pxPorS >= 6 && menor >= quadro - 1e-9 ? menor : null };
+  return { maior, menor: menor * pxPorS > MENOR_PX && menor >= quadro - 1e-9 ? menor : null };
 }
 
 const dois = (n: number) => String(n).padStart(2, "0");
 
-/** "01:05", "01:02:05" (≥ 1 h) e "01:05,250" quando o passo é menor que 1 s. */
+/** "0:05", "1:20", "1:02:05" (≥ 1 h) e "0:05,250" quando o passo é menor que 1 s (maquete). */
 export function textoDaRegua(t: Seg, ms: boolean): string {
   const total = Math.round(Math.max(0, t) * 1000);
   const s = Math.floor(total / 1000);
   const h = Math.floor(s / 3600);
-  const base = h > 0 ? `${dois(h)}:${dois(Math.floor(s / 60) % 60)}:${dois(s % 60)}` : `${dois(Math.floor(s / 60))}:${dois(s % 60)}`;
+  const base = h > 0 ? `${h}:${dois(Math.floor(s / 60) % 60)}:${dois(s % 60)}` : `${Math.floor(s / 60)}:${dois(s % 60)}`;
   return ms ? `${base},${String(total % 1000).padStart(3, "0")}` : base;
 }
 

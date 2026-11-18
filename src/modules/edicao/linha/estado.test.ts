@@ -37,9 +37,12 @@ describe("estado da linha", () => {
     expect(lerGuardado(null).pxPorS).toBe(PX_POR_S_PADRAO);
   });
 
-  it("altura automática pela janela; a escolhida até 70 % dela", () => {
-    expect(alturaDoPainel(0, 700)).toBe(210);
-    expect(alturaDoPainel(0, 2000)).toBe(320);
+  it("altura automática pela janela (a da maquete); a escolhida até 70 % dela", () => {
+    // maquete: 318 px a 900 de altura, proporcional abaixo, nunca acima
+    expect(alturaDoPainel(0, 900)).toBe(318);
+    expect(alturaDoPainel(0, 768)).toBe(271);
+    expect(alturaDoPainel(0, 700)).toBe(247);
+    expect(alturaDoPainel(0, 2000)).toBe(318);
     expect(alturaDoPainel(0, 400)).toBe(170);
     expect(alturaDoPainel(500, 600)).toBe(420);
     expect(alturaDoPainel(260, 900)).toBe(260);

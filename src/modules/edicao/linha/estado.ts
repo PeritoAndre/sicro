@@ -15,13 +15,14 @@ export const PX_POR_S_PADRAO = 14;
 /** Altura do painel (px): barra + régua + trilhas. 0 = automática (uma fração da janela, entre o mínimo e o teto). */
 export const ALTURA_PAINEL_MIN = 150;
 export const ALTURA_PAINEL_PADRAO = 0;
-export const ALTURA_PAINEL_AUTO = { fracao: 0.3, min: 170, max: 320 } as const;
+/** Maquete aprovada: 318 px numa janela de 900 de altura; proporcional abaixo, nunca acima. */
+export const ALTURA_PAINEL_AUTO = { px: 318, janela: 900, min: 170 } as const;
 
 /** Altura do painel na janela de altura `h`: a escolhida (até 70 % da janela) ou a automática. */
 export function alturaDoPainel(escolhida: number, h: number): number {
-  if (!(h > 0)) return escolhida > 0 ? escolhida : ALTURA_PAINEL_AUTO.max;
+  if (!(h > 0)) return escolhida > 0 ? escolhida : ALTURA_PAINEL_AUTO.px;
   if (escolhida > 0) return Math.max(ALTURA_PAINEL_MIN, Math.min(escolhida, h * 0.7));
-  return Math.round(Math.min(Math.max(h * ALTURA_PAINEL_AUTO.fracao, ALTURA_PAINEL_AUTO.min), ALTURA_PAINEL_AUTO.max));
+  return Math.round(Math.max(ALTURA_PAINEL_AUTO.min, ALTURA_PAINEL_AUTO.px * Math.min(1, h / ALTURA_PAINEL_AUTO.janela)));
 }
 export const ALTURA_TRILHA_MIN = 16;
 export const ALTURA_TRILHA_MAX = 160;
@@ -41,6 +42,8 @@ export interface LinhaUi {
   alturas: Record<string, number>;
   /** Trilhas travadas (sem arrasto nem lâmina), por id. */
   travadas: Record<string, boolean>;
+  // CONTRATO: acréscimo do P4.1 (rodada 2). "Ver" da V1, do Som e das trilhas de áudio: sem miniaturas ou ondas.
+  semConteudo: Record<string, boolean>;
   // CONTRATO: acréscimos do P4.1 ao estado de tela (não vão ao documento).
   /** Altura do painel (px; 0 = automática). */
   altura: number;
@@ -53,7 +56,7 @@ export interface LinhaUi {
   carregar(projeto: Id | null): void;
 }
 
-type Guardado = Pick<LinhaUi, "aberta" | "pxPorS" | "ferramenta" | "ima" | "rolagem_s" | "alturas" | "travadas" | "altura">;
+type Guardado = Pick<LinhaUi, "aberta" | "pxPorS" | "ferramenta" | "ima" | "rolagem_s" | "alturas" | "travadas" | "semConteudo" | "altura">;
 
 export const UI_PADRAO: Guardado = Object.freeze({
   aberta: true,
@@ -63,6 +66,7 @@ export const UI_PADRAO: Guardado = Object.freeze({
   rolagem_s: 0,
   alturas: {},
   travadas: {},
+  semConteudo: {},
   altura: ALTURA_PAINEL_PADRAO,
 }) as Guardado;
 
@@ -86,6 +90,7 @@ export function lerGuardado(o: unknown): Guardado {
     rolagem_s: finito(x.rolagem_s, 0, 1e7, 0),
     alturas: registros(x.alturas, (h) => typeof h === "number" && h >= ALTURA_TRILHA_MIN && h <= ALTURA_TRILHA_MAX),
     travadas: registros(x.travadas, (b) => b === true),
+    semConteudo: registros(x.semConteudo, (b) => b === true),
     altura: x.altura === 0 ? 0 : finito(x.altura, ALTURA_PAINEL_MIN, 2000, ALTURA_PAINEL_PADRAO),
   };
 }
@@ -131,6 +136,7 @@ const guardado = (s: LinhaUi): Guardado => ({
   rolagem_s: s.rolagem_s,
   alturas: s.alturas,
   travadas: s.travadas,
+  semConteudo: s.semConteudo,
   altura: s.altura,
 });
 

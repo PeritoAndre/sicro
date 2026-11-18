@@ -8,15 +8,18 @@ import { create } from "zustand";
 import { commands } from "@core/commands";
 import type { Onda, TarefaFundo } from "@domain/edicao";
 import { useFundoStore } from "../store/fundoStore";
+import { WS_DE_MENTIRA } from "./tiras";
 
 type Estado = { tipo: "pedindo" } | { tipo: "fundo" } | { tipo: "pronta"; onda: Onda } | { tipo: "falhou" };
 
 export const useOndasVersao = create<{ versao: number }>(() => ({ versao: 0 }));
 const subir = () => useOndasVersao.setState((s) => ({ versao: s.versao + 1 }));
 
+/** Casos guardados ao mesmo tempo (o aberto e o da medida do Diagnóstico): trocar de um para o outro não pede tudo de novo. */
+const CASOS = 2;
+
 export class Ondas {
-  private porSha = new Map<string, Estado>();
-  private ws: string | null = null;
+  private porWs = new Map<string, Map<string, Estado>>();
   private vistas = new Set<string>();
 
   constructor(
@@ -25,29 +28,40 @@ export class Ondas {
     private readonly tarefasAgora: () => readonly TarefaFundo[] = () => [],
   ) {}
 
+  /** As do caso; o caso mais antigo além de `CASOS` sai. */
+  private doCaso(ws: string): Map<string, Estado> {
+    let m = this.porWs.get(ws);
+    if (m) {
+      this.porWs.delete(ws);
+      this.porWs.set(ws, m);
+      return m;
+    }
+    m = new Map();
+    this.porWs.set(ws, m);
+    while (this.porWs.size > CASOS) this.porWs.delete(this.porWs.keys().next().value as string);
+    return m;
+  }
+
   /** A onda da mídia, ou null (pedida agora, se ainda não foi). */
   onda(ws: string, sha: string): Onda | null {
-    if (this.ws !== ws) {
-      this.ws = ws;
-      this.porSha.clear();
-    }
-    const e = this.porSha.get(sha);
+    const e = this.doCaso(ws).get(sha);
     if (e?.tipo === "pronta") return e.onda;
     if (!e) this.pedir(ws, sha);
     return null;
   }
 
   private pedir(ws: string, sha: string): void {
-    this.porSha.set(sha, { tipo: "pedindo" });
+    const porSha = this.doCaso(ws);
+    porSha.set(sha, { tipo: "pedindo" });
     this.pedirOnda(ws, sha).then(
       (o) => {
-        if (this.ws !== ws) return;
+        if (this.porWs.get(ws) !== porSha) return;
         if (o) {
-          this.porSha.set(sha, { tipo: "pronta", onda: o });
+          porSha.set(sha, { tipo: "pronta", onda: o });
           this.aoMudar();
           return;
         }
-        this.porSha.set(sha, { tipo: "fundo" });
+        porSha.set(sha, { tipo: "fundo" });
         // pronta antes de a resposta chegar: pede já (o backend agora lê do cache)
         const t = this.tarefasAgora().find((x) => x.chave === `onda:${sha}` && x.estado.tipo === "pronta");
         if (t && !this.vistas.has(`${t.id}:pronta`)) {
@@ -56,7 +70,7 @@ export class Ondas {
         }
       },
       () => {
-        if (this.ws === ws) this.porSha.set(sha, { tipo: "falhou" });
+        if (this.porWs.get(ws) === porSha) porSha.set(sha, { tipo: "falhou" });
       },
     );
   }
@@ -68,13 +82,19 @@ export class Ondas {
       if (this.vistas.has(v)) continue;
       this.vistas.add(v);
       const sha = t.chave.slice(t.chave.indexOf(":") + 1);
-      if (this.ws && this.porSha.get(sha)?.tipo === "fundo") this.pedir(this.ws, sha);
+      for (const [ws, m] of this.porWs) if (m.get(sha)?.tipo === "fundo") this.pedir(ws, sha);
     }
   }
 }
 
+/** Medida do Diagnóstico: ondas feitas na hora enquanto ela roda; null = as do app. */
+let deMentira: ((sha: string) => Onda) | null = null;
+export function ondasDeMentira(f: typeof deMentira): void {
+  deMentira = f;
+}
+
 export const ondas = new Ondas(
-  (ws, sha) => Promise.resolve().then(() => commands.edicaoOnda(ws, sha)),
+  (ws, sha) => (deMentira && ws === WS_DE_MENTIRA ? Promise.resolve(deMentira(sha)) : Promise.resolve().then(() => commands.edicaoOnda(ws, sha))),
   subir,
   () => useFundoStore.getState().tarefas,
 );

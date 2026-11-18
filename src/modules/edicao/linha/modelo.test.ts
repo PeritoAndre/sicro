@@ -22,7 +22,7 @@ function montar() {
 }
 
 describe("trilhas da linha", () => {
-  it("ordem: sobreposições (a de cima primeiro), V1, faixas, Som, áudios na ordem, Legendas", () => {
+  it("ordem e cabeças da maquete: T (a de cima primeiro), V1 Vídeo, faixas, A1 Som, áudios A2…, Legendas só com legenda", () => {
     const { doc, ctx, a } = montar();
     const s1 = trilhaS([], "baixo");
     const s2 = trilhaS([], "cima");
@@ -36,13 +36,16 @@ describe("trilhas da linha", () => {
     doc.rastreios.push(r);
     a.efeitos.push(novoDestaque(r.id));
     const ts = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
-    expect(ts.map((t) => t.sigla ?? t.tipo)).toEqual(["S2", "S1", "V1", "efeito", "som", "A1", "A2", "legendas"]);
+    expect(ts.map((t) => t.sigla ?? t.tipo)).toEqual(["T2", "T1", "V1", "efeito", "A1", "A2", "A3"]);
+    expect(ts.map((t) => t.nome)).toEqual(["cima", "baixo", "Vídeo", "PP1 · seta", "Som", "Narração", "Música"]);
     expect(ts[0]!.id).toBe(s2.id);
-    expect(ts.find((t) => t.tipo === "efeito")!.nome).toBe("PP1 · Destaque");
     expect(ts.find((t) => t.tipo === "efeito")!.cor).toBe("#ef6b6b");
-    expect(ts.find((t) => t.id === n2.id)!.nome).toBe("Música");
-    expect(ts.find((t) => t.id === TRILHA_SOM)!.nome).toBe("Som");
-    expect(ts.find((t) => t.id === TRILHA_LEGENDAS)!.nome).toBe("Legendas");
+    expect(ts.find((t) => t.id === TRILHA_LEGENDAS)).toBeUndefined();
+    s1.nome = "";
+    doc.legendas.itens.push({ id: "lg", texto: "oi", locutor: null, origem: "perito", conferida: true, locutor_auto: false, ref: { tipo: "programa", de: 1, ate: 2 } });
+    const ts2 = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
+    expect(ts2.find((t) => t.id === s1.id)!.nome).toBe("Textos");
+    expect(ts2.find((t) => t.id === TRILHA_LEGENDAS)).toMatchObject({ nome: "Legendas", itens: [{ id: "lg", de_q: 30, ate_q: 60 }] });
   });
 
   it("V1 = clipes da linha resolvida, na ordem e nos slots dela", () => {
@@ -105,13 +108,20 @@ describe("trilhas da linha", () => {
     doc.midias[0]!.ocultacoes.push(o);
     const ts = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
     const faixas = ts.filter((t) => t.tipo === "efeito");
-    expect(faixas.map((f) => f.nome)).toEqual(["PP2 · Destaque", "PP1 · Destaque", "PP1 · Ocultar", "Enquadramento"]);
-    expect(faixas[1]!.itens.map((i) => i.clipe)).toEqual([a.id, b.id]);
+    expect(faixas.map((f) => f.nome)).toEqual(["PP2 · seta", "PP1 · seta", "PP1 · ocultar", "Zoom"]);
+    // o destaque de PP1 em a (até o fim) e em b (desde o começo): UMA barra que atravessa a emenda (maquete)
+    expect(faixas[1]!.itens).toHaveLength(1);
+    expect(faixas[1]!.itens[0]).toMatchObject({ de_q: 0, ate_q: 180 });
+    expect(faixas[1]!.itens[0]!.partes!.map((x) => [x.clipe, x.de_q, x.ate_q])).toEqual([
+      [a.id, 0, 60],
+      [b.id, 60, 180],
+    ]);
+    // a ocultação da mídia em a (quadros 50..59) segue em b (quadros 100..120 a 0,5×): uma barra; nas pontas, não cortada
     const oc = faixas[2]!.itens;
-    // em a: quadros 50..59 (o resto passa da borda: cortada à direita); em b: quadros 100..120 a 0,5×
-    expect(oc.map((i) => [i.clipe, i.de_q, i.ate_q, i.daMidia, i.cortado])).toEqual([
-      [a.id, 50, 60, true, { de: false, ate: true }],
-      [b.id, 60, 102, true, { de: true, ate: false }],
+    expect(oc.map((i) => [i.de_q, i.ate_q, i.daMidia, i.cortado ?? null])).toEqual([[50, 102, true, null]]);
+    expect(oc[0]!.partes!.map((x) => [x.clipe, x.de_q, x.ate_q, x.daMidia])).toEqual([
+      [a.id, 50, 60, true],
+      [b.id, 60, 102, true],
     ]);
   });
 
@@ -128,8 +138,8 @@ describe("trilhas da linha", () => {
     ];
     a.efeitos.push(z);
     const ts = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
-    expect(ts.find((t) => t.nome.endsWith("Destaque"))!.itens[0]!.chaves).toEqual([10, 40]);
-    expect(ts.find((t) => t.nome === "Enquadramento")!.itens[0]!.chaves).toEqual([5, 30]);
+    expect(ts.find((t) => t.nome === "Seta")!.itens[0]!.chaves).toEqual([10, 40]);
+    expect(ts.find((t) => t.nome === "Zoom")!.itens[0]!.chaves).toEqual([5, 30]);
   });
 
   it("sobreposições e áudio nos slots dos livres resolvidos; Som só de trecho com mídia com som", () => {
@@ -219,5 +229,48 @@ describe("o documento não muda", () => {
     doc.principal.push({ ...novoTrecho("m1", 0, 1), id: novoId() });
     congelar(doc);
     expect(() => trilhasDaLinha(doc as ProjetoEdicao, resolver(doc, ctx), ctx)).not.toThrow();
+  });
+});
+
+describe("faixas como na maquete", () => {
+  it("a mesma pessoa em duas câmeras: uma faixa pelo nome; lupa e zoom só pelo tipo; emenda só em clipes vizinhos", () => {
+    const { doc, ctx, tab, a, b, t } = montar();
+    const r1 = novoRastreio("m1", 1);
+    r1.nome = "PP2";
+    const r2 = novoRastreio("m1", 2);
+    r2.nome = "PP2";
+    doc.rastreios.push(r1, r2);
+    // a: do quadro 30 ao fim; b: do começo ao quadro 110 (outro rastreio, mesma pessoa)
+    a.efeitos.push({ ...novoDestaque(r1.id), ativo: { de: tempoDoQuadro(tab, 30), ate: null } });
+    b.efeitos.push({ ...novoDestaque(r2.id), ativo: { de: null, ate: tempoDoQuadro(tab, 110) } });
+    const lupa = (rid: string) => ({ id: novoId(), ligado: true, nome: "", ativo: null, tipo: "lupa" as const, rastreio: rid, janela: 0.2, fator: 2, forma: "circulo" as const, interpolacao: "bilinear" as const, onde: { modo: "fixa" as const, x: 0.5, y: 0.5 }, moldura: { cor: "#fff", espessura: 0.004, contorno: true }, ligacao: false });
+    b.efeitos.push(lupa(r1.id));
+    t.efeitos.push({ ...novoTexto(), ativo: { de: 0.5, ate: null } });
+    const ts = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
+    const pp2 = ts.find((x) => x.nome === "PP2 · seta")!;
+    expect(pp2.itens).toHaveLength(1);
+    expect(pp2.itens[0]).toMatchObject({ de_q: 30, ate_q: 82 });
+    expect(ts.find((x) => x.nome === "Lupa")!.itens).toHaveLength(1);
+    // o texto do título não emenda com nada (o título começa no slot 180; a barra dele em 195)
+    expect(ts.find((x) => x.nome === "Texto")!.itens[0]).toMatchObject({ de_q: 195, ate_q: 240 });
+    expect(ts.find((x) => x.nome === "Texto")!.itens[0]!.partes).toBeUndefined();
+  });
+
+  it("não emenda: efeito que acaba antes do fim do clipe, desligado de um lado, clipes que não se tocam", () => {
+    const { doc, ctx, tab, a, b } = montar();
+    const r = novoRastreio("m1", 1);
+    r.nome = "PP1";
+    doc.rastreios.push(r);
+    a.efeitos.push({ ...novoDestaque(r.id), ativo: { de: null, ate: tempoDoQuadro(tab, 50) } });
+    b.efeitos.push(novoDestaque(r.id));
+    const e2 = { ...novoDestaque(r.id) };
+    const ts = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
+    expect(ts.find((x) => x.nome === "PP1 · seta")!.itens.map((i) => [i.de_q, i.ate_q])).toEqual([
+      [0, 51],
+      [60, 180],
+    ]);
+    a.efeitos[0] = { ...e2, ligado: false };
+    const ts2 = trilhasDaLinha(doc, resolver(doc, ctx), ctx);
+    expect(ts2.find((x) => x.nome === "PP1 · seta")!.itens).toHaveLength(2);
   });
 });

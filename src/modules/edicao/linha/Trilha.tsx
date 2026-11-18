@@ -1,15 +1,17 @@
-/** Uma trilha da linha do tempo: cabeça (sigla, nome, ver, travar) e a pista com os itens visíveis. Dono: P4.1. */
+/** Uma trilha da linha do tempo: cabeça como na maquete (sigla, nome, ver, travar; faixa de efeito com o ponto da cor)
+ *  e a pista com os itens visíveis e, nas trilhas de som, as ondas num canvas só. Dono: P4.1. */
 
 import { memo, useCallback, type PointerEvent as PE } from "react";
-import { Eye, EyeOff, Lock, LockOpen, Volume2, VolumeX } from "lucide-react";
+import { Eye, EyeOff, Lock, LockOpen } from "lucide-react";
 import type { Id, Racional, Selecao } from "@domain/edicao";
 import type { ItemNaLinha, TrilhaNaLinha } from "./modelo";
 import { ClipeNaLinha, type AlvoNoItem, type FonteDoItem } from "./ClipeNaLinha";
+import { OndasDaTrilha } from "./Onda";
 import type { BlocoTira } from "./tiras";
 import styles from "./Linha.module.css";
 
-/** Altura padrão de cada tipo de trilha (px); a faixa de efeito tem uma raia por linha de barras. */
-export const ALTURA_PADRAO = { sobreposicao: 32, principal: 58, efeito: 20, som: 36, audio: 32, legendas: 22 } as const;
+/** Altura de cada tipo de trilha (px, as da maquete aprovada); a faixa de efeito tem uma raia por linha de barras. */
+export const ALTURA_PADRAO = { sobreposicao: 34, principal: 54, efeito: 20, som: 34, audio: 28, legendas: 22 } as const;
 export const RAIA_PX = 20;
 
 /** Item sendo arrastado: onde vai (slots e trilha) e a borda pega. */
@@ -31,11 +33,13 @@ export interface TrilhaProps {
   // CONTRATO: acréscimos do P4.1 (props do próprio componente).
   fps: Racional;
   janela: readonly [number, number];
-  /** Largura da pista (px, no zoom desenhado) e a mesma em CSS (acompanha o zoom vivo). */
+  /** Largura da pista (px, no zoom desenhado) e a mesma em CSS (acompanha o zoom). */
   largura: number;
   larguraCss?: string;
   selecao: Selecao;
   travada: boolean;
+  /** V1, Som e áudio: o conteúdo (miniaturas, ondas) aparece? (o "Ver" dessas trilhas é da tela) */
+  semConteudo?: boolean;
   soLeitura: boolean;
   fantasmas: readonly Fantasma[];
   /** O item de um fantasma que veio de outra trilha. */
@@ -54,11 +58,15 @@ export interface TrilhaProps {
 export const chaveDoItem = (it: Pick<ItemNaLinha, "id" | "clipe">) => `${it.id}@${it.clipe ?? ""}`;
 
 export function selecionado(s: Selecao, it: ItemNaLinha): boolean {
-  if (it.k === "efeito") return s.efeito === it.id && (!it.clipe || s.foco?.id === it.clipe);
+  if (it.k === "efeito") {
+    // barra emendada: qualquer efeito dela
+    if (it.partes) return it.partes.some((x) => s.efeito === x.id && s.foco?.id === x.clipe);
+    return s.efeito === it.id && (!it.clipe || s.foco?.id === it.clipe);
+  }
   return s.itens.some((x) => x.id === it.id) || s.foco?.id === it.id;
 }
 
-function Cabeca({ t, travada, onVer, onTravar }: { t: TrilhaNaLinha; travada: boolean; onVer(): void; onTravar(): void }) {
+function Cabeca({ t, travada, semConteudo, onVer, onTravar }: { t: TrilhaNaLinha; travada: boolean; semConteudo: boolean; onVer(): void; onTravar(): void }) {
   if (t.tipo === "efeito") {
     return (
       <>
@@ -69,28 +77,24 @@ function Cabeca({ t, travada, onVer, onTravar }: { t: TrilhaNaLinha; travada: bo
       </>
     );
   }
-  const nome = t.tipo === "som" ? "Som" : t.tipo === "legendas" ? "Legendas" : t.nome;
+  // sobreposição: "Ver" é a trilha oculta no vídeo (documento); nas outras, o conteúdo na linha (tela)
+  const ver = t.tipo === "sobreposicao" ? !t.oculta : !semConteudo;
   return (
     <>
       {t.sigla && <b className={styles.sigla}>{t.sigla}</b>}
-      {nome && (
-        <span className={styles.nomeTrilha} title={nome}>
-          {nome}
+      {t.nome && (
+        <span className={styles.nomeTrilha} title={t.nome}>
+          {t.nome}
         </span>
       )}
       <span className={styles.icones}>
-        {t.tipo === "sobreposicao" && (
-          <button type="button" className={styles.mini} title="Ver" aria-label="Ver" aria-pressed={!t.oculta} onClick={onVer} data-ver={t.id}>
-            {t.oculta ? <EyeOff size={13} /> : <Eye size={13} />}
-          </button>
-        )}
-        {t.tipo === "audio" && (
-          <button type="button" className={styles.mini} title="Mudo" aria-label="Mudo" aria-pressed={!!t.muda} onClick={onVer} data-mudo={t.id}>
-            {t.muda ? <VolumeX size={13} /> : <Volume2 size={13} />}
+        {t.tipo !== "legendas" && (
+          <button type="button" className={styles.mini} title="Ver" aria-label="Ver" aria-pressed={ver} onClick={onVer} data-ver={t.id}>
+            {ver ? <Eye size={13} /> : <EyeOff size={13} />}
           </button>
         )}
         <button type="button" className={styles.mini} title="Travar" aria-label="Travar" aria-pressed={travada} onClick={onTravar} data-travar={t.id}>
-          {travada ? <Lock size={12} /> : <LockOpen size={12} />}
+          {travada ? <Lock size={13} /> : <LockOpen size={13} />}
         </button>
       </span>
     </>
@@ -114,6 +118,8 @@ export const Trilha = memo(function Trilha(p: TrilhaProps) {
   const render = (it: ItemNaLinha, f: Fantasma | null) => {
     const fixo = travada || !!it.apagado;
     const corte = it.cortado;
+    // barra emendada: arrasta pelas bordas (a primeira e a última parte), não pelo corpo
+    const emendada = !!it.partes;
     return (
       <ClipeNaLinha
         key={chaveDoItem(it)}
@@ -129,11 +135,10 @@ export const Trilha = memo(function Trilha(p: TrilhaProps) {
         fantasmaDe={f ? f.de_q : null}
         fantasmaAte={f ? f.ate_q : null}
         bordaAtiva={f?.borda ?? null}
-        pegaCorpo={!fixo && !corte?.de && !corte?.ate && t.tipo !== "legendas"}
+        pegaCorpo={!fixo && !corte?.de && !corte?.ate && !emendada && t.tipo !== "legendas"}
         pegaInicio={!fixo && !corte?.de && t.tipo !== "legendas"}
         pegaFim={!fixo && !corte?.ate && t.tipo !== "legendas"}
-        fonte={t.tipo === "som" || t.tipo === "audio" ? p.fonteDe(it) : null}
-        blocos={t.tipo === "principal" ? p.blocos.get(it.id) : undefined}
+        blocos={t.tipo === "principal" && !p.semConteudo ? p.blocos.get(it.id) : undefined}
         ws={p.ws}
         raizCache={p.raizCache}
         onPegar={pegar}
@@ -141,11 +146,12 @@ export const Trilha = memo(function Trilha(p: TrilhaProps) {
       />
     );
   };
+  const comOnda = (t.tipo === "som" || t.tipo === "audio") && !p.semConteudo && !!p.ws;
   return (
     <div className={classe} style={{ height: p.altura }} data-trilha={t.id} data-tipo={t.tipo}>
       <div className={`${styles.cab} ${t.tipo === "efeito" ? styles.cabEfeito : ""}`}>
-        <Cabeca t={t} travada={p.travada} onVer={() => p.onVer(t)} onTravar={() => p.onTravar(t)} />
-        <span className={styles.alturaCab} onPointerDown={(e) => p.onAltura(e, t)} aria-hidden />
+        <Cabeca t={t} travada={p.travada} semConteudo={!!p.semConteudo} onVer={() => p.onVer(t)} onTravar={() => p.onTravar(t)} />
+        {t.tipo !== "efeito" && <span className={styles.alturaCab} onPointerDown={(e) => p.onAltura(e, t)} aria-hidden />}
       </div>
       <div className={styles.pista} style={{ width: p.larguraCss ?? p.largura }} data-pista={t.id}>
         {t.itens.map((it) => {
@@ -156,6 +162,7 @@ export const Trilha = memo(function Trilha(p: TrilhaProps) {
           const original = p.itemDe(f);
           return original ? render({ ...original, trilha: t.id }, f) : null;
         })}
+        {comOnda && <OndasDaTrilha itens={t.itens} fonteDe={p.fonteDe} ws={p.ws as string} pxPorS={p.pxPorS} fps={p.fps} janela={p.janela} largura={p.largura} altura={p.altura} />}
       </div>
     </div>
   );

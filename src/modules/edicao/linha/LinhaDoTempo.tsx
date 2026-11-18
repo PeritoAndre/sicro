@@ -8,7 +8,7 @@
 
 import { startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type PointerEvent as PE } from "react";
 import { flushSync } from "react-dom";
-import { Magnet, Maximize2, MousePointer2, Scissors, ZoomIn, ZoomOut } from "lucide-react";
+import { Magnet, MousePointer2, Scissors } from "lucide-react";
 import type { Draft } from "immer";
 import type { Id, ItemSel, LinhaResolvida, ProjetoEdicao, Problema, Selecao, Seg } from "@domain/edicao";
 import { useShortcuts } from "@core/useShortcuts";
@@ -65,8 +65,8 @@ export interface AcoesLinha {
   dividir(clipe: Id, q: number): void;
   /** Marca da transição: o clipe em foco e a seção "Entrada" do Inspetor. */
   abrirEntrada(clipe: Id): void;
-  /** J e L. */
-  tocar(sentido: 1 | -1): void;
+  /** J e L, com a velocidade (1, 2, 4, 8: repetir a tecla acelera). */
+  tocar(sentido: 1 | -1, velocidade?: number): void;
   /** Guarda o cursor de agora e devolve quem o põe de volta (Esc no aparar: a borda mostrada no palco desiste junto). */
   guardarCursor?(): () => void;
 }
@@ -77,7 +77,7 @@ export interface FonteCabeca {
   assinar(f: () => void): () => void;
 }
 
-export type UiDaLinha = Pick<LinhaUi, "pxPorS" | "ferramenta" | "ima" | "rolagem_s" | "alturas" | "travadas" | "altura"> & Partial<Pick<LinhaUi, "ajustarAoAbrir">>;
+export type UiDaLinha = Pick<LinhaUi, "pxPorS" | "ferramenta" | "ima" | "rolagem_s" | "alturas" | "travadas" | "altura"> & Partial<Pick<LinhaUi, "ajustarAoAbrir" | "semConteudo">>;
 
 export interface VistaLinhaProps {
   doc: ProjetoEdicao;
@@ -176,6 +176,7 @@ export function LinhaDoTempo({ palco, atalhos }: LinhaProps) {
           h?.scrollIntoView?.({ block: "nearest" });
         });
       },
+      // `PalcoApi.tocar` ainda não tem velocidade (a prévia viva, P3.3, traz `Relogio.velocidade`): o ponto é este
       tocar: (d) => palco()?.tocar(d),
       guardarCursor: () => {
         const c = st().cursor;
@@ -251,11 +252,22 @@ interface Gesto {
   alt: boolean;
   /** Clique num item já selecionado (de um grupo): a seleção vira só ele ao soltar sem arrastar. */
   soEleAoSoltar: boolean;
+  /** Barra emendada de onde saiu a parte arrastada (o fantasma é a barra inteira com a borda nova). */
+  emendada: ItemNaLinha | null;
   /** Aparar mexe no cursor (o palco mostra a borda): Esc o põe onde estava antes do clique. */
   voltarCursor: (() => void) | null;
 }
 
 const tipoItemSel = (it: ItemNaLinha): ItemSel["k"] | null => (it.k === "efeito" ? null : it.k);
+
+export interface EstadoJL {
+  sentido: 1 | -1;
+  velocidade: number;
+}
+/** J e L: repetir no mesmo sentido acelera (1×, 2×, 4×, 8×); trocar de sentido volta a 1× (rótulo do atalho). */
+export function velocidadeJL(atual: EstadoJL | null, sentido: 1 | -1): EstadoJL {
+  return { sentido, velocidade: atual && atual.sentido === sentido ? Math.min(8, atual.velocidade * 2) : 1 };
+}
 
 export function VistaLinha(p: VistaLinhaProps) {
   const { doc, linha, ctx, ui } = p;
@@ -266,6 +278,8 @@ export function VistaLinha(p: VistaLinhaProps) {
   const cabecaTopoRef = useRef<HTMLDivElement>(null);
   const laminaRef = useRef<HTMLDivElement>(null);
   const [vw, setVw] = useState(0);
+  /** Largura e rolagem do rolo guardadas (a cabeça não lê do leiaute: ler força o leiaute da página inteira). */
+  const medidas = useRef({ vw: 0, rolagem: 0 });
   /** Parte desenhada e parte visível (para pedir tiras), em s do programa: o zoom vivo não as invalida. */
   const [janelaS, setJanelaS] = useState<readonly [number, number]>(() => {
     // antes de medir: a largura da janela do app (a montagem não desenha o programa inteiro)
@@ -276,7 +290,11 @@ export function VistaLinha(p: VistaLinhaProps) {
   /** Zoom com que a árvore foi desenhada (px/s). O vivo (roda, botões) muda antes só a variável CSS `--px` do
    *  conteúdo, sem React; a árvore assenta depois, numa transição (o React reparte o trabalho em pedaços). */
   const [pxS, setPxS] = useState(ui.pxPorS);
+  /** Zoom que está na tela agora (px/s). */
   const pxVivo = useRef(ui.pxPorS);
+  /** Zoom aplicado em `--px` (px/s); o vivo = base × `b` enquanto a transformação `x' = a + b·x` estica as pistas. */
+  const pxBase = useRef(ui.pxPorS);
+  const vivo = useRef({ a: 0, b: 1 });
   const [fantasmas, setFantasmas] = useState<readonly Fantasma[]>(VAZIO);
   const [insercao, setInsercao] = useState<number | null>(null);
   const [guia, setGuia] = useState<number | null>(null);
@@ -302,9 +320,13 @@ export function VistaLinha(p: VistaLinhaProps) {
     return f;
   }, [trilhas, marcadores, linha.total_q]);
   const fimS = (fimQ * fps.den) / fps.num;
-  const largura = Math.max(fimQ * px + Math.max(240, vw * 0.5), vw - CAB_PX);
+  // a largura anda em degraus (~2 % do programa): aparar um clipe não muda a largura das pistas, que refaria o leiaute
+  // de todos os itens
+  const degrau = 2 ** Math.max(4, Math.floor(Math.log2(Math.max(1, fimQ) / 32)));
+  const fimL = Math.ceil(fimQ / degrau) * degrau;
+  const largura = Math.max(fimL * px + Math.max(240, vw * 0.5), vw - CAB_PX);
   // a largura acompanha o zoom vivo pela variável CSS
-  const larguraCss = `max(${Math.max(0, vw - CAB_PX)}px, calc(var(--px) * ${fimQ}px + ${Math.max(240, vw * 0.5)}px))`;
+  const larguraCss = `max(${Math.max(0, vw - CAB_PX)}px, calc(var(--px) * ${fimL}px + ${Math.max(240, vw * 0.5)}px))`;
   const janela = useMemo(() => [janelaS[0] * pxS, janelaS[1] * pxS] as const, [janelaS, pxS]);
   const pxMax = Math.max(PX_POR_S_MIN, Math.min(PX_POR_S_MAX, LARGURA_MAX_PX / Math.max(fimS, 1)));
   const alturaDe = useCallback((t: TrilhaNaLinha) => (t.tipo === "efeito" ? (t.raias ?? 1) * RAIA_PX : (ui.alturas[t.id] ?? ALTURA_PADRAO[t.tipo])), [ui.alturas]);
@@ -331,8 +353,9 @@ export function VistaLinha(p: VistaLinhaProps) {
       return;
     }
     const k = pxVivo.current;
-    const a = el.scrollLeft / k;
-    const b = (el.scrollLeft + w) / k;
+    medidas.current.rolagem = el.scrollLeft;
+    const a = (el.scrollLeft - vivo.current.a) / k;
+    const b = (el.scrollLeft + w - vivo.current.a) / k;
     // a inicial (tudo, antes de medir) também é trocada assim que há largura
     if (j[1] !== Infinity && a >= j[0] && b <= j[1]) return;
     // fora da parte desenhada: outra, com uma tela de cada lado (render repartido: a rolagem não para)
@@ -345,6 +368,8 @@ export function VistaLinha(p: VistaLinhaProps) {
     const el = rolo.current;
     if (!el) return;
     const medir = () => {
+      medidas.current.vw = el.clientWidth;
+      medidas.current.rolagem = el.scrollLeft;
       setVw(el.clientWidth);
       atualizarJanela(true);
     };
@@ -370,6 +395,7 @@ export function VistaLinha(p: VistaLinhaProps) {
   }, [doc.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const fimDaRolagem = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aoRolar = useCallback(() => {
+    if (rolo.current) medidas.current.rolagem = rolo.current.scrollLeft;
     atualizarJanela();
     if (fimDaRolagem.current !== null) clearTimeout(fimDaRolagem.current);
     fimDaRolagem.current = setTimeout(() => {
@@ -393,44 +419,92 @@ export function VistaLinha(p: VistaLinhaProps) {
 
   // ---- zoom ----
   const moverCabeca = useRef<() => void>(() => {});
-  /** Zoom na tela já: só a variável `--px` e a rolagem (o ponto sob `ancoraX` fica no lugar; null = o começo). */
-  const zoomVivo = useCallback(
+  /** Pistas e régua: o que o zoom contínuo (roda, controle) estica por transformação, sem leiaute. */
+  const esticaveis = () => conteudo.current?.querySelectorAll<HTMLElement>("[data-pista], [data-regua]") ?? [];
+  const pintarVivo = () => {
+    const { a, b } = vivo.current;
+    const t = a === 0 && b === 1 ? "" : `matrix(${b}, 0, 0, 1, ${a}, 0)`;
+    // escrever o mesmo valor também invalida o estilo: só onde muda (a origem 0 0 está no CSS)
+    for (const el of esticaveis()) if (el.style.transform !== t) el.style.transform = t;
+  };
+  const assentar = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** O estado (e a árvore, numa transição) recebe o zoom quando ele para. */
+  const agendarAssentar = () => {
+    if (assentar.current !== null) clearTimeout(assentar.current);
+    assentar.current = setTimeout(() => {
+      assentar.current = null;
+      assentarZoom();
+      v.current.p.definirUi({ pxPorS: pxVivo.current });
+    }, 150);
+  };
+  /** O zoom esticado vira o de verdade: `--px` novo, sem transformação, a rolagem compensa o deslocamento dela. */
+  const assentarZoom = () => {
+    const { a, b } = vivo.current;
+    if (a === 0 && b === 1) return;
+    vivo.current = { a: 0, b: 1 };
+    pxBase.current = pxVivo.current;
+    conteudo.current?.style.setProperty("--px", String(pxDoSlot(pxBase.current, fps)));
+    pintarVivo();
+    const el = rolo.current;
+    if (el) el.scrollLeft = Math.max(0, el.scrollLeft - a);
+    atualizarJanela();
+    moverCabeca.current();
+  };
+  /** Zoom de uma vez (botões, teclas, ajustar): `--px` já, o ponto sob `ancoraX` no lugar (null = o começo). */
+  const zoomDireto = useCallback(
     (n: number, ancoraX: number | null) => {
+      assentarZoom();
       const el = rolo.current;
       const antes = pxVivo.current;
       const w = el ? el.clientWidth - CAB_PX : 0;
       const ax = ancoraX ?? 0;
       const t = ancoraX === null ? 0 : ((el?.scrollLeft ?? 0) + ax) / antes;
       pxVivo.current = n;
+      pxBase.current = n;
       conteudo.current?.style.setProperty("--px", String(pxDoSlot(n, fps)));
       if (el && w > 0) el.scrollLeft = Math.max(0, t * n - ax);
       atualizarJanela();
       moverCabeca.current();
     },
-    [fps, atualizarJanela],
+    [fps, atualizarJanela], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const assentar = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Zoom contínuo (Ctrl+roda, controle): só estica as pistas e a régua em volta de `ancoraX` (px da área visível). */
+  const zoomContinuo = (f: number, ancoraX: number) => {
+    const el = rolo.current;
+    const { pxMax: max } = v.current;
+    const n = Math.min(Math.max(pxVivo.current * f, PX_POR_S_MIN), max);
+    const k = n / pxVivo.current;
+    if (!(k > 0) || k === 1) return;
+    const X = (el?.scrollLeft ?? 0) + (Number.isFinite(ancoraX) ? ancoraX : 0);
+    const { a, b } = vivo.current;
+    vivo.current = { a: X * (1 - k) + k * a, b: k * b };
+    pxVivo.current = n;
+    pintarVivo();
+    atualizarJanela();
+    moverCabeca.current();
+    agendarAssentar();
+  };
   const zoom = useCallback(
     (f: number | "ajustar", ancoraX?: number) => {
       const el = rolo.current;
-      const { p: pp, pxMax: max, fimS: fs } = v.current;
+      const { pxMax: max, fimS: fs } = v.current;
       const w = el ? el.clientWidth - CAB_PX : 0;
       const antes = pxVivo.current;
       const n = f === "ajustar" ? Math.min(Math.max((w > 0 ? w - 24 : 800) / Math.max(fs, 1), PX_POR_S_MIN), max) : Math.min(Math.max(antes * f, PX_POR_S_MIN), max);
-      if (n !== antes || f === "ajustar") zoomVivo(n, f === "ajustar" ? null : (ancoraX ?? (w > 0 ? w / 2 : 0)));
-      // a árvore (rótulos, tiras, régua) assenta quando o zoom para
+      if (n !== antes || f === "ajustar") zoomDireto(n, f === "ajustar" ? null : (ancoraX ?? (w > 0 ? w / 2 : 0)));
       if (assentar.current !== null) clearTimeout(assentar.current);
       assentar.current = setTimeout(() => {
         assentar.current = null;
-        pp.definirUi({ pxPorS: pxVivo.current });
-      }, 120);
+        v.current.p.definirUi({ pxPorS: pxVivo.current });
+      }, 150);
     },
-    [zoomVivo],
+    [zoomDireto],
   );
   useEffect(() => () => void (assentar.current !== null && clearTimeout(assentar.current)), []);
   // a árvore que assentou com um zoom mais velho não desfaz o vivo
   useLayoutEffect(() => {
-    if (pxVivo.current !== pxS) conteudo.current?.style.setProperty("--px", String(pxDoSlot(pxVivo.current, fps)));
+    if (pxBase.current !== pxS) conteudo.current?.style.setProperty("--px", String(pxDoSlot(pxBase.current, fps)));
+    pintarVivo();
   });
   // zoom de fora (bancada) ou o vivo que parou: a árvore assenta numa transição. Só quando o do estado MUDA: na
   // montagem o ajuste do projeto novo já pôs o vivo à frente dele.
@@ -438,7 +512,7 @@ export function VistaLinha(p: VistaLinhaProps) {
   useEffect(() => {
     if (ui.pxPorS === pxDoEstado.current) return;
     pxDoEstado.current = ui.pxPorS;
-    if (ui.pxPorS !== pxVivo.current) zoomVivo(ui.pxPorS, Math.max(0, ((rolo.current?.clientWidth ?? CAB_PX) - CAB_PX) / 2));
+    if (ui.pxPorS !== pxVivo.current) zoomDireto(ui.pxPorS, Math.max(0, ((rolo.current?.clientWidth ?? CAB_PX) - CAB_PX) / 2));
     if (ui.pxPorS !== pxS) startTransition(() => setPxS(ui.pxPorS));
   }, [ui.pxPorS]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -451,7 +525,7 @@ export function VistaLinha(p: VistaLinhaProps) {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
         const r = el.getBoundingClientRect();
-        zoom(Math.pow(1.0018, -dy), Math.max(0, e.clientX - r.left - CAB_PX));
+        zoomContinuo(Math.pow(1.0018, -dy), Math.max(0, e.clientX - r.left - CAB_PX));
         return;
       }
       if (!e.shiftKey && Math.abs(dy) > Math.abs(e.deltaX) && el.scrollHeight <= el.clientHeight + 1) {
@@ -461,7 +535,7 @@ export function VistaLinha(p: VistaLinhaProps) {
     };
     el.addEventListener("wheel", roda, { passive: false });
     return () => el.removeEventListener("wheel", roda);
-  }, [zoom]);
+  }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ---- cabeça de leitura (fora do React) ----
   const cabecaQ = useRef<number | null>(null);
@@ -470,6 +544,8 @@ export function VistaLinha(p: VistaLinhaProps) {
     let raf = 0;
     let parado = 0;
     let ultimo = "";
+    // o que já está escrito (escrever o mesmo estilo a cada quadro também invalida)
+    let escrito = "";
     const aplicar = (): boolean => {
       const c = p.cabeca.ler();
       const chave = c ? `${c.q}:${c.fora}` : "";
@@ -479,21 +555,27 @@ export function VistaLinha(p: VistaLinhaProps) {
       ultimo = chave;
       cabecaQ.current = c?.q ?? null;
       cabecaFora.current = !!c?.fora;
-      for (const el of [cabecaRef.current, cabecaTopoRef.current]) {
-        if (!el) continue;
-        el.style.display = c ? "" : "none";
-        if (c) {
-          el.style.transform = `translateX(${c.q * pxs}px)`;
-          el.classList.toggle(styles.fora as string, c.fora);
+      const tx = c ? `translateX(${vivo.current.a + c.q * pxs}px)` : "";
+      const estilo = `${tx}|${c?.fora}`;
+      if (estilo !== escrito) {
+        escrito = estilo;
+        for (const el of [cabecaRef.current, cabecaTopoRef.current]) {
+          if (!el) continue;
+          el.style.display = c ? "" : "none";
+          if (c) {
+            el.style.transform = tx;
+            el.classList.toggle(styles.fora as string, c.fora);
+          }
         }
       }
       // tocando: a página acompanha quando a cabeça passa da borda direita
       const r = rolo.current;
       if (mudou && c && antes !== null && c.q > antes && r) {
-        const w = r.clientWidth - CAB_PX;
+        const w = medidas.current.vw - CAB_PX;
+        const sl = medidas.current.rolagem;
         const x = c.q * pxs;
         const xa = antes * pxs;
-        if (w > 0 && xa >= r.scrollLeft && xa <= r.scrollLeft + w && x > r.scrollLeft + w - 24) r.scrollLeft = x - w * 0.15;
+        if (w > 0 && xa >= sl && xa <= sl + w && x > sl + w - 24) r.scrollLeft = medidas.current.rolagem = x - w * 0.15;
       }
       return mudou;
     };
@@ -600,7 +682,7 @@ export function VistaLinha(p: VistaLinhaProps) {
     const el = rolo.current;
     if (!el) return 0;
     const r = el.getBoundingClientRect();
-    return (clientX - r.left - CAB_PX + el.scrollLeft) / pxAgora();
+    return (clientX - r.left - CAB_PX + el.scrollLeft - vivo.current.a) / pxAgora();
   };
 
   const trilhaSob = (clientY: number): { id: string; tipo: string } | "acima" | null => {
@@ -687,7 +769,12 @@ export function VistaLinha(p: VistaLinhaProps) {
   const fantasmasDe = (g: Gesto): Fantasma[] => {
     const destino = g.trilhaDestino === "nova" ? (trilhas.find((t) => t.tipo === "sobreposicao")?.id ?? g.trilha.id) : (g.trilhaDestino ?? g.trilha.id);
     const borda = g.alvo === "corpo" ? null : g.alvo;
-    const r: Fantasma[] = [{ id: g.item.id, clipe: g.item.clipe, de_q: g.de_q, ate_q: g.ate_q, trilha: g.trilha.tipo === "som" ? g.trilha.id : destino, origem: g.trilha.id, borda }];
+    const em = g.emendada;
+    const r: Fantasma[] = [
+      em
+        ? { id: em.id, clipe: em.clipe, de_q: g.alvo === "inicio" ? g.de_q : em.de_q, ate_q: g.alvo === "fim" ? g.ate_q : em.ate_q, trilha: g.trilha.id, origem: g.trilha.id, borda }
+        : { id: g.item.id, clipe: g.item.clipe, de_q: g.de_q, ate_q: g.ate_q, trilha: g.trilha.tipo === "som" ? g.trilha.id : destino, origem: g.trilha.id, borda },
+    ];
     const delta = g.de_q - g.item.de_q;
     for (const o of g.grupo) r.push({ id: o.id, de_q: o.de_q + delta, ate_q: o.ate_q + delta, trilha: o.trilha, origem: o.trilha, borda: null });
     return r;
@@ -754,8 +841,17 @@ export function VistaLinha(p: VistaLinhaProps) {
     }
   };
 
-  const pegar = (e: PE<HTMLElement>, it: ItemNaLinha, alvo: AlvoNoItem, t: TrilhaNaLinha) => {
+  const pegar = (e: PE<HTMLElement>, itTela: ItemNaLinha, alvo: AlvoNoItem, t: TrilhaNaLinha) => {
       if (e.button !== 0) return;
+      // barra emendada (um efeito por clipe): a borda do começo é a do primeiro, a do fim a do último; o corpo, o sob o ponteiro
+      const emendada = itTela.partes ?? null;
+      let it = itTela;
+      if (emendada) {
+        const q = slotDoPonteiro(e.clientX);
+        const sob = alvo === "inicio" ? emendada[0]! : alvo === "fim" ? emendada[emendada.length - 1]! : (emendada.find((x) => q >= x.de_q && q < x.ate_q) ?? emendada[0]!);
+        const cortado = { de: sob === emendada[0] && !!itTela.cortado?.de, ate: sob === emendada[emendada.length - 1] && !!itTela.cortado?.ate };
+        it = { ...itTela, id: sob.id, clipe: sob.clipe, de_q: sob.de_q, ate_q: sob.ate_q, partes: undefined, ...(sob.daMidia ? { daMidia: true } : { daMidia: undefined }), cortado };
+      }
       e.stopPropagation();
       e.preventDefault();
       const pp = v.current.p;
@@ -778,7 +874,8 @@ export function VistaLinha(p: VistaLinhaProps) {
         const naCabeca = cab !== null && !cabecaFora.current && cab >= it.de_q && cab < it.ate_q && (clipe === null || clipeNoSlot(linha, cab) === clipe);
         if (it.ate_q > it.de_q && !naCabeca) pp.acoes.posicionar(Math.floor(q0), clipe);
       }
-      if (travada || it.apagado || it.k === "legenda") return;
+      // barra emendada: só as pontas arrastam (o corpo é de vários efeitos, um por clipe)
+      if (travada || it.apagado || it.k === "legenda" || (emendada && alvo === "corpo")) return;
       if (alvo === "corpo" && it.cortado && (it.cortado.de || it.cortado.ate)) return;
       // a captura fica no rolo: o item (ou a borda) pode sair da tela no meio do arrasto
       const alvo2 = capturarEm(rolo.current ?? e.currentTarget, e.pointerId);
@@ -788,6 +885,7 @@ export function VistaLinha(p: VistaLinhaProps) {
           ? v.current.trilhas.flatMap((tt) => tt.itens.filter((o) => o.id !== it.id && (o.k === "livre" || o.k === "audio") && sel.some((x) => x.id === o.id) && (jaSel || e.shiftKey)))
           : [];
       const g: Gesto = {
+        emendada: emendada ? itTela : null,
         item: it,
         trilha: t,
         alvo,
@@ -933,16 +1031,18 @@ export function VistaLinha(p: VistaLinhaProps) {
   // ---- cabeças: ver, travar, altura ----
   const onVer = useCallback((t: TrilhaNaLinha) => {
     const pp = v.current.p;
+    if (t.tipo === "principal" || t.tipo === "som" || t.tipo === "audio") {
+      const sc = { ...(pp.ui.semConteudo ?? {}) };
+      if (sc[t.id]) delete sc[t.id];
+      else sc[t.id] = true;
+      pp.definirUi({ semConteudo: sc });
+      return;
+    }
     if (pp.soLeitura) return;
     if (t.tipo === "sobreposicao")
       pp.acoes.alterar("Ver", (d) => {
         const x = d.sobreposicoes.find((s) => s.id === t.id);
         if (x) x.oculta = !x.oculta;
-      });
-    else if (t.tipo === "audio")
-      pp.acoes.alterar("Mudo", (d) => {
-        const x = d.audios.find((s) => s.id === t.id);
-        if (x) x.mudo = !x.mudo;
       });
   }, []);
   const onTravar = useCallback((t: TrilhaNaLinha) => {
@@ -1018,6 +1118,7 @@ export function VistaLinha(p: VistaLinhaProps) {
   };
 
   // ---- atalhos ----
+  const jl = useRef<EstadoJL | null>(null);
   const ferramenta = (f: Ferramenta) => p.definirUi({ ferramenta: f });
   useShortcuts(
     {
@@ -1028,8 +1129,16 @@ export function VistaLinha(p: VistaLinhaProps) {
       "video.timelineZoomOut": () => zoom(1 / 1.5),
       "video.timelineZoomFit": () => zoom("ajustar"),
       // J e L: ré e à frente (K pausa pelo atalho do palco)
-      "video.reverse": () => v.current.p.acoes.tocar(-1),
-      "video.forward": () => v.current.p.acoes.tocar(1),
+      "video.reverse": () => {
+        jl.current = velocidadeJL(jl.current, -1);
+        v.current.p.acoes.tocar(-1, jl.current.velocidade);
+      },
+      "video.forward": () => {
+        jl.current = velocidadeJL(jl.current, 1);
+        v.current.p.acoes.tocar(1, jl.current.velocidade);
+      },
+      // K: o palco pausa (atalho do editor); a próxima J ou L recomeça em 1×
+      "video.playPauseK": () => void (jl.current = null),
     },
     { enabled: p.atalhos },
   );
@@ -1063,17 +1172,31 @@ export function VistaLinha(p: VistaLinhaProps) {
           </button>
         </div>
         <span className={styles.espaco} />
-        <button type="button" className={styles.icone} title="Afastar" aria-label="Afastar" onClick={() => zoom(1 / 1.5)} disabled={ui.pxPorS <= PX_POR_S_MIN} data-zoom="afastar">
-          <ZoomOut size={15} />
-        </button>
-        <button type="button" className={styles.icone} title="Aproximar" aria-label="Aproximar" onClick={() => zoom(1.5)} disabled={ui.pxPorS >= pxMax} data-zoom="aproximar">
-          <ZoomIn size={15} />
-        </button>
-        <button type="button" className={styles.icone} title="Ajustar à tela" aria-label="Ajustar à tela" onClick={() => zoom("ajustar")} data-zoom="ajustar">
-          <Maximize2 size={14} />
-        </button>
+        <span className={styles.zoomt}>
+          <button type="button" className={styles.zoomMais} title="Afastar" aria-label="Afastar" onClick={() => zoom(1 / 1.5)} disabled={ui.pxPorS <= PX_POR_S_MIN} data-zoom="afastar">
+            −
+          </button>
+          <input
+            type="range"
+            aria-label="Zoom"
+            min={Math.log(PX_POR_S_MIN)}
+            max={Math.log(pxMax)}
+            step="any"
+            value={Math.log(ui.pxPorS)}
+            data-zoom="controle"
+            onChange={(e) => {
+              const el = rolo.current;
+              const w = el ? el.clientWidth - CAB_PX : 0;
+              zoomContinuo(Math.exp(Number(e.currentTarget.value)) / pxVivo.current, w > 0 ? w / 2 : 0);
+            }}
+          />
+          <button type="button" className={styles.zoomMais} title="Aproximar" aria-label="Aproximar" onClick={() => zoom(1.5)} disabled={ui.pxPorS >= pxMax} data-zoom="aproximar">
+            +
+          </button>
+        </span>
       </div>
-      <div ref={rolo} className={styles.rolo} onScroll={aoRolar} data-linha-rolo="">
+      {/* qualquer toque na linha assenta antes o zoom esticado (as contas de slot valem no zoom de verdade) */}
+      <div ref={rolo} className={styles.rolo} onScroll={aoRolar} onPointerDownCapture={assentarZoom} data-linha-rolo="">
         <div
           ref={conteudo}
           className={styles.conteudo}
@@ -1111,6 +1234,7 @@ export function VistaLinha(p: VistaLinhaProps) {
               larguraCss={larguraCss}
               selecao={p.selecao}
               travada={!!ui.travadas[t.id]}
+              semConteudo={!!ui.semConteudo?.[t.id]}
               soLeitura={p.soLeitura}
               fantasmas={fantasmasDaTrilha(t)}
               itemDe={itemDe}

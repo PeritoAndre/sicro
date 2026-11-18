@@ -12,9 +12,10 @@ import { chaveDaFaixaDe, donoNaLinha, instantesDasChaves, slotsNaBase, tempoDoSl
 
 /** Chave da faixa do efeito: tipo + rastreio seguido (`destaque`, `lupa`, `ocultar`, `holofote`, velocidade que
  *  acompanha, enquadramento que segue), ou só o tipo. */
-// CONTRATO: aceita também o item de versão futura (`Desconhecido`): a faixa dele é a do tipo cru.
-export function chaveDaFaixa(e: Efeito | Desconhecido): string {
-  return chaveDaFaixaDe(e);
+// CONTRATO: aceita também o item de versão futura (`Desconhecido`): a faixa dele é a do tipo cru. `doc` opcional
+// (rodada 2): com ele, a chave da linha (a da maquete: pessoa pelo nome, destaque pela forma, lupa e zoom pelo tipo).
+export function chaveDaFaixa(e: Efeito | Desconhecido, doc?: ProjetoEdicao): string {
+  return chaveDaFaixaDe(e, doc);
 }
 
 /** `ativo` (base do clipe) em slots do programa `[de_q, ate_q)`; null = fora do clipe. */

@@ -54,6 +54,25 @@ export function prenderTituloNoModelo(d: ProjetoEdicao, clipe: Id, modelo: "even
 
 const st = () => useEdicaoStore.getState();
 
+// Fase 4 (P4.1, rodada 2): cada cartão lê só os presos dele. Ler o documento inteiro redesenhava os 200 cartões a cada
+// mudança; a lista de cada clipe sai de um índice feito uma vez por documento.
+const presosPorDoc = new WeakMap<ProjetoEdicao, Map<Id, string>>();
+const SEM_PRESOS = "[]";
+
+/** Os presos do clipe como texto (comparável): igual enquanto nada preso a ele muda. */
+export function chaveDosPresos(doc: ProjetoEdicao, clipe: Id): string {
+  let m = presosPorDoc.get(doc);
+  if (!m) {
+    m = new Map();
+    const ids = new Set<Id>();
+    for (const t of doc.sobreposicoes) for (const c of t.clipes) if ((c as { pos?: { ref?: string; clipe?: Id } }).pos?.ref === "clipe") ids.add((c as { pos: { clipe: Id } }).pos.clipe);
+    for (const t of doc.audios) for (const c of t.clipes) if (c.pos.ref === "clipe") ids.add(c.pos.clipe);
+    for (const id of ids) m.set(id, JSON.stringify(presosAoClipe(doc, id)));
+    presosPorDoc.set(doc, m);
+  }
+  return m.get(clipe) ?? SEM_PRESOS;
+}
+
 /** Importa um arquivo para o projeto (a pasta do projeto precisa existir antes da mídia própria). */
 async function importar(tipo: "imagem" | "audio"): Promise<{ id: Id; nome: string } | null> {
   const s = st();
@@ -99,7 +118,8 @@ function selecionarPreso(p: Preso) {
 }
 
 export function Presos({ clipe }: { clipe: Id }) {
-  const doc = useEdicaoStore((s) => s.doc);
+  const aberto = useEdicaoStore((s) => s.doc !== null);
+  const chave = useEdicaoStore((s) => (s.doc ? chaveDosPresos(s.doc, clipe) : SEM_PRESOS));
   const soLeitura = useEdicaoStore((s) => s.soLeitura);
   // o cartão em foco (o mesmo da Sequência): seleção do clipe, senão o clipe do cursor
   const emFoco = useEdicaoStore((s) => (s.selecao.foco?.k === "clipe" ? s.selecao.foco.id : s.cursor.modo === "clipe" ? s.cursor.clipe : null) === clipe);
@@ -124,8 +144,8 @@ export function Presos({ clipe }: { clipe: Id }) {
       window.removeEventListener("keydown", tecla);
     };
   }, [menu]);
-  if (!doc) return null;
-  const presos = presosAoClipe(doc, clipe);
+  if (!aberto) return null;
+  const presos = JSON.parse(chave) as Preso[];
   if (presos.length === 0 && !emFoco) return null;
   const parar = (e: { stopPropagation(): void }) => e.stopPropagation();
   return (

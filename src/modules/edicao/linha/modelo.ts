@@ -71,6 +71,18 @@ export interface ItemNaLinha {
   cortado?: { de: boolean; ate: boolean };
   /** Som dos trechos: o do clipe está mudo. */
   mudo?: boolean;
+  /** Barra que atravessa emendas de clipe: os efeitos que a formam, em ordem (o primeiro dá a borda do começo, o
+   *  último a do fim). Ausente = um efeito só. */
+  partes?: ParteDaBarra[];
+}
+
+/** Um efeito dentro de uma barra emendada: o pedaço dele, no clipe dele. */
+export interface ParteDaBarra {
+  id: Id;
+  clipe: Id;
+  de_q: number;
+  ate_q: number;
+  daMidia?: boolean;
 }
 
 /** Faixa de efeito: chave = tipo + rastreio seguido (ou só o tipo), na ordem da primeira aparição (D2). */
@@ -154,11 +166,36 @@ export function rastreioSeguido(e: Efeito): Id | null {
   }
 }
 
-/** Chave da faixa (D2): tipo + rastreio seguido, ou só o tipo. Item de versão futura: o tipo cru. */
-export function chaveDaFaixaDe(e: Efeito | Desconhecido): string {
+/** Forma do destaque como a maquete escreve na faixa ("PP1 · seta"). */
+export const FORMA_NA_FAIXA: Readonly<Record<string, string>> = { seta: "seta", circulo: "círculo", elipse: "elipse", retangulo: "retângulo", colchetes: "colchetes" };
+
+/** Faixas só pelo tipo, como na maquete ("Lupa", "Zoom"): o rastreio não as separa. */
+const SO_PELO_TIPO = new Set<string>(["lupa", "enquadramento"]);
+
+/** Nome da faixa pelo tipo (sem pessoa): o do registro, com o enquadramento chamado "Zoom" (maquete). */
+const nomeDoTipo = (tipo: string) => (tipo === "enquadramento" ? "Zoom" : (ROTULO_DO_EFEITO[tipo as Efeito["tipo"]] ?? tipo));
+
+/** Chave da faixa (D2): tipo + rastreio seguido, ou só o tipo. Item de versão futura: o tipo cru. Com `doc` (a
+ *  linha), a da maquete: a pessoa pelo NOME do rastreio (a mesma pessoa em duas câmeras fica numa faixa), o destaque
+ *  também pela forma, lupa e zoom só pelo tipo. */
+// CONTRATO: `doc` opcional (P4.1 rodada 2); sem ele, a chave de antes (pelo id do rastreio).
+export function chaveDaFaixaDe(e: Efeito | Desconhecido, doc?: ProjetoEdicao): string {
   if (!efeitoConhecido(e)) return `?${String((e as { tipo?: unknown }).tipo ?? "")}`;
   const r = rastreioSeguido(e);
-  return r ? `${e.tipo}:${r}` : e.tipo;
+  if (!doc) return r ? `${e.tipo}:${r}` : e.tipo;
+  if (SO_PELO_TIPO.has(e.tipo) || !r) return e.tipo;
+  const quem = doc.rastreios.find((x) => x.id === r)?.nome || r;
+  return e.tipo === "destaque" ? `destaque:${quem}:${e.forma}` : `${e.tipo}:${quem}`;
+}
+
+/** Nome da faixa como na maquete: "PP1 · seta", "PP1 · ocultar", "Lupa", "Zoom", "Texto". */
+export function nomeDaFaixa(e: Efeito | Desconhecido, doc: ProjetoEdicao): string {
+  if (!efeitoConhecido(e)) return tipoDe(e);
+  const rid = SO_PELO_TIPO.has(e.tipo) ? null : rastreioSeguido(e);
+  const quem = rid ? doc.rastreios.find((x) => x.id === rid)?.nome : "";
+  const oque = e.tipo === "destaque" ? (FORMA_NA_FAIXA[e.forma] ?? e.forma) : nomeDoTipo(e.tipo).toLowerCase();
+  if (quem) return `${quem} · ${oque}`;
+  return e.tipo === "destaque" ? oque.charAt(0).toUpperCase() + oque.slice(1) : nomeDoTipo(e.tipo);
 }
 
 // ---- coordenadas ----
@@ -201,7 +238,9 @@ export function mapaDoClipe(c: ClipePrincipal, rc: ClipeResolvido, ctx: Contexto
   const tab = ctx.tabela(midia);
   if (!tab) return null;
   const chaveFps = `${fps.num}/${fps.den}`;
-  const chaveJ = `${rc.fonte.j_in}:${rc.fonte.j_out}`;
+  // a velocidade também (o objeto do clipe pode ter mudado no lugar fora do immer)
+  const vel = (c as { velocidade?: { tipo: string; fator?: number; pontos?: unknown[] } }).velocidade;
+  const chaveJ = `${rc.fonte.j_in}:${rc.fonte.j_out}:${vel?.tipo}:${vel?.tipo === "constante" ? vel.fator : JSON.stringify(vel?.pontos)}`;
   const g = mapas.get(c);
   if (g && g.tab === tab && g.fps === chaveFps && g.j === chaveJ) return g.r;
   let r: MapaClipe | null = null;
@@ -346,6 +385,8 @@ export function slotsNaBase(d: Dono, ativo: Intervalo | null, base: "dono" | "fo
 
 // ---- nomes ----
 
+const tipoDe = (x: unknown) => String((x as { tipo?: unknown })?.tipo ?? "");
+
 const semExtensao = (s: string) => s.replace(/\.[^.]+$/, "");
 
 /** Nome do clipe da principal: o "Nome", senão o da mídia, senão o primeiro texto do título (o da Sequência). */
@@ -370,8 +411,6 @@ function nomeDoSobreposto(c: ClipeSobreposto, doc: ProjetoEdicao): string {
 const nomeDoRastreio = (rs: readonly Rastreio[], id: Id | null) => (id ? (rs.find((r) => r.id === id) ?? null) : null);
 
 // ---- trilhas ----
-
-const tipoDe = (x: unknown) => String((x as { tipo?: unknown })?.tipo ?? "");
 
 /** Raias das barras de uma faixa: a primeira raia livre na ordem do tempo. */
 function porRaias(itens: ItemNaLinha[]): number {
@@ -429,7 +468,8 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       const lugar = lugarDesconhecido(c, linha);
       if (lugar) itens.push({ id: c.id ?? `?${t.id}:${j}`, k: "livre", trilha: t.id, de_q: lugar[0], ate_q: lugar[1], rotulo: tipoDe(c), tipo: tipoDe(c), apagado: true });
     });
-    saida.push({ id: t.id, tipo: "sobreposicao", nome: t.nome, sigla: `S${i + 1}`, itens, oculta: t.oculta, indice: i });
+    // maquete: "T1 Textos" (a trilha dos textos, títulos e imagens por cima do vídeo)
+    saida.push({ id: t.id, tipo: "sobreposicao", nome: t.nome || "Textos", sigla: `T${i + 1}`, itens, oculta: t.oculta, indice: i });
   }
 
   // ---- principal (V1) ----
@@ -467,14 +507,13 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
   // ---- faixas de efeito (ordem da primeira aparição na linha) ----
   const faixas = new Map<string, TrilhaNaLinha>();
   const naFaixa = (e: Efeito | Desconhecido, item: Omit<ItemNaLinha, "trilha">) => {
-    const chave = chaveDaFaixaDe(e);
+    const chave = chaveDaFaixaDe(e, doc);
     let f = faixas.get(chave);
     if (!f) {
       const conhecido = efeitoConhecido(e);
-      const r = conhecido ? nomeDoRastreio(doc.rastreios, rastreioSeguido(e)) : null;
-      const rot = conhecido ? (ROTULO_DO_EFEITO[e.tipo] ?? e.tipo) : tipoDe(e);
+      const r = conhecido && !SO_PELO_TIPO.has(e.tipo) ? nomeDoRastreio(doc.rastreios, rastreioSeguido(e)) : null;
       const cor = r?.cor ?? (conhecido ? COR_DA_FAMILIA[FAMILIA[e.tipo] ?? "anotacao"] : COR_DA_FAMILIA.desconhecido);
-      f = { id: `faixa:${chave}`, tipo: "efeito", nome: r?.nome ? `${r.nome} · ${rot}` : rot, cor, itens: [] };
+      f = { id: `faixa:${chave}`, tipo: "efeito", nome: nomeDaFaixa(e, doc), cor, itens: [] };
       faixas.set(chave, f);
     }
     f.itens.push({ ...item, trilha: f.id });
@@ -494,7 +533,7 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       k: "efeito",
       de_q: s[0],
       ate_q: s[1],
-      rotulo: conhecido ? e.nome || nomeDoRastreio(doc.rastreios, rastreioSeguido(e))?.nome || (ROTULO_DO_EFEITO[e.tipo] ?? e.tipo) : tipoDe(e),
+      rotulo: conhecido ? e.nome || nomeDoRastreio(doc.rastreios, rastreioSeguido(e))?.nome || nomeDoTipo(e.tipo) : tipoDe(e),
       clipe: d.id,
       tipo: tipoDe(e),
       ...(chaves.length ? { chaves } : {}),
@@ -521,9 +560,15 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       const d: Dono = { id: c.id, inicio_q: l.inicio_q, n_q: l.n_q, fps, base: "local", mapa: null, inicio_s: 0, fator: 1, clipe: null };
       for (const e of c.efeitos) barra(e, d, "dono", {});
     }
-  for (const f of faixas.values()) f.raias = porRaias(f.itens);
+  // a barra de um efeito que segue no clipe seguinte (o corte duplicou o efeito; a mesma pessoa na outra câmera) é uma
+  // barra só, como na maquete
+  const limites = new Map<Id, [number, number]>([...donos.values()].map((d) => [d.id, [d.inicio_q, d.inicio_q + d.n_q]] as const));
+  for (const f of faixas.values()) {
+    f.itens = emendarBarras(f.itens, limites);
+    f.raias = porRaias(f.itens);
+  }
 
-  saida.push({ id: TRILHA_PRINCIPAL, tipo: "principal", nome: "", sigla: "V1", itens: v1 });
+  saida.push({ id: TRILHA_PRINCIPAL, tipo: "principal", nome: "Vídeo", sigla: "V1", itens: v1 });
   saida.push(...faixas.values());
 
   // ---- som dos trechos, na posição deles ----
@@ -536,7 +581,8 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
     if (!m?.tem_audio) continue;
     som.push({ id: c.id, k: "clipe", trilha: TRILHA_SOM, de_q: rc.inicio_q, ate_q: rc.inicio_q + rc.n_q, rotulo: nomeDoClipe(c, doc), tipo: c.tipo, midia: m.id, ...(c.audio.mudo ? { mudo: true } : {}) });
   }
-  saida.push({ id: TRILHA_SOM, tipo: "som", nome: "Som", itens: som });
+  // maquete: "A1 Som" (o som dos trechos); as trilhas de áudio do documento seguem como A2, A3…
+  saida.push({ id: TRILHA_SOM, tipo: "som", nome: "Som", sigla: "A1", itens: som });
 
   // ---- áudio, na ordem do documento ----
   doc.audios.forEach((t, i) => {
@@ -547,7 +593,7 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       const m = doc.midias.find((x) => x.id === c.midia);
       itens.push({ id: c.id, k: "audio", trilha: t.id, de_q: l.inicio_q, ate_q: l.inicio_q + l.n_q, rotulo: c.nome || (m ? semExtensao(m.nome) : ""), tipo: t.papel, midia: c.midia });
     }
-    saida.push({ id: t.id, tipo: "audio", nome: PAPEL[t.papel] ?? t.papel, sigla: `A${i + 1}`, itens, muda: t.mudo, indice: i });
+    saida.push({ id: t.id, tipo: "audio", nome: PAPEL[t.papel] ?? t.papel, sigla: `A${i + 2}`, itens, muda: t.mudo, indice: i });
   });
 
   // ---- legendas ----
@@ -568,8 +614,48 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       if (s) legendas.push({ id: l.id, k: "legenda", trilha: TRILHA_LEGENDAS, de_q: s[0], ate_q: s[1], rotulo: l.texto, clipe: c.id });
     }
   }
-  saida.push({ id: TRILHA_LEGENDAS, tipo: "legendas", nome: "Legendas", itens: legendas });
+  // sem legenda no projeto, a trilha não ocupa a altura do painel (a maquete não tem)
+  if (doc.legendas.itens.length > 0) saida.push({ id: TRILHA_LEGENDAS, tipo: "legendas", nome: "Legendas", itens: legendas });
   return saida;
+}
+
+/**
+ * Barras da mesma faixa que se tocam numa emenda de clipe viram uma: a primeira acaba no fim do clipe dela e a
+ * seguinte começa no começo do clipe seguinte (na transição com sobreposição, dentro dela). Mesma situação (ligado,
+ * apagado) e nenhuma da versão futura. As partes ficam no item para as bordas e a seleção.
+ */
+export function emendarBarras(itens: ItemNaLinha[], limites: ReadonlyMap<Id, readonly [number, number]>): ItemNaLinha[] {
+  const ordem = [...itens].sort((a, b) => a.de_q - b.de_q || a.ate_q - b.ate_q);
+  const r: ItemNaLinha[] = [];
+  const parte = (it: ItemNaLinha): ParteDaBarra => ({ id: it.id, clipe: it.clipe as Id, de_q: it.de_q, ate_q: it.ate_q, ...(it.daMidia ? { daMidia: true } : {}) });
+  const li = (it: ItemNaLinha) => (it.clipe ? limites.get(it.clipe) : undefined);
+  for (const it of ordem) {
+    const lit = li(it);
+    let ant: ItemNaLinha | null = null;
+    // a barra que acaba no fim do clipe de antes, na emenda em que esta começa
+    for (let k = r.length - 1; k >= 0 && lit && !it.apagado && it.de_q === lit[0]; k--) {
+      const x = r[k]!;
+      const u = x.partes ? x.partes[x.partes.length - 1]! : parte(x);
+      const lu = limites.get(u.clipe);
+      if (!x.apagado && x.tipo === it.tipo && !x.desligado === !it.desligado && u.clipe !== it.clipe && lu && u.ate_q === lu[1] && lit[0] <= lu[1] && lit[0] >= lu[0]) {
+        ant = x;
+        break;
+      }
+    }
+    if (!ant) {
+      r.push(it);
+      continue;
+    }
+    const partes = [...(ant.partes ?? [parte(ant)]), parte(it)];
+    const chaves = [...new Set([...(ant.chaves ?? []), ...(it.chaves ?? [])])];
+    const cortado = { de: !!ant.cortado?.de, ate: !!it.cortado?.ate };
+    const junta: ItemNaLinha = { ...ant, ate_q: Math.max(ant.ate_q, it.ate_q), partes, ...(chaves.length ? { chaves } : {}) };
+    if (cortado.de || cortado.ate) junta.cortado = cortado;
+    else delete junta.cortado;
+    if (ant.erro || it.erro) junta.erro = true;
+    r[r.indexOf(ant)] = junta;
+  }
+  return r;
 }
 
 /** O `ativo` (tempo de fonte) começa antes do primeiro quadro do clipe? Nulo = desde o começo da mídia. No congelado,

@@ -52,6 +52,10 @@ export const ROTULOS = new Set<string>([
   "Chave no cursor", "Tirar chave", "Linear", "Suave", "Degrau", "Escala", "Opacidade", "Volume",
   "Acompanhar rastreio", "Cena inteira", "Aproximar", "Segurar", "Afastar",
   "Rastrear pessoas", "Motor", "Automático", "EdgeTAM", "VitTrack", "Mancha",
+  // Fase 4 (P4.1, rodada 2: maquete aprovada): cabeças "T1 Textos", "V1 Vídeo", "A1 Som"; faixas "Zoom", "PP1 · seta"
+  // (a forma do destaque); o zoom da linha "− ▬ +"
+  "Textos", "Zoom", "Seta", "Círculo", "Colchetes", "seta", "círculo", "elipse", "retângulo", "colchetes", "ocultar", "holofote", "velocidade",
+  "−", "+",
   // amostras e unidades
   "Aa", "×", "%", "°", "#",
 ]);
@@ -64,6 +68,10 @@ export function textoPermitido(t: string): boolean {
   if (/^Diferente a partir de \d{2}:\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^Perdido em (\d{2}:)?\d{2}:\d{2},\d{3}$/.test(t)) return true;
   if (/^\d+ marcaç(ão|ões)$/.test(t)) return true;
+  // Fase 4 (P4.1, rodada 2): cabeças das trilhas de textos (T1, T2…); marcas da régua como na maquete ("0:05", "1:02:05",
+  // "0:05,500")
+  if (/^T\d+$/.test(t)) return true;
+  if (/^\d+:\d{2}(:\d{2})?(,\d{3})?$/.test(t)) return true;
   // Fase 4: cabeças das trilhas de sobreposição e de áudio (S1, S2…, A1, A2…)
   if (/^[SA]\d+$/.test(t)) return true;
   if (/^#\d+$/.test(t)) return true;

@@ -5,6 +5,7 @@
  */
 
 import type { AlvoQuadro, Chave, ClipePrincipal, ClipeResolvido, FaixaFonte, Id, LinhaResolvida, LivreResolvido, Posicao, ProjetoEdicao, QuadroEm, Racional, Seg, TabelaQuadros, Velocidade } from "@domain/edicao";
+import { isDraft } from "immer";
 import { clipeConhecido, sobrepostoConhecido } from "./projeto";
 import { tabelaDoClipe } from "./realce";
 
@@ -450,8 +451,54 @@ export interface ContextoTempo {
   tabela(midia: Id): TabelaQuadros | null;
 }
 
-/** Slots e faixa de fonte de um clipe; sem tabela ou faixa inválida: slots estimados pelos segundos, sem `fonte`. */
+// Fase 4 (P4.1, rodada 2): a medida de cada clipe fica guardada pelo objeto dele (o documento só muda pelo immer,
+// que mantém o objeto que não mudou e troca o que mudou), pela tabela da mídia e pela taxa: mudar um clipe não refaz o
+// mapa dos outros 199. Mesma conta, mesmo resultado. Rascunho do immer (muda no lugar) nunca é guardado.
+const medidas = new WeakMap<object, { tab: TabelaQuadros | null; num: number; den: number; chave: unknown[]; r: [number, FaixaFonte | null] }>();
+
+/** A mídia cuja tabela a medida do clipe lê (trecho, tela pela célula de referência, congelado); null nos sem fonte. */
+function midiaDaMedida(c: ClipePrincipal): Id | null {
+  if (c.tipo === "trecho" || c.tipo === "congelar") return c.midia;
+  if (c.tipo === "tela") return c.celulas[c.referencia]?.midia ?? null;
+  return null;
+}
+
+/** Tudo do clipe que a medida lê (o objeto pode ter mudado no lugar fora do immer: nos testes, nas contas de corte). */
+function chaveDaMedida(c: ClipePrincipal): unknown[] {
+  const x = c as Partial<Record<"midia" | "inicio_s" | "fim_s" | "inicio_pts" | "fim_pts" | "duracao_s" | "instante_s" | "instante_pts", unknown>> & { velocidade?: Velocidade };
+  const v = x.velocidade;
+  return [
+    c.tipo,
+    midiaDaMedida(c),
+    x.inicio_s,
+    x.fim_s,
+    x.inicio_pts,
+    x.fim_pts,
+    x.duracao_s,
+    x.instante_s,
+    x.instante_pts,
+    v?.tipo,
+    v?.tipo === "constante" ? v.fator : JSON.stringify(v?.pontos),
+  ];
+}
+
+/** `medirAgora` guardada (ver `medidas`). A tabela entra como o clipe a lê (a de campos no desentrelace por campo é
+ *  refeita a cada vez: esse clipe não fica guardado). */
 function medir(c: ClipePrincipal, ctx: ContextoTempo, fps: Racional): [number, FaixaFonte | null] {
+  if (isDraft(c)) return medirAgora(c, ctx, fps);
+  const m = midiaDaMedida(c);
+  const daMidia = m !== null ? ctx.tabela(m) : null;
+  const tab = daMidia && (c.tipo === "trecho" || c.tipo === "tela") ? tabelaDoClipe(daMidia, c.efeitos) : daMidia;
+  const chave = chaveDaMedida(c);
+  const g = medidas.get(c);
+  if (g && g.tab === tab && g.num === fps.num && g.den === fps.den && g.chave.every((x, i) => x === chave[i])) return g.r;
+  const r = medirAgora(c, ctx, fps);
+  medidas.set(c, { tab, num: fps.num, den: fps.den, chave, r });
+  return r;
+}
+
+/** Slots e faixa de fonte de um clipe; sem tabela ou faixa inválida: slots estimados pelos segundos, sem `fonte`. */
+function medirAgora(c: ClipePrincipal, ctx: ContextoTempo, fps: Racional): [number, FaixaFonte | null] {
   if (c.tipo === "trecho" || c.tipo === "tela") {
     const midia = c.tipo === "trecho" ? c.midia : c.celulas[c.referencia]?.midia;
     if (midia !== undefined) {

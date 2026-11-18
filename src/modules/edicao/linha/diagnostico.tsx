@@ -1,22 +1,25 @@
 /**
  * Medida da linha do tempo para o Diagnóstico (aceite do P4.1: 200 clipes com menos de 16 ms por quadro de tela,
  * medidos DENTRO do app: o WebKitGTK pinta a página por software). Monta a `VistaLinha` com um projeto sintético de
- * 200 clipes (sem a store: o projeto aberto não muda), e roda quatro fases, um passo por quadro de tela: rolar, zoom,
- * cabeça andando e arrasto de um texto. Em cada quadro: o trabalho (mudança + render do React + leiaute) e o intervalo
+ * 200 clipes curtos (0,4 a 0,55 s, como a revisão mediu), com tabela de quadros, tiras e ondas feitas na hora (sem a
+ * store: o projeto aberto não muda), e roda quatro fases, um passo por quadro de tela: rolar, zoom, cabeça andando e
+ * arrasto de um texto. Em cada quadro: o trabalho (mudança + render do React + leiaute) e o intervalo
  * entre quadros (inclui a pintura). Dono: P4.1.
  */
 
 import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import { useState, type Dispatch, type SetStateAction } from "react";
-import type { Caixa, ProjetoEdicao, Selecao } from "@domain/edicao";
-import { novoId, novoProjeto, novoTrecho } from "../modelo/projeto";
-import { resolver, type ContextoTempo } from "../modelo/tempo";
-import { novoClipeAudio, novoDestaque, novoRastreio, novoTitulo, novaTrilhaNarracao } from "../inspetor/novos";
+import type { Caixa, ClipeAudio, Onda, PedidoTira, ProjetoEdicao, Selecao, TiraMiniaturas } from "@domain/edicao";
+import { novoId, novoProjeto } from "../modelo/projeto";
+import { resolver, tempoDoQuadro, type ContextoTempo } from "../modelo/tempo";
+import { novoClipeAudio, novoDestaque, novoRastreio, novaTrilhaNarracao } from "../inspetor/novos";
 import type { Ambiente } from "../diagnostico/base";
 import { VistaLinha, type AcoesLinha, type FonteCabeca, type UiDaLinha } from "./LinhaDoTempo";
 import { UI_PADRAO } from "./estado";
-import { midiaSintetica, textoLivre, trilhaS } from "./testeLinha";
+import { midiaSintetica, tabelaSintetica, textoLivre, trechoNosQuadros, trilhaS } from "./testeLinha";
+import { tirasDeMentira, WS_DE_MENTIRA } from "./tiras";
+import { ondasDeMentira } from "./ondas";
 
 /** Limite do aceite (ms de trabalho por quadro de tela). */
 export const LIMITE_MS = 16;
@@ -43,35 +46,88 @@ export interface ResLinha {
   ok: boolean;
 }
 
-/** Projeto de 200 clipes (trechos e títulos alternados), 40 textos em duas trilhas, 20 narrações, 60 destaques. */
+/** Projeto de 200 clipes curtos (12 a 16 quadros a 30 qps) com tabela, um destaque a cada 3, 40 textos de 0,3 s em
+ *  duas trilhas, 20 narrações de 1 s (o da revisão da rodada 2). */
 export function projetoDe200(): { doc: ProjetoEdicao; ctx: ContextoTempo } {
   const doc = novoProjeto("diagnostico");
   doc.saida.fps = { num: 30, den: 1 };
-  doc.midias.push(midiaSintetica("m1", null, { duracao_s: 3600 }));
-  doc.midias.push({ ...midiaSintetica("a1", null, { duracao_s: 6 }), tipo: "audio" });
+  const tab = tabelaSintetica(3000);
+  const tabA = tabelaSintetica(300);
+  doc.midias.push(midiaSintetica("m1", tab, { sha256: "diagnostico-linha-m1".padEnd(64, "0") }));
+  doc.midias.push({ ...midiaSintetica("a1", tabA, { sha256: "diagnostico-linha-a1".padEnd(64, "0") }), tipo: "audio" });
   const r = novoRastreio("m1", 0, { x: 0.4, y: 0.4, w: 0.1, h: 0.2 } as Caixa);
   r.nome = "PP1";
   doc.rastreios.push(r);
   for (let i = 0; i < N_CLIPES; i++) {
-    if (i % 4 === 3) {
-      doc.principal.push(novoTitulo(2));
-      continue;
-    }
-    const c = novoTrecho("m1", i * 12, i * 12 + 4 + (i % 5));
+    const a = (i * 14) % 2900;
+    const c = trechoNosQuadros("m1", tab, a, a + 12 + (i % 5));
     c.rotulo = `Cena ${i + 1}`;
-    if (i % 3 === 0) c.efeitos.push({ ...novoDestaque(r.id), ativo: { de: i * 12 + 1, ate: i * 12 + 3 } });
+    if (i % 3 === 0) c.efeitos.push({ ...novoDestaque(r.id), ativo: { de: tempoDoQuadro(tab, a + 2), ate: tempoDoQuadro(tab, a + 8) } });
     doc.principal.push(c);
   }
   const ids = doc.principal.map((c) => (c as { id: string }).id);
   const s1 = trilhaS([]);
   const s2 = trilhaS([]);
-  for (let i = 0; i < 40; i++) (i % 2 ? s2 : s1).clipes.push(textoLivre({ ref: "clipe", clipe: ids[i * 5]!, desloc: 0.5 }, 2, `Texto ${i + 1}`));
+  for (let i = 0; i < 40; i++) (i % 2 ? s2 : s1).clipes.push(textoLivre({ ref: "clipe", clipe: ids[i * 5]!, desloc: 0.1 }, 0.3, `Texto ${i + 1}`));
   doc.sobreposicoes.push(s1, s2);
   const a = novaTrilhaNarracao();
-  for (let i = 0; i < 20; i++) a.clipes.push(novoClipeAudio("a1", `Narração ${i + 1}`, { ref: "clipe", clipe: ids[i * 10]!, desloc: 0 }));
+  for (let i = 0; i < 20; i++) a.clipes.push({ ...novoClipeAudio("a1", `Narração ${i + 1}`, { ref: "clipe", clipe: ids[i * 10]!, desloc: 0 }), ate_s: 1 } as ClipeAudio);
   doc.audios.push(a);
-  for (let i = 0; i < 12; i++) doc.marcadores.push({ id: novoId(), rotulo: "", cor: "#5aa9e6", pos: { ref: "programa", t: i * 60 } });
-  return { doc, ctx: { tabela: () => null } };
+  for (let i = 0; i < 12; i++) doc.marcadores.push({ id: novoId(), rotulo: "", cor: "#5aa9e6", pos: { ref: "programa", t: i * 8 } });
+  return { doc, ctx: { tabela: (id) => (id === "m1" ? tab : id === "a1" ? tabA : null) } };
+}
+
+/** Imagem de 64 células (a mesma para toda tira da medida). */
+function spriteDeMentira(w: number, h: number): string {
+  const c = document.createElement("canvas");
+  c.width = w * 64;
+  c.height = h;
+  const g = c.getContext?.("2d");
+  if (!g) return "data:,";
+  for (let k = 0; k < 64; k++) {
+    g.fillStyle = `hsl(${(k * 37) % 360} 25% 28%)`;
+    g.fillRect(k * w, 0, w, h);
+    g.fillStyle = "#cfd6df";
+    g.fillRect(k * w + w * 0.3, h * 0.4, w * 0.2, h * 0.3);
+  }
+  return c.toDataURL("image/jpeg", 0.8);
+}
+
+/** Tiras e ondas feitas na hora (a forma das do app: `n` pela largura pedida, 100 picos por segundo). */
+function mentiras(): () => void {
+  const sprites = new Map<string, string>();
+  tirasDeMentira({
+    pedir: (_ws, p: PedidoTira) => {
+      const h = p.altura;
+      const w = Math.max(2, Math.round((h * 16) / 9 / 2) * 2);
+      const n = Math.max(1, Math.min(256, Math.round((p.largura ?? w) / w)));
+      const tira: TiraMiniaturas = { relativo: `diagnostico/${w}x${h}.jpg`, w, h, n, de_s: p.de_s, ate_s: p.ate_s, celulas: [], miniaturas: Array.from({ length: n }, (_, k) => k % 64) };
+      return Promise.resolve({ chave: `tira:${p.sha256}`, tira });
+    },
+    url: (t) => {
+      const k = `${t.w}x${t.h}`;
+      let u = sprites.get(k);
+      if (!u) sprites.set(k, (u = spriteDeMentira(t.w, t.h)));
+      return u;
+    },
+  });
+  ondasDeMentira((sha): Onda => {
+    const n = 100 * 120;
+    const min: number[] = new Array(n);
+    const max: number[] = new Array(n);
+    let x = sha.charCodeAt(12) || 7;
+    for (let i = 0; i < n; i++) {
+      x = (x * 9301 + 49297) % 233280;
+      const v = ((x / 233280) * 0.55 + 0.18 * Math.abs(Math.sin(i / 37))) * 20000;
+      min[i] = -Math.round(v);
+      max[i] = Math.round(v * 0.9);
+    }
+    return { inicio_s: 0, por_s: 100, min, max };
+  });
+  return () => {
+    tirasDeMentira(null);
+    ondasDeMentira(null);
+  };
 }
 
 interface Controle {
@@ -102,8 +158,8 @@ function Bancada({ doc, ctx, controle }: { doc: ProjetoEdicao; ctx: ContextoTemp
       selecao={selecao}
       soLeitura={false}
       problemas={[]}
-      ws={null}
-      raizCache={null}
+      ws={WS_DE_MENTIRA}
+      raizCache={WS_DE_MENTIRA}
       ui={ui}
       definirUi={(p) => setUi((u) => ({ ...u, ...p }))}
       cabeca={cabeca}
@@ -127,8 +183,12 @@ export async function medirLinha(amb: Pick<Ambiente, "agora" | "quadro" | "palco
   const raiz = createRoot(caixa);
   const { doc, ctx } = projetoDe200();
   const controle: Controle = { ui: () => {}, selecao: () => {}, cabeca: { q: 0, avisar: null } };
+  const voltar = mentiras();
   try {
     flushSync(() => raiz.render(<Bancada doc={doc} ctx={ctx} controle={controle} />));
+    // as tiras pedem depois de a tela parar; chegam antes das fases
+    await new Promise((r) => setTimeout(r, 400));
+    for (let k = 0; k < 3; k++) await amb.quadro();
     const rolo = caixa.querySelector<HTMLElement>("[data-linha-rolo]");
     if (!rolo) throw new Error("linha não montou");
     /** `diferido`: o painel faz o trabalho no quadro seguinte (arrasto, cabeça): conta também o que rodou antes desta
@@ -199,6 +259,7 @@ export async function medirLinha(amb: Pick<Ambiente, "agora" | "quadro" | "palco
   } finally {
     raiz.unmount();
     caixa.remove();
+    voltar();
   }
 }
 

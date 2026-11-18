@@ -229,9 +229,17 @@ function ultimaComChave(ts: readonly TarefaFundo[], chave: string): TarefaFundo 
 export const useTirasVersao = create<{ versao: number }>(() => ({ versao: 0 }));
 const subir = () => useTirasVersao.setState((s) => ({ versao: s.versao + 1 }));
 
+/** Medida do Diagnóstico: tiras e imagens feitas na hora, só para o caso de mentira dela (o editor aberto ao lado segue
+ *  com as do app). */
+export const WS_DE_MENTIRA = "diagnostico";
+let deMentira: { pedir: PedirTira; url: (t: TiraMiniaturas) => string } | null = null;
+export function tirasDeMentira(m: typeof deMentira): void {
+  deMentira = m;
+}
+
 export const tiras = new Tiras(
   // erro síncrono (comando ausente) vira recusa: a faixa fica lisa
-  (ws, p) => Promise.resolve().then(() => commands.edicaoTira(ws, p)),
+  (ws, p) => (deMentira && ws === WS_DE_MENTIRA ? deMentira.pedir(ws, p) : Promise.resolve().then(() => commands.edicaoTira(ws, p))),
   subir,
   () => useFundoStore.getState().tarefas,
 );
@@ -262,7 +270,7 @@ const imagens = new Map<string, { img: HTMLImageElement; pronta: boolean }>();
 /** Imagem da tira já carregada; começa a carregar na primeira vez (avisa a linha ao chegar). */
 export function imagemDaTira(raizCache: string, t: TiraMiniaturas): HTMLImageElement | null {
   if (!t.relativo) return null;
-  const url = urlDoCache(raizCache, t.relativo);
+  const url = deMentira && raizCache === WS_DE_MENTIRA ? deMentira.url(t) : urlDoCache(raizCache, t.relativo);
   let e = imagens.get(url);
   if (!e) {
     const img = new Image();

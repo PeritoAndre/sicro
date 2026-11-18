@@ -4,7 +4,7 @@
  * cartão apagado com o `tipo`, sem editor. Estado só por ícone; os rótulos são os do §8.6.
  */
 
-import type { PointerEvent as PE } from "react";
+import { memo, type PointerEvent as PE } from "react";
 import { CircleAlert, Copy, Eye, GripVertical, Trash2 } from "lucide-react";
 import type { OrigemDoClipe } from "../store/origemStore";
 import type { Id, Problema, Seg } from "@domain/edicao";
@@ -39,7 +39,27 @@ export interface CartaoProps {
   onAlca(e: PE<HTMLElement>): void;
 }
 
-export function CartaoClipe(p: CartaoProps) {
+// Fase 4 (P4.1, rodada 2): o cartão só redesenha quando o que ele mostra muda (com 200 clipes, uma edição num
+// redesenhava os 200). As funções vêm presas ao `id` e ao `indice`, que entram na comparação.
+function mesmoCartao(a: CartaoProps, b: CartaoProps): boolean {
+  const ka = Object.keys(a) as (keyof CartaoProps)[];
+  if (ka.length !== Object.keys(b).length) return false;
+  for (const k of ka) {
+    const x = a[k];
+    const y = b[k];
+    if (typeof x === "function" && typeof y === "function") continue;
+    if (Array.isArray(x) && Array.isArray(y)) {
+      if (x.length !== y.length || x.some((v, i) => v !== y[i] && JSON.stringify(v) !== JSON.stringify(y[i]))) return false;
+      continue;
+    }
+    if (x !== y) return false;
+  }
+  return true;
+}
+
+export const CartaoClipe = memo(CartaoClipeBase, mesmoCartao);
+
+function CartaoClipeBase(p: CartaoProps) {
   const conhecido = p.tipo !== null;
   // erro primeiro; senão o primeiro aviso
   const problema = p.problemas.find((x) => x.nivel === "erro") ?? p.problemas[0] ?? null;

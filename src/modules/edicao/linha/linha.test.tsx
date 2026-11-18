@@ -213,6 +213,21 @@ describe("gestos na tela", () => {
     expect(linhaAgora().clipes.find((c) => c.id === id)!.n_q).toBe(antes);
   });
 
+  it("o clipe que andou (aparado o de antes) apara pela posição nova", async () => {
+    const t = await telaComLinha();
+    await act(async () => useLinhaUi.setState({ ima: false }));
+    const ids = st().doc!.principal.map((c) => (c as { id: string }).id);
+    const k = ids.findIndex((_, i) => i > 1 && !!v1Item(t.raiz, i).querySelector("[data-borda=fim]"));
+    const n = (id: string) => linhaAgora().clipes.find((c) => c.id === id)!.n_q;
+    const [n1, nk] = [n(ids[1]!), n(ids[k]!)];
+    await arrastarEl(v1Item(t.raiz, 1).querySelector("[data-borda=fim]")!, rolo(t.raiz), 500, 472);
+    expect(n(ids[1]!)).toBe(n1 - 60);
+    // o seguinte andou 60 slots para trás: a borda dele vale onde está agora
+    await arrastarEl(v1Item(t.raiz, k).querySelector("[data-borda=fim]")!, rolo(t.raiz), 700, 686);
+    expect(n(ids[k]!)).toBe(nk - 30);
+    conferir(t.raiz);
+  });
+
   it("arrastar o clipe na V1 reordena por inserção (um passo)", async () => {
     const t = await telaComLinha();
     await act(async () => {});
@@ -315,7 +330,10 @@ describe("gestos na tela", () => {
     expect(palcoFalso.tocar).not.toHaveBeenCalled();
   });
 
-  it("Travar: a trilha não arrasta; Mudo da trilha de áudio é edição do documento (um passo)", async () => {
+  it("Travar: a trilha não arrasta; Ver da V1 e do áudio só esconde o conteúdo; Ver dos textos é edição (um passo)", async () => {
+    st().alterar("t", (d) => {
+      d.sobreposicoes.push({ id: "s1", nome: "", oculta: false, clipes: [] });
+    });
     const t = await telaComLinha();
     await act(async () => {});
     await act(async () => (t.raiz.querySelector('[data-travar="principal"]') as HTMLElement).click());
@@ -323,13 +341,20 @@ describe("gestos na tela", () => {
     const passos = st().passado.length;
     const borda = v1Item(t.raiz, 1).querySelector("[data-borda=fim]");
     expect(borda).toBeNull();
+    // o olho da maquete na V1 e nas trilhas de som: tela, sem passo
     const a1 = st().doc!.audios[0]!.id;
-    await act(async () => (t.raiz.querySelector(`[data-mudo="${a1}"]`) as HTMLElement).click());
-    expect(st().doc!.audios[0]!.mudo).toBe(true);
+    await act(async () => (t.raiz.querySelector('[data-ver="principal"]') as HTMLElement).click());
+    await act(async () => (t.raiz.querySelector(`[data-ver="${a1}"]`) as HTMLElement).click());
+    expect(useLinhaUi.getState().semConteudo).toMatchObject({ principal: true, [a1]: true });
+    expect(t.raiz.querySelector('[data-ver="principal"]')!.getAttribute("aria-pressed")).toBe("false");
+    expect(st().doc!.audios[0]!.mudo).toBe(false);
+    expect(st().passado.length).toBe(passos);
+    await act(async () => (t.raiz.querySelector('[data-ver="s1"]') as HTMLElement).click());
+    expect(st().doc!.sobreposicoes[0]!.oculta).toBe(true);
     expect(st().passado.length).toBe(passos + 1);
   });
 
-  it("Ctrl+roda: o zoom vale já na tela (variável --px, sem React); o estado assenta quando a roda para", async () => {
+  it("Ctrl+roda: o zoom vale já na tela (pistas e régua esticadas, sem leiaute nem React); assenta quando a roda para", async () => {
     const t = await telaComLinha();
     await act(async () => {});
     const conteudo = rolo(t.raiz).firstElementChild as HTMLElement;
@@ -340,12 +365,17 @@ describe("gestos na tela", () => {
     // o happy-dom não guarda `ctrlKey` na roda
     Object.defineProperty(roda, "ctrlKey", { value: true });
     await act(async () => void rolo(t.raiz).dispatchEvent(roda));
-    const px1 = Number(conteudo.style.getPropertyValue("--px"));
-    expect(px1).toBeCloseTo(px0 * Math.pow(1.0018, 100), 6);
+    const k = Math.pow(1.0018, 100);
+    const pista = t.raiz.querySelector<HTMLElement>('[data-pista="principal"]')!;
+    const esticada = /^matrix\(([-\d.e]+), 0, 0, 1, ([-\d.e]+), 0\)$/.exec(pista.style.transform);
+    expect(Number(esticada![1])).toBeCloseTo(k, 9);
+    expect(t.raiz.querySelector<HTMLElement>("[data-regua]")!.style.transform).toBe(pista.style.transform);
+    expect(Number(conteudo.style.getPropertyValue("--px"))).toBe(px0);
     expect(useLinhaUi.getState().pxPorS).toBe(14);
-    await act(async () => void (await new Promise((r) => setTimeout(r, 200))));
-    expect(useLinhaUi.getState().pxPorS).toBeCloseTo(px1 * 30, 6);
-    expect(Number(conteudo.style.getPropertyValue("--px"))).toBeCloseTo(px1, 9);
+    await act(async () => void (await new Promise((r) => setTimeout(r, 250))));
+    expect(useLinhaUi.getState().pxPorS).toBeCloseTo(14 * k, 6);
+    expect(Number(conteudo.style.getPropertyValue("--px"))).toBeCloseTo(px0 * k, 9);
+    expect(pista.style.transform).toBe("");
   });
 
   it("projeto aberto pela primeira vez: a linha abre ajustada ao programa", async () => {
@@ -415,7 +445,8 @@ describe("gestos na tela", () => {
       if (s) textos.push(s);
     }
     expect(textos.filter((s) => !textoPermitido(s))).toEqual([]);
-    expect(textos).toEqual(expect.arrayContaining(["Selecionar", "Lâmina", "Ímã", "V1", "Som", "A1", "Narração", "Legendas"]));
+    // cabeças da maquete: "V1 Vídeo", "A1 Som", "A2 Narração"; o zoom "− ▬ +"
+    expect(textos).toEqual(expect.arrayContaining(["Selecionar", "Lâmina", "Ímã", "V1", "Vídeo", "A1", "Som", "A2", "Narração", "−", "+", "0:05"]));
     const dicas = [...painel.querySelectorAll<HTMLElement>("[title]")].filter((e) => !e.closest("[data-item]") && !e.closest("[data-marcador]")).map((e) => e.title);
     expect(dicas.filter((d) => !ROTULOS.has(d) && d !== "Ajustar à tela" && !textoPermitido(d))).toEqual([]);
   });
