@@ -1,6 +1,7 @@
 /**
  * Áudio: volume do original e as trilhas de narração (importar, gravar, volume). Cada clipe de narração: "Preso a"
- * (clipe da principal, ou o programa), "Posição", recorte "De"/"Até" no arquivo, "Entrada (s)"/"Saída (s)".
+ * (clipe da principal, ou o programa), "Posição", recorte "De"/"Até" no arquivo, "Entrada (s)"/"Saída (s)" e (P4.2)
+ * o "Volume" no cursor com as chaves dele (tempo local do clipe).
  * A gravação vai inteira num comando só (`edicao_gravacao_salvar`, bytes crus).
  * É a aba da Fase 0; o `PainelAudio` (P1.5) monta a dele com as mesmas peças (`Trilha`, `Gravador`).
  */
@@ -16,6 +17,7 @@ import { clipeConhecido } from "../../modelo/projeto";
 import { adicionarNarracao, mudar, narracaoNoProjeto } from "../acoes";
 import { Deslizante, Grade, Icone, Mini, Numero, Secao, Tempo } from "../campos";
 import { escolherMidia } from "./importar";
+import { CurvasDoItem, VolumeNoCursor } from "../../linha/curvas/CurvasDoItem";
 import styles from "../Inspetor.module.css";
 
 export const PAPEL: Record<TrilhaAudio["papel"], string> = { narracao: "Narração", musica: "Música", efeitos: "Efeitos" };
@@ -201,6 +203,8 @@ function ClipeNarracao({ c, principal, foco }: { c: ClipeAudio; principal: unkno
           />
           <Numero rotulo="Entrada (s)" item={c.id} valor={c.entrada_s} min={0} max={30} passo={0.1} casas={1} valido={(v) => v >= 0} aplicar={(v) => noClipeAudio(c.id, (x) => void (x.entrada_s = v))} />
           <Numero rotulo="Saída (s)" item={c.id} valor={c.saida_s} min={0} max={30} passo={0.1} casas={1} valido={(v) => v >= 0} aplicar={(v) => noClipeAudio(c.id, (x) => void (x.saida_s = v))} />
+          <VolumeNoCursor item={{ k: "audio", id: c.id }} />
+          <CurvasDoItem item={{ k: "audio", id: c.id }} />
         </div>
       )}
     </li>

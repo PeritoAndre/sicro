@@ -1,0 +1,182 @@
+/* Curvas (P4.2): a faixa das chaves de uma propriedade (Inspetor e item da linha do tempo) e o menu da interpolação */
+
+.curva {
+  position: relative;
+  min-width: 0;
+  touch-action: none;
+}
+/* no Inspetor: uma faixa baixa com o fundo do campo */
+.noInspetor {
+  height: 22px;
+  background: var(--sicro-surface-2);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+}
+/* sobre o item da linha: ocupa o item, só os losangos pegam o ponteiro */
+.naLinha {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.desligada {
+  opacity: 0.55;
+}
+
+.traco {
+  position: absolute;
+  inset: 3px 0;
+  width: 100%;
+  height: calc(100% - 6px);
+  overflow: visible;
+  pointer-events: none;
+}
+.traco polyline {
+  fill: none;
+  stroke: var(--sicro-accent);
+  stroke-width: 1.25;
+  opacity: 0.7;
+}
+.naLinha .traco polyline {
+  stroke: #f4f7fb;
+  opacity: 0.85;
+}
+
+.cabeca {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 0;
+  border-left: 1px solid var(--sicro-accent);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.losango {
+  position: absolute;
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin: -6px 0 0 -6px;
+  padding: 0;
+  border: 1px solid #0b1220;
+  border-radius: 1px;
+  background: var(--sicro-accent);
+  transform: rotate(45deg);
+  cursor: ew-resize;
+  pointer-events: auto;
+}
+.losango:hover:not(:disabled) {
+  background: var(--sicro-fg);
+}
+.losango:focus-visible {
+  outline: 2px solid var(--sicro-fg);
+  outline-offset: 1px;
+}
+.losango:disabled {
+  cursor: default;
+}
+.escolhido {
+  background: var(--sicro-fg);
+  box-shadow: 0 0 0 2px var(--sicro-accent);
+}
+.naLinha .losango {
+  border-color: #f4f7fb;
+  background: #0b1220;
+}
+.naLinha .escolhido {
+  background: var(--sicro-accent);
+}
+/* chave no meio de um arrasto */
+.andando {
+  cursor: grabbing;
+}
+
+/* menu da interpolação (por cima de tudo: o item da linha corta o que passa dele) */
+.menu {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  min-width: 96px;
+  padding: 3px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-sm);
+}
+.menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sicro-fg);
+  font: inherit;
+  font-size: var(--text-xs);
+  text-align: left;
+  cursor: pointer;
+}
+.menu button:hover,
+.menu button:focus-visible {
+  background: var(--sicro-surface-2);
+  outline: none;
+}
+.menu button[aria-checked="true"] {
+  color: var(--sicro-accent);
+}
+
+/* ---- bloco das curvas no Inspetor: rótulo, chave no cursor, faixa ---- */
+
+.bloco {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.raia {
+  display: grid;
+  grid-template-columns: 66px 24px minmax(0, 1fr);
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.nome {
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.emFoco .nome {
+  color: var(--sicro-fg);
+}
+.chaveBtn {
+  width: 24px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  cursor: pointer;
+}
+.chaveBtn:hover:not(:disabled) {
+  color: var(--sicro-fg);
+  background: var(--sicro-surface-2);
+}
+.chaveBtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.naChave,
+.naChave:hover:not(:disabled) {
+  color: var(--sicro-accent);
+}
+.interp {
+  margin-left: 94px;
+}

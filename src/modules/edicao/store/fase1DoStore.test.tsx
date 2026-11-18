@@ -356,7 +356,8 @@ beforeAll(async () => {
   await clicar(q(tela.raiz, '[data-acao="marcar-volume"]'));
   await esperar(() => st().posicionar({ modo: "clipe", clipe: a.id, t: 2.5 + 1 / 60 }));
   await clicar(q(tela.raiz, '[data-acao="marcar-volume"]'));
-  await arrastar(q<HTMLInputElement>(tela.raiz, '[data-chave-volume="1"] input[type="range"]'), [0.8, 0.6]);
+  // P4.2: o "Som" do trecho grava a chave do cursor (a segunda)
+  await arrastar(q<HTMLInputElement>(tela.raiz, '[data-campo="Som"] input[type="range"]'), [0.8, 0.6]);
 
   // ---- trecho B (câmera 2): entrada por fusão com o som cortado, a "Cor" escolhida e os seis efeitos de origem
   await focarClipe(b.id);

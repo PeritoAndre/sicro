@@ -326,44 +326,58 @@ describe("som do clipe", () => {
     expect(textosVisiveis(tela.raiz).filter((t) => !textoPermitido(t))).toEqual([]);
   });
 
+  // P4.2 (D7): a raia "Volume" com "Chave no cursor" / "Tirar chave"; o "Som" do trecho grava a chave do cursor
   it("Som: chave do volume no cursor (tempo de fonte); a última que sai deixa o valor fixo", async () => {
     await focarTrecho();
     await esperar(() => st().alterar("Som", (d) => void ((d.principal[1] as ClipeTrecho).audio.volume = 0.8)));
     await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 13 }));
     const n = passos();
-    await clicar(q<HTMLButtonElement>('[data-acao="marcar-volume"]'));
+    const chave = () => q<HTMLButtonElement>('[data-raia="volume"] [data-acao="marcar-volume"]');
+    expect(chave().getAttribute("aria-label")).toBe("Chave no cursor");
+    await clicar(chave());
+    // linear, sem o campo: o mesmo que a chave do som gravava antes da Fase 4
     expect(trecho().audio.volume).toEqual([{ t: 13, v: 0.8 }]);
-    expect([passos(), ultimo()]).toEqual([n + 1, "Som"]);
+    expect([passos(), ultimo()]).toEqual([n + 1, "Chave no cursor"]);
+    expect(chave().getAttribute("aria-label")).toBe("Tirar chave");
     expect(tela.raiz.querySelectorAll('[data-estado="so-no-render"][data-de="volume"]').length).toBe(1);
     await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 14 }));
-    await clicar(q<HTMLButtonElement>('[data-acao="marcar-volume"]'));
+    await clicar(chave());
     expect(trecho().audio.volume).toEqual([
       { t: 13, v: 0.8 },
       { t: 14, v: 0.8 },
     ]);
-    // arrasto do volume da segunda chave: um passo
+    expect(tela.raiz.querySelectorAll('[data-curva="Volume"] [data-chave]').length).toBe(2);
+    // o "Som" mostra o volume do cursor e o arrasto grava a chave dele: um passo
+    const som = q<HTMLInputElement>('[data-campo="Som"] input[type="range"]');
+    expect(som.disabled).toBe(false);
     const m = passos();
-    await arrastar(q<HTMLInputElement>('[data-chave-volume="1"] input[type="range"]'), [0.5, 0.2]);
-    expect((trecho().audio.volume as { v: number }[])[1]!.v).toBe(0.2);
+    await arrastar(som, [0.5, 0.2]);
+    expect(trecho().audio.volume).toEqual([
+      { t: 13, v: 0.8 },
+      { t: 14, v: 0.2 },
+    ]);
     expect(passos()).toBe(m + 1);
-    // no mesmo instante a chave é trocada, não duplicada, e leva o valor da curva
+    // no meio: a chave nova leva o valor da curva
     await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 13.5 }));
-    await clicar(q<HTMLButtonElement>('[data-acao="marcar-volume"]'));
+    expect(Number(som.value)).toBeCloseTo(0.5, 9);
+    await clicar(chave());
     expect((trecho().audio.volume as { t: number; v: number }[]).map((k) => [k.t, Math.round(k.v * 100) / 100])).toEqual([
       [13, 0.8],
       [13.5, 0.5],
       [14, 0.2],
     ]);
-    for (const _ of [0, 1]) await clicar(q<HTMLButtonElement>('[data-chave-volume="0"] [aria-label="Remover"]'));
+    // na chave do cursor: Tirar chave
+    await clicar(chave());
+    await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 13 }));
+    await clicar(chave());
     expect(trecho().audio.volume).toEqual([{ t: 14, v: 0.2 }]);
-    // cursor fora do trecho (aparando): a chave cai na ponta dele
+    // cursor fora do trecho (aparando): nada de chave fora dele
     await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 20 }));
-    await clicar(q<HTMLButtonElement>('[data-acao="marcar-volume"]'));
-    expect((trecho().audio.volume as { t: number }[]).map((k) => k.t)).toEqual([14, 15.5]);
-    await clicar(q<HTMLButtonElement>('[data-chave-volume="1"] [aria-label="Remover"]'));
-    await clicar(q<HTMLButtonElement>('[data-chave-volume="0"] [aria-label="Remover"]'));
+    expect(chave().disabled).toBe(true);
+    await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 14 }));
+    await clicar(chave());
     expect(trecho().audio.volume).toBe(0.2);
-    expect(tela.raiz.querySelector("[data-chave-volume]")).toBeNull();
+    expect(tela.raiz.querySelector('[data-curva="Volume"] [data-chave]')).toBeNull();
     expect(tela.raiz.querySelector('[data-estado="so-no-render"]')).toBeNull();
     expect(textosVisiveis(tela.raiz).filter((t) => !textoPermitido(t))).toEqual([]);
   });

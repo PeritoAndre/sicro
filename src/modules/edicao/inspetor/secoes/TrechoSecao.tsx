@@ -1,9 +1,11 @@
-/** Clipe · Trecho: nome, vídeo, início e fim (tempo de fonte, pts pela tabela), velocidade e som do clipe. */
+/** Clipe · Trecho: nome, vídeo, início e fim (tempo de fonte, pts pela tabela), velocidade e som do clipe. Volume com
+ *  chaves (P4.2): o "Som" mostra o do cursor e grava a chave dele. */
 
 import { Volume2, VolumeX } from "lucide-react";
 import type { ClipeTrecho } from "@domain/edicao";
-import { ehChaves } from "../../modelo/curva";
-import { noClipe } from "../acoes";
+import { avaliar, ehChaves } from "../../modelo/curva";
+import { gravarEm } from "../../linha/curvas/chaves";
+import { noClipe, tempoNoClipe } from "../acoes";
 import { Deslizante, Grade, Marca, Secao, Tempo, Texto } from "../campos";
 import { useEdicaoStore } from "../../store/edicaoStore";
 import type { SecaoProps } from "../registro";
@@ -21,6 +23,9 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
   const ate = info?.ate_s;
   const volume = c.audio.volume;
   const animado = ehChaves(volume);
+  // com chaves: o instante do cursor no trecho (tempo de fonte), e o valor da curva nele
+  const tCursor = () => Math.min(Math.max(tempoNoClipe(c), c.inicio_s), c.fim_s);
+  const noCursor = useEdicaoStore(() => (animado ? avaliar(volume, tCursor()) : null));
   // contratos (h) 17: #n e setas só com a tabela confiável; mídia não marcável não marca nem pelo texto
   const tab = info?.marcavel ? tabela : null;
   const travado = info?.marcavel === false;
@@ -80,13 +85,13 @@ export function TrechoSecao({ clipe: c, info, tabela }: SecaoProps<ClipeTrecho>)
               rotulo="Som"
               semRotulo
               item={id}
-              valor={animado ? 1 : (volume as number)}
-              desligado={animado || c.audio.mudo}
+              valor={noCursor ?? (volume as number)}
+              desligado={c.audio.mudo}
               min={0}
               max={2}
               passo={0.05}
               mostrar={(v) => `${Math.round(v * 100)} %`}
-              aplicar={(v) => noClipe<ClipeTrecho>(id, (x) => void (x.audio.volume = v))}
+              aplicar={(v) => noClipe<ClipeTrecho>(id, (x) => void (x.audio.volume = animado ? gravarEm(volume, tCursor(), v, null) : v))}
             />
           </span>
         </div>

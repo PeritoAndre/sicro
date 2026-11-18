@@ -5,4 +5,5 @@ pub mod aceite;
 pub mod executor;
 pub mod fontes;
 pub mod medir;
+pub mod curvas;
 pub mod previa_viva;

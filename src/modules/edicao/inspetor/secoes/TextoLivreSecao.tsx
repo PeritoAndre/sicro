@@ -3,20 +3,20 @@
  * Faixa, Caixa) · "Contorno" · "Sombra" · "Posição" · "Giro" · "Largura" · "Entrada" / "Saída" (Corte, Aparecer,
  * Deslizar) · "Duração (s)" · "Lado"; com a linha do tempo (P4.1), "De" · "Até" · "Começar no cursor" · "Terminar no
  * cursor". Posição e largura em % da saída (a posição gravada no pixel inteiro), giro em graus; com chaves (P4.2), o
- * campo grava a chave no cursor.
+ * campo grava a chave no cursor; "Escala" e "Opacidade" e as raias das curvas (`linha/curvas/CurvasDoItem`) são do P4.2.
  * Montada pelo registro (`livre:texto`) só com `TEXTO_LIVRE_PRONTO`. Dono: pacote do texto livre.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { current, isDraft, type Draft } from "immer";
 import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp } from "lucide-react";
 import type { Animavel, AnimacaoSob, BlocoTexto, EstiloTexto, ProjetoEdicao, SobTitulo, Surgir } from "@domain/edicao";
 import { CampoNumero } from "@components/CampoNumero/CampoNumero";
 import { useEdicaoStore } from "../../store/edicaoStore";
-import { acharMidia, porChave } from "../../modelo/projeto";
+import { acharMidia } from "../../modelo/projeto";
 import { avaliar, ehChaves } from "../../modelo/curva";
 import { resolver } from "../../modelo/tempo";
-import { recursoDe } from "../../palco/recursos";
+import { recursoDe, useRecursos } from "../../palco/recursos";
 import { mudar, noClipe } from "../acoes";
 import { Cor, Escolha, Grade, Marca, Mini, Numero, Secao, Tempo, Texto } from "../campos";
 import type { SecaoProps } from "../registro";
@@ -24,6 +24,8 @@ import { round } from "./comum";
 import { CONTORNO, CORES, DURACAO_SURGIR, SOMBRA, comFundo, comSurgir, fundoDe, tauNoCursor, tomarFoco, type Fundo } from "./textoLivre";
 import { LINHA_PRONTA } from "../../linha/LinhaDoTempo";
 import { apararLivre } from "../../linha/arrastar";
+import { gravarEm } from "../../linha/curvas/chaves";
+import { CurvasDoItem } from "../../linha/curvas/CurvasDoItem";
 import styles from "../Inspetor.module.css";
 import meu from "./TextoLivre.module.css";
 
@@ -67,15 +69,19 @@ export function TextoLivreSecao({ clipe: c }: SecaoProps<SobTitulo>) {
     if (tomarFoco(id)) raiz.current?.querySelector("textarea")?.focus();
   }, [id]);
   const b = c.titulo.blocos[0] as BlocoTexto | undefined;
+  // P4.2: a linha resolvida só muda com o documento e as tabelas (o cursor muda a cada quadro tocando)
+  const versao = useRecursos((s) => s.versao);
+  const resolvida = useMemo(() => (doc ? resolver(doc, { tabela: (m) => recursoDe(acharMidia(doc, m)?.sha256).tabela }) : null), [doc, versao]);
   if (!doc || !b) return null;
   const e = b.estilo;
   const W = Math.max(doc.saida.largura, 1);
   const H = Math.max(doc.saida.altura, 1);
   const tr = c.transformacao;
-  const animado = ehChaves(tr.x) || ehChaves(tr.y) || ehChaves(tr.rotacao);
-  const linha = animado || LINHA_PRONTA ? resolver(doc, { tabela: (m) => recursoDe(acharMidia(doc, m)?.sha256).tabela }) : null;
+  const animado = ehChaves(tr.x) || ehChaves(tr.y) || ehChaves(tr.rotacao) || ehChaves(tr.escala) || ehChaves(tr.opacidade);
+  const linha = animado || LINHA_PRONTA ? resolvida : null;
   const tau = (linha && tauNoCursor(doc, linha, cursor, id)) ?? 0;
-  const naChave = (a: Animavel<number>, v: number): Animavel<number> => (ehChaves(a) ? porChave(a, { t: tau, pts: null, v, interp: a.find((k) => k.t <= tau)?.interp ?? "linear" }) : v);
+  // P4.2 (D7): com chaves, o campo grava a chave no cursor (a que já existe ali fica com a curva dela)
+  const naChave = (a: Animavel<number>, v: number): Animavel<number> => gravarEm(a, tau, v);
 
   const noBloco = (f: (x: Draft<BlocoTexto>, s: Draft<SobTitulo>) => void): Mut =>
     noClipe<SobTitulo>(id, (x) => {
@@ -207,7 +213,19 @@ export function TextoLivreSecao({ clipe: c }: SecaoProps<SobTitulo>) {
                       unidade="%"
                       disabled={soLeitura}
                       // no pixel inteiro da saída: sem giro o texto sai do sprite sem reamostrar
-                      onChange={(n) => n !== v && mudar("Posição", noClipe<SobTitulo>(id, (x) => void (x.transformacao[eixo] = naChave(tr[eixo], Math.round((n / 100) * lado) / lado))), `${id}:Posição:${eixo}`)}
+                      onChange={(n) =>
+                        n !== v &&
+                        mudar(
+                          "Posição",
+                          noClipe<SobTitulo>(id, (x) => {
+                            x.transformacao[eixo] = naChave(tr[eixo], Math.round((n / 100) * lado) / lado);
+                            // posição com chaves: x e y ganham a chave do instante juntos (a raia é uma só)
+                            const outro = eixo === "x" ? "y" : "x";
+                            if (ehChaves(tr[eixo]) && ehChaves(tr[outro])) x.transformacao[outro] = naChave(tr[outro], avaliar(tr[outro], tau));
+                          }),
+                          `${id}:Posição:${eixo}`,
+                        )
+                      }
                     />
                   </div>
                 );
@@ -226,6 +244,30 @@ export function TextoLivreSecao({ clipe: c }: SecaoProps<SobTitulo>) {
             aplicar={(v) => noClipe<SobTitulo>(id, (x) => void (x.transformacao.rotacao = naChave(tr.rotacao, v)))}
           />
           <Numero
+            rotulo="Escala"
+            item={id}
+            valor={round(avaliar(tr.escala, tau) * 100, 1)}
+            min={5}
+            max={1000}
+            passo={5}
+            casas={1}
+            unidade="%"
+            valido={(v) => v > 0}
+            aplicar={(v) => noClipe<SobTitulo>(id, (x) => void (x.transformacao.escala = naChave(tr.escala, v / 100)))}
+          />
+          <Numero
+            rotulo="Opacidade"
+            item={id}
+            valor={round(avaliar(tr.opacidade, tau) * 100, 1)}
+            min={0}
+            max={100}
+            passo={5}
+            casas={1}
+            unidade="%"
+            valido={(v) => v >= 0 && v <= 100}
+            aplicar={(v) => noClipe<SobTitulo>(id, (x) => void (x.transformacao.opacidade = naChave(tr.opacidade, v / 100)))}
+          />
+          <Numero
             rotulo="Largura"
             item={id}
             valor={round(b.largura_max * 100, 1)}
@@ -237,6 +279,7 @@ export function TextoLivreSecao({ clipe: c }: SecaoProps<SobTitulo>) {
             valido={(v) => v > 0}
             aplicar={(v) => noBloco((bl) => void (bl.largura_max = v / 100))}
           />
+          <CurvasDoItem item={{ k: "livre", id }} />
           {surgir("entrada")}
           {surgir("saida")}
           {LINHA_PRONTA && livre && linha && (

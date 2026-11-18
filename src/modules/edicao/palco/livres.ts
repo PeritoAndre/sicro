@@ -11,8 +11,9 @@
 import type { Alca, Animavel, BlocoTexto, Id, LinhaResolvida, Mudanca, Ponto, Primitiva, ProjetoEdicao, Seg, SobImagem, SobTitulo } from "@domain/edicao";
 import { folgaDaSombra, transformacaoEm, type TransformacaoAvaliada } from "../modelo/sobreposto";
 import { primitivas as primitivasDoTitulo } from "../modelo/titulos";
-import { avaliar, ehChaves } from "../modelo/curva";
-import { porChave, sobrepostoConhecido } from "../modelo/projeto";
+import { avaliar } from "../modelo/curva";
+import { sobrepostoConhecido } from "../modelo/projeto";
+import { gravarEm as gravarNaChave } from "../linha/curvas/chaves";
 import { instanteDoSlot } from "../modelo/tempo";
 import { SOMBRA_MAX, ehTextoLivre } from "../inspetor/secoes/textoLivre";
 import type { FontesCena } from "./cena";
@@ -113,8 +114,10 @@ const aplicarT = (m: Transf, p: V): V => mais(girar(m, menos(p, m.C)), m.X);
 
 /** Valor animável no instante, e o mesmo campo com `v` gravado no instante (chave no cursor, se já tem chaves). */
 const lerEm = (a: Animavel<number>, tau: Seg) => avaliar(a, tau);
+// P4.2 (D7): a mesma regra do Inspetor e da linha (`linha/curvas/chaves.ts`): chave nova "suave", a que já existe fica
+// com a curva dela
 function gravarEm(a: Animavel<number>, v: number, tau: Seg): Animavel<number> {
-  return ehChaves(a) ? porChave(a, { t: tau, pts: null, v, interp: a.find((k) => k.t <= tau)?.interp ?? "linear" }) : v;
+  return gravarNaChave(a, tau, v);
 }
 
 const limitar = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);

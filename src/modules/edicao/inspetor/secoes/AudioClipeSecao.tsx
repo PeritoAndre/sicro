@@ -1,19 +1,20 @@
-/** Som do clipe (P1.5): chaves do volume ("Som" no instante "Posição", tempo de fonte) e "Silenciar trecho"
- *  (Tom, Mudo) · "Da degravação…" · "Motivo". Os silêncios valem em tempo de fonte; o que vem da degravação é
- *  o trecho de fala cortado no clipe. A prévia viva toca o som da fonte: chaves e silêncios levam o ícone de
- *  estado (§8.6). */
+/** Som do clipe (P1.5): chaves do volume (P4.2: a raia "Volume" com "Chave no cursor" / "Tirar chave", tempo de
+ *  fonte; o valor no cursor é o "Som" do trecho) e "Silenciar trecho" (Tom, Mudo) · "Da degravação…" · "Motivo". Os
+ *  silêncios valem em tempo de fonte; o que vem da degravação é o trecho de fala cortado no clipe. A prévia viva toca
+ *  o som da fonte: chaves e silêncios levam o ícone de estado (§8.6). */
 
 import { useState } from "react";
-import { BellOff, Captions, ChevronDown, ChevronRight, Diamond, EarOff, Trash2, VolumeX } from "lucide-react";
-import type { Chave, ClipeTrecho, Id, Seg, Silencio, TrechoFala } from "@domain/edicao";
+import { BellOff, Captions, ChevronDown, ChevronRight, EarOff, Trash2, VolumeX } from "lucide-react";
+import type { ClipeTrecho, Id, Seg, Silencio, TrechoFala } from "@domain/edicao";
 import { commands } from "@core/commands";
 import { pushToast } from "@components/toast/toastStore";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import { separarErro, useEdicaoStore } from "../../store/edicaoStore";
-import { avaliar, ehChaves } from "../../modelo/curva";
+import { ehChaves } from "../../modelo/curva";
 import { novoId } from "../../modelo/projeto";
 import { mudar, noClipe, tempoNoClipe } from "../acoes";
-import { Deslizante, Escolha, Grade, Icone, Mini, Secao, Tempo, Texto } from "../campos";
+import { Escolha, Grade, Icone, Mini, Secao, Tempo, Texto } from "../campos";
+import { CurvasDoItem } from "../../linha/curvas/CurvasDoItem";
 import { useShaDe } from "../contexto";
 import type { SecaoProps } from "../registro";
 import styles from "../Inspetor.module.css";
@@ -57,39 +58,8 @@ export function AudioClipeSecao({ clipe: c }: SecaoProps<ClipeTrecho>) {
   const sha = useShaDe(c.midia);
   const [aberto, setAberto] = useState<Id | null>(null);
   const [falas, setFalas] = useState<{ midia: Id; lista: TrechoFala[] } | null>(null);
-  const volume = c.audio.volume;
-  const chaves: Chave<number>[] = ehChaves(volume) ? volume : [];
+  const animado = ehChaves(c.audio.volume);
   const dentro = (t: Seg) => t >= c.inicio_s - 1e-9 && t <= c.fim_s + 1e-9;
-
-  const marcarVolume = () => {
-    const t = Math.min(Math.max(tempoNoClipe(c), c.inicio_s), c.fim_s);
-    mudar(
-      "Som",
-      noTrecho(id, (x) => {
-        const v = x.audio.volume;
-        const ks = ehChaves(v) ? v.filter((k) => !mesmo(k.t, t)) : [];
-        ks.push({ t, v: avaliar(v, t) });
-        x.audio.volume = ks.sort((a, b) => a.t - b.t);
-      }),
-    );
-  };
-  // a última chave que sai deixa o valor fixo (lista vazia nunca é gravada)
-  const tirarChave = (i: number) =>
-    mudar(
-      "Remover",
-      noTrecho(id, (x) => {
-        const v = x.audio.volume;
-        if (!ehChaves(v)) return;
-        x.audio.volume = v.length > 1 ? v.filter((_, k) => k !== i) : (v[0]?.v ?? 1);
-      }),
-    );
-  const naChave = (i: number, f: (k: Chave<number>) => void) =>
-    noTrecho(id, (x) => {
-      const v = x.audio.volume;
-      if (!ehChaves(v) || !v[i]) return;
-      f(v[i]);
-      v.sort((a, b) => a.t - b.t);
-    });
 
   const silenciar = () => {
     const de = Math.min(Math.max(tempoNoClipe(c), c.inicio_s), c.fim_s);
@@ -123,44 +93,9 @@ export function AudioClipeSecao({ clipe: c }: SecaoProps<ClipeTrecho>) {
   return (
     <Secao
       titulo="Som"
-      acoes={
-        <>
-          {chaves.length > 0 && <SoNoRender de="volume" />}
-          <Icone rotulo="Som" data-acao="marcar-volume" onClick={marcarVolume}>
-            <Diamond size={13} />
-          </Icone>
-        </>
-      }
+      acoes={animado ? <SoNoRender de="volume" /> : undefined}
     >
-      {chaves.length > 0 && (
-        <ul className={styles.efeitos}>
-          {chaves.map((k, i) => (
-            <li key={`${i}:${k.t}`} className={styles.efeito} data-chave-volume={i}>
-              <div className={styles.grade}>
-                <Tempo rotulo="Posição" item={`${id}:v${i}`} base="fonte" valor={k.t} valido={dentro} aplicar={(t) => naChave(i, (x) => void (x.t = t))} />
-                <div className={styles.som}>
-                  <span className={styles.somLinha}>
-                    <Deslizante
-                      rotulo="Som"
-                      semRotulo
-                      item={`${id}:v${i}`}
-                      valor={k.v}
-                      min={0}
-                      max={2}
-                      passo={0.05}
-                      mostrar={(v) => `${Math.round(v * 100)} %`}
-                      aplicar={(v) => naChave(i, (x) => void (x.v = v))}
-                    />
-                    <Icone rotulo="Remover" onClick={() => tirarChave(i)}>
-                      <Trash2 size={13} />
-                    </Icone>
-                  </span>
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
+      <CurvasDoItem item={{ k: "som", id }} props={["volume"]} />
       <div className={styles.barra}>
         <Mini data-acao="silenciar" disabled={c.audio.mudo} onClick={silenciar}>
           <BellOff size={12} /> Silenciar trecho
