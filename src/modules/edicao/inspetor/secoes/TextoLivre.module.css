@@ -1,0 +1,43 @@
+/* Seção do texto livre (pacote do texto livre): cores à mão e o par x / y da posição. */
+
+.raiz {
+  min-width: 0;
+}
+
+.cores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 2px 2px 4px;
+}
+.amostraCor {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 0;
+  box-shadow: 0 0 0 1px var(--sicro-border);
+  cursor: pointer;
+}
+.amostraCor:hover:not(:disabled) {
+  box-shadow: 0 0 0 1px var(--sicro-fg-muted);
+}
+.amostraCor:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.amostraCor:focus-visible {
+  outline: 2px solid var(--sicro-accent);
+  outline-offset: 2px;
+}
+.corOn,
+.corOn:hover:not(:disabled) {
+  box-shadow: 0 0 0 2px var(--sicro-surface-1), 0 0 0 4px var(--sicro-accent);
+}
+
+.par {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}

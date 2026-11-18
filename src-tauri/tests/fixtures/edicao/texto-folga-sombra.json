@@ -1,0 +1,863 @@
+[
+  {
+    "entrada": {
+      "altura_canvas": 180,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.004,
+        "dx": 0.0,
+        "dy": 0.003
+      }
+    },
+    "nome": "0 0.003 0.004 em 180",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        1
+      ],
+      "x": 1,
+      "y": 2
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 360,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.004,
+        "dx": 0.0,
+        "dy": 0.003
+      }
+    },
+    "nome": "0 0.003 0.004 em 360",
+    "saida": {
+      "raios": [
+        1,
+        1,
+        1
+      ],
+      "x": 3,
+      "y": 4
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 720,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.004,
+        "dx": 0.0,
+        "dy": 0.003
+      }
+    },
+    "nome": "0 0.003 0.004 em 720",
+    "saida": {
+      "raios": [
+        2,
+        2,
+        3
+      ],
+      "x": 7,
+      "y": 9
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.004,
+        "dx": 0.0,
+        "dy": 0.003
+      }
+    },
+    "nome": "0 0.003 0.004 em 1080",
+    "saida": {
+      "raios": [
+        3,
+        4,
+        4
+      ],
+      "x": 11,
+      "y": 14
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 2160,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.004,
+        "dx": 0.0,
+        "dy": 0.003
+      }
+    },
+    "nome": "0 0.003 0.004 em 2160",
+    "saida": {
+      "raios": [
+        8,
+        8,
+        8
+      ],
+      "x": 24,
+      "y": 30
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 180,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0 em 180",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 360,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0 em 360",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 720,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0 em 720",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0 em 1080",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 2160,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0 em 2160",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 180,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0005,
+        "dx": -0.002,
+        "dy": 0.001
+      }
+    },
+    "nome": "-0.002 0.001 0.0005 em 180",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 360,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0005,
+        "dx": -0.002,
+        "dy": 0.001
+      }
+    },
+    "nome": "-0.002 0.001 0.0005 em 360",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 1,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 720,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0005,
+        "dx": -0.002,
+        "dy": 0.001
+      }
+    },
+    "nome": "-0.002 0.001 0.0005 em 720",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 1,
+      "y": 1
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0005,
+        "dx": -0.002,
+        "dy": 0.001
+      }
+    },
+    "nome": "-0.002 0.001 0.0005 em 1080",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 2,
+      "y": 1
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 2160,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0005,
+        "dx": -0.002,
+        "dy": 0.001
+      }
+    },
+    "nome": "-0.002 0.001 0.0005 em 2160",
+    "saida": {
+      "raios": [
+        0,
+        1,
+        1
+      ],
+      "x": 6,
+      "y": 4
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 180,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.05,
+        "dx": 0.05,
+        "dy": -0.05
+      }
+    },
+    "nome": "0.05 -0.05 0.05 em 180",
+    "saida": {
+      "raios": [
+        8,
+        8,
+        9
+      ],
+      "x": 34,
+      "y": 34
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 360,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.05,
+        "dx": 0.05,
+        "dy": -0.05
+      }
+    },
+    "nome": "0.05 -0.05 0.05 em 360",
+    "saida": {
+      "raios": [
+        17,
+        17,
+        18
+      ],
+      "x": 70,
+      "y": 70
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 720,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.05,
+        "dx": 0.05,
+        "dy": -0.05
+      }
+    },
+    "nome": "0.05 -0.05 0.05 em 720",
+    "saida": {
+      "raios": [
+        35,
+        35,
+        36
+      ],
+      "x": 142,
+      "y": 142
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.05,
+        "dx": 0.05,
+        "dy": -0.05
+      }
+    },
+    "nome": "0.05 -0.05 0.05 em 1080",
+    "saida": {
+      "raios": [
+        53,
+        53,
+        54
+      ],
+      "x": 214,
+      "y": 214
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 2160,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.05,
+        "dx": 0.05,
+        "dy": -0.05
+      }
+    },
+    "nome": "0.05 -0.05 0.05 em 2160",
+    "saida": {
+      "raios": [
+        107,
+        107,
+        108
+      ],
+      "x": 430,
+      "y": 430
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 180,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0017,
+        "dx": 0.0013,
+        "dy": 0.0021
+      }
+    },
+    "nome": "0.0013 0.0021 0.0017 em 180",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 360,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0017,
+        "dx": 0.0013,
+        "dy": 0.0021
+      }
+    },
+    "nome": "0.0013 0.0021 0.0017 em 360",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        1
+      ],
+      "x": 1,
+      "y": 2
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 720,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0017,
+        "dx": 0.0013,
+        "dy": 0.0021
+      }
+    },
+    "nome": "0.0013 0.0021 0.0017 em 720",
+    "saida": {
+      "raios": [
+        0,
+        1,
+        1
+      ],
+      "x": 3,
+      "y": 4
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0017,
+        "dx": 0.0013,
+        "dy": 0.0021
+      }
+    },
+    "nome": "0.0013 0.0021 0.0017 em 1080",
+    "saida": {
+      "raios": [
+        1,
+        1,
+        2
+      ],
+      "x": 5,
+      "y": 6
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 2160,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0017,
+        "dx": 0.0013,
+        "dy": 0.0021
+      }
+    },
+    "nome": "0.0013 0.0021 0.0017 em 2160",
+    "saida": {
+      "raios": [
+        3,
+        3,
+        4
+      ],
+      "x": 13,
+      "y": 15
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 180,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0001,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0.0001 em 180",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 360,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0001,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0.0001 em 360",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 720,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0001,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0.0001 em 720",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0001,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0.0001 em 1080",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 2160,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0001,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "0 0 0.0001 em 2160",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.000462962962962963,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 0.5",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        0
+      ],
+      "x": 0,
+      "y": 0
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0008333333333333334,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 0.9",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        1
+      ],
+      "x": 1,
+      "y": 1
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.000925925925925926,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 1",
+    "saida": {
+      "raios": [
+        0,
+        0,
+        1
+      ],
+      "x": 1,
+      "y": 1
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.001388888888888889,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 1.5",
+    "saida": {
+      "raios": [
+        1,
+        1,
+        1
+      ],
+      "x": 3,
+      "y": 3
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.001851851851851852,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 2",
+    "saida": {
+      "raios": [
+        1,
+        1,
+        2
+      ],
+      "x": 4,
+      "y": 4
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.0023148148148148147,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 2.5",
+    "saida": {
+      "raios": [
+        2,
+        2,
+        2
+      ],
+      "x": 6,
+      "y": 6
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.002777777777777778,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 3",
+    "saida": {
+      "raios": [
+        2,
+        2,
+        3
+      ],
+      "x": 7,
+      "y": 7
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.004,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 4.32",
+    "saida": {
+      "raios": [
+        3,
+        4,
+        4
+      ],
+      "x": 11,
+      "y": 11
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.006481481481481481,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 7",
+    "saida": {
+      "raios": [
+        6,
+        6,
+        7
+      ],
+      "x": 19,
+      "y": 19
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.009259259259259259,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 10",
+    "saida": {
+      "raios": [
+        9,
+        9,
+        10
+      ],
+      "x": 28,
+      "y": 28
+    }
+  },
+  {
+    "entrada": {
+      "altura_canvas": 1080,
+      "sombra": {
+        "cor": "#000000",
+        "desfoque": 0.05,
+        "dx": 0.0,
+        "dy": 0.0
+      }
+    },
+    "nome": "desvio 54",
+    "saida": {
+      "raios": [
+        53,
+        53,
+        54
+      ],
+      "x": 160,
+      "y": 160
+    }
+  }
+]

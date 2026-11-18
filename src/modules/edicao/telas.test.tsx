@@ -52,6 +52,8 @@ const ROTULOS = new Set([
   "Expandir",
   "Trecho…",
   "Dos eventos…",
+  // Fase 4 (contratos-fase4.md (h)): botão do texto livre, com TEXTO_LIVRE_PRONTO
+  "Texto livre",
   "Título…",
   "Congelar aqui",
   "Imagem…",

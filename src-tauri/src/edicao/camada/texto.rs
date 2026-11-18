@@ -22,7 +22,7 @@ use super::formas::bitmap_reto;
 use super::{Bitmap, VERSAO_RASTERIZADOR};
 use crate::edicao::cor;
 use crate::edicao::mensagens::codigo;
-use crate::edicao::modelo::{BlocoTexto, EstiloTexto, TamanhoPx};
+use crate::edicao::modelo::{BlocoTexto, EstiloTexto, SombraTexto, TamanhoPx};
 use crate::edicao::motor::plano::ImagemCamada;
 use crate::error::{Result, SicroError};
 
@@ -131,15 +131,17 @@ const COMUM: &str = r##"
 }
 "##;
 
-/// Sprite: cada bloco com largura natural limitada a `d.largura`, caixa de fundo opcional; blocos empilhados;
-/// tamanho final arredondado para cima ao px inteiro.
+/// Sprite: cada bloco com largura natural limitada a `d.largura` (faixa: a largura inteira), caixa de fundo opcional;
+/// blocos empilhados; tamanho final arredondado para cima ao px inteiro. `b.texto`/`b.caixa` falsos escondem o texto
+/// ou a cor da caixa sem mudar o arranjo (as passadas da sombra: caixa, sombra e texto compostos à parte).
 const MODELO_SPRITE: &str = r##"
 #let bloco(b) = context {
   let e = b.estilo
-  let largura = calc.min(measure(letra(e, black, none, b.conteudo)).width, d.largura * 1pt)
+  let largura = if b.faixa { d.largura * 1pt } else { calc.min(measure(letra(e, black, none, b.conteudo)).width, d.largura * 1pt) }
   let corpo = com-contorno(e, c => block(width: largura, align(alinha.at(e.alinhamento), c)), b.conteudo)
+  let corpo = if b.texto { corpo } else { hide(corpo) }
   if d.fundo and e.caixa != none {
-    block(fill: rgb(e.caixa.cor), inset: e.caixa.margem * d.altura * 1pt, radius: e.caixa.raio * d.altura * 1pt, corpo)
+    block(fill: if b.caixa { rgb(e.caixa.cor) } else { none }, inset: e.caixa.margem * d.altura * 1pt, radius: e.caixa.raio * d.altura * 1pt, corpo)
   } else { corpo }
 }
 #context {
@@ -267,6 +269,11 @@ fn sanear(s: &str) -> (String, Vec<char>) {
 
 /// Compila `modelo` (depois de `COMUM`) com `dados` e rasteriza a primeira página: RGBA de alfa reto.
 fn rasterizar_modelo(modelo: &str, dados: &serde_json::Value) -> Result<Bitmap> {
+    Ok(bitmap_reto(rasterizar_pixmap(modelo, dados)?))
+}
+
+/// O mesmo, em RGBA pré-multiplicado (as passadas da sombra são compostas antes de voltar ao alfa reto).
+fn rasterizar_pixmap(modelo: &str, dados: &serde_json::Value) -> Result<tiny_skia::Pixmap> {
     let b = base();
     let mundo = Mundo {
         base: b,
@@ -290,7 +297,7 @@ fn rasterizar_modelo(modelo: &str, dados: &serde_json::Value) -> Result<Bitmap> 
     }
     let mut pm = tiny_skia::Pixmap::new(w, h).ok_or_else(|| SicroError::Workspace("texto: tamanho".into()))?;
     resvg::render(&arvore, tiny_skia::Transform::identity(), &mut pm.as_mut());
-    Ok(bitmap_reto(pm))
+    Ok(pm)
 }
 
 fn sha256_hex(texto: &[u8]) -> String {
@@ -366,13 +373,24 @@ fn conferir_cores(e: &EstiloTexto) -> Result<()> {
     if let Some(c) = &e.contorno {
         cor::ler(&c.cor)?;
     }
+    if let Some(s) = &e.sombra {
+        cor::ler(&s.cor)?;
+    }
     Ok(())
 }
 
 // CONTRATO: acréscimo da abertura da Fase 4 (contratos-fase4.md B2): regra única do pacote do texto livre.
-/// Detalhe do `nao_suportado` enquanto o modelo de sprite não desenha `sombra` ou `faixa`; None = desenha.
-/// A validação e o rasterizador perguntam aqui; o pacote converte trocando só esta função e o modelo.
+/// Detalhe do `nao_suportado` do estilo no sprite; None = desenha. Desde o pacote do texto livre o sprite desenha
+/// sombra e faixa: nada mais é recusado aqui (o atlas do carimbo tem a regra dele, `recusa_do_atlas`).
 pub fn recusa_estilo(e: &EstiloTexto) -> Option<&'static str> {
+    let _ = e;
+    None
+}
+
+// CONTRATO: acréscimo do pacote do texto livre (Fase 4): `recusa_do_atlas`, `SOMBRA_MAX`, `sombra_ok` (para a
+// validação do P4.R) e `folga_da_sombra` (espelho em `modelo/sobreposto.ts`, para as alças do palco).
+/// O atlas do carimbo é uma célula por glifo: não tem largura de bloco (faixa) nem lugar para o desfoque da sombra.
+pub fn recusa_do_atlas(e: &EstiloTexto) -> Option<&'static str> {
     if e.sombra.is_some() {
         return Some("sombra");
     }
@@ -380,6 +398,170 @@ pub fn recusa_estilo(e: &EstiloTexto) -> Option<&'static str> {
         return Some("faixa");
     }
     None
+}
+
+/// Maior deslocamento e maior desfoque da sombra, em fração da altura do canvas.
+pub const SOMBRA_MAX: f64 = 0.05;
+
+/// Sombra dentro da faixa que o sprite desenha (deslocamento e desfoque finitos, até `SOMBRA_MAX`; desfoque ≥ 0).
+pub fn sombra_ok(s: &SombraTexto) -> bool {
+    let ok = |v: f64| v.is_finite() && v.abs() <= SOMBRA_MAX;
+    ok(s.dx) && ok(s.dy) && ok(s.desfoque) && s.desfoque >= 0.0
+}
+
+/// Arredondamento do Rust (meio para longe do zero), o que o espelho repete.
+fn arredondar(v: f64) -> i64 {
+    v.round() as i64
+}
+
+/// Raios (px) das 3 passadas de caixa que aproximam a gaussiana de desvio `sigma` px ("boxes for gauss"):
+/// larguras ímpares `wl` e `wl + 2`, as `m` primeiras na menor.
+pub(crate) fn raios_do_desfoque(sigma: f64) -> [u32; 3] {
+    if !(sigma > 0.0) || !sigma.is_finite() {
+        return [0; 3];
+    }
+    let ideal = (4.0 * sigma * sigma + 1.0).sqrt();
+    let mut wl = ideal.floor() as i64;
+    if wl % 2 == 0 {
+        wl -= 1;
+    }
+    let wu = wl + 2;
+    let m = arredondar((12.0 * sigma * sigma - 3.0 * (wl * wl) as f64 - 12.0 * wl as f64 - 9.0) / (-4.0 * wl as f64 - 4.0));
+    let raio = |i: i64| ((if i < m { wl } else { wu }) - 1).max(0) as u32 / 2;
+    [raio(0), raio(1), raio(2)]
+}
+
+/// Quanto o sprite cresce de cada lado (px) para caber a sombra: deslocamento arredondado + os 3 raios do desfoque.
+/// Espelho em `modelo/sobreposto.ts::folgaDaSombra` (fixture `texto-folga-sombra.json`).
+pub fn folga_da_sombra(s: &SombraTexto, altura_canvas: u32) -> (u32, u32) {
+    let h = altura_canvas as f64;
+    let r: u32 = raios_do_desfoque(s.desfoque * h).iter().sum();
+    (arredondar(s.dx * h).unsigned_abs() as u32 + r, arredondar(s.dy * h).unsigned_abs() as u32 + r)
+}
+
+/// Uma passada de caixa de raio `r` sobre `n` valores a passo `passo` a partir de `inicio` (fora = 0), arredondada.
+fn caixa_1d(v: &mut [u32], tmp: &mut Vec<u32>, inicio: usize, n: usize, passo: usize, r: usize) {
+    if r == 0 || n == 0 {
+        return;
+    }
+    tmp.clear();
+    tmp.extend((0..n).map(|i| v[inicio + i * passo]));
+    let d = (2 * r + 1) as u64;
+    // soma da janela [i − r, i + r] com zeros fora
+    let mut soma: u64 = tmp.iter().take(r.min(n)).map(|&x| x as u64).sum();
+    for i in 0..n {
+        if i + r < n {
+            soma += tmp[i + r] as u64;
+        }
+        v[inicio + i * passo] = ((soma + d / 2) / d) as u32;
+        if i >= r {
+            soma -= tmp[i - r] as u64;
+        }
+    }
+}
+
+/// Alfa (pré-multiplicado) de `silhueta` posto em (x0, y0) de uma tela `w`×`h`, desfocado pelas 3 caixas (uma
+/// horizontal e uma vertical por passada). Inteiros com 8 bits de fração: o mesmo resultado em toda máquina.
+fn alfa_desfocado(silhueta: &tiny_skia::Pixmap, x0: u32, y0: u32, w: u32, h: u32, raios: [u32; 3]) -> Vec<u8> {
+    let (w, h) = (w as usize, h as usize);
+    let mut v = vec![0u32; w * h];
+    let sw = silhueta.width() as usize;
+    for (i, p) in silhueta.pixels().iter().enumerate() {
+        let (x, y) = (x0 as usize + i % sw, y0 as usize + i / sw);
+        v[y * w + x] = (p.alpha() as u32) << 8;
+    }
+    let mut tmp = Vec::new();
+    for r in raios {
+        for y in 0..h {
+            caixa_1d(&mut v, &mut tmp, y * w, w, 1, r as usize);
+        }
+        for x in 0..w {
+            caixa_1d(&mut v, &mut tmp, x, h, w, r as usize);
+        }
+    }
+    v.into_iter().map(|a| ((a + 128) >> 8).min(255) as u8).collect()
+}
+
+/// Dados do modelo com o que cada passada mostra de cada bloco (`texto`, `caixa`; `faixa` vem do estilo).
+fn dados_do_sprite(pedido: &PedidoSprite, conteudos: &[String], mostra: impl Fn(usize) -> (bool, bool)) -> serde_json::Value {
+    let altura = pedido.altura_canvas as f64;
+    let blocos: Vec<serde_json::Value> = pedido
+        .blocos
+        .iter()
+        .zip(conteudos)
+        .enumerate()
+        .map(|(i, (b, c))| {
+            let (texto, caixa) = mostra(i);
+            let faixa = b.estilo.caixa.as_ref().is_some_and(|c| c.faixa);
+            serde_json::json!({ "conteudo": c, "estilo": b.estilo, "faixa": faixa, "texto": texto, "caixa": caixa })
+        })
+        .collect();
+    serde_json::json!({ "altura": altura, "largura": pedido.largura_max * altura, "fundo": pedido.fundo, "blocos": blocos })
+}
+
+/// Sprite com sombra: a caixa, depois a sombra de cada grupo de blocos de mesma sombra (a silhueta do texto com o
+/// contorno, na cor da sombra, deslocada e desfocada), depois o texto; a tela cresce a mesma folga dos dois lados
+/// (o centro do texto não muda).
+fn sprite_com_sombra(pedido: &PedidoSprite, conteudos: &[String]) -> Result<Bitmap> {
+    let n = pedido.blocos.len();
+    let com_caixa = pedido.fundo && pedido.blocos.iter().any(|b| b.estilo.caixa.is_some());
+    let texto = rasterizar_pixmap(MODELO_SPRITE, &dados_do_sprite(pedido, conteudos, |_| (true, false)))?;
+    let (w, h) = (texto.width(), texto.height());
+    // grupos de blocos com a mesma sombra, na ordem da primeira aparição
+    let mut grupos: Vec<(&SombraTexto, Vec<usize>)> = Vec::new();
+    for (i, b) in pedido.blocos.iter().enumerate() {
+        if let Some(s) = &b.estilo.sombra {
+            match grupos.iter_mut().find(|(x, _)| *x == s) {
+                Some((_, v)) => v.push(i),
+                None => grupos.push((s, vec![i])),
+            }
+        }
+    }
+    let (mut fx, mut fy) = (0u32, 0u32);
+    for (s, _) in &grupos {
+        let (x, y) = folga_da_sombra(s, pedido.altura_canvas);
+        (fx, fy) = (fx.max(x), fy.max(y));
+    }
+    let (w2, h2) = (w as u64 + 2 * fx as u64, h as u64 + 2 * fy as u64);
+    if w2 * h2 > LIMITE_PX {
+        return Err(SicroError::Validation(format!("{}: texto de {w2}×{h2} px", codigo::ITEM_INVALIDO)));
+    }
+    let (w2, h2) = (w2 as u32, h2 as u32);
+    let mut tela = tiny_skia::Pixmap::new(w2, h2).ok_or_else(|| SicroError::Workspace("texto: tamanho".into()))?;
+    let copia = tiny_skia::PixmapPaint::default();
+    let id = tiny_skia::Transform::identity();
+    if com_caixa {
+        let caixa = rasterizar_pixmap(MODELO_SPRITE, &dados_do_sprite(pedido, conteudos, |_| (false, true)))?;
+        tela.draw_pixmap(fx as i32, fy as i32, caixa.as_ref(), &copia, id, None);
+    }
+    for (s, blocos) in &grupos {
+        let silhueta = if blocos.len() == n {
+            None
+        } else {
+            Some(rasterizar_pixmap(MODELO_SPRITE, &dados_do_sprite(pedido, conteudos, |i| (blocos.contains(&i), false)))?)
+        };
+        let silhueta = silhueta.as_ref().unwrap_or(&texto);
+        if (silhueta.width(), silhueta.height()) != (w, h) {
+            return Err(SicroError::Workspace("texto: passadas da sombra de tamanhos diferentes".into()));
+        }
+        let altura = pedido.altura_canvas as f64;
+        let (ox, oy) = (arredondar(s.dx * altura), arredondar(s.dy * altura));
+        let x0 = (fx as i64 + ox) as u32;
+        let y0 = (fy as i64 + oy) as u32;
+        let alfa = alfa_desfocado(silhueta, x0, y0, w2, h2, raios_do_desfoque(s.desfoque * altura));
+        let c = cor::ler(&s.cor)?;
+        let mut sombra = tiny_skia::Pixmap::new(w2, h2).ok_or_else(|| SicroError::Workspace("texto: tamanho".into()))?;
+        let mul = |v: u8, a: u32| ((v as u32 * a + 127) / 255) as u8;
+        for (p, a) in sombra.pixels_mut().iter_mut().zip(alfa) {
+            let a = (a as u32 * c.a as u32 + 127) / 255;
+            if a > 0 {
+                *p = tiny_skia::PremultipliedColorU8::from_rgba(mul(c.r, a), mul(c.g, a), mul(c.b, a), a as u8).unwrap_or(*p);
+            }
+        }
+        tela.draw_pixmap(0, 0, sombra.as_ref(), &copia, id, None);
+    }
+    tela.draw_pixmap(fx as i32, fy as i32, texto.as_ref(), &copia, id, None);
+    Ok(bitmap_reto(tela))
 }
 
 /// Bitmap do sprite (sem cache): o que `sprite` grava.
@@ -394,6 +576,9 @@ pub(crate) fn bitmap_sprite(pedido: &PedidoSprite) -> Result<(Bitmap, Vec<char>)
         if let Some(d) = recusa_estilo(&b.estilo) {
             return Err(SicroError::Validation(format!("{}: {d}", codigo::NAO_SUPORTADO)));
         }
+        if b.estilo.sombra.as_ref().is_some_and(|s| !sombra_ok(s)) {
+            return Err(SicroError::Validation(format!("{}: sombra", codigo::ITEM_INVALIDO)));
+        }
     }
     if pedido.blocos.iter().map(|b| b.conteudo.chars().count()).sum::<usize>() > LIMITE_TEXTO {
         return Err(SicroError::Validation(format!("{}: texto longo demais", codigo::ITEM_INVALIDO)));
@@ -402,17 +587,20 @@ pub(crate) fn bitmap_sprite(pedido: &PedidoSprite) -> Result<(Bitmap, Vec<char>)
         return Ok((Bitmap { w: 1, h: 1, canais: 4, px: vec![0; 4] }, Vec::new()));
     }
     let mut trocados = Vec::new();
-    let blocos: Vec<serde_json::Value> = pedido
+    let conteudos: Vec<String> = pedido
         .blocos
         .iter()
         .map(|b| {
             let (c, t) = sanear(&b.conteudo);
             trocados.extend(t);
-            serde_json::json!({ "conteudo": c, "estilo": b.estilo })
+            c
         })
         .collect();
-    let dados = serde_json::json!({ "altura": altura, "largura": largura, "fundo": pedido.fundo, "blocos": blocos });
-    Ok((rasterizar_modelo(MODELO_SPRITE, &dados)?, trocados))
+    if pedido.blocos.iter().any(|b| b.estilo.sombra.is_some()) {
+        return Ok((sprite_com_sombra(pedido, &conteudos)?, trocados));
+    }
+    // sem sombra: uma passada só (os mesmos bytes de antes da Fase 4 para quem não usa faixa)
+    Ok((rasterizar_modelo(MODELO_SPRITE, &dados_do_sprite(pedido, &conteudos, |_| (true, true)))?, trocados))
 }
 
 /// Rasteriza (ou acha no cache) o sprite do pedido. A chave inclui a altura do canvas.
@@ -433,6 +621,10 @@ pub(crate) fn bitmap_atlas(estilo: &EstiloTexto, altura_canvas: u32) -> Result<(
         return Err(SicroError::Validation(format!("{}: altura_canvas", codigo::ITEM_INVALIDO)));
     }
     conferir_cores(estilo)?;
+    // recusa explícita: o atlas não desenharia a sombra nem a faixa (nunca ignorar calado)
+    if let Some(d) = recusa_do_atlas(estilo) {
+        return Err(SicroError::Validation(format!("{}: {d}", codigo::NAO_SUPORTADO)));
+    }
     let dados = serde_json::json!({ "altura": altura_canvas as f64, "glifos": GLIFOS_CARIMBO, "estilo": estilo });
     let b = rasterizar_modelo(MODELO_ATLAS, &dados)?;
     let n = GLIFOS_CARIMBO.chars().count() as u32;
@@ -710,6 +902,328 @@ mod testes {
             let (b, _) = bitmap_sprite(&pedido(c, e, larg)).unwrap_or_else(|e| panic!("{c:?} {tam}: {e}"));
             assert!(b.w >= 1 && b.h >= 1);
         }
+    }
+
+    // ---------------------------------------------------------------- Fase 4: sombra e faixa (texto livre)
+
+    fn sombra(dx: f64, dy: f64, desfoque: f64) -> SombraTexto {
+        SombraTexto { cor: "#000000".into(), dx, dy, desfoque }
+    }
+
+    fn rgba(b: &Bitmap, x: u32, y: u32) -> [u8; 4] {
+        let i = ((y * b.w + x) * 4) as usize;
+        [b.px[i], b.px[i + 1], b.px[i + 2], b.px[i + 3]]
+    }
+
+    /// O modelo de antes da Fase 4, para provar que o de agora desenha igual quando não há sombra nem faixa.
+    const MODELO_ANTES_DA_FASE4: &str = r##"
+#let bloco(b) = context {
+  let e = b.estilo
+  let largura = calc.min(measure(letra(e, black, none, b.conteudo)).width, d.largura * 1pt)
+  let corpo = com-contorno(e, c => block(width: largura, align(alinha.at(e.alinhamento), c)), b.conteudo)
+  if d.fundo and e.caixa != none {
+    block(fill: rgb(e.caixa.cor), inset: e.caixa.margem * d.altura * 1pt, radius: e.caixa.raio * d.altura * 1pt, corpo)
+  } else { corpo }
+}
+#context {
+  let partes = d.blocos.map(bloco)
+  let largura = calc.max(..partes.map(p => measure(p).width))
+  let tudo = stack(dir: ttb, ..partes.zip(d.blocos).map(((p, b)) => block(width: largura, align(alinha.at(b.estilo.alinhamento), p))))
+  let s = measure(tudo)
+  box(width: calc.ceil(s.width / 1pt) * 1pt, height: calc.ceil(s.height / 1pt) * 1pt, tudo)
+}
+"##;
+
+    /// Sem sombra e sem faixa, o modelo novo dá os MESMOS bytes do de antes (projeto antigo, composto igual):
+    /// fontes, caixa, contorno, alinhamentos, vários blocos e quebra de linha.
+    #[test]
+    fn sem_sombra_nem_faixa_desenha_como_antes() {
+        let mut casos = Vec::new();
+        for fonte in [Fonte::Sans, Fonte::Serifa, Fonte::Mono] {
+            casos.push(pedido("Câmera 2 — 14/03/2026", estilo(fonte, Some("#000000a0"), Some("#000000")), 1.5));
+            casos.push(pedido("linha um\nlinha dois mais longa", estilo(fonte, None, Some("#ff0000")), 0.3));
+        }
+        let mut e = estilo(Fonte::Sans, Some("#00000080"), None);
+        e.alinhamento = crate::edicao::modelo::Alinhamento::Dir;
+        e.negrito = true;
+        let mut dois = pedido("Título", e.clone(), 0.8);
+        let mut b2 = dois.blocos[0].clone();
+        b2.conteudo = "subtítulo bem mais comprido".into();
+        b2.estilo.alinhamento = crate::edicao::modelo::Alinhamento::Esq;
+        dois.blocos.push(b2);
+        casos.push(dois);
+        let mut sem_fundo = pedido("sem fundo", e, 1.5);
+        sem_fundo.fundo = false;
+        casos.push(sem_fundo);
+        for p in casos {
+            let antigo = {
+                let blocos: Vec<serde_json::Value> = p.blocos.iter().map(|b| serde_json::json!({ "conteudo": b.conteudo, "estilo": b.estilo })).collect();
+                let altura = p.altura_canvas as f64;
+                let dados = serde_json::json!({ "altura": altura, "largura": p.largura_max * altura, "fundo": p.fundo, "blocos": blocos });
+                rasterizar_modelo(MODELO_ANTES_DA_FASE4, &dados).unwrap()
+            };
+            assert_eq!(bitmap_sprite(&p).unwrap().0, antigo, "{:?}", p.blocos[0].conteudo);
+        }
+    }
+
+    /// Sombra: o texto por cima (todo pixel opaco do texto sozinho sai igual, deslocado pela folga), a sombra embaixo,
+    /// deslocada (dy) e desfocada (degradê de alfa, mesmo alcance dos dois lados no eixo sem deslocamento); a tela cresce
+    /// a folga dos dois lados. Com caixa, a sombra fica entre a caixa e o texto.
+    #[test]
+    fn sombra_por_baixo_e_desfocada() {
+        let mut e = estilo(Fonte::Sans, None, None);
+        e.negrito = true;
+        e.tamanho = 0.08;
+        let sem = sprite_de("Teste", e.clone());
+        let s = sombra(0.0, 0.004, 0.003);
+        e.sombra = Some(s.clone());
+        let com = sprite_de("Teste", e.clone());
+        let (fx, fy) = folga_da_sombra(&s, 1080);
+        let r: u32 = raios_do_desfoque(0.003 * 1080.0).iter().sum();
+        assert_eq!((fx, fy), (r, 4 + r));
+        assert!(r >= 6, "desfoque de 3,2 px de desvio: raios {r}");
+        assert_eq!((com.w, com.h), (sem.w + 2 * fx, sem.h + 2 * fy));
+        let mut opacos = 0;
+        let mut cobertos = vec![false; (com.w * com.h) as usize];
+        for y in 0..sem.h {
+            for x in 0..sem.w {
+                if alfa(&sem, x, y) > 0 {
+                    cobertos[((y + fy) * com.w + x + fx) as usize] = true;
+                }
+                if alfa(&sem, x, y) == 255 {
+                    opacos += 1;
+                    assert_eq!(rgba(&com, x + fx, y + fy), [255, 255, 255, 255], "texto por baixo da sombra em ({x}, {y})");
+                }
+            }
+        }
+        assert!(opacos > 1000);
+        // só sombra: fora do texto; preta, alfa em degradê
+        let (mut alfas, mut linhas, mut colunas) = (std::collections::BTreeSet::new(), (u32::MAX, 0u32), (u32::MAX, 0u32));
+        for y in 0..com.h {
+            for x in 0..com.w {
+                let p = rgba(&com, x, y);
+                if p[3] > 0 && !cobertos[(y * com.w + x) as usize] {
+                    assert_eq!(&p[..3], &[0, 0, 0], "sombra preta em ({x}, {y})");
+                    alfas.insert(p[3]);
+                    (linhas, colunas) = ((linhas.0.min(y), linhas.1.max(y)), (colunas.0.min(x), colunas.1.max(x)));
+                }
+            }
+        }
+        assert!(alfas.len() >= 40, "desfocada: {} níveis de alfa", alfas.len());
+        // alcance da sombra além do texto: acima = r − dy, abaixo = r + dy; esquerda = direita = r (a 1 px)
+        let tinta = |b: &Bitmap| {
+            let (mut l, mut c) = ((u32::MAX, 0u32), (u32::MAX, 0u32));
+            for y in 0..b.h {
+                for x in 0..b.w {
+                    if alfa(b, x, y) > 0 {
+                        (l, c) = ((l.0.min(y), l.1.max(y)), (c.0.min(x), c.1.max(x)));
+                    }
+                }
+            }
+            (l, c)
+        };
+        let (lt, ct) = tinta(&sem);
+        // (a cauda do desfoque some no arredondamento a 8 bits conforme a tinta da borda: folga de 2 px)
+        let (acima, abaixo) = ((lt.0 + fy) as i64 - linhas.0 as i64, linhas.1 as i64 - (lt.1 + fy) as i64);
+        let (esq, dir) = ((ct.0 + fx) as i64 - colunas.0 as i64, colunas.1 as i64 - (ct.1 + fx) as i64);
+        assert!((abaixo - acima - 8).abs() <= 2, "deslocada 4 px para baixo: {acima} acima, {abaixo} abaixo");
+        assert!((esq - dir).abs() <= 2, "sem deslocamento no x: {esq} × {dir}");
+        assert!(esq <= r as i64 && esq >= r as i64 - 3, "alcance do desfoque {esq} × raios {r}");
+        // com caixa azul: a caixa fica, a sombra escurece a caixa embaixo do texto, o texto fica por cima
+        let mut e2 = e.clone();
+        e2.caixa = Some(CaixaTexto { cor: "#0000ff".into(), margem: 0.02, raio: 0.0, faixa: false });
+        let sem2 = sprite_de("Teste", EstiloTexto { sombra: None, ..e2.clone() });
+        let com2 = sprite_de("Teste", e2);
+        assert_eq!(rgba(&com2, fx + 1, fy + 1), [0, 0, 255, 255], "canto da caixa");
+        let mut escurecidos = 0;
+        for y in 0..sem2.h {
+            for x in 0..sem2.w {
+                let (a, b) = (rgba(&sem2, x, y), rgba(&com2, x + fx, y + fy));
+                if a == [255, 255, 255, 255] {
+                    assert_eq!(b, a, "texto em ({x}, {y})");
+                } else if a == [0, 0, 255, 255] && b[3] == 255 && b[2] < 200 && b[0] == 0 && b[1] == 0 {
+                    escurecidos += 1;
+                }
+            }
+        }
+        assert!(escurecidos > 200, "sombra sobre a caixa: {escurecidos}");
+        // fora da caixa nada (a sombra é do texto e a caixa a cobre com folga)
+        assert_eq!(rgba(&com2, 0, 0)[3], 0);
+    }
+
+    /// Faixa: a caixa vai de uma borda à outra do bloco (`largura_max`), com o texto curto ou longo; o alinhamento
+    /// põe o texto dentro dela. Sem faixa, a caixa é justa ao texto.
+    #[test]
+    fn faixa_na_largura_do_bloco() {
+        let faixa = |alinhamento: crate::edicao::modelo::Alinhamento| {
+            let mut e = estilo(Fonte::Sans, Some("#000000a0"), None);
+            e.caixa.as_mut().unwrap().faixa = true;
+            e.caixa.as_mut().unwrap().raio = 0.0;
+            e.alinhamento = alinhamento;
+            e
+        };
+        use crate::edicao::modelo::Alinhamento::{Centro, Dir, Esq};
+        // 0,6 da altura + 2 margens de 0,01: 669,6 → 670 px
+        let esperada = (0.6f64 * 1080.0 + 2.0 * 0.01 * 1080.0).ceil() as u32;
+        let curto = bitmap_sprite(&pedido("A", faixa(Centro), 0.6)).unwrap().0;
+        let longo = bitmap_sprite(&pedido("o veículo entra no cruzamento", faixa(Centro), 0.6)).unwrap().0;
+        assert_eq!((curto.w, longo.w), (esperada, esperada));
+        let justa = bitmap_sprite(&pedido("A", estilo(Fonte::Sans, Some("#000000a0"), None), 0.6)).unwrap().0;
+        assert!(justa.w < esperada / 4, "sem faixa a caixa é justa: {}", justa.w);
+        // a caixa cobre a largura inteira na linha do meio (fora as colunas de borda, cobertas em parte)
+        for b in [&curto, &longo] {
+            let y = b.h / 2;
+            for x in 1..b.w - 1 {
+                let p = rgba(b, x, y);
+                assert!(p[3] >= 0xa0, "coluna {x}: {p:?}");
+            }
+        }
+        // o alinhamento põe a tinta do texto na esquerda, no meio ou na direita da faixa
+        let centro_da_tinta = |b: &Bitmap| {
+            let (mut s, mut n) = (0.0, 0.0);
+            for y in 0..b.h {
+                for x in 0..b.w {
+                    let p = rgba(b, x, y);
+                    if p[0] > 200 {
+                        (s, n) = (s + x as f64, n + 1.0);
+                    }
+                }
+            }
+            s / n / b.w as f64
+        };
+        let (e, c, d) = (
+            centro_da_tinta(&bitmap_sprite(&pedido("Texto", faixa(Esq), 0.6)).unwrap().0),
+            centro_da_tinta(&curto),
+            centro_da_tinta(&bitmap_sprite(&pedido("Texto", faixa(Dir), 0.6)).unwrap().0),
+        );
+        assert!(e < 0.2 && (c - 0.5).abs() < 0.05 && d > 0.8, "esq {e:.3}, centro {c:.3}, dir {d:.3}");
+    }
+
+    /// Mesmos bytes com sombra, faixa e contorno: duas vezes (cache do Typst limpo entre elas) e em 4 threads.
+    #[test]
+    fn mesmos_bytes() {
+        let mut e = estilo(Fonte::Serifa, Some("#000000a0"), Some("#202020"));
+        e.caixa.as_mut().unwrap().faixa = true;
+        e.sombra = Some(SombraTexto { cor: "#000000b3".into(), dx: 0.002, dy: 0.003, desfoque: 0.004 });
+        let p = pedido("Policiais chegam ao estabelecimento", e, 0.7);
+        let a = bitmap_sprite(&p).unwrap().0.png().unwrap();
+        typst::comemo::evict(0);
+        assert_eq!(bitmap_sprite(&p).unwrap().0.png().unwrap(), a);
+        let outros: Vec<Vec<u8>> = std::thread::scope(|s| {
+            let h: Vec<_> = (0..4).map(|_| s.spawn(|| bitmap_sprite(&p).unwrap().0.png().unwrap())).collect();
+            h.into_iter().map(|h| h.join().unwrap()).collect()
+        });
+        assert!(outros.iter().all(|o| *o == a));
+        // a sombra entra na chave do cache: outro deslocamento, outro arquivo
+        let mut q = p.clone();
+        q.blocos[0].estilo.sombra.as_mut().unwrap().dy = 0.004;
+        assert_ne!(chave_sprite(&q).unwrap(), chave_sprite(&p).unwrap());
+        let mut sem_faixa = p.clone();
+        sem_faixa.blocos[0].estilo.caixa.as_mut().unwrap().faixa = false;
+        assert_ne!(chave_sprite(&sem_faixa).unwrap(), chave_sprite(&p).unwrap());
+    }
+
+    /// Desfoque de um quadrado de 5 px: simétrico nos dois eixos, alcance = meio lado + soma dos raios, massa
+    /// conservada (a 2 %), pico no centro; a variância das 3 caixas fica perto de σ² e a medida bate com ela.
+    #[test]
+    fn desfoque_de_um_ponto() {
+        let mut quadrado = tiny_skia::Pixmap::new(5, 5).unwrap();
+        quadrado.pixels_mut().fill(tiny_skia::PremultipliedColorU8::from_rgba(255, 255, 255, 255).unwrap());
+        for sigma in [1.0, 3.24, 6.0] {
+            let raios = raios_do_desfoque(sigma);
+            let r: u32 = raios.iter().sum();
+            let n = 2 * r + 15;
+            let a = alfa_desfocado(&quadrado, n / 2 - 2, n / 2 - 2, n, n, raios);
+            let em = |x: u32, y: u32| a[(y * n + x) as usize];
+            let soma: u32 = a.iter().map(|&v| v as u32).sum();
+            assert!((soma as f64 - 25.0 * 255.0).abs() < 25.0 * 255.0 * 0.02, "σ {sigma}: massa {soma}");
+            for y in 0..n {
+                for x in 0..n {
+                    assert_eq!(em(x, y), em(n - 1 - x, y), "σ {sigma}");
+                    assert_eq!(em(x, y), em(y, x), "σ {sigma}");
+                    if em(x, y) > 0 {
+                        assert!(x.abs_diff(n / 2) <= r + 2 && y.abs_diff(n / 2) <= r + 2, "σ {sigma}: ({x}, {y}) além do alcance {r}");
+                    }
+                }
+            }
+            assert_eq!(a.iter().max(), Some(&em(n / 2, n / 2)));
+            // variância das caixas ((2r+1)² − 1)/12 somadas: perto de σ²; a medida = ela + a do quadrado (2)
+            let das_caixas: f64 = raios.iter().map(|&r| (((2 * r + 1) * (2 * r + 1)) as f64 - 1.0) / 12.0).sum();
+            assert!((das_caixas.sqrt() - sigma).abs() < 0.2 * sigma, "σ {sigma}: caixas dão {}", das_caixas.sqrt());
+            let var: f64 = (0..n).map(|x| (x as f64 - (n / 2) as f64).powi(2) * (0..n).map(|y| em(x, y) as f64).sum::<f64>()).sum::<f64>() / soma as f64;
+            assert!((var - (das_caixas + 2.0)).abs() < 0.05 * (das_caixas + 2.0), "σ {sigma}: variância {var} × {}", das_caixas + 2.0);
+        }
+        assert_eq!(raios_do_desfoque(0.0), [0, 0, 0]);
+        assert_eq!(raios_do_desfoque(f64::NAN), [0, 0, 0]);
+    }
+
+    /// Dois blocos com sombras diferentes e um sem: cada grupo com a sua cor, nada some.
+    #[test]
+    fn sombras_por_bloco() {
+        let mut e = estilo(Fonte::Sans, None, None);
+        e.negrito = true;
+        let mut p = pedido("AAA", e.clone(), 1.5);
+        let mut b2 = p.blocos[0].clone();
+        b2.estilo.sombra = Some(SombraTexto { cor: "#ff0000".into(), dx: 0.004, dy: 0.0, desfoque: 0.0 });
+        let mut b3 = p.blocos[0].clone();
+        b3.estilo.sombra = Some(SombraTexto { cor: "#0000ff".into(), dx: 0.0, dy: 0.004, desfoque: 0.001 });
+        p.blocos.push(b2);
+        p.blocos.push(b3);
+        let b = bitmap_sprite(&p).unwrap().0;
+        let px: Vec<[u8; 4]> = (0..b.h).flat_map(|y| (0..b.w).map(move |x| (x, y))).map(|(x, y)| rgba(&b, x, y)).collect();
+        assert!(px.iter().any(|p| p[3] == 255 && p[0] > 200 && p[1] < 40 && p[2] < 40), "sombra vermelha");
+        assert!(px.iter().any(|p| p[3] > 100 && p[2] > 200 && p[0] < 40 && p[1] < 40), "sombra azul");
+        // o bloco de cima, sem sombra, não ganhou nenhuma: só branco no terço de cima
+        let terco = b.h / 3;
+        assert!((0..terco).all(|y| (0..b.w).all(|x| { let p = rgba(&b, x, y); p[3] == 0 || p[..3] == [255, 255, 255] })));
+    }
+
+    /// Sombra fora da faixa (deslocamento ou desfoque absurdo, desfoque negativo): `item_invalido` antes de alocar;
+    /// o atlas do carimbo recusa sombra e faixa (não desenharia); `recusa_estilo` não recusa mais nada.
+    #[test]
+    fn sombra_fora_da_faixa_e_atlas() {
+        let codigo_de = |e: SicroError| e.to_string();
+        for s in [sombra(0.06, 0.0, 0.0), sombra(0.0, -0.06, 0.0), sombra(0.0, 0.0, 0.051), sombra(0.0, 0.0, -0.001), sombra(f64::NAN, 0.0, 0.0)] {
+            assert!(!sombra_ok(&s));
+            let mut e = estilo(Fonte::Sans, None, None);
+            e.sombra = Some(s.clone());
+            assert!(recusa_estilo(&e).is_none());
+            let m = codigo_de(bitmap_sprite(&pedido("abc", e, 1.5)).unwrap_err());
+            assert!(m.contains(&format!("{}: sombra", codigo::ITEM_INVALIDO)), "{s:?}: {m}");
+        }
+        assert!(sombra_ok(&sombra(SOMBRA_MAX, -SOMBRA_MAX, SOMBRA_MAX)) && sombra_ok(&sombra(0.0, 0.0, 0.0)));
+        let mut e = estilo(Fonte::Sans, None, None);
+        e.sombra = Some(sombra(0.0, 0.003, 0.002));
+        assert!(codigo_de(bitmap_atlas(&e, 1080).unwrap_err()).contains(&format!("{}: sombra", codigo::NAO_SUPORTADO)));
+        let mut e = estilo(Fonte::Sans, Some("#000000"), None);
+        e.caixa.as_mut().unwrap().faixa = true;
+        assert!(recusa_estilo(&e).is_none());
+        assert!(codigo_de(bitmap_atlas(&e, 1080).unwrap_err()).contains(&format!("{}: faixa", codigo::NAO_SUPORTADO)));
+        // cor da sombra fora do modelo: código `cor`
+        let mut e = estilo(Fonte::Sans, None, None);
+        e.sombra = Some(SombraTexto { cor: "black".into(), dx: 0.0, dy: 0.0, desfoque: 0.0 });
+        assert!(matches!(bitmap_sprite(&pedido("abc", e, 1.5)), Err(SicroError::Validation(m)) if m == codigo::COR));
+    }
+
+    /// Espelho da folga (o palco põe as alças na caixa visível, sem a folga da sombra): `texto-folga-sombra.json`.
+    #[test]
+    fn fixture_folga_da_sombra() {
+        let mut casos = Vec::new();
+        for (dx, dy, desfoque) in [(0.0, 0.003, 0.004), (0.0, 0.0, 0.0), (-0.002, 0.001, 0.0005), (0.05, -0.05, 0.05), (0.0013, 0.0021, 0.0017), (0.0, 0.0, 0.0001)] {
+            for altura in [180u32, 360, 720, 1080, 2160] {
+                let s = sombra(dx, dy, desfoque);
+                let (x, y) = folga_da_sombra(&s, altura);
+                casos.push(serde_json::json!({ "nome": format!("{dx} {dy} {desfoque} em {altura}"), "entrada": { "sombra": s, "altura_canvas": altura },
+                    "saida": { "x": x, "y": y, "raios": raios_do_desfoque(desfoque * altura as f64) } }));
+            }
+        }
+        // desvios na fronteira das larguras das caixas (o arredondamento de m)
+        for sigma in [0.5, 0.9, 1.0, 1.5, 2.0, 2.5, 3.0, 4.32, 7.0, 10.0, 54.0] {
+            casos.push(serde_json::json!({ "nome": format!("desvio {sigma}"), "entrada": { "sombra": sombra(0.0, 0.0, sigma / 1080.0), "altura_canvas": 1080 },
+                "saida": { "x": folga_da_sombra(&sombra(0.0, 0.0, sigma / 1080.0), 1080).0, "y": folga_da_sombra(&sombra(0.0, 0.0, sigma / 1080.0), 1080).1,
+                           "raios": raios_do_desfoque(sigma / 1080.0 * 1080.0) } }));
+        }
+        crate::edicao::curva::fixtures::conferir("texto-folga-sombra.json", serde_json::Value::Array(casos));
     }
 
     #[test]
