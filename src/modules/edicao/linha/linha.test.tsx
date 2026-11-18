@@ -418,13 +418,13 @@ describe("gestos na tela", () => {
     expect(t.raiz.querySelector(`[data-trilha="principal"] [data-item="${ultimo.id}"]`)).not.toBeNull();
   });
 
-  it("J e L tocam pelo palco; S liga e desliga o ímã; B e V trocam a ferramenta", async () => {
+  it("J e L são só do editor (um caminho: teclaJL); S liga e desliga o ímã; B e V trocam a ferramenta", async () => {
     await telaComLinha();
     const tecla = (key: string) => act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, code: `Key${key.toUpperCase()}`, bubbles: true })));
+    vi.mocked(palcoFalso.tocar).mockClear();
     await tecla("j");
-    expect(palcoFalso.tocar).toHaveBeenLastCalledWith(-1);
     await tecla("l");
-    expect(palcoFalso.tocar).toHaveBeenLastCalledWith(1);
+    expect(palcoFalso.tocar).not.toHaveBeenCalled();
     await tecla("s");
     expect(useLinhaUi.getState().ima).toBe(false);
     await tecla("b");
