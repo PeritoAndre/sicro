@@ -39,6 +39,19 @@ pub(crate) const MOTIVO_PLANO: &str = "plano";
 pub(crate) const MOTIVO_FONTE: &str = "fonte_danificada";
 pub(crate) const MOTIVO_SOM: &str = "som";
 
+/// Cache só da refeita, em `render/<tarefa>/`: com o do caso, os blocos da exportação de origem voltavam e a
+/// comparação dava "Igual" sem render nenhum.
+pub(crate) const CACHE_PROPRIO: &str = "cache";
+
+/// Apaga o cache próprio no fim, dê no que der.
+struct CacheProprio(PathBuf);
+
+impl Drop for CacheProprio {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 /// Tarefa `Refazer` → saída de origem (o pedido de render não leva a saída; a tarefa a busca aqui ao rodar).
 static PEDIDOS: Mutex<Vec<(String, String)>> = Mutex::new(Vec::new());
 
@@ -351,10 +364,14 @@ pub(crate) fn rodar_com(
         }
     }
     let auto = matches!(&pedido.alvo, Alvo::Final { exportacao } if exportacao.codificador == EscolhaCodificador::Auto) && !sem_gpu;
+    // blocos, camadas e quadros feitos de novo, num cache vazio só desta tarefa
+    let cache = CacheProprio(trabalho.join(CACHE_PROPRIO));
+    let _ = fs::remove_dir_all(&cache.0);
+    fs::create_dir_all(&cache.0)?;
     let amb = Ambiente {
         cap: prep.cap.clone(),
         trabalho: trabalho.to_path_buf(),
-        cache: pedido.cache.clone(),
+        cache: cache.0.clone(),
         caso: pedido.ws.clone(),
         pasta_projeto: prep.pasta_projeto.clone(),
         paralelos: executar::paralelos(auto && prep.cap.gpu.is_some()),
@@ -475,12 +492,18 @@ pub(crate) mod testes {
         ponta::projeto(titulo, true, vec![m], vec![trecho("c1", "m1", &tab, 30, 75, 1.0, efeitos(&tab))], json!({}))
     }
 
-    /// Pede a refeita, espera e devolve (saída de origem, saída refeita).
+    /// Pede a refeita, espera e devolve (saída de origem, saída refeita). Toda refeita renderiza de novo: nenhum bloco
+    /// do cache no `tecnico.json` nem na marca da fila, e o cache dela some no fim.
     fn refazer(caso: &Caso, origem: &str) -> (SaidaRegistrada, SaidaRegistrada) {
         let t = pedir(&caso.ws, &caso.cache(), origem).expect("edicao_refazer");
         let fim = fila::esperar(&t).expect("esperar");
         let nova = caso.saida(&ponta::id_da(&fim));
         assert_eq!(nova.refeita_de.as_deref(), Some(origem));
+        let tecnico = ler_json(&paths::resolver_relativo(&caso.ws, nova.tecnico_rel.as_deref().unwrap())).unwrap();
+        let blocos = tecnico["execucao"]["blocos"].as_array().expect("blocos no tecnico.json");
+        assert!(!blocos.is_empty() && blocos.iter().all(|b| b["reaproveitado"] == json!(false)), "refeita com bloco do cache: {blocos:?}");
+        assert_eq!(fila::listar().into_iter().find(|x| x.id == t).map(|x| x.reaproveitada), Some(false));
+        assert!(!caso.cache().join("render").join(&t).join(CACHE_PROPRIO).exists(), "o cache da refeita ficou");
         (caso.saida(origem), nova)
     }
 
@@ -512,6 +535,22 @@ pub(crate) mod testes {
         assert!(!crate::edicao::armazem::pasta_projeto(&caso.ws, doc["id"].as_str().unwrap()).join("projeto.json").exists());
         let (_, c) = refazer(&caso, &b.id);
         assert_eq!(c.comparacao, Some(Comparacao::Igual), "refeita da refeita");
+    }
+
+    /// `Igual` com camada (carimbo de tempo): atlas e camada feitos de novo no cache da refeita dão os mesmos quadros.
+    #[test]
+    fn igual_com_camada_feita_de_novo() {
+        let Some(caso) = ponta::caso("refazer-camada") else { return };
+        let doc = projeto_simples(&caso, "Carimbo", &fontes::gerar(Fonte::Mp4).unwrap(), |_| {
+            json!([efeito("carimbo", "k1", json!({ "mostra": "tempo_fonte", "formato": "hms_ms", "relogio": null, "lugar": { "x": 0.03, "y": 0.97, "h": "esq", "v": "base" },
+                "estilo": { "fonte": "mono", "negrito": false, "italico": false, "tamanho": 0.07, "cor": "#ffffff", "alinhamento": "esq", "caixa": { "cor": "#000000", "margem": 0.01, "raio": 0.0 }, "contorno": null } }))])
+        });
+        let (fim, _) = caso.exportar(&doc, ponta::exportacao("juri", "cpu", Value::Null, "a3"));
+        let (a, b) = refazer(&caso, &ponta::id_da(&fim));
+        assert_eq!(b.comparacao, Some(Comparacao::Igual), "{}", caso.cap.versao);
+        assert_eq!((&a.sha256, &a.composto_sha256), (&b.sha256, &b.composto_sha256));
+        let tecnico = ler_json(&paths::resolver_relativo(&caso.ws, b.tecnico_rel.as_deref().unwrap())).unwrap();
+        assert!(tecnico["execucao"]["camadas"].as_array().is_some_and(|c| !c.is_empty()), "sem camada: {}", tecnico["execucao"]["camadas"]);
     }
 
     /// Aceite `Igual` em projeto estabilizado: a análise guardada no retrato (`.trf`) dá os mesmos quadros.

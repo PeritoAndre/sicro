@@ -1188,6 +1188,12 @@ impl Execucao<'_> {
     /// Arquivo do cache pelo caminho relativo à pasta de trabalho (a do processo). O concat resolve as entradas da lista
     /// contra o caminho dela como URL: `#` ou `?` numa pasta acima (nome de usuário) cortava o caminho ali.
     fn relativo_ao_trabalho(&self, alvo: &Path) -> PathBuf {
+        // cache dentro da pasta de trabalho (o do "refazer")
+        if let Ok(a) = alvo.strip_prefix(self.trabalho()) {
+            if a.components().all(|c| matches!(c, std::path::Component::Normal(_))) {
+                return a.to_path_buf();
+            }
+        }
         let (Ok(t), Ok(a)) = (self.trabalho().strip_prefix(&self.amb.cache), alvo.strip_prefix(&self.amb.cache)) else { return alvo.to_path_buf() };
         if !t.components().chain(a.components()).all(|c| matches!(c, std::path::Component::Normal(_))) {
             return alvo.to_path_buf();
@@ -2278,6 +2284,12 @@ mod testes {
             fs::write(amb.cache.join("camadas/abc").join(camada::LISTA), "x").unwrap();
             fs::canonicalize(amb.trabalho.join(&rel)).unwrap()
         });
+        // cache dentro da pasta de trabalho (o do "refazer"): relativa também
+        let amb2 = Ambiente { cache: amb.trabalho.join(crate::edicao::refazer::CACHE_PROPRIO), ..amb.clone() };
+        let ex2 = Execucao { plano: &plano, amb: &amb2, cancelar: &AtomicBool::new(false), dir_blocos: amb2.cache.join("blocos"), passos: vec![] };
+        let dentro = CamadaPronta { pasta: amb2.cache.join("camadas").join("abc"), lista: Some(camada::LISTA.into()), fixa: false, ..pronta.clone() };
+        let prontas: HashMap<String, CamadaPronta> = [("k001".to_string(), dentro)].into();
+        assert_eq!(ex2.caminho_da_entrada(&concat, 1, &plano.blocos[0], &prontas).unwrap(), Path::new("cache/camadas/abc").join(camada::LISTA));
     }
 
     #[test]
