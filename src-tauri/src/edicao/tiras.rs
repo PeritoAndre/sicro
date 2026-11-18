@@ -66,6 +66,8 @@ const RECUO_S: f64 = 0.5;
 const PTS_DO_ANTERIOR: &str =
     r"setts=pts=if(eq(PTS\,NOPTS)\,if(eq(PREV_OUTPTS\,NOPTS)\,NOPTS\,PREV_OUTPTS+DURATION)\,PTS)";
 const FORMATO_POSICOES: &str = "sicro.tira.posicoes/1";
+/// `ffprobe` das posições ao mesmo tempo (as que a tira cancelada deixou seguem): o mesmo que a fila de fundo.
+const MEDINDO: usize = 2;
 
 /// Pedido da tira. Faixa `[de_s, ate_s)` em tempo de fonte; `n` miniaturas ou `largura` da faixa na tela (px; n =
 /// largura ÷ largura da célula, preso aos tetos); `altura` de cada miniatura (px). `canal` = quem pede (o clipe na linha
@@ -278,10 +280,15 @@ enum Partida {
 /// Lista do `concat` que abre a mídia a partir do byte `pos` (o `concat` faz o ffmpeg usar o pts dos pacotes).
 const LISTA: &str = "partida.ffconcat";
 
-fn lista_do_concat(video: &Path, pos: u64) -> String {
-    // aspas simples: nada escapa lá dentro; a aspa do nome sai e volta escapada
-    let nome = video.to_string_lossy().replace('\'', r"'\''");
-    format!("ffconcat version 1.0\nfile '{nome}'\noption skip_initial_bytes {pos}\n")
+/// None = nome com quebra de linha (a lista é lida linha a linha).
+fn lista_do_concat(video: &Path, pos: u64) -> Option<String> {
+    let nome = video.to_string_lossy();
+    if nome.contains(['\n', '\r']) {
+        return None;
+    }
+    // aspas simples: nada escapa lá dentro (nem a `\` do Windows); a aspa do nome sai e volta escapada
+    let nome = nome.replace('\'', r"'\''");
+    Some(format!("ffconcat version 1.0\nfile '{nome}'\noption skip_initial_bytes {pos}\n"))
 }
 
 fn comando(cap: &Capacidades, fonte: &FonteInfo, p: &Plano, pasta: &Path, partida: Option<&Partida>) -> exec::Comando {
@@ -518,7 +525,7 @@ fn atalho(
     cancelar: &AtomicBool,
     perto: usize,
 ) -> Result<Option<Lida>> {
-    let (Modo::Ordem { ordinais, .. }, Some(js)) = (&p.modo, &p.esperado) else { return Ok(None) };
+    let (Modo::Ordem { ordinais, celulas }, Some(js)) = (&p.modo, &p.esperado) else { return Ok(None) };
     let (Some(&o0), Some(&j0)) = (ordinais.first(), js.first()) else { return Ok(None) };
     let marca = format!("{}:{}", fonte.sha256, cap.sha256);
     if o0 < perto || divergentes().lock().unwrap_or_else(|e| e.into_inner()).contains(&marca) {
@@ -536,13 +543,15 @@ fn atalho(
         let Some(pos) = posicoes(cap, cache, fonte, cancelar)? else { return Ok(None) };
         // o último quadro-chave até o primeiro da tira
         let Some(&(j, byte)) = pos.ancoras.partition_point(|&(j, _)| j <= j0).checked_sub(1).map(|k| &pos.ancoras[k]) else { return Ok(None) };
-        std::fs::write(pasta.join(LISTA), lista_do_concat(&fonte.caminho, byte))?;
+        let Some(lista) = lista_do_concat(&fonte.caminho, byte) else { return Ok(None) };
+        std::fs::write(pasta.join(LISTA), lista)?;
         (Partida::Byte { pts0: tab.pts[j], passo }, Caminho::Byte)
     };
     let cmd = comando(cap, fonte, p, pasta, Some(&partida));
     let lido = rodar_tira(&cmd, cancelar, &pasta.join("tira.jpg")).and_then(|pts| conferir_tempo(fonte, p, &cmd.stderr, &pts));
     match lido {
-        Ok((c, t)) => Ok(Some((c, t, caminho))),
+        // conferida: as células da tabela (pts na base dela), as mesmas do modo Ordem e da mesma chave do cache
+        Ok(_) => Ok(Some((celulas.clone(), celulas.iter().map(|c| c.t).collect(), caminho))),
         Err(e) if cancelar.load(Ordering::SeqCst) => Err(e),
         Err(e) => {
             tracing::warn!("tira: atalho {partida:?} não bateu ({e}); modo Ordem desde o começo");
@@ -589,6 +598,40 @@ fn medicoes() -> &'static (Mutex<HashMap<String, Medicao>>, Condvar) {
     M.get_or_init(Default::default)
 }
 
+/// Vaga de medição (`MEDINDO` por vez), devolvida ao sair.
+struct Vaga;
+
+impl Vaga {
+    fn ocupadas() -> &'static (Mutex<usize>, Condvar) {
+        static V: OnceLock<(Mutex<usize>, Condvar)> = OnceLock::new();
+        V.get_or_init(Default::default)
+    }
+
+    /// Espera a vez; None = o app está saindo.
+    fn pegar() -> Option<Vaga> {
+        let (m, cv) = Self::ocupadas();
+        let mut n = m.lock().unwrap_or_else(|e| e.into_inner());
+        loop {
+            if exec::encerrando() {
+                return None;
+            }
+            if *n < MEDINDO {
+                *n += 1;
+                return Some(Vaga);
+            }
+            n = cv.wait_timeout(n, Duration::from_millis(50)).unwrap_or_else(|e| e.into_inner()).0;
+        }
+    }
+}
+
+impl Drop for Vaga {
+    fn drop(&mut self) {
+        let (m, cv) = Self::ocupadas();
+        *m.lock().unwrap_or_else(|e| e.into_inner()) -= 1;
+        cv.notify_one();
+    }
+}
+
 fn arquivo_posicoes(cache: &Path, sha256: &str, ffmpeg: &str) -> PathBuf {
     cache.join(PASTA).join(sha256).join(format!("posicoes-{ffmpeg}.json"))
 }
@@ -598,8 +641,11 @@ fn ler_posicoes(arquivo: &Path) -> Option<Posicoes> {
 }
 
 fn gravar_posicoes(arquivo: &Path, p: &Posicoes) -> Result<()> {
-    std::fs::create_dir_all(arquivo.parent().expect("pasta das posições"))?;
-    let tmp = arquivo.with_extension(format!("json.tmp-{}", std::process::id()));
+    let pasta = arquivo.parent().expect("pasta das posições");
+    std::fs::create_dir_all(pasta)?;
+    // o temporário em `tiras/`, onde a limpeza do cache acha o de processo morto
+    let nome = format!("{}-{}", pasta.file_name().unwrap_or_default().to_string_lossy(), arquivo.file_name().unwrap_or_default().to_string_lossy());
+    let tmp = pasta.with_file_name(format!("{nome}.tmp-{}-0", std::process::id()));
     std::fs::write(&tmp, serde_json::to_vec(p)?)?;
     std::fs::rename(&tmp, arquivo).inspect_err(|_| drop(std::fs::remove_file(&tmp)))?;
     Ok(())
@@ -701,7 +747,8 @@ fn medir_posicoes(ffprobe: &Path, video: &Path, cache: &Path, midia: &str, ffmpe
 }
 
 /// Posições do fluxo cru: da memória, do cache, ou medidas numa thread própria (a tira cancelada a cada zoom não perde
-/// a medição; a seguinte espera por ela). Espera enquanto a tira não for cancelada. None = não valem para a tabela.
+/// a medição; a seguinte espera por ela; `MEDINDO` por vez). Espera enquanto a tira não for cancelada. None = não valem
+/// para a tabela.
 fn posicoes(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, cancelar: &AtomicBool) -> Result<Option<Arc<Posicoes>>> {
     if !sha_valido(&fonte.sha256) || !sha_valido(&cap.sha256) {
         return Ok(None);
@@ -725,7 +772,12 @@ fn posicoes(cap: &Capacidades, cache: &Path, fonte: &FonteInfo, cancelar: &Atomi
                 let (ffprobe, video, cache, sha, ffmpeg, ch) =
                     (cap.ffprobe.clone(), fonte.caminho.clone(), cache.to_path_buf(), fonte.sha256.clone(), cap.sha256.clone(), chave.clone());
                 let medir = move || {
-                    let r = std::panic::catch_unwind(|| medir_posicoes(&ffprobe, &video, &cache, &sha, &ffmpeg));
+                    let vaga = Vaga::pegar();
+                    let r = match vaga {
+                        Some(_) => std::panic::catch_unwind(|| medir_posicoes(&ffprobe, &video, &cache, &sha, &ffmpeg)),
+                        None => Ok(Err(cancelada())),
+                    };
+                    drop(vaga);
                     let p = match r {
                         Ok(Ok(p)) => {
                             if let Err(e) = gravar_posicoes(&arquivo, &p) {
@@ -1291,8 +1343,8 @@ mod testes {
     #[test]
     fn lista_do_concat_com_aspa() {
         assert_eq!(
-            lista_do_concat(Path::new("/x/gravação d'água.h264"), 7),
-            "ffconcat version 1.0\nfile '/x/gravação d'\\''água.h264'\noption skip_initial_bytes 7\n"
+            lista_do_concat(Path::new("/x/gravação d'água.h264"), 7).as_deref(),
+            Some("ffconcat version 1.0\nfile '/x/gravação d'\\''água.h264'\noption skip_initial_bytes 7\n")
         );
     }
 
@@ -1862,5 +1914,278 @@ mod testes {
             let teto = comeco.max(0.3) * FOLGA;
             assert!(meio < teto && fim < teto, "{nome} ({}): começo {comeco:.2} s, meio {meio:.2} s, fim {fim:.2} s", cap.versao);
         }
+    }
+
+    // ------------------------------------------------------------ revisão adversa do P4.3b
+
+    fn ffmpeg_ok(cap: &Capacidades, args: &[&str]) {
+        let st = crate::tools::command(&cap.binario).args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error"]).args(args).status().unwrap();
+        assert!(st.success(), "{args:?} ({})", cap.versao);
+    }
+
+    /// NALs do Anexo B, cada um com o código de início `00 00 01` (o zero a mais do de 4 bytes fica no anterior).
+    fn nals(b: &[u8]) -> Vec<&[u8]> {
+        let ini: Vec<usize> = b.windows(3).enumerate().filter(|(_, w)| *w == [0, 0, 1]).map(|(i, _)| i).collect();
+        ini.iter().enumerate().map(|(k, &i)| &b[i..ini.get(k + 1).copied().unwrap_or(b.len())]).collect()
+    }
+
+    /// H.264 cru reescrito: `so_inicio` = SPS/PPS só no começo; senão AUD + SPS + PPS + SEI antes de todo quadro.
+    fn h264_reescrito(cru: &Path, destino: &Path, so_inicio: bool) {
+        let b = std::fs::read(cru).unwrap();
+        let ns = nals(&b);
+        let tipo = |n: &[u8]| n[3] & 0x1f;
+        let (sps, pps) = (ns.iter().find(|n| tipo(n) == 7).unwrap().to_vec(), ns.iter().find(|n| tipo(n) == 8).unwrap().to_vec());
+        let mut carga: Vec<u8> = (0x11..0x21).collect();
+        carga.extend_from_slice(b"gravador cam 3");
+        let mut sei = vec![0, 0, 1, 6, 5, carga.len() as u8];
+        sei.extend(carga);
+        sei.push(0x80);
+        let mut out = Vec::new();
+        let mut visto = HashSet::new();
+        for n in ns {
+            let t = tipo(n);
+            if so_inicio {
+                if (t == 7 || t == 8) && !visto.insert(t) {
+                    continue;
+                }
+            } else if t == 7 || t == 8 {
+                continue;
+            } else if (t == 1 || t == 5) && n[4] & 0x80 != 0 {
+                // primeira fatia do quadro (first_mb_in_slice = 0)
+                out.extend_from_slice(&[0, 0, 1, 9, 0xF0]);
+                out.extend_from_slice(&sps);
+                out.extend_from_slice(&pps);
+                out.extend_from_slice(&sei);
+            }
+            out.extend_from_slice(n);
+        }
+        std::fs::write(destino, out).unwrap();
+    }
+
+    /// Rajadas de lixo (gerador fixo) entre 10 % e 60 % do arquivo.
+    fn com_lixo(origem: &Path, destino: &Path) {
+        let mut b = std::fs::read(origem).unwrap();
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15;
+        let mut prox = || {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            x
+        };
+        let n = b.len();
+        for _ in 0..12 {
+            let p = n / 10 + (prox() as usize) % (n / 2);
+            for x in &mut b[p..(p + 1500).min(n)] {
+                *x = prox() as u8;
+            }
+        }
+        std::fs::write(destino, b).unwrap();
+    }
+
+    /// A tira longe do começo sai pelo atalho `quer` (ou pelo modo Ordem, quando o atalho não vale aqui) com os
+    /// quadros-chave certos pelo número desenhado; a do modo Ordem desde o começo dá as mesmas células e imagens.
+    fn adversa(cap: &Capacidades, video: &Path, quer: Caminho, nome: &str) -> FonteInfo {
+        let fonte = fonte_do_decodificador(cap, video);
+        let numeros = medir::quadros_de_origem(cap, video).unwrap();
+        assert_eq!(numeros.len(), fonte.quadros.pts.len(), "{nome}");
+        let k = chaves_de(&fonte.quadros);
+        let (de, ate) = faixa(&fonte.quadros, k[k.len() - 6] + 3, 1e9, 10);
+        let (t, por) = conferir_por(cap, &fontes::pasta_temporaria("tiras-adversa"), &fonte, &numeros, (de, ate, 10, 90), nome, 0);
+        assert_eq!(por, quer, "{nome} ({})", cap.versao);
+        assert!(t.celulas.len() >= 3, "{nome}: {} células", t.celulas.len());
+        if quer != Caminho::Ordem {
+            igual_ao_ordem(cap, &fonte, (de, ate, 10), quer, nome);
+        }
+        fonte
+    }
+
+    /// MPEG-PS com o relógio de 33 bits dando a volta no meio (antes e depois de 60 s do começo: o ffmpeg desconta
+    /// ou soma a volta), com o relógio do gravador pulando para a frente (gravador reiniciado) e com lixo no meio;
+    /// fluxo cru com SPS/PPS só no começo (o atalho não decodifica: modo Ordem), com AUD, SPS, PPS e SEI em todo
+    /// quadro e num nome com `\`, aspa, `#`, `?` e `%` (a lista do `concat`), com quadros B em GOP fechado, HEVC em
+    /// GOP fechado e aberto (aberto: modo Ordem). Nunca um quadro de outra hora.
+    #[test]
+    fn atalho_adverso_nunca_mostra_quadro_de_outra_hora() {
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = fontes::pasta_temporaria("tiras-adversa-midias");
+        let ps = fontes::gerar(Fonte::MpegPs).unwrap().to_string_lossy().into_owned();
+        let volta = (1u64 << 33) as f64 / 90000.0;
+        let ini_ps = fonte_do_decodificador(&cap, Path::new(&ps)).inicio_s;
+        let caminho = |n: &str| pasta.join(n);
+        let s = |p: &Path| p.to_string_lossy().into_owned();
+
+        // volta descontada (começo a 7 s dela) e somada (começo a 70 s dela, 90 s de vídeo)
+        let w1 = caminho("volta-7s.mpg");
+        ffmpeg_ok(&cap, &["-i", &ps, "-map", "0:v:0", "-c", "copy", "-output_ts_offset", &format!("{}", volta - 7.0 - ini_ps), "-f", "vob", &s(&w1)]);
+        let f = adversa(&cap, &w1, Caminho::Busca, "PS com a volta a 7 s do começo");
+        assert!(f.quadros.pts[0] < 0 && *f.quadros.pts.last().unwrap() > 0, "sem volta: {:?}", (f.quadros.pts[0], f.quadros.pts.last()));
+        let w2 = caminho("volta-70s.mpg");
+        ffmpeg_ok(&cap, &["-stream_loop", "5", "-i", &ps, "-map", "0:v:0", "-c", "copy", "-output_ts_offset", &format!("{}", volta - 70.0 - ini_ps), "-f", "vob", &s(&w2)]);
+        let f = adversa(&cap, &w2, Caminho::Busca, "PS com a volta a 70 s do começo");
+        assert!(f.quadros.pts[0] < 1 << 33 && *f.quadros.pts.last().unwrap() > 1 << 33, "sem volta: {:?}", (f.quadros.pts[0], f.quadros.pts.last()));
+
+        // gravador reiniciado: o relógio pula para a frente no meio do arquivo
+        let (a, b) = (caminho("a.mpg"), caminho("b.mpg"));
+        ffmpeg_ok(&cap, &["-i", &ps, "-map", "0:v:0", "-c", "copy", "-output_ts_offset", "1000", "-f", "vob", &s(&a)]);
+        ffmpeg_ok(&cap, &["-i", &ps, "-map", "0:v:0", "-c", "copy", "-output_ts_offset", "5000", "-f", "vob", &s(&b)]);
+        let salto = caminho("salto.mpg");
+        std::fs::write(&salto, [std::fs::read(&a).unwrap(), std::fs::read(&b).unwrap()].concat()).unwrap();
+        let f = adversa(&cap, &salto, Caminho::Busca, "PS com o relógio pulando");
+        assert!(f.quadros.lacunas.iter().any(|&(x, y)| y - x > 3000 * 90000), "{:?}", f.quadros.lacunas);
+        let lixo = caminho("lixo.mpg");
+        com_lixo(&w2, &lixo);
+        adversa(&cap, &lixo, Caminho::Busca, "PS com lixo no meio");
+
+        let cru = h264_cru(&cap);
+        let so_inicio = caminho("so-inicio.h264");
+        h264_reescrito(&cru, &so_inicio, true);
+        adversa(&cap, &so_inicio, Caminho::Ordem, "cru com SPS/PPS só no começo");
+        let feio = fontes::pasta_temporaria("tiras-nome feio").join(r"a\b 'c' #1 ?x %d [2].h264");
+        h264_reescrito(&cru, &feio, false);
+        adversa(&cap, &feio, Caminho::Byte, "cru com AUD, SPS, PPS e SEI em todo quadro, nome feio");
+
+        let mp4 = fontes::gerar(Fonte::Mp4).unwrap().to_string_lossy().into_owned();
+        let cru_b = caminho("b-fechado.h264");
+        ffmpeg_ok(&cap, &["-i", &mp4, "-map", "0:v:0", "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-g", "30", "-bf", "2", "-f", "h264", &s(&cru_b)]);
+        adversa(&cap, &cru_b, Caminho::Byte, "cru com quadros B em GOP fechado");
+        let x265 = |gop: &str| format!("keyint=30:min-keyint=30:{gop}:repeat-headers=1:crf=16:log-level=error");
+        let hevc = caminho("fechado.hevc");
+        ffmpeg_ok(&cap, &["-i", &mp4, "-map", "0:v:0", "-c:v", "libx265", "-preset", "fast", "-x265-params", &x265("bframes=0:open-gop=0"), "-f", "hevc", &s(&hevc)]);
+        adversa(&cap, &hevc, Caminho::Byte, "HEVC cru em GOP fechado");
+        let hevc_aberto = caminho("aberto.hevc");
+        ffmpeg_ok(&cap, &["-i", &mp4, "-map", "0:v:0", "-c:v", "libx265", "-preset", "fast", "-x265-params", &x265("bframes=3:open-gop=1"), "-f", "hevc", &s(&hevc_aberto)]);
+        adversa(&cap, &hevc_aberto, Caminho::Ordem, "HEVC cru em GOP aberto");
+    }
+
+    /// Gravação ainda sendo copiada: tabela e posições do pedaço que havia valem depois que o arquivo cresce (os bytes
+    /// de antes não mudam); posições medidas com o arquivo maior que a tabela não valem (modo Ordem). Nos dois casos,
+    /// os quadros-chave certos.
+    #[test]
+    fn arquivo_crescendo() {
+        let Some(cap) = fontes::cap() else { return };
+        let cru = h264_cru(&cap);
+        let b = std::fs::read(&cru).unwrap();
+        let inteiro = medir_posicoes(&cap.ffprobe, &cru, &fontes::pasta_temporaria("tiras-crescendo-pos"), &"c3".repeat(32), &cap.sha256).unwrap();
+        // corta antes de um quadro-chave a uns 70 %
+        let corte = inteiro.ancoras.iter().map(|a| a.1 as usize).find(|&p| p > b.len() * 7 / 10).unwrap();
+        let video = fontes::pasta_temporaria("tiras-crescendo").join("copiando.h264");
+        std::fs::write(&video, &b[..corte]).unwrap();
+        let fonte = FonteInfo { sha256: "c4".repeat(32), ..fonte_do_decodificador(&cap, &video) };
+        let numeros = medir::quadros_de_origem(&cap, &video).unwrap();
+        let k = chaves_de(&fonte.quadros);
+        let cache = fontes::pasta_temporaria("tiras-crescendo-cache");
+        let (de, ate) = faixa(&fonte.quadros, k[k.len() - 4] + 3, 1e9, 6);
+        assert_eq!(conferir_por(&cap, &cache, &fonte, &numeros, (de, ate, 6, 90), "pedaço", 0).1, Caminho::Byte, "{}", cap.versao);
+        std::fs::write(&video, &b).unwrap();
+        let (de, ate) = faixa(&fonte.quadros, k[k.len() - 5] + 2, 1e9, 7);
+        assert_eq!(conferir_por(&cap, &cache, &fonte, &numeros, (de, ate, 7, 90), "cresceu", 0).1, Caminho::Byte, "{}", cap.versao);
+        // a tabela é do pedaço, as posições do arquivo inteiro
+        let nova = FonteInfo { sha256: "c5".repeat(32), ..fonte.clone() };
+        assert_eq!(conferir_por(&cap, &cache, &nova, &numeros, (de, ate, 7, 90), "posições do inteiro", 0).1, Caminho::Ordem, "{}", cap.versao);
+    }
+
+    /// As células do atalho são as da tabela (pts na base dela), não as do `showinfo`: com a tabela noutra base
+    /// (mesmos tempos), a tira do atalho é a mesma do modo Ordem.
+    #[test]
+    fn celulas_do_atalho_na_base_da_tabela() {
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::MpegPs);
+        let tab = &m.info.quadros;
+        let dobro = TabelaQuadros { tb: Racional { num: tab.tb.num, den: tab.tb.den * 2 }, pts: tab.pts.iter().map(|p| p * 2).collect(), ..(**tab).clone() };
+        let fonte = FonteInfo { sha256: "c6".repeat(32), quadros: Arc::new(dobro), ..m.info.clone() };
+        let k = chaves_de(&fonte.quadros);
+        let (de, ate) = faixa(&fonte.quadros, k[7] + 3, 1e9, 8);
+        igual_ao_ordem(&cap, &fonte, (de, ate, 8), Caminho::Busca, "tabela em outra base");
+    }
+
+    /// Lista do `concat` com caminho do Windows (barra invertida, acento, aspa, UNC, `\\?\`) e nomes feios: lida de
+    /// volta pela regra do `av_get_token` do ffmpeg (aspa simples: tudo literal até a próxima; fora dela, `\` escapa o
+    /// seguinte), o nome volta igual. Quebra de linha no nome: sem lista (a linha do `file` quebraria).
+    #[test]
+    fn lista_do_concat_no_windows_e_nomes_feios() {
+        fn token(mut s: &str) -> String {
+            let mut out = String::new();
+            s = s.trim_start();
+            let mut c = s.chars();
+            while let Some(x) = c.next() {
+                match x {
+                    '\\' => out.extend(c.next()),
+                    '\'' => {
+                        for y in c.by_ref() {
+                            if y == '\'' {
+                                break;
+                            }
+                            out.push(y);
+                        }
+                    }
+                    ' ' | '\t' => break,
+                    _ => out.push(x),
+                }
+            }
+            out
+        }
+        assert_eq!(
+            lista_do_concat(Path::new(r"C:\Users\André\Caso d'Ávila\gravação.h264"), 9).as_deref(),
+            Some("ffconcat version 1.0\nfile 'C:\\Users\\André\\Caso d'\\''Ávila\\gravação.h264'\noption skip_initial_bytes 9\n")
+        );
+        for nome in [
+            r"C:\Users\André\Caso d'Ávila\gravação.h264",
+            r"\\servidor\casos\cam 1\x.h264",
+            r"\\?\C:\Casos\x.h264",
+            r"C:\fim com barra\",
+            "/x/'começa e acaba com aspa'",
+            "/x/a''b #1 ?x %d [2]",
+            "/x/ espaço nas pontas ",
+        ] {
+            let lista = lista_do_concat(Path::new(nome), 0).unwrap();
+            let linha = lista.lines().nth(1).unwrap();
+            assert_eq!(token(linha.strip_prefix("file ").unwrap()), nome);
+        }
+        assert_eq!(lista_do_concat(Path::new("/x/a\nb.h264"), 0), None);
+        assert_eq!(lista_do_concat(Path::new("/x/a\rb.h264"), 0), None);
+    }
+
+    /// Rajada de pedidos em mídias diferentes (o zoom passando por vários clipes de fluxo cru): as medições que a tira
+    /// cancelada deixou seguem, mas no máximo `MEDINDO` `ffprobe` por vez; o resto espera sem processo. Some a entrada:
+    /// todas acabam, sem posições e sem processo.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn medicoes_em_rajada_tem_teto() {
+        let Some(cap) = fontes::cap() else { return };
+        let base = fonte_do_decodificador(&cap, &h264_cru(&cap));
+        let cache = fontes::pasta_temporaria("tiras-rajada-medicoes");
+        let presas: Vec<(std::net::TcpListener, PathBuf)> = (0..6).map(|_| entrada_presa()).collect();
+        let urls: Vec<String> = presas.iter().map(|(_, u)| u.to_string_lossy().into_owned()).collect();
+        let ja = AtomicBool::new(true);
+        for (i, (_, url)) in presas.iter().enumerate() {
+            let fonte = FonteInfo { caminho: url.clone(), sha256: format!("{:02x}", 0xa0 + i).repeat(32), ..base.clone() };
+            assert_eq!(codigo(posicoes(&cap, &cache, &fonte, &ja)), ERRO_CANCELADO);
+        }
+        let vivos = || {
+            std::fs::read_dir("/proc")
+                .unwrap()
+                .flatten()
+                .filter_map(|e| std::fs::read(e.path().join("cmdline")).ok())
+                .filter(|c| {
+                    let c = String::from_utf8_lossy(c);
+                    urls.iter().any(|u| c.contains(u.as_str()))
+                })
+                .count()
+        };
+        let t0 = Instant::now();
+        let mut maximo = 0;
+        while t0.elapsed() < Duration::from_millis(1500) {
+            maximo = maximo.max(vivos());
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!((1..=MEDINDO).contains(&maximo), "{maximo} ffprobe ao mesmo tempo");
+        drop(presas);
+        let t0 = Instant::now();
+        let chaves: Vec<String> = (0..6).map(|i| format!("{}:{}", format!("{:02x}", 0xa0 + i).repeat(32), cap.sha256)).collect();
+        while chaves.iter().any(|c| !matches!(medicoes().0.lock().unwrap().get(c), Some(Medicao::Sem))) {
+            assert!(t0.elapsed() < Duration::from_secs(30), "medições presas");
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(vivos(), 0);
     }
 }
