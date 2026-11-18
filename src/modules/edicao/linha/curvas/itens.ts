@@ -132,9 +132,21 @@ export interface BaseDoItem {
   paraSlot(t: Seg): number;
   /** Trecho com tabela: o pts do quadro mostrado no slot (a chave presa a quadro leva o dela). */
   ptsDoSlot?(q: number): Pts;
+  /** Quadro na tela de um instante (sem limite): o mesmo número = a mesma chave do cursor (`instanteNoQuadro`). */
+  quadro(t: Seg): number;
 }
 
 const limitar = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
+
+/** Quadro de um instante local (o slot dele desde o começo do item). */
+export const quadroLocal = (fps: LinhaResolvida["fps"]) => (t: Seg) => Math.round((t * fps.num) / fps.den);
+
+/** Quadro de um instante de fonte do trecho: o mostrado pela tabela; sem ela, pela velocidade constante. */
+export function quadroDoTrecho(c: ClipeTrecho, tab: TabelaQuadros | null, fps: LinhaResolvida["fps"]): (t: Seg) => number {
+  if (tab) return (t) => exibido(tab, t);
+  const v = c.velocidade.tipo === "constante" && c.velocidade.fator > 0 ? c.velocidade.fator : 1;
+  return (t) => Math.round(((t - c.inicio_s) / v) * (fps.num / fps.den));
+}
 
 /** Base local: τ = (q − início)·den/num. */
 function baseLocal(de_q: number, n_q: number, fps: LinhaResolvida["fps"]): BaseDoItem {
@@ -143,6 +155,7 @@ function baseLocal(de_q: number, n_q: number, fps: LinhaResolvida["fps"]): BaseD
     ate_q: de_q + n_q,
     deSlot: (q) => instanteDoSlot(q - de_q, fps),
     paraSlot: (t) => de_q + Math.round((t * fps.num) / fps.den),
+    quadro: quadroLocal(fps),
   };
 }
 
@@ -162,6 +175,7 @@ function baseDoTrecho(c: ClipeTrecho, de_q: number, n_q: number, linha: LinhaRes
     return {
       de_q,
       ate_q: de_q + n_q,
+      quadro: quadroDoTrecho(c, tab, fps),
       ptsDoSlot: (q) => ptsDaTabela(tab)[j(q)] as Pts,
       deSlot: (q) => tempoDoQuadro(tab, j(q)),
       paraSlot: (t) => {
@@ -177,6 +191,7 @@ function baseDoTrecho(c: ClipeTrecho, de_q: number, n_q: number, linha: LinhaRes
   return {
     de_q,
     ate_q: de_q + n_q,
+    quadro: quadroDoTrecho(c, null, fps),
     deSlot: (q) => c.inicio_s + instanteDoSlot(q - de_q, fps) * v,
     paraSlot: (t) => de_q + Math.round(((t - c.inicio_s) / v) * (fps.num / fps.den)),
   };

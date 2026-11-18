@@ -13,7 +13,7 @@ import { folgaDaSombra, transformacaoEm, type TransformacaoAvaliada } from "../m
 import { primitivas as primitivasDoTitulo } from "../modelo/titulos";
 import { avaliar } from "../modelo/curva";
 import { sobrepostoConhecido } from "../modelo/projeto";
-import { gravarEm as gravarNaChave } from "../linha/curvas/chaves";
+import { gravarEm as gravarNaChave, instanteNoQuadro } from "../linha/curvas/chaves";
 import { instanteDoSlot } from "../modelo/tempo";
 import { SOMBRA_MAX, ehTextoLivre } from "../inspetor/secoes/textoLivre";
 import type { FontesCena } from "./cena";
@@ -114,10 +114,10 @@ const aplicarT = (m: Transf, p: V): V => mais(girar(m, menos(p, m.C)), m.X);
 
 /** Valor animável no instante, e o mesmo campo com `v` gravado no instante (chave no cursor, se já tem chaves). */
 const lerEm = (a: Animavel<number>, tau: Seg) => avaliar(a, tau);
-// P4.2 (D7): a mesma regra do Inspetor e da linha (`linha/curvas/chaves.ts`): chave nova "suave", a que já existe fica
-// com a curva dela
-function gravarEm(a: Animavel<number>, v: number, tau: Seg): Animavel<number> {
-  return gravarNaChave(a, tau, v);
+// P4.2 (D7): a mesma regra do Inspetor e da linha (`linha/curvas/chaves.ts`): chave nova "suave", a que já existe no
+// quadro do cursor fica com a curva dela
+function gravarEm(a: Animavel<number>, v: number, tau: Seg, fps: { num: number; den: number } | undefined): Animavel<number> {
+  return gravarNaChave(a, instanteNoQuadro(a, tau, fps && ((t) => Math.round((t * fps.num) / fps.den))), v);
 }
 
 const limitar = (v: number, a: number, b: number) => Math.min(Math.max(v, a), b);
@@ -135,7 +135,7 @@ function cursorDe(tipo: Alca["tipo"], d: V): string {
  *  mover, quatro cantos, dois lados e giro; outro título ou imagem: só mover. Shift: mover num eixo, giro de 15°
  *  em 15°. Alt: canto e lado a partir do centro. */
 export function alcasDoLivre(doc: ProjetoEdicao, item: LivreNoQuadro, canvas: { w: number; h: number }): Alca[] {
-  void doc;
+  const fps = doc.saida?.fps;
   const { w: W, h: H } = canvas;
   if (!(W > 0 && H > 0)) return [];
   const c0 = item.clipe;
@@ -150,8 +150,8 @@ export function alcasDoLivre(doc: ProjetoEdicao, item: LivreNoQuadro, canvas: { 
   const copia = () => structuredClone(c0) as SobTitulo | SobImagem;
   /** Grava o centro do objeto que se vê em `X` (px), tirando o deslize. */
   const comCentro = (novo: SobTitulo | SobImagem, X: V) => {
-    novo.transformacao.x = gravarEm(tr.x, noPixel(X.x / W - desliza.x, W), tau);
-    novo.transformacao.y = gravarEm(tr.y, noPixel(X.y / H - desliza.y, H), tau);
+    novo.transformacao.x = gravarEm(tr.x, noPixel(X.x / W - desliza.x, W), tau, fps);
+    novo.transformacao.y = gravarEm(tr.y, noPixel(X.y / H - desliza.y, H), tau, fps);
   };
   const em = (p: V): Ponto => ({ x: p.x / W, y: p.y / H });
   const px = (p: Ponto): V => ({ x: p.x * W, y: p.y * H });
@@ -253,7 +253,7 @@ export function alcasDoLivre(doc: ProjetoEdicao, item: LivreNoQuadro, canvas: { 
       if (mod.shift) r = Math.round(r / 15) * 15;
       r = ((((r + 180) % 360) + 360) % 360) - 180;
       const novo = copia();
-      novo.transformacao.rotacao = gravarEm(tr.rotacao, Math.round(r * 100) / 100 + 0, tau);
+      novo.transformacao.rotacao = gravarEm(tr.rotacao, Math.round(r * 100) / 100 + 0, tau, fps);
       const m2 = transf({ ...visto, rotacao: visto.rotacao + (r - lerEm(tr.rotacao, tau)) }, W, H);
       comCentro(novo, objetoPara(m2, cx.c, centro));
       return mudanca(novo);

@@ -24,7 +24,8 @@ import { round } from "./comum";
 import { CONTORNO, CORES, DURACAO_SURGIR, SOMBRA, comFundo, comSurgir, fundoDe, tauNoCursor, tomarFoco, type Fundo } from "./textoLivre";
 import { LINHA_PRONTA } from "../../linha/LinhaDoTempo";
 import { apararLivre } from "../../linha/arrastar";
-import { gravarEm } from "../../linha/curvas/chaves";
+import { gravarEm, instanteNoQuadro } from "../../linha/curvas/chaves";
+import { quadroLocal } from "../../linha/curvas/itens";
 import { CurvasDoItem } from "../../linha/curvas/CurvasDoItem";
 import styles from "../Inspetor.module.css";
 import meu from "./TextoLivre.module.css";
@@ -81,7 +82,9 @@ export function TextoLivreSecao({ clipe: c }: SecaoProps<SobTitulo>) {
   const linha = animado || LINHA_PRONTA ? resolvida : null;
   const tau = (linha && tauNoCursor(doc, linha, cursor, id)) ?? 0;
   // P4.2 (D7): com chaves, o campo grava a chave no cursor (a que já existe ali fica com a curva dela)
-  const naChave = (a: Animavel<number>, v: number): Animavel<number> => gravarEm(a, tau, v);
+  // a chave que já está no quadro do cursor é a dele (a mesma conta da raia)
+  const tChave = (a: Animavel<number>) => instanteNoQuadro(a, tau, quadroLocal(doc.saida.fps));
+  const naChave = (a: Animavel<number>, v: number): Animavel<number> => gravarEm(a, tChave(a), v);
 
   const noBloco = (f: (x: Draft<BlocoTexto>, s: Draft<SobTitulo>) => void): Mut =>
     noClipe<SobTitulo>(id, (x) => {
@@ -221,7 +224,7 @@ export function TextoLivreSecao({ clipe: c }: SecaoProps<SobTitulo>) {
                             x.transformacao[eixo] = naChave(tr[eixo], Math.round((n / 100) * lado) / lado);
                             // posição com chaves: x e y ganham a chave do instante juntos (a raia é uma só)
                             const outro = eixo === "x" ? "y" : "x";
-                            if (ehChaves(tr[eixo]) && ehChaves(tr[outro])) x.transformacao[outro] = naChave(tr[outro], avaliar(tr[outro], tau));
+                            if (ehChaves(tr[eixo]) && ehChaves(tr[outro])) x.transformacao[outro] = naChave(tr[outro], avaliar(tr[outro], tChave(tr[outro])));
                           }),
                           `${id}:Posição:${eixo}`,
                         )

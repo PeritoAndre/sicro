@@ -271,6 +271,106 @@ describe("volume do clipe de áudio", () => {
   });
 });
 
+describe("escolhida pelo instante; chave fora do item", () => {
+  it("chave que entra antes da escolhida, desfazer e seta não trocam a escolhida; a de fora fica na beira e sai com Delete", async () => {
+    const { id, raiz, inicio } = await criar();
+    await ir(inicio);
+    await clicar(chave(raiz, "opacidade"));
+    await ir(inicio + 60);
+    await clicar(chave(raiz, "opacidade"));
+    const faixa = () => raia(raiz, "opacidade").querySelector<HTMLElement>("[data-curva]")!;
+    const escolhida = () => faixa().querySelector<HTMLElement>('[data-chave][aria-pressed="true"]')?.getAttribute("data-q");
+    const op = () => textoDe(id).transformacao.opacidade as Chave<number>[];
+    // a de 2 s é a escolhida (a última posta); o grupo mostra a interpolação dela
+    expect(escolhida()).toBe(String(inicio + 60));
+    // uma chave nova no meio, pelo campo: a escolhida continua a de 2 s
+    await ir(inicio + 30);
+    await depois();
+    await digitar(entradaDe(raiz, "Opacidade") as HTMLInputElement, "50");
+    expect(op().map((k) => k.t)).toEqual([0, 1, 2]);
+    expect(escolhida()).toBe(String(inicio + 60));
+    // seta: anda um slot e segue escolhida
+    await act(async () => void faixa().querySelector<HTMLElement>('[data-chave="2"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })));
+    expect(op()[2]!.t).toBeCloseTo(61 / 30, 12);
+    expect(escolhida()).toBe(String(inicio + 61));
+    st().desfazer();
+    await esperar(() => {});
+    expect(op()[2]!.t).toBe(2);
+    // desfeita a seta, a chave de 61/30 não existe: nenhuma escolhida (nunca a vizinha)
+    expect(escolhida()).toBeUndefined();
+    expect(raiz.querySelector('[data-interp-de="opacidade"]')).toBeNull();
+
+    // o item encolhe para 1,5 s: a chave de 2 s fica fora, na beira, apagada, e ainda sai com Delete
+    await esperar(() => st().alterar("Duração", (d) => void ((d.sobreposicoes[0]!.clipes[0] as SobTitulo).duracao_s = 1.5)));
+    const fora = faixa().querySelector<HTMLElement>('[data-chave="2"]')!;
+    expect(fora.getAttribute("data-fora")).toBe("true");
+    const n = passos();
+    await act(async () => void fora.dispatchEvent(new KeyboardEvent("keydown", { key: "Delete", bubbles: true })));
+    expect(op().map((k) => k.t)).toEqual([0, 1]);
+    expect(passos()).toBe(n + 1);
+  });
+
+  it("alça do palco: a chave antiga no mesmo quadro (fora do instante exato do slot) é a que recebe o valor", async () => {
+    const { id, inicio } = await criar();
+    await esperar(() => st().alterar("Texto", (d) => void ((d.sobreposicoes[0]!.clipes[0] as SobTitulo).titulo.blocos[0]!.conteudo = "Policiais")));
+    // chave posta a 1 s + 4 ms (um projeto de outra taxa de saída, ou escrito à mão): o slot 30 mostra ela
+    await esperar(() =>
+      st().alterar("Chave no cursor", (d) => {
+        const t = (d.sobreposicoes[0]!.clipes[0] as SobTitulo).transformacao;
+        t.x = [{ t: 0, v: 0.5 }, { t: 1.004, v: 0.5 }];
+        t.y = [{ t: 0, v: 0.5 }, { t: 1.004, v: 0.5 }];
+      }),
+    );
+    const linha = resolver(doc(), { tabela: () => null });
+    const fontes = { sprite: () => ({ relativo: "sprites/x.png", w: 400, h: 70 }), atlas: () => null, midia: () => null };
+    const item = livresNoQuadro(doc(), linha, inicio + 30, fontes)[0]!;
+    const a = alcasDoLivre(doc(), item, { w: 1920, h: 1080 }).find((x) => x.id.endsWith(":mover"))!;
+    await esperar(() => st().alterar("Posição", (d) => void aplicarMudanca(d, a.arrastar(a.em, { x: a.em.x + 192 / 1920, y: a.em.y }, { shift: false, alt: false }))));
+    expect(textoDe(id).transformacao.x).toEqual([{ t: 0, v: 0.5 }, { t: 1.004, v: 0.6 }]);
+  });
+});
+
+describe("volume do trecho: a chave é a do quadro, não a do instante exato", () => {
+  // o palco parado no modo Clipe põe o cursor no MEIO do quadro (a chave do P1.5 nasceu ali); o Programa, no começo dele
+  it("chave antiga no meio do quadro: com o cursor no começo dele (Programa ou Clipe), Tirar chave e o Som acham ela", async () => {
+    const tab: TabelaQuadros = { tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(1799).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem: "decodificador" };
+    const sha = doc().midias.find((m) => m.id === "m1")!.sha256;
+    useRecursos.setState({ midias: { [sha]: { info: null, tabela: tab, erro: null, pedindo: false } as never } });
+    try {
+      const meio = (j: number) => tempoDoQuadro(tab, j) + 1 / 60;
+      const id = (doc().principal[1] as { id: string }).id;
+      const volume = () => (doc().principal[1] as { audio: { volume: unknown } }).audio.volume;
+      await esperar(() =>
+        st().alterar("Som", (d) => {
+          (d.principal[1] as { audio: { volume: unknown } }).audio.volume = [
+            { t: meio(390), v: 0.8 },
+            { t: meio(420), v: 0.3 },
+          ];
+        }),
+      );
+      await esperar(() => st().selecionar({ itens: [{ k: "clipe", id }], foco: { k: "clipe", id }, efeito: null }));
+      const ch = () => tela.raiz.querySelector<HTMLButtonElement>('[data-raia="volume"] button[aria-pressed]')!;
+      // o trecho começa no slot 90 (fonte 12 s = quadro 360): o quadro 390 é o slot 120
+      await ir(120);
+      expect(ch().getAttribute("title")).toBe("Tirar chave");
+      const som = tela.raiz.querySelector<HTMLInputElement>('[data-campo="Som"] input[type="range"]')!;
+      expect(Number(som.value)).toBeCloseTo(0.8, 9);
+      await arrastar(som, [0.5]);
+      expect(volume()).toEqual([
+        { t: meio(390), v: 0.5 },
+        { t: meio(420), v: 0.3 },
+      ]);
+      // no modo Clipe, no começo do quadro 420
+      await esperar(() => st().posicionar({ modo: "clipe", clipe: id, t: tempoDoQuadro(tab, 420) }));
+      expect(ch().getAttribute("title")).toBe("Tirar chave");
+      await clicar(ch());
+      expect(volume()).toEqual([{ t: meio(390), v: 0.5 }]);
+    } finally {
+      useRecursos.setState({ midias: {} });
+    }
+  });
+});
+
 describe("na linha do tempo (ponto de montagem do P4.1)", () => {
   async function animado() {
     const { id, inicio } = await criar();

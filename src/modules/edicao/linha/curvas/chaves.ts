@@ -26,6 +26,16 @@ export function chaveEm<T>(a: Animavel<T>, t: Seg): number {
   return ehChaves(a) ? a.findIndex((k) => mesmo(k.t, t)) : -1;
 }
 
+/** Instante da chave do cursor: o de uma chave que já está no quadro de `t` (`quadro`: o quadro na tela de um instante),
+ *  senão `t`. O modo Clipe põe o cursor no meio do quadro e o Programa no começo; a chave antiga fica onde nasceu. */
+export function instanteNoQuadro<T>(a: Animavel<T>, t: Seg, quadro?: (t: Seg) => number): Seg {
+  if (!ehChaves(a) || !quadro || chaveEm(a, t) >= 0) return t;
+  const q = quadro(t);
+  let achado: Seg | null = null;
+  for (const k of a) if (quadro(k.t) === q && (achado === null || Math.abs(k.t - t) < Math.abs(achado - t))) achado = k.t;
+  return achado ?? t;
+}
+
 /** Chave nova; `interp` null = sem o campo (linear). */
 function nova<T>(t: Seg, v: T, interp: Interp | null | undefined): Chave<T> {
   const i = interp === undefined ? INTERP_NOVA : interp;

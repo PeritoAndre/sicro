@@ -169,7 +169,8 @@ fn amostrar(c: &Value, tempos: &[f64]) -> Amostras {
 
 /// O que o motor desenha, conferido contra a amostragem do Rust nos dois sobrepostos, slot a slot: centro a até 1 px,
 /// ângulo a até 1°, lados a até 1,5 px (escala) e o miolo pela opacidade. As contas das curvas são conferidas antes à
-/// mão (linear, suave e degrau), para a amostragem não ser a única referência.
+/// mão (linear, suave e degrau), para a amostragem não ser a única referência. O medido vai para `curvas-render.json`,
+/// que o palco confere pela conta dele (`linha/curvas/paridade.test.ts`, a até 1 px e 1°).
 #[test]
 fn posicao_escala_rotacao_opacidade_no_render() {
     let Some(cap) = fontes::cap() else { return };
@@ -224,6 +225,9 @@ fn posicao_escala_rotacao_opacidade_no_render() {
         assert!(dop <= 0.03, "{nome} ({}) slot {k}: opacidade {:.3} × {eop:.3}", cap.versao, m.miolo);
         (pior_px, pior_grau, pior_lado, pior_op) = (pior_px.max(dp), pior_grau.max(da), pior_lado.max(dl), pior_op.max(dop));
     };
+    let (mut medidas_t, mut medidas_i) = (Vec::new(), Vec::new());
+    let r2 = |v: f64| (v * 100.0).round() / 100.0;
+    let medida = |k: usize, m: &Mancha| json!({ "q": k, "cx": r2(m.cx), "cy": r2(m.cy), "maior": r2(m.maior), "menor": r2(m.menor), "angulo": r2(m.angulo), "opacidade": (m.miolo * 1000.0).round() / 1000.0 });
     for (k, quadro) in q.iter().enumerate() {
         if k >= ti && k < ti + tn {
             let j = k - ti;
@@ -232,6 +236,7 @@ fn posicao_escala_rotacao_opacidade_no_render() {
             let e = (at.x[j] * W as f64 + sc * (co * dx - sn * dy), at.y[j] * H as f64 + sc * (sn * dx + co * dy), smaior * sc, smenor * sc, at.rotacao[j], at.opacidade[j]);
             let mut m = mancha(quadro, 1);
             m.miolo /= ref_t;
+            medidas_t.push(medida(k, &m));
             conferir("texto", k, m, e);
         }
         if k >= ii && k < ii + in_ {
@@ -240,6 +245,7 @@ fn posicao_escala_rotacao_opacidade_no_render() {
             let e = (ai.x[j] * W as f64, ai.y[j] * H as f64, lado, lado * IMG.1 as f64 / IMG.0 as f64, ai.rotacao[j], ai.opacidade[j]);
             let mut m = mancha(quadro, 2);
             m.miolo /= ref_i;
+            medidas_i.push(medida(k, &m));
             conferir("imagem", k, m, e);
         }
     }
@@ -249,6 +255,30 @@ fn posicao_escala_rotacao_opacidade_no_render() {
     assert!(faixa(&at.x) * W as f64 > 40.0 && faixa(&at.y) * H as f64 > 60.0 && faixa(&at.rotacao) > 50.0 && faixa(&at.escala) > 0.4 && faixa(&at.opacidade) > 0.5);
     assert!(faixa(&ai.x) * W as f64 > 30.0 && faixa(&ai.y) * H as f64 > 50.0 && faixa(&ai.rotacao) > 20.0 && faixa(&ai.escala) * W as f64 > 30.0 && faixa(&ai.opacidade) > 0.5);
     let _ = std::fs::remove_dir_all(pasta);
+
+    // o medido para o palco: gravado com `SICRO_GRAVAR_FIXTURES=1`; fora dela, a medida tem de ser a mesma nos dois
+    // ffmpeg (a até 0,05 px, 0,05° e 0,005 de opacidade)
+    let nova = json!([{ "nome": "texto livre e imagem animados",
+        "entrada": { "projeto": serde_json::to_value(&p).unwrap(), "sprite": { "w": s.w, "h": s.h, "maior": r2(smaior), "menor": r2(smenor) }, "imagem": { "w": IMG.0, "h": IMG.1 } },
+        "saida": { "texto": medidas_t, "imagem": medidas_i } }]);
+    let arq = curva::fixtures::caminho("curvas-render.json");
+    if std::env::var(curva::fixtures::VARIAVEL).is_ok_and(|v| v == "1") {
+        std::fs::write(&arq, serde_json::to_string_pretty(&nova).unwrap() + "\n").unwrap();
+        return;
+    }
+    let gravada: Value = serde_json::from_str(&std::fs::read_to_string(&arq).expect("curvas-render.json")).unwrap();
+    assert_eq!(gravada[0]["entrada"], nova[0]["entrada"], "{}", cap.versao);
+    for lado in ["texto", "imagem"] {
+        let (g, n) = (gravada[0]["saida"][lado].as_array().unwrap(), nova[0]["saida"][lado].as_array().unwrap());
+        assert_eq!(g.len(), n.len(), "{lado}");
+        for (a, b) in g.iter().zip(n) {
+            assert_eq!(a["q"], b["q"]);
+            for (k, tol) in [("cx", 0.05), ("cy", 0.05), ("maior", 0.05), ("menor", 0.05), ("angulo", 0.05), ("opacidade", 0.005)] {
+                let (x, y) = (a[k].as_f64().unwrap(), b[k].as_f64().unwrap());
+                assert!((x - y).abs() <= tol + 1e-9, "{lado} ({}) slot {}: {k} {y} × gravado {x}", cap.versao, b["q"]);
+            }
+        }
+    }
 }
 
 // ------------------------------------------------------------------ volume

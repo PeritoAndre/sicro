@@ -150,7 +150,10 @@ export function EditorCurva(p: EditorCurvaProps) {
       e.preventDefault();
       e.stopPropagation();
       const l = noSlot(ks, i, slot(k.t) + (e.key === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 10 : 1));
-      if (l && (l[i] as Chave<number>).t !== k.t) p.aplicar(l);
+      if (l && (l[i] as Chave<number>).t !== k.t) {
+        p.aplicar(l);
+        p.onEscolher?.(i);
+      }
     } else if (e.key === "Delete" || e.key === "Backspace") {
       e.preventDefault();
       e.stopPropagation();
@@ -203,21 +206,24 @@ export function EditorCurva(p: EditorCurvaProps) {
       )}
       {cursorDentro && <i className={st.cabeca} style={{ left: `${(((p.cursor_q as number) - de_q + 0.5) / n) * 100}%` }} aria-hidden />}
       {lista.map((k, i) => {
-        const q = slot(k.t);
-        // a chave no fim do item (t = duração) é dele: fica na beira
-        if (q < de_q || q > ate_q) return null;
+        const q0 = slot(k.t);
+        // a chave no fim do item (t = duração) é dele; a de fora (o item encolheu depois dela) ainda pesa na curva:
+        // fica na beira, apagada, para arrastar para dentro ou tirar
+        const fora = q0 < de_q || q0 > ate_q;
+        const q = Math.min(Math.max(q0, de_q), ate_q);
         const escolhida = p.escolhida === i;
         return (
           <button
             key={i}
             type="button"
-            className={`${st.losango} ${escolhida ? st.escolhido : ""}`}
+            className={[st.losango, escolhida && st.escolhido, fora && st.fora].filter(Boolean).join(" ")}
             style={{ left: esquerda(q), top: altura(k.v) }}
             aria-label={p.rotulo}
             aria-pressed={escolhida}
             title={p.rotulo}
             data-chave={i}
-            data-q={q}
+            data-q={q0}
+            data-fora={fora || undefined}
             data-interp={interpDe(k)}
             disabled={p.desligado}
             onPointerDown={pegar(i)}

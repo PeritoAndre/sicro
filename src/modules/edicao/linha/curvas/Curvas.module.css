@@ -79,6 +79,10 @@
   background: var(--sicro-fg);
   box-shadow: 0 0 0 2px var(--sicro-accent);
 }
+/* chave fora do item, posta na beira */
+.fora {
+  opacity: 0.45;
+}
 .naLinha .losango {
   border-color: #f4f7fb;
   background: #0b1220;

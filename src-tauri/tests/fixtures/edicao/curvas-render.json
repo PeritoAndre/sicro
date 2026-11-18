@@ -1,0 +1,1485 @@
+[
+  {
+    "entrada": {
+      "imagem": {
+        "h": 24,
+        "w": 48
+      },
+      "projeto": {
+        "audios": [],
+        "created_at": "2026-11-14T00:00:00Z",
+        "esquema": 2,
+        "esquema_menor": 0,
+        "fecho": null,
+        "gravado_por": "",
+        "id": "p-teste",
+        "legendas": {
+          "estilo": {
+            "alinhamento": "centro",
+            "caixa": {
+              "cor": "#0000008c",
+              "margem": 0.013,
+              "raio": 0.0
+            },
+            "contorno": null,
+            "cor": "#ffffff",
+            "fonte": "sans",
+            "italico": false,
+            "negrito": false,
+            "tamanho": 0.052
+          },
+          "itens": [],
+          "linhas_max": 2,
+          "lugar": {
+            "h": "centro",
+            "v": "base",
+            "x": 0.5,
+            "y": 0.94
+          },
+          "origem": null
+        },
+        "marcadores": [],
+        "midias": [
+          {
+            "altura": null,
+            "cor": null,
+            "decodificacao": null,
+            "derivacao": null,
+            "duracao_s": null,
+            "gravador": null,
+            "id": "azul",
+            "inicio_s": null,
+            "largura": null,
+            "media_id": null,
+            "nome": "azul.mp4",
+            "ocultacoes": [],
+            "origem": "caso",
+            "recebido": {
+              "nativo": null,
+              "obs": ""
+            },
+            "relativo": "Midias/azul.mp4",
+            "relogio_desvio_s": null,
+            "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+            "taxa": null,
+            "tem_audio": false,
+            "tipo": "imagem",
+            "vfr": false
+          }
+        ],
+        "mixagem": {
+          "abaixar": {
+            "ataque_s": 0.3,
+            "db": -12.0,
+            "soltura_s": 0.5
+          },
+          "limitador": false,
+          "normalizar": null,
+          "volume_original": 1.0
+        },
+        "principal": [
+          {
+            "desligado": false,
+            "duracao_s": 0.5,
+            "efeitos": [],
+            "id": "A",
+            "rotulo": "",
+            "tipo": "titulo",
+            "titulo": {
+              "blocos": [],
+              "fundo": {
+                "cor": "#404040",
+                "tipo": "cor"
+              },
+              "modelo": "cartela"
+            },
+            "transicao_entrada": null
+          },
+          {
+            "desligado": false,
+            "duracao_s": 2.0,
+            "efeitos": [],
+            "id": "B",
+            "rotulo": "",
+            "tipo": "titulo",
+            "titulo": {
+              "blocos": [],
+              "fundo": {
+                "cor": "#404040",
+                "tipo": "cor"
+              },
+              "modelo": "cartela"
+            },
+            "transicao_entrada": null
+          }
+        ],
+        "rastreios": [],
+        "saida": {
+          "altura": 180,
+          "audio": false,
+          "auto": false,
+          "cor_fundo": "#202020",
+          "exportacao": {
+            "codificador": "cpu",
+            "legendas": "nenhuma",
+            "pacote": null,
+            "pdf": "a3",
+            "personalizada": null,
+            "predefinicao": "juri",
+            "revisado_por": ""
+          },
+          "fps": {
+            "den": 1,
+            "num": 30
+          },
+          "largura": 320,
+          "selos": {
+            "ampliacao": true,
+            "realce": true,
+            "velocidade": true
+          }
+        },
+        "sincronias": [],
+        "sobreposicoes": [
+          {
+            "clipes": [
+              {
+                "duracao_s": 2.2,
+                "efeitos": [],
+                "entrada_s": 0.0,
+                "id": "im",
+                "midia": "azul",
+                "pos": {
+                  "ref": "programa",
+                  "t": 0.1
+                },
+                "rotulo": "",
+                "saida_s": 0.0,
+                "tipo": "imagem",
+                "transformacao": {
+                  "escala": [
+                    {
+                      "interp": "suave",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.15
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.5,
+                      "v": 0.25
+                    }
+                  ],
+                  "opacidade": [
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 1.0
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 2.0,
+                      "v": 0.45
+                    }
+                  ],
+                  "rotacao": [
+                    {
+                      "interp": "degrau",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 10.0
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.0,
+                      "v": -15.0
+                    }
+                  ],
+                  "x": [
+                    {
+                      "interp": "suave",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.7
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 2.0,
+                      "v": 0.82
+                    }
+                  ],
+                  "y": [
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.65
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.0,
+                      "v": 0.35
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 2.0,
+                      "v": 0.5
+                    }
+                  ]
+                }
+              },
+              {
+                "animacao": {
+                  "entrada": "corte",
+                  "lado": "baixo",
+                  "saida": "corte"
+                },
+                "duracao_s": 1.8,
+                "efeitos": [],
+                "entrada_s": 0.0,
+                "id": "tl",
+                "pos": {
+                  "clipe": "B",
+                  "desloc": 0.2,
+                  "ref": "clipe"
+                },
+                "rotulo": "",
+                "saida_s": 0.0,
+                "tipo": "titulo",
+                "titulo": {
+                  "blocos": [
+                    {
+                      "conteudo": "Texto",
+                      "estilo": {
+                        "alinhamento": "centro",
+                        "caixa": {
+                          "cor": "#30c030",
+                          "margem": 0.03,
+                          "raio": 0.0
+                        },
+                        "contorno": null,
+                        "cor": "#30c030",
+                        "fonte": "sans",
+                        "italico": false,
+                        "negrito": true,
+                        "tamanho": 0.09
+                      },
+                      "id": "b1",
+                      "largura_max": 0.6,
+                      "lugar": {
+                        "h": "centro",
+                        "v": "meio",
+                        "x": 0.5,
+                        "y": 0.5
+                      },
+                      "papel": "corpo"
+                    }
+                  ],
+                  "fundo": {
+                    "tipo": "transparente"
+                  },
+                  "modelo": "livre"
+                },
+                "transformacao": {
+                  "escala": [
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.8
+                    },
+                    {
+                      "interp": "degrau",
+                      "pts": null,
+                      "t": 0.6,
+                      "v": 1.25
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.2,
+                      "v": 1.0
+                    }
+                  ],
+                  "opacidade": [
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.4
+                    },
+                    {
+                      "interp": "degrau",
+                      "pts": null,
+                      "t": 0.9,
+                      "v": 1.0
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.4,
+                      "v": 0.6
+                    }
+                  ],
+                  "rotacao": [
+                    {
+                      "interp": "suave",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": -25.0
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.5,
+                      "v": 30.0
+                    }
+                  ],
+                  "x": [
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.25
+                    },
+                    {
+                      "interp": "suave",
+                      "pts": null,
+                      "t": 0.8,
+                      "v": 0.4
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.6,
+                      "v": 0.3
+                    }
+                  ],
+                  "y": [
+                    {
+                      "interp": "suave",
+                      "pts": null,
+                      "t": 0.0,
+                      "v": 0.3
+                    },
+                    {
+                      "interp": "linear",
+                      "pts": null,
+                      "t": 1.2,
+                      "v": 0.7
+                    }
+                  ]
+                }
+              }
+            ],
+            "id": "s1",
+            "nome": "",
+            "oculta": false
+          }
+        ],
+        "titulo": "Teste",
+        "updated_at": "2026-11-14T00:00:00Z"
+      },
+      "sprite": {
+        "h": 31,
+        "maior": 54.99,
+        "menor": 30.51,
+        "w": 56
+      }
+    },
+    "nome": "texto livre e imagem animados",
+    "saida": {
+      "imagem": [
+        {
+          "angulo": 10.0,
+          "cx": 224.0,
+          "cy": 117.0,
+          "maior": 48.25,
+          "menor": 24.31,
+          "opacidade": 1.0,
+          "q": 3
+        },
+        {
+          "angulo": 9.99,
+          "cx": 224.05,
+          "cy": 115.17,
+          "maior": 48.2,
+          "menor": 24.3,
+          "opacidade": 1.0,
+          "q": 4
+        },
+        {
+          "angulo": 9.95,
+          "cx": 224.13,
+          "cy": 113.39,
+          "maior": 48.37,
+          "menor": 24.37,
+          "opacidade": 0.981,
+          "q": 5
+        },
+        {
+          "angulo": 9.95,
+          "cx": 224.23,
+          "cy": 111.61,
+          "maior": 48.54,
+          "menor": 24.45,
+          "opacidade": 0.97,
+          "q": 6
+        },
+        {
+          "angulo": 10.11,
+          "cx": 224.44,
+          "cy": 109.79,
+          "maior": 48.91,
+          "menor": 24.64,
+          "opacidade": 0.958,
+          "q": 7
+        },
+        {
+          "angulo": 10.01,
+          "cx": 224.72,
+          "cy": 107.98,
+          "maior": 49.29,
+          "menor": 24.79,
+          "opacidade": 0.958,
+          "q": 8
+        },
+        {
+          "angulo": 10.04,
+          "cx": 225.06,
+          "cy": 106.2,
+          "maior": 49.73,
+          "menor": 24.96,
+          "opacidade": 0.941,
+          "q": 9
+        },
+        {
+          "angulo": 9.92,
+          "cx": 225.43,
+          "cy": 104.4,
+          "maior": 50.29,
+          "menor": 25.31,
+          "opacidade": 0.936,
+          "q": 10
+        },
+        {
+          "angulo": 9.89,
+          "cx": 225.84,
+          "cy": 102.58,
+          "maior": 50.85,
+          "menor": 25.59,
+          "opacidade": 0.936,
+          "q": 11
+        },
+        {
+          "angulo": 10.0,
+          "cx": 226.32,
+          "cy": 100.81,
+          "maior": 51.56,
+          "menor": 25.95,
+          "opacidade": 0.918,
+          "q": 12
+        },
+        {
+          "angulo": 9.9,
+          "cx": 226.83,
+          "cy": 98.97,
+          "maior": 52.26,
+          "menor": 26.23,
+          "opacidade": 0.889,
+          "q": 13
+        },
+        {
+          "angulo": 9.96,
+          "cx": 227.36,
+          "cy": 97.22,
+          "maior": 53.02,
+          "menor": 26.71,
+          "opacidade": 0.894,
+          "q": 14
+        },
+        {
+          "angulo": 9.91,
+          "cx": 228.01,
+          "cy": 95.41,
+          "maior": 53.73,
+          "menor": 27.04,
+          "opacidade": 0.883,
+          "q": 15
+        },
+        {
+          "angulo": 9.98,
+          "cx": 228.63,
+          "cy": 93.61,
+          "maior": 54.56,
+          "menor": 27.42,
+          "opacidade": 0.88,
+          "q": 16
+        },
+        {
+          "angulo": 10.06,
+          "cx": 229.27,
+          "cy": 91.79,
+          "maior": 55.43,
+          "menor": 27.88,
+          "opacidade": 0.865,
+          "q": 17
+        },
+        {
+          "angulo": 9.96,
+          "cx": 229.99,
+          "cy": 89.97,
+          "maior": 56.47,
+          "menor": 28.33,
+          "opacidade": 0.865,
+          "q": 18
+        },
+        {
+          "angulo": 10.05,
+          "cx": 230.74,
+          "cy": 88.21,
+          "maior": 57.47,
+          "menor": 28.89,
+          "opacidade": 0.857,
+          "q": 19
+        },
+        {
+          "angulo": 10.03,
+          "cx": 231.49,
+          "cy": 86.39,
+          "maior": 58.48,
+          "menor": 29.4,
+          "opacidade": 0.845,
+          "q": 20
+        },
+        {
+          "angulo": 10.03,
+          "cx": 232.27,
+          "cy": 84.57,
+          "maior": 59.48,
+          "menor": 29.87,
+          "opacidade": 0.844,
+          "q": 21
+        },
+        {
+          "angulo": 9.96,
+          "cx": 233.07,
+          "cy": 82.82,
+          "maior": 60.52,
+          "menor": 30.39,
+          "opacidade": 0.82,
+          "q": 22
+        },
+        {
+          "angulo": 9.97,
+          "cx": 233.95,
+          "cy": 81.0,
+          "maior": 61.57,
+          "menor": 30.92,
+          "opacidade": 0.815,
+          "q": 23
+        },
+        {
+          "angulo": 9.98,
+          "cx": 234.79,
+          "cy": 79.21,
+          "maior": 62.49,
+          "menor": 31.39,
+          "opacidade": 0.812,
+          "q": 24
+        },
+        {
+          "angulo": 10.0,
+          "cx": 235.67,
+          "cy": 77.39,
+          "maior": 63.61,
+          "menor": 31.95,
+          "opacidade": 0.804,
+          "q": 25
+        },
+        {
+          "angulo": 10.06,
+          "cx": 236.59,
+          "cy": 75.58,
+          "maior": 64.76,
+          "menor": 32.51,
+          "opacidade": 0.794,
+          "q": 26
+        },
+        {
+          "angulo": 9.98,
+          "cx": 237.52,
+          "cy": 73.81,
+          "maior": 65.72,
+          "menor": 32.99,
+          "opacidade": 0.775,
+          "q": 27
+        },
+        {
+          "angulo": 10.05,
+          "cx": 238.44,
+          "cy": 71.98,
+          "maior": 66.86,
+          "menor": 33.63,
+          "opacidade": 0.763,
+          "q": 28
+        },
+        {
+          "angulo": 10.0,
+          "cx": 239.38,
+          "cy": 70.18,
+          "maior": 67.89,
+          "menor": 34.11,
+          "opacidade": 0.764,
+          "q": 29
+        },
+        {
+          "angulo": 9.94,
+          "cx": 240.32,
+          "cy": 68.4,
+          "maior": 68.9,
+          "menor": 34.58,
+          "opacidade": 0.753,
+          "q": 30
+        },
+        {
+          "angulo": 9.96,
+          "cx": 241.28,
+          "cy": 66.62,
+          "maior": 69.97,
+          "menor": 35.13,
+          "opacidade": 0.74,
+          "q": 31
+        },
+        {
+          "angulo": 9.96,
+          "cx": 242.2,
+          "cy": 64.77,
+          "maior": 70.97,
+          "menor": 35.64,
+          "opacidade": 0.728,
+          "q": 32
+        },
+        {
+          "angulo": -14.96,
+          "cx": 243.18,
+          "cy": 63.01,
+          "maior": 71.85,
+          "menor": 36.06,
+          "opacidade": 0.724,
+          "q": 33
+        },
+        {
+          "angulo": -15.01,
+          "cx": 244.15,
+          "cy": 63.89,
+          "maior": 72.72,
+          "menor": 36.48,
+          "opacidade": 0.724,
+          "q": 34
+        },
+        {
+          "angulo": -14.96,
+          "cx": 245.1,
+          "cy": 64.79,
+          "maior": 73.6,
+          "menor": 36.91,
+          "opacidade": 0.71,
+          "q": 35
+        },
+        {
+          "angulo": -15.03,
+          "cx": 246.04,
+          "cy": 65.7,
+          "maior": 74.4,
+          "menor": 37.29,
+          "opacidade": 0.695,
+          "q": 36
+        },
+        {
+          "angulo": -15.01,
+          "cx": 246.99,
+          "cy": 66.59,
+          "maior": 75.35,
+          "menor": 37.79,
+          "opacidade": 0.684,
+          "q": 37
+        },
+        {
+          "angulo": -15.04,
+          "cx": 247.94,
+          "cy": 67.49,
+          "maior": 76.14,
+          "menor": 38.17,
+          "opacidade": 0.69,
+          "q": 38
+        },
+        {
+          "angulo": -14.98,
+          "cx": 248.86,
+          "cy": 68.39,
+          "maior": 76.85,
+          "menor": 38.56,
+          "opacidade": 0.664,
+          "q": 39
+        },
+        {
+          "angulo": -15.01,
+          "cx": 249.77,
+          "cy": 69.29,
+          "maior": 77.47,
+          "menor": 38.85,
+          "opacidade": 0.661,
+          "q": 40
+        },
+        {
+          "angulo": -14.97,
+          "cx": 250.66,
+          "cy": 70.19,
+          "maior": 78.03,
+          "menor": 39.14,
+          "opacidade": 0.643,
+          "q": 41
+        },
+        {
+          "angulo": -15.02,
+          "cx": 251.58,
+          "cy": 71.09,
+          "maior": 78.55,
+          "menor": 39.38,
+          "opacidade": 0.648,
+          "q": 42
+        },
+        {
+          "angulo": -15.05,
+          "cx": 252.39,
+          "cy": 71.99,
+          "maior": 79.08,
+          "menor": 39.64,
+          "opacidade": 0.634,
+          "q": 43
+        },
+        {
+          "angulo": -15.0,
+          "cx": 253.28,
+          "cy": 72.89,
+          "maior": 79.49,
+          "menor": 39.86,
+          "opacidade": 0.619,
+          "q": 44
+        },
+        {
+          "angulo": -14.99,
+          "cx": 254.1,
+          "cy": 73.8,
+          "maior": 79.75,
+          "menor": 40.01,
+          "opacidade": 0.608,
+          "q": 45
+        },
+        {
+          "angulo": -14.99,
+          "cx": 254.87,
+          "cy": 74.7,
+          "maior": 79.94,
+          "menor": 40.08,
+          "opacidade": 0.608,
+          "q": 46
+        },
+        {
+          "angulo": -15.02,
+          "cx": 255.64,
+          "cy": 75.58,
+          "maior": 80.2,
+          "menor": 40.24,
+          "opacidade": 0.597,
+          "q": 47
+        },
+        {
+          "angulo": -14.99,
+          "cx": 256.4,
+          "cy": 76.49,
+          "maior": 80.24,
+          "menor": 40.23,
+          "opacidade": 0.585,
+          "q": 48
+        },
+        {
+          "angulo": -15.03,
+          "cx": 257.09,
+          "cy": 77.39,
+          "maior": 80.22,
+          "menor": 40.23,
+          "opacidade": 0.585,
+          "q": 49
+        },
+        {
+          "angulo": -15.03,
+          "cx": 257.75,
+          "cy": 78.3,
+          "maior": 80.19,
+          "menor": 40.23,
+          "opacidade": 0.569,
+          "q": 50
+        },
+        {
+          "angulo": -15.0,
+          "cx": 258.38,
+          "cy": 79.19,
+          "maior": 80.12,
+          "menor": 40.17,
+          "opacidade": 0.556,
+          "q": 51
+        },
+        {
+          "angulo": -15.01,
+          "cx": 258.99,
+          "cy": 80.1,
+          "maior": 80.05,
+          "menor": 40.1,
+          "opacidade": 0.553,
+          "q": 52
+        },
+        {
+          "angulo": -15.01,
+          "cx": 259.53,
+          "cy": 80.98,
+          "maior": 80.22,
+          "menor": 40.25,
+          "opacidade": 0.547,
+          "q": 53
+        },
+        {
+          "angulo": -15.05,
+          "cx": 260.04,
+          "cy": 81.89,
+          "maior": 80.15,
+          "menor": 40.19,
+          "opacidade": 0.528,
+          "q": 54
+        },
+        {
+          "angulo": -14.94,
+          "cx": 260.51,
+          "cy": 82.8,
+          "maior": 80.22,
+          "menor": 40.28,
+          "opacidade": 0.521,
+          "q": 55
+        },
+        {
+          "angulo": -14.99,
+          "cx": 260.94,
+          "cy": 83.69,
+          "maior": 80.12,
+          "menor": 40.12,
+          "opacidade": 0.502,
+          "q": 56
+        },
+        {
+          "angulo": -14.97,
+          "cx": 261.32,
+          "cy": 84.6,
+          "maior": 80.12,
+          "menor": 40.21,
+          "opacidade": 0.505,
+          "q": 57
+        },
+        {
+          "angulo": -14.96,
+          "cx": 261.63,
+          "cy": 85.49,
+          "maior": 80.16,
+          "menor": 40.16,
+          "opacidade": 0.489,
+          "q": 58
+        },
+        {
+          "angulo": -15.08,
+          "cx": 261.88,
+          "cy": 86.39,
+          "maior": 80.17,
+          "menor": 40.2,
+          "opacidade": 0.476,
+          "q": 59
+        },
+        {
+          "angulo": -14.99,
+          "cx": 262.08,
+          "cy": 87.3,
+          "maior": 80.23,
+          "menor": 40.26,
+          "opacidade": 0.465,
+          "q": 60
+        },
+        {
+          "angulo": -15.05,
+          "cx": 262.27,
+          "cy": 88.2,
+          "maior": 80.28,
+          "menor": 40.31,
+          "opacidade": 0.471,
+          "q": 61
+        },
+        {
+          "angulo": -15.01,
+          "cx": 262.36,
+          "cy": 89.11,
+          "maior": 80.16,
+          "menor": 40.21,
+          "opacidade": 0.452,
+          "q": 62
+        },
+        {
+          "angulo": -15.03,
+          "cx": 262.39,
+          "cy": 89.99,
+          "maior": 80.03,
+          "menor": 40.09,
+          "opacidade": 0.436,
+          "q": 63
+        },
+        {
+          "angulo": -15.03,
+          "cx": 262.39,
+          "cy": 89.99,
+          "maior": 80.03,
+          "menor": 40.09,
+          "opacidade": 0.436,
+          "q": 64
+        },
+        {
+          "angulo": -15.03,
+          "cx": 262.39,
+          "cy": 89.99,
+          "maior": 80.03,
+          "menor": 40.09,
+          "opacidade": 0.436,
+          "q": 65
+        },
+        {
+          "angulo": -15.03,
+          "cx": 262.39,
+          "cy": 89.99,
+          "maior": 80.03,
+          "menor": 40.09,
+          "opacidade": 0.436,
+          "q": 66
+        },
+        {
+          "angulo": -15.03,
+          "cx": 262.39,
+          "cy": 89.99,
+          "maior": 80.03,
+          "menor": 40.09,
+          "opacidade": 0.436,
+          "q": 67
+        },
+        {
+          "angulo": -15.03,
+          "cx": 262.39,
+          "cy": 89.99,
+          "maior": 80.03,
+          "menor": 40.09,
+          "opacidade": 0.436,
+          "q": 68
+        }
+      ],
+      "texto": [
+        {
+          "angulo": -25.12,
+          "cx": 79.69,
+          "cy": 54.34,
+          "maior": 44.16,
+          "menor": 24.56,
+          "opacidade": 0.404,
+          "q": 21
+        },
+        {
+          "angulo": -24.94,
+          "cx": 81.7,
+          "cy": 54.52,
+          "maior": 45.51,
+          "menor": 25.39,
+          "opacidade": 0.417,
+          "q": 22
+        },
+        {
+          "angulo": -24.75,
+          "cx": 83.68,
+          "cy": 55.0,
+          "maior": 46.93,
+          "menor": 26.11,
+          "opacidade": 0.441,
+          "q": 23
+        },
+        {
+          "angulo": -24.36,
+          "cx": 85.67,
+          "cy": 55.78,
+          "maior": 48.32,
+          "menor": 26.89,
+          "opacidade": 0.47,
+          "q": 24
+        },
+        {
+          "angulo": -23.75,
+          "cx": 87.66,
+          "cy": 56.83,
+          "maior": 49.68,
+          "menor": 27.66,
+          "opacidade": 0.481,
+          "q": 25
+        },
+        {
+          "angulo": -23.1,
+          "cx": 89.68,
+          "cy": 58.14,
+          "maior": 50.97,
+          "menor": 28.42,
+          "opacidade": 0.519,
+          "q": 26
+        },
+        {
+          "angulo": -22.29,
+          "cx": 91.63,
+          "cy": 59.72,
+          "maior": 52.36,
+          "menor": 29.13,
+          "opacidade": 0.534,
+          "q": 27
+        },
+        {
+          "angulo": -21.49,
+          "cx": 93.6,
+          "cy": 61.51,
+          "maior": 53.79,
+          "menor": 29.94,
+          "opacidade": 0.563,
+          "q": 28
+        },
+        {
+          "angulo": -20.44,
+          "cx": 95.61,
+          "cy": 63.49,
+          "maior": 55.2,
+          "menor": 30.73,
+          "opacidade": 0.585,
+          "q": 29
+        },
+        {
+          "angulo": -19.29,
+          "cx": 97.6,
+          "cy": 65.65,
+          "maior": 56.52,
+          "menor": 31.45,
+          "opacidade": 0.601,
+          "q": 30
+        },
+        {
+          "angulo": -17.92,
+          "cx": 99.56,
+          "cy": 67.97,
+          "maior": 57.85,
+          "menor": 32.21,
+          "opacidade": 0.618,
+          "q": 31
+        },
+        {
+          "angulo": -16.68,
+          "cx": 101.53,
+          "cy": 70.44,
+          "maior": 59.22,
+          "menor": 32.93,
+          "opacidade": 0.658,
+          "q": 32
+        },
+        {
+          "angulo": -15.38,
+          "cx": 103.52,
+          "cy": 73.07,
+          "maior": 60.75,
+          "menor": 33.8,
+          "opacidade": 0.668,
+          "q": 33
+        },
+        {
+          "angulo": -13.94,
+          "cx": 105.58,
+          "cy": 75.77,
+          "maior": 61.97,
+          "menor": 34.52,
+          "opacidade": 0.684,
+          "q": 34
+        },
+        {
+          "angulo": -12.36,
+          "cx": 107.47,
+          "cy": 78.59,
+          "maior": 63.43,
+          "menor": 35.29,
+          "opacidade": 0.719,
+          "q": 35
+        },
+        {
+          "angulo": -10.81,
+          "cx": 109.48,
+          "cy": 81.46,
+          "maior": 64.84,
+          "menor": 36.06,
+          "opacidade": 0.731,
+          "q": 36
+        },
+        {
+          "angulo": -9.05,
+          "cx": 111.43,
+          "cy": 84.41,
+          "maior": 66.22,
+          "menor": 36.85,
+          "opacidade": 0.76,
+          "q": 37
+        },
+        {
+          "angulo": -7.42,
+          "cx": 113.41,
+          "cy": 87.39,
+          "maior": 67.6,
+          "menor": 37.63,
+          "opacidade": 0.782,
+          "q": 38
+        },
+        {
+          "angulo": -5.58,
+          "cx": 115.38,
+          "cy": 90.35,
+          "maior": 68.93,
+          "menor": 38.37,
+          "opacidade": 0.8,
+          "q": 39
+        },
+        {
+          "angulo": -3.9,
+          "cx": 117.36,
+          "cy": 93.31,
+          "maior": 68.94,
+          "menor": 38.36,
+          "opacidade": 0.816,
+          "q": 40
+        },
+        {
+          "angulo": -2.02,
+          "cx": 119.36,
+          "cy": 96.27,
+          "maior": 69.03,
+          "menor": 38.41,
+          "opacidade": 0.853,
+          "q": 41
+        },
+        {
+          "angulo": -0.01,
+          "cx": 121.35,
+          "cy": 99.12,
+          "maior": 68.91,
+          "menor": 38.51,
+          "opacidade": 0.867,
+          "q": 42
+        },
+        {
+          "angulo": 2.07,
+          "cx": 123.35,
+          "cy": 102.05,
+          "maior": 68.97,
+          "menor": 38.38,
+          "opacidade": 0.896,
+          "q": 43
+        },
+        {
+          "angulo": 3.42,
+          "cx": 125.31,
+          "cy": 104.87,
+          "maior": 68.92,
+          "menor": 38.36,
+          "opacidade": 0.916,
+          "q": 44
+        },
+        {
+          "angulo": 5.18,
+          "cx": 127.35,
+          "cy": 107.59,
+          "maior": 68.9,
+          "menor": 38.35,
+          "opacidade": 0.936,
+          "q": 45
+        },
+        {
+          "angulo": 7.06,
+          "cx": 127.18,
+          "cy": 110.15,
+          "maior": 68.98,
+          "menor": 38.4,
+          "opacidade": 0.946,
+          "q": 46
+        },
+        {
+          "angulo": 8.78,
+          "cx": 126.7,
+          "cy": 112.62,
+          "maior": 68.88,
+          "menor": 38.29,
+          "opacidade": 0.985,
+          "q": 47
+        },
+        {
+          "angulo": 10.63,
+          "cx": 125.95,
+          "cy": 114.93,
+          "maior": 68.91,
+          "menor": 38.31,
+          "opacidade": 1.0,
+          "q": 48
+        },
+        {
+          "angulo": 12.43,
+          "cx": 124.95,
+          "cy": 117.07,
+          "maior": 68.9,
+          "menor": 38.33,
+          "opacidade": 1.0,
+          "q": 49
+        },
+        {
+          "angulo": 14.1,
+          "cx": 123.71,
+          "cy": 119.07,
+          "maior": 68.92,
+          "menor": 38.31,
+          "opacidade": 1.0,
+          "q": 50
+        },
+        {
+          "angulo": 15.74,
+          "cx": 122.29,
+          "cy": 120.79,
+          "maior": 68.95,
+          "menor": 38.33,
+          "opacidade": 1.0,
+          "q": 51
+        },
+        {
+          "angulo": 17.36,
+          "cx": 120.7,
+          "cy": 122.32,
+          "maior": 68.92,
+          "menor": 38.34,
+          "opacidade": 1.0,
+          "q": 52
+        },
+        {
+          "angulo": 18.82,
+          "cx": 118.98,
+          "cy": 123.62,
+          "maior": 68.88,
+          "menor": 38.27,
+          "opacidade": 1.0,
+          "q": 53
+        },
+        {
+          "angulo": 20.31,
+          "cx": 117.18,
+          "cy": 124.66,
+          "maior": 68.86,
+          "menor": 38.3,
+          "opacidade": 1.0,
+          "q": 54
+        },
+        {
+          "angulo": 21.72,
+          "cx": 115.23,
+          "cy": 125.41,
+          "maior": 68.89,
+          "menor": 38.29,
+          "opacidade": 1.0,
+          "q": 55
+        },
+        {
+          "angulo": 22.99,
+          "cx": 113.27,
+          "cy": 125.87,
+          "maior": 68.94,
+          "menor": 38.3,
+          "opacidade": 1.0,
+          "q": 56
+        },
+        {
+          "angulo": 24.2,
+          "cx": 111.44,
+          "cy": 126.02,
+          "maior": 55.15,
+          "menor": 30.69,
+          "opacidade": 1.0,
+          "q": 57
+        },
+        {
+          "angulo": 25.38,
+          "cx": 109.45,
+          "cy": 126.03,
+          "maior": 55.12,
+          "menor": 30.67,
+          "opacidade": 1.0,
+          "q": 58
+        },
+        {
+          "angulo": 26.29,
+          "cx": 107.45,
+          "cy": 125.95,
+          "maior": 55.24,
+          "menor": 30.82,
+          "opacidade": 1.0,
+          "q": 59
+        },
+        {
+          "angulo": 27.11,
+          "cx": 105.54,
+          "cy": 126.01,
+          "maior": 55.09,
+          "menor": 30.65,
+          "opacidade": 1.0,
+          "q": 60
+        },
+        {
+          "angulo": 28.12,
+          "cx": 103.72,
+          "cy": 125.99,
+          "maior": 55.14,
+          "menor": 30.67,
+          "opacidade": 1.0,
+          "q": 61
+        },
+        {
+          "angulo": 28.77,
+          "cx": 102.01,
+          "cy": 125.97,
+          "maior": 55.14,
+          "menor": 30.68,
+          "opacidade": 1.0,
+          "q": 62
+        },
+        {
+          "angulo": 29.25,
+          "cx": 100.45,
+          "cy": 125.98,
+          "maior": 55.1,
+          "menor": 30.67,
+          "opacidade": 0.601,
+          "q": 63
+        },
+        {
+          "angulo": 29.71,
+          "cx": 98.99,
+          "cy": 125.98,
+          "maior": 55.16,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 64
+        },
+        {
+          "angulo": 29.86,
+          "cx": 97.82,
+          "cy": 125.97,
+          "maior": 55.14,
+          "menor": 30.7,
+          "opacidade": 0.601,
+          "q": 65
+        },
+        {
+          "angulo": 29.89,
+          "cx": 96.82,
+          "cy": 125.97,
+          "maior": 55.13,
+          "menor": 30.69,
+          "opacidade": 0.601,
+          "q": 66
+        },
+        {
+          "angulo": 29.92,
+          "cx": 96.07,
+          "cy": 125.96,
+          "maior": 55.13,
+          "menor": 30.67,
+          "opacidade": 0.601,
+          "q": 67
+        },
+        {
+          "angulo": 29.97,
+          "cx": 95.6,
+          "cy": 125.97,
+          "maior": 55.16,
+          "menor": 30.67,
+          "opacidade": 0.601,
+          "q": 68
+        },
+        {
+          "angulo": 30.11,
+          "cx": 95.44,
+          "cy": 125.96,
+          "maior": 55.14,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 69
+        },
+        {
+          "angulo": 30.11,
+          "cx": 95.44,
+          "cy": 125.96,
+          "maior": 55.14,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 70
+        },
+        {
+          "angulo": 30.11,
+          "cx": 95.44,
+          "cy": 125.96,
+          "maior": 55.14,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 71
+        },
+        {
+          "angulo": 30.11,
+          "cx": 95.44,
+          "cy": 125.96,
+          "maior": 55.14,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 72
+        },
+        {
+          "angulo": 30.11,
+          "cx": 95.44,
+          "cy": 125.96,
+          "maior": 55.14,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 73
+        },
+        {
+          "angulo": 30.11,
+          "cx": 95.44,
+          "cy": 125.96,
+          "maior": 55.14,
+          "menor": 30.65,
+          "opacidade": 0.601,
+          "q": 74
+        }
+      ]
+    }
+  }
+]

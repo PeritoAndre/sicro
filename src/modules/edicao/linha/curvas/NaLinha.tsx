@@ -12,7 +12,7 @@ import { ehChaves } from "../../modelo/curva";
 import { useRecursos, recursoDe } from "../../palco/recursos";
 import { mudar } from "../../inspetor/acoes";
 import { EditorCurva } from "./EditorCurva";
-import { comPrimeira, linhaDoDoc, useCurvaUi } from "./CurvasDoItem";
+import { comPrimeira, escolherNoDoc, indiceEscolhido, linhaDoDoc, useCurvaUi } from "./CurvasDoItem";
 import { FAIXA_DA_PROP, baseDoItem, comPtsDoSlot, cursorNaChave, gravarProp, lerProp, propsDe, ROTULO_DA_PROP, tabelaPor, type ItemComCurva, type Propriedade } from "./itens";
 
 /** Trilha do som dos trechos na linha (`linha/modelo.ts::TRILHA_SOM` do P4.1). */
@@ -67,9 +67,9 @@ export function CurvasNaLinha({ item: it }: { item: ItemDaLinha }) {
       deSlot={base.deSlot}
       paraSlot={base.paraSlot}
       faixa={FAIXA_DA_PROP[prop]}
-      escolhida={escolhida?.prop === prop ? escolhida.i : null}
+      escolhida={escolhida?.prop === prop && indiceEscolhido(vs[0], escolhida) >= 0 ? indiceEscolhido(vs[0], escolhida) : null}
       desligado={so}
-      onEscolher={(i) => useCurvaUi.getState().escolher(it.id, prop, i)}
+      onEscolher={(i) => escolherNoDoc(item, prop, i)}
       onIr={(t) => {
         const s = useEdicaoStore.getState();
         if (s.doc) s.posicionar(cursorNaChave(s.doc, linhaDoDoc(s.doc), item, base, t, s.cursor, tabela));
