@@ -616,8 +616,11 @@ pub fn ouvir(ouvinte: Box<dyn Ouvinte>) {
     global().ouvir(Arc::from(ouvinte));
 }
 
-/// Enfileira e devolve o id da tarefa. Grava o retrato do projeto antes de voltar.
+/// Enfileira e devolve o id da tarefa. Grava o retrato do projeto antes de voltar. Com o ffmpeg abaixo do mínimo,
+/// recusa antes de tudo (exportar, refazer, prévia e quadro final passam por aqui).
 pub fn enfileirar(pedido: PedidoRender) -> Result<String> {
+    let cap = super::ffmpeg::sonda::capacidades()?;
+    super::ffmpeg::sonda::exigir_minimo(&cap)?;
     global().enfileirar(pedido)
 }
 
@@ -3490,5 +3493,89 @@ mod fila_visivel {
         assert_eq!(pastas_das_saidas(&caso), 1);
         assert_eq!(quadros(&caso, &lista[0]), (30..60).collect::<Vec<u32>>());
         f2.encerrar();
+    }
+}
+
+/// §12 item 2: ffmpeg abaixo do mínimo vindo do PATH (o do .deb) — a Edição abre e edita, nada renderiza.
+#[cfg(all(test, unix))]
+mod abaixo_do_minimo {
+    use std::sync::Arc;
+
+    use serde_json::json;
+
+    use super::*;
+    use crate::commands::edicao_commands as cmd;
+    use crate::edicao::ffmpeg::sonda::{self, Capacidades, Origem, FORCADAS};
+    use crate::edicao::mensagens::{self, codigo};
+    use crate::edicao::pacote::ponta;
+    use crate::edicao::testes::aceite::trecho;
+    use crate::edicao::testes::fontes::{self, Fonte};
+
+    /// Volta às capacidades de verdade ao sair (inclusive em pânico).
+    struct Forcadas;
+
+    impl Forcadas {
+        fn por(c: Arc<Capacidades>) -> Self {
+            FORCADAS.with(|f| *f.borrow_mut() = Some(c));
+            Forcadas
+        }
+    }
+
+    impl Drop for Forcadas {
+        fn drop(&mut self) {
+            FORCADAS.with(|f| *f.borrow_mut() = None);
+        }
+    }
+
+    /// O binário dos testes como o 4.4 da Ubuntu 22.04: recusa `-fps_mode`; `ffprobe` ao lado.
+    fn como_o_da_22_04(cap: &Capacidades) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let d = fontes::pasta_temporaria("ffmpeg-4.4");
+        let f = d.join("ffmpeg");
+        let real = cap.binario.to_string_lossy().replace('\'', "'\\''");
+        let corpo = "for x in \"$@\"; do [ \"$x\" = -fps_mode ] && { echo \"Unrecognized option 'fps_mode'.\" >&2; exit 8; }; done";
+        fs::write(&f, format!("#!/bin/bash\nREAL='{real}'\n{corpo}\nexec \"$REAL\" \"$@\"\n")).unwrap();
+        fs::set_permissions(&f, fs::Permissions::from_mode(0o755)).unwrap();
+        std::os::unix::fs::symlink(&cap.ffprobe, d.join("ffprobe")).unwrap();
+        f
+    }
+
+    #[test]
+    fn edicao_abre_e_edita_mas_nada_renderiza() {
+        let Some(caso) = ponta::caso("abaixo-do-minimo") else { return };
+        let (m, tab) = caso.midia("m1", &fontes::gerar(Fonte::Mp4).unwrap());
+        let doc = ponta::projeto("Mínimo", true, vec![m], vec![trecho("c1", "m1", &tab, 30, 75, 1.0, json!([]))], json!({}));
+        // uma exportação de antes, com o ffmpeg bom, para o "refazer"
+        let (fim, _) = caso.exportar(&doc, ponta::exportacao("juri", "cpu", Value::Null, "a3"));
+        let origem = ponta::id_da(&fim);
+        let falso = como_o_da_22_04(&caso.cap);
+        let cap = sonda::capacidades_de(&falso, Origem::Path, None, false).unwrap();
+        assert_eq!(cap.faltam, ["autoteste"], "{}", caso.cap.versao);
+        let render = caso.cache().join("render");
+        let pastas = || fs::read_dir(&render).map(|r| r.count()).unwrap_or(0);
+        let antes = (pastas(), listar().len());
+        let _f = Forcadas::por(cap);
+        // abre e edita: análise, gravação e leitura do projeto
+        let analise = cmd::analisar(&caso.ws, &doc, &caso.app).expect("edicao_analisar");
+        assert!(!analise.problemas.iter().any(|p| p.codigo == codigo::FFMPEG_ABAIXO_DO_MINIMO));
+        cmd::salvar(&caso.ws, &doc, None).expect("edicao_salvar");
+        crate::edicao::armazem::abrir(&caso.ws, doc["id"].as_str().unwrap()).expect("edicao_abrir");
+        // exportar, prévia do render e quadro final: recusa com o código do catálogo, nada na fila nem no cache
+        let alvos = [
+            json!({ "tipo": "final", "exportacao": ponta::exportacao("juri", "cpu", Value::Null, "a3") }),
+            json!({ "tipo": "previa", "altura": 240, "de_q": 0, "ate_q": 30 }),
+            json!({ "tipo": "quadro", "q": 3, "largura": 320 }),
+        ];
+        for a in alvos {
+            let alvo: Alvo = serde_json::from_value(a.clone()).unwrap_or_else(|e| panic!("{a}: {e}"));
+            let e = enfileirar(cmd::pedido(&caso.ws, doc.clone(), alvo, Vec::new(), &caso.app).unwrap()).unwrap_err();
+            match mensagens::erro_de_comando(e) {
+                SicroError::Validation(m) => assert_eq!(m, "ffmpeg_abaixo_do_minimo: Versão do ffmpeg abaixo do mínimo", "{a}"),
+                outro => panic!("{a}: {outro:?}"),
+            }
+        }
+        let e = super::super::refazer::pedir(&caso.ws, &caso.cache(), &origem).unwrap_err().to_string();
+        assert!(e.contains(codigo::FFMPEG_ABAIXO_DO_MINIMO), "{e}");
+        assert_eq!((pastas(), listar().len()), antes, "nada entrou na fila");
     }
 }

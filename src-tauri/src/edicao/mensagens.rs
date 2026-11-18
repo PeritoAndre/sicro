@@ -115,6 +115,8 @@ pub mod codigo {
     // Fase 4 (P4.6): gravadores (`video/dvr.rs`)
     pub const GRAVADOR_NAO_SUPORTADO: &str = "gravador_nao_suportado";
     pub const COPIA_DIVERGENTE: &str = "copia_divergente";
+    // integrador do bloco 6.4 (§12 item 2): sonda reprovada, a Edição abre mas não renderiza
+    pub const FFMPEG_ABAIXO_DO_MINIMO: &str = "ffmpeg_abaixo_do_minimo";
 }
 
 use codigo::*;
@@ -249,6 +251,7 @@ const CATALOGO: &[Entrada] = &[
     // Fase 4 (P4.6): o detalhe é o rótulo do formato (`dvr::Formato::rotulo`) e a contagem de quadros
     com_detalhe(GRAVADOR_NAO_SUPORTADO, Erro, "Formato de gravador não suportado"),
     com_detalhe(COPIA_DIVERGENTE, Erro, "Cópia de trabalho diferente do original"),
+    e(FFMPEG_ABAIXO_DO_MINIMO, Erro, "Versão do ffmpeg abaixo do mínimo"),
 ];
 
 /// Rótulo do que `nao_suportado` recusa (o detalhe dos erros); palavra desconhecida = só a frase.
@@ -394,7 +397,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 98, "constantes de `codigo`");
+        assert_eq!(cods.len(), 99, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {

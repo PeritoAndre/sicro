@@ -246,9 +246,19 @@ pub fn configurar(cache_edicao: &Path) {
     e.por_binario.clear();
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Testes: capacidades no lugar das do binário escolhido, só nesta thread.
+    pub(crate) static FORCADAS: std::cell::RefCell<Option<Arc<Capacidades>>> = const { std::cell::RefCell::new(None) };
+}
+
 /// Capacidades do binário escolhido: memória → `sonda-<sha256>.json` → sonda. Erro se `SICRO_FFMPEG` tem `faltam`.
 /// Com o cache configurado, a GPU vem de `sonda-gpu.json` (chave igual) ou da sonda lançada em segundo plano.
 pub fn capacidades() -> Result<Arc<Capacidades>> {
+    #[cfg(test)]
+    if let Some(c) = FORCADAS.with(|f| f.borrow().clone()) {
+        return Ok(c);
+    }
     let (bin, origem) = escolher()?;
     let cache = estado().cache.clone();
     let cap = capacidades_de(&bin, origem, cache.as_deref(), cache.is_some())?;
@@ -262,6 +272,15 @@ fn exigir(cap: &Capacidades) -> Result<()> {
         return Err(SicroError::Validation(format!("filtro_ausente: {}", cap.faltam.join(", "))));
     }
     Ok(())
+}
+
+/// Sonda reprovada (de qualquer origem: o do PATH, como no .deb, também): a Edição abre e edita, mas nada que
+/// renderiza pelo motor entra na fila (§12 item 2).
+pub(crate) fn exigir_minimo(cap: &Capacidades) -> Result<()> {
+    if cap.faltam.is_empty() {
+        return Ok(());
+    }
+    Err(SicroError::Validation(format!("{}: {}", crate::edicao::mensagens::codigo::FFMPEG_ABAIXO_DO_MINIMO, cap.faltam.join(", "))))
 }
 
 /// O binário: `SICRO_FFMPEG` vence sempre; senão o campo "ffmpeg" das Configurações; senão o embutido; senão o PATH.
