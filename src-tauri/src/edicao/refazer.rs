@@ -38,6 +38,8 @@ pub(crate) const COMPARACAO: &str = "comparacao.json";
 pub(crate) const MOTIVO_PLANO: &str = "plano";
 pub(crate) const MOTIVO_FONTE: &str = "fonte_danificada";
 pub(crate) const MOTIVO_SOM: &str = "som";
+/// Aviso pericial sem ciência na exportação de origem (código novo do programa); o motivo leva os códigos.
+pub(crate) const MOTIVO_CIENCIA: &str = "ciencia_nova";
 
 /// Cache só da refeita, em `render/<tarefa>/`: com o do caso, os blocos da exportação de origem voltavam e a
 /// comparação dava "Igual" sem render nenhum.
@@ -355,14 +357,12 @@ pub(crate) fn rodar_com(
     fila::exigir_gravacao(ws)?;
     let _repostos = Repostos::por(ws, &s.projeto_id, &dir_retrato, &m)?;
     let prep = executar::preparar_com(ws, &p, &pedido.cache, true, Some(cancelar))?;
-    {
+    // aviso pericial que a exportação de origem não teve (regra mais nova que ela): refaz, mas não compara
+    let regra_nova = {
         let ctx = prep.contexto();
         let linha = tempo::resolver(&p, &ctx);
-        let faltam = validar::sem_ciencia(&validar::validar(&p, &linha, &ctx, Some(&pedido.alvo)), &pedido.ciencias);
-        if !faltam.is_empty() {
-            return Err(erro(format!("ciencia: {}", faltam.join(", "))));
-        }
-    }
+        validar::sem_ciencia(&validar::validar(&p, &linha, &ctx, Some(&pedido.alvo)), &pedido.ciencias)
+    };
     let auto = matches!(&pedido.alvo, Alvo::Final { exportacao } if exportacao.codificador == EscolhaCodificador::Auto) && !sem_gpu;
     // blocos, camadas e quadros feitos de novo, num cache vazio só desta tarefa
     let cache = CacheProprio(trabalho.join(CACHE_PROPRIO));
@@ -387,7 +387,10 @@ pub(crate) fn rodar_com(
     fila::gravar_grafos(&dir_novo, &plano)?;
     let plano_igual = planos_iguais(&dir_retrato.join("grafos"), &dir_novo)?;
     // 4 e 5. compara e registra
-    let c = classificar(&antes, &Fatos::do_render(&plano, &res, &amb)?, plano_igual, plano.canvas.fps);
+    let c = match regra_nova.is_empty() {
+        true => classificar(&antes, &Fatos::do_render(&plano, &res, &amb)?, plano_igual, plano.canvas.fps),
+        false => Comparacao::NaoComparavel { motivo: format!("{MOTIVO_CIENCIA}: {}", regra_nova.join(", ")) },
+    };
     fila::publicar_da_fila(fila, tarefa, pedido, &p, &prep, &amb, &plano, &res, cancelar, progresso, Some((id, &c)))
 }
 
@@ -635,6 +638,32 @@ pub(crate) mod testes {
         trocar_slot(&caso.retrato(&caso.saida(&origem)), 31);
         let (_, b) = refazer(&caso, &origem);
         assert_eq!(b.comparacao, Some(Comparacao::Diferente { primeiro_q: 17, tempo: 17.0 / 30.0 }), "{}", caso.cap.versao);
+    }
+
+    /// Exportação de antes de uma regra pericial nova (cópia de gravador com taxa suposta, sem a ciência de
+    /// `taxa_suposta`): a refeita sai "Não comparável" com o código no motivo, sem falhar.
+    #[test]
+    fn regra_nova_sem_ciencia_da_nao_comparavel() {
+        let Some(caso) = ponta::caso("refazer-regra-nova") else { return };
+        let (mut m, tab) = caso.midia("m1", &fontes::gerar(Fonte::Mp4).unwrap());
+        m["derivacao"] = json!({ "tipo": "copia_dvr", "de_sha256": m["sha256"], "raiz_sha256": m["sha256"], "comando": "ffmpeg -c copy",
+            "com_perdas": false, "taxa_suposta": { "num": 25, "den": 1 } });
+        let doc = ponta::projeto("Gravador", true, vec![m], vec![trecho("c1", "m1", &tab, 30, 75, 1.0, json!([]))], json!({}));
+        let (fim, ciencias) = caso.exportar(&doc, ponta::exportacao("juri", "cpu", Value::Null, "a3"));
+        assert!(ciencias.iter().any(|c| c == codigo::TAXA_SUPOSTA), "{ciencias:?}");
+        let origem = ponta::id_da(&fim);
+        // a exportação "de antes" da regra: o tecnico.json sem essa ciência
+        let arq = paths::resolver_relativo(&caso.ws, caso.saida(&origem).tecnico_rel.as_deref().unwrap());
+        let mut t = ler_json(&arq).unwrap();
+        t["execucao"]["ciencias"].as_array_mut().unwrap().retain(|c| c["codigo"] != codigo::TAXA_SUPOSTA);
+        // a pasta da saída é somente leitura
+        let mut perm = fs::metadata(&arq).unwrap().permissions();
+        #[allow(clippy::permissions_set_readonly_false)]
+        perm.set_readonly(false);
+        fs::set_permissions(&arq, perm).unwrap();
+        fs::write(&arq, serde_json::to_vec_pretty(&t).unwrap()).unwrap();
+        let (_, b) = refazer(&caso, &origem);
+        assert_eq!(b.comparacao, Some(Comparacao::NaoComparavel { motivo: format!("{MOTIVO_CIENCIA}: {}", codigo::TAXA_SUPOSTA) }), "{}", caso.cap.versao);
     }
 
     /// Aceite `NaoComparavel` com fonte danificada: a mesma diferença de quadro, numa exportação cuja fonte tem erro de
