@@ -243,28 +243,34 @@ pub async fn pessoas_rastrear(
     .map_err(|e| SicroError::Workspace(format!("tarefa de rastreio: {e}")));
     encerrar_tarefa();
     let r = r??;
+    gravar_rastreio(&c.conn, &c.occ, &media_hash, &run_da_analise(&media_hash, &op_run, &r), &r)?;
+    estado(&c.conn, &c.occ, &media_hash)
+}
 
+/// Trilhas, análise e registro numa transação só: erro no meio deixa o banco como estava.
+fn gravar_rastreio(conn: &Connection, occ: &Uuid, media_hash: &str, run: &Run, r: &pipeline::Rastreio) -> Result<()> {
+    let tx = conn.unchecked_transaction()?;
     // as manchas marcadas à mão sobrevivem e passam a ter os números seguintes
-    repo::delete_auto(&c.conn, &c.occ, &media_hash)?;
+    repo::delete_auto(&tx, occ, media_hash)?;
     for p in &r.pessoas {
-        repo::insert(&c.conn, &c.occ, p)?;
+        repo::insert(&tx, occ, p)?;
     }
     let mut n = r.pessoas.len() as i64;
-    for mut m in repo::list(&c.conn, &c.occ, &media_hash)?.into_iter().filter(|p| p.origem == "manual") {
+    for mut m in repo::list(&tx, occ, media_hash)?.into_iter().filter(|p| p.origem == "manual") {
         n += 1;
         m.numero = n;
-        repo::update(&c.conn, &m)?;
+        repo::update(&tx, &m)?;
     }
-    let run = run_da_analise(&media_hash, &op_run, &r);
-    repo::replace_run(&c.conn, &c.occ, &run)?;
+    repo::replace_run(&tx, occ, run)?;
     video_repo::insert_log(
-        &c.conn,
-        &c.occ,
-        Some(&media_hash),
+        &tx,
+        occ,
+        Some(media_hash),
         "pessoas.rastrear",
         &json!({ "pessoas": r.pessoas.len(), "meta": r.meta, "params": run.params_json, "modelo": run.model }).to_string(),
     )?;
-    estado(&c.conn, &c.occ, &media_hash)
+    tx.commit()?;
+    Ok(())
 }
 
 /// A análise gravada: o onnxruntime carregado (`ia::sessao::versao_runtime`) e onde o detector rodou (§6.6).
@@ -1768,6 +1774,38 @@ mod testes {
 
     fn banco(ws: &Path) -> Connection {
         open_connection(&sqlite_path(ws)).unwrap()
+    }
+
+    /// `pessoas_rastrear` grava numa transação: erro no meio (a segunda trilha com o id da primeira) deixa as
+    /// trilhas, a análise e o registro de antes; sem erro, troca as do detector e renumera a marcada à mão.
+    #[test]
+    fn rastrear_grava_tudo_ou_nada() {
+        let (_d, ws, occ) = caso();
+        let conn = banco(&ws);
+        let h = "ab".repeat(32);
+        let am = vec![Amostra { t: 0.0, x: 1.0, y: 1.0, w: 10.0, h: 20.0 }];
+        let nova = |id: &str, n: i64| Pessoa { numero: n, ..pessoa(id, &h, "auto", am.clone()) };
+        repo::insert(&conn, &occ, &nova("pa", 1)).unwrap();
+        repo::insert(&conn, &occ, &Pessoa { origem: "manual".into(), ..nova("pm", 2) }).unwrap();
+        repo::replace_run(&conn, &occ, &Run { media_hash: h.clone(), ..run(640, 360, 1, 0.04) }).unwrap();
+        let foto = || {
+            let logs: i64 = conn.query_row("SELECT COUNT(*) FROM video_operation_logs", [], |r| r.get(0)).unwrap();
+            let trilhas: Vec<(String, i64)> = repo::list(&conn, &occ, &h).unwrap().into_iter().map(|p| (p.id, p.numero)).collect();
+            (trilhas, repo::get_run(&conn, &occ, &h).unwrap().map(|r| r.created_at), logs)
+        };
+        let antes = foto();
+        let meta = pipeline::Meta {
+            largura: 640, altura: 360, frame_dur_s: 0.04, passo: 1, limiar: 0.5, quadros_total: 10, quadros_analisados: 10, tempo_s: 1.0,
+            ms_por_quadro: 1.0, provedor: "cpu".into(),
+        };
+        let novo = Run { media_hash: h.clone(), created_at: "2026-11-18T04:00:00+00:00".into(), ..run(640, 360, 1, 0.04) };
+        let ruim = pipeline::Rastreio { pessoas: vec![nova("n1", 1), nova("n1", 2)], meta: meta.clone() };
+        assert!(gravar_rastreio(&conn, &occ, &h, &novo, &ruim).is_err());
+        assert_eq!(foto(), antes, "banco pela metade");
+        let bom = pipeline::Rastreio { pessoas: vec![nova("n1", 1), nova("n2", 2)], meta };
+        gravar_rastreio(&conn, &occ, &h, &novo, &bom).unwrap();
+        let ids = |v: &[(&str, i64)]| v.iter().map(|(a, b)| (a.to_string(), *b)).collect::<Vec<_>>();
+        assert_eq!(foto(), (ids(&[("n1", 1), ("n2", 2), ("pm", 3)]), Some(novo.created_at.clone()), antes.2 + 1));
     }
 
     /// Mídia registrada no caso: `src` copiado para dentro dele; devolve o caminho e o SHA-256.
