@@ -227,15 +227,28 @@ export function VideoPlayerPanel({
 
   useEffect(() => {
     const v = videoRef.current;
-    if (v) {
-      v.volume = audio.volume;
-      v.muted = audio.muted;
-    }
+    // o PipeWire guarda o volume do fluxo por aplicativo: parado, o elemento fica em 1 e sem mudo (senão cala o resto do SICRO)
+    const aplicar = () => {
+      if (!v) return;
+      v.volume = v.paused ? 1 : audio.volume;
+      v.muted = v.paused ? false : audio.muted;
+    };
+    aplicar();
+    v?.addEventListener("play", aplicar);
+    v?.addEventListener("pause", aplicar);
     try {
       localStorage.setItem(AUDIO_KEY, JSON.stringify(audio));
     } catch {
       /* sem localStorage — só não lembra */
     }
+    return () => {
+      v?.removeEventListener("play", aplicar);
+      v?.removeEventListener("pause", aplicar);
+      if (v) {
+        v.volume = 1;
+        v.muted = false;
+      }
+    };
   }, [audio, src]);
   const changeVolume = (delta: number) => {
     if (!hasAudio) {
@@ -360,10 +373,16 @@ export function VideoPlayerPanel({
     if (lp && (v.currentTime < lp.a - 1e-3 || v.currentTime >= lp.b - 1e-3)) {
       v.currentTime = lp.a; // repetindo: começa do início do trecho
     }
+    v.volume = audio.volume;
+    v.muted = audio.muted;
     try {
       await v.play();
     } catch {
       /* erros de autoplay chegam pelo evento error */
+      if (v.paused) {
+        v.volume = 1;
+        v.muted = false;
+      }
     }
   };
 

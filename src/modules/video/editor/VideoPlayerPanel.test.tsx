@@ -335,3 +335,26 @@ describe("←/→ e Shift+←/→: o gesto de useGestoTransporte", () => {
     caf.mockRestore();
   });
 });
+
+describe("volume do <video> (o PipeWire guarda o do aplicativo)", () => {
+  it("parado: volume 1 e sem mudo; tocando: o escolhido; desmontado: 1", async () => {
+    vi.stubGlobal("localStorage", { getItem: (k: string) => (k === "sicro.video.audio.v1" ? JSON.stringify({ volume: 0.3, muted: true }) : null), setItem: () => {} });
+    await montar();
+    await esperar(() => expect(div.querySelector("video")).toBeTruthy());
+    const v = div.querySelector("video")!;
+    expect([v.volume, v.muted]).toEqual([1, false]);
+    let parado = false;
+    Object.defineProperty(v, "paused", { get: () => parado, configurable: true });
+    await act(async () => void v.dispatchEvent(new Event("play")));
+    expect([v.volume, v.muted]).toEqual([0.3, true]);
+    parado = true;
+    await act(async () => void v.dispatchEvent(new Event("pause")));
+    expect([v.volume, v.muted]).toEqual([1, false]);
+    parado = false;
+    await act(async () => void v.dispatchEvent(new Event("play")));
+    act(() => raiz!.unmount());
+    raiz = null;
+    expect([v.volume, v.muted]).toEqual([1, false]);
+    vi.unstubAllGlobals();
+  });
+});

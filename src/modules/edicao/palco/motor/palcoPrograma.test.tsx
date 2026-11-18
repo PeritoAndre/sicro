@@ -172,8 +172,7 @@ describe("palco no modo Programa", () => {
     expect(st().cursor).toEqual({ modo: "programa", q: 75 });
   });
 
-  // o `livres.ts` de verdade (dentroDoTexto, cantosDoTexto, alcasDoLivre) é do TL: na base é casca
-  it.skip("fecho do bloco 6.4: TL", async () => {
+  it("texto livre arrastado no palco, nos dois modos: um passo cada (livres.ts do TL)", async () => {
     const getContext = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = (() => new Proxy({}, { get: () => () => undefined, set: () => true })) as unknown as typeof getContext;
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
@@ -192,15 +191,61 @@ describe("palco no modo Programa", () => {
     const t = await montar(<EditorEdicao ativo />);
     await act(async () => st().posicionar({ modo: "programa", q: 20 }));
     await espera(60);
-    const camada = t.raiz.querySelector("[data-camada]")!;
-    const ponteiro = (tipo: string, x: number) => act(async () => void camada.dispatchEvent(new PointerEvent(tipo, { clientX: x, clientY: 225, bubbles: true, button: 0, pointerId: 1, isPrimary: true })));
-    await ponteiro("pointerdown", 400);
-    await ponteiro("pointermove", 480);
-    await ponteiro("pointerup", 480);
-    await espera(40);
+    const arrastar = async (de: number, para: number) => {
+      const camada = t.raiz.querySelector("[data-camada]")!;
+      const ponteiro = (tipo: string, x: number) => act(async () => void camada.dispatchEvent(new PointerEvent(tipo, { clientX: x, clientY: 225, bubbles: true, button: 0, pointerId: 1, isPrimary: true })));
+      await ponteiro("pointerdown", de);
+      await ponteiro("pointermove", para);
+      await ponteiro("pointerup", para);
+      await espera(40);
+    };
+    const passos = st().passado.length;
+    await arrastar(400, 480);
     expect(st().selecao.foco).toEqual({ k: "livre", id: "s1", trilha: "T1" });
     expect(st().doc!.sobreposicoes[0]!.clipes[0]).toMatchObject({ transformacao: { x: 0.6 } });
+    expect(st().passado.length).toBe(passos + 1);
     expect(t.raiz.querySelector('[data-alca="livre:s1:giro"]')).toBeTruthy();
+    // modo Clipe, mesmo quadro: o texto continua clicável e arrastável
+    await clicar(botao(t.raiz, "Clipe"));
+    await espera(60);
+    expect(modo(t.raiz)).toBe("clipe");
+    await arrastar(480, 360);
+    expect(st().doc!.sobreposicoes[0]!.clipes[0]).toMatchObject({ transformacao: { x: 0.45 } });
+    expect(st().passado.length).toBe(passos + 2);
+    HTMLCanvasElement.prototype.getContext = getContext;
+  });
+
+  it("vista de origem do zoom que acompanha: a caixa anda com o rastreio (ZS)", async () => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => new Proxy({}, { get: () => () => undefined, set: () => true })) as unknown as typeof getContext;
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(450);
+    // a pessoa anda da esquerda (quadro 0) à direita (quadro 60)
+    const caixa = (x: number) => ({ x, y: 0.4, w: 0.1, h: 0.1 });
+    await act(async () =>
+      st().alterar("Acompanhar rastreio", (d) => {
+        d.rastreios.push({ id: "r1", nome: "", cor: "#ffcc00", midia: "m", base: "fonte", tipo: "caixa", espaco: "original", denso: null, silhuetas: null, ausencias: [],
+          origem: { tipo: "manual" }, confirmacao: null, ancoras: [{ t: tempoDoQuadro(tab, 0), pts: 0, v: caixa(0.1) }, { t: tempoDoQuadro(tab, 60), pts: 60 * 512, v: caixa(0.7) }] });
+        (d.principal[0] as ClipeTrecho).efeitos.push({ id: "z1", ligado: true, nome: "", ativo: null, tipo: "enquadramento", regiao: { x: 0.25, y: 0.25, w: 0.5, h: 0.5 },
+          ajuste: "cobrir", interpolacao: "bilinear", segue: { rastreio: "r1", suavizar_s: 0 } });
+      }),
+    );
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().selecionar({ itens: [{ k: "clipe", id: "a" }], foco: { k: "clipe", id: "a" }, efeito: "z1" }));
+    // o happy-dom não busca: o palco mostra o quadro do cursor ao (re)entrar no clipe
+    const esquerda = async (j: number) => {
+      await act(async () => st().posicionar({ modo: "clipe", clipe: "b", t: meioDoQuadro(tab, 100) }));
+      await espera(20);
+      await act(async () => st().posicionar({ modo: "clipe", clipe: "a", t: meioDoQuadro(tab, j) }));
+      await espera(60);
+      const xs = [...t.raiz.querySelectorAll<HTMLElement>('[data-alca^="regiao:z1"]')].map((a) => parseFloat(a.style.left));
+      expect(xs.length).toBeGreaterThan(0);
+      return Math.min(...xs);
+    };
+    const x10 = await esquerda(10);
+    const x50 = await esquerda(50);
+    // a região sai de x = 0 (encostada) a x = 0,4 da origem: a borda esquerda anda para a direita
+    expect(x50 - x10).toBeGreaterThan(100);
     HTMLCanvasElement.prototype.getContext = getContext;
   });
 

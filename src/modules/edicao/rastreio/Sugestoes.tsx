@@ -23,6 +23,7 @@ import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { densoEmCache, peritoQueRegistra, useRastreioStore } from "../store/rastreioStore";
 import { acharMidia } from "../modelo/projeto";
 import { novoOcultar } from "../inspetor/novos";
+import { usaRastreio } from "../inspetor/acoes";
 import { padraoDoConteudo } from "../inspetor/secoes/ocultarPadrao";
 import { Icone, Mini, Secao } from "../inspetor/campos";
 import { useMenuAberto } from "../menus";
@@ -207,11 +208,12 @@ export function confirmarSugestao(rid: Id): void {
   });
 }
 
-/** "Descartar": sai o rastreio e a ocultação da mídia que aponta para ele (o denso vira órfão e sai ao fechar). */
+/** "Descartar": sai a ocultação da mídia que aponta para o rastreio e, se nenhum outro efeito o usa, o rastreio
+ *  (o denso vira órfão e sai ao fechar). */
 export function descartarSugestao(rid: Id): void {
   edicao().alterar("Descartar", (d) => {
     for (const m of d.midias) m.ocultacoes = m.ocultacoes.filter((o) => !("alvo" in o && (o as EfOcultar).alvo?.rastreio === rid));
-    d.rastreios = d.rastreios.filter((r) => r.id !== rid);
+    if (!usaRastreio(d as ProjetoEdicao, rid)) d.rastreios = d.rastreios.filter((r) => r.id !== rid);
   });
 }
 

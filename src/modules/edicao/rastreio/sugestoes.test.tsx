@@ -194,6 +194,16 @@ describe("Sugestões (ocultação assistida)", () => {
     expect(doc().midias.find((x) => x.id === m)!.ocultacoes.length).toBe(antes);
   });
 
+  it("Descartar tira a ocultação; o rastreio que o zoom acompanha fica", async () => {
+    await detectarPlacas([proposta("r1", SHA("1"), T(0), T(0.9667)), proposta("r2", SHA("2"), T(1), T(1.9667))]);
+    const z = { id: "z1", ligado: true, nome: "", ativo: null, tipo: "enquadramento", regiao: { x: 0, y: 0, w: 0.5, h: 0.5 }, ajuste: "cobrir",
+      interpolacao: "bilinear", segue: { rastreio: "r2", suavizar_s: 1 } };
+    await esperar(() => st().alterar("Acompanhar rastreio", (d) => void (d.principal[1] as ClipeTrecho).efeitos.push(z as unknown as ClipeTrecho["efeitos"][number])));
+    await clicar(botao(linha("r2"), "Descartar"));
+    expect(doc().rastreios.some((r) => r.id === "r2")).toBe(true);
+    expect(doc().midias.flatMap((x) => x.ocultacoes).some((o) => (o as { alvo?: { rastreio: string } }).alvo?.rastreio === "r2")).toBe(false);
+  });
+
   it("conteúdo trocado depois de confirmar: a folha vista de outro conteúdo não habilita; sem folha nada grava", async () => {
     await detectarPlacas([proposta("r1", SHA("1"), T(0), T(0.9667)), proposta("r2", SHA("2"), T(1), T(1.9667))]);
     const r = (id: string) => doc().rastreios.find((x) => x.id === id)!;

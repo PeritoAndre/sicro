@@ -3,7 +3,7 @@
  * Texto livre no palco (P3.3 × TL): o pintor põe o sobreposto pela transformação do Rust (objeto = canvas inteiro,
  * centro em (x, y), escala da largura, giro horário, opacidade do grupo); nos dois modos o palco liga as alças de
  * `alcasDoLivre` (giro redondo com haste), o contorno girado e o clique dentro da caixa, que seleciona e arrasta pela
- * alça "mover" num passo do histórico. `palco/livres.ts` aqui é falso (a casca da base devolve vazio).
+ * alça "mover" num passo do histórico. `palco/livres.ts` aqui é falso; o de verdade, em `palcoPrograma.test.tsx`.
  */
 
 import { act } from "react";
@@ -17,7 +17,7 @@ const cmd = vi.hoisted(() => ({
 vi.mock("@core/commands", () => ({ commands: cmd }));
 vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
 vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: (p: string) => `asset://${p}`, invoke: vi.fn() }));
-// o TL entrega o de verdade: aqui um texto no centro, caixa de 0,4 × 0,2, com mover, um canto e o giro
+// falso: um texto no centro, caixa de 0,4 × 0,2, com mover, um canto e o giro
 vi.mock("../livres", () => {
   const item = (doc: { sobreposicoes: { id: string; clipes: SobTitulo[] }[] }, q: number) => {
     const c = doc.sobreposicoes[0]?.clipes[0];

@@ -17,7 +17,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { commands } from "@core/commands";
 import { mediaSrc } from "@core/mediaSrc";
 import { caminhoDoCaso } from "@core/caminhoDoCaso";
-import type { Alca, Caixa, ClipePrincipal, ClipeTrecho, Cursor, Id, Lugar, MidiaRef, PalcoProps, Ponto, PreviaMidia, Primitiva, ProjetoEdicao, Pts, Seg, TabelaQuadros } from "@domain/edicao";
+import type { Alca, Caixa, ClipePrincipal, ClipeTrecho, Cursor, Desconhecido, EfEnquadramento, Efeito, Id, Lugar, MidiaRef, PalcoProps, Ponto, PreviaMidia, Primitiva, ProjetoEdicao, Pts, Seg, TabelaQuadros } from "@domain/edicao";
 import { useEdicaoStore, type Gesto } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
 import { useFundoStore, fundoPorChave, chaveFundo } from "../store/fundoStore";
@@ -27,7 +27,7 @@ import { exibido, mapaTrecho, nQuadros, ptsDaTabela, resolver, tempoDoQuadro, ty
 import { tabelaDoClipe } from "../modelo/realce";
 import { avaliar as avaliarCurva } from "../modelo/curva";
 // Fase 4 (contratos-fase4.md B4): todo `aDe` do palco passa pelo zoom que segue
-import { efeitosNoInstante } from "../modelo/segue";
+import { efeitosNoInstante, regiaoNoInstante } from "../modelo/segue";
 import { relogioMidia, type RelogioMidia } from "./motor/relogioMidia";
 import { elementoDe, type ElementoBusca } from "./motor/elemento";
 import { Buscador } from "./motor/busca";
@@ -50,8 +50,7 @@ import { PREVIA_VIVA_PRONTA } from "./motor/motor";
 import { slotDoTempo, segmentoDoSlot, tempoNoSegmento } from "./motor/plano";
 import { planoDoDoc } from "./motor/cursor";
 import { pintarLivres, primitivasProprias } from "./motor/pintor";
-import { alcasDoLivre, livresNoQuadro } from "./livres";
-import { cantosDoTexto, dentroDoTexto } from "./motor/livresPonte";
+import { alcasDoLivre, cantosDoTexto, dentroDoTexto, livresNoQuadro } from "./livres";
 import { PalcoPrograma } from "./motor/PalcoPrograma";
 import { areaVisivelNaOrigem, useAreaVisivel } from "./areaVisivel";
 // Fase 2 (contratos-fase2.md (c)): corrida do rastreio no palco (P2.4), só com a bandeira dele
@@ -442,8 +441,7 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
     if (e && alcasComFerramenta(v.ferramenta, e.id) && !soLeituraRef.current) {
       if (e.tipo === "enquadramento" && v.modoOrigem) {
         const g = aDaGirada(c.efeitos, origem, canvasSaida);
-        const r = e.regiao;
-        const regiao = Array.isArray(r) && r.length === 0 ? { x: 0, y: 0, w: 1, h: 1 } : avaliarCurva(r, inst.t);
+        const regiao = regiaoNaVista(v.doc, c.efeitos, e, inst.t);
         const k = instanteDaChave(c, inst);
         novas.push(...alcasDaRegiao(e, regiao, k.t, k.pts, g, proporcaoDaSaida(c.efeitos, origem, canvasSaida)));
         cont = caixaNoCanvas(g, regiao);
@@ -1310,5 +1308,11 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
 });
 
 export type { EstadoRender };
-export const _paraTeste = { primitivasProprias, rastreioDoEfeito, tamanhoDoCanvas, urlDaPrimitiva };
+/** Região do enquadramento na vista de origem no instante `t`: a que acompanha o rastreio (ZS), senão a gravada. */
+function regiaoNaVista(doc: ProjetoEdicao, efeitos: readonly (Efeito | Desconhecido)[], e: EfEnquadramento, t: Seg): Caixa {
+  const r = e.regiao;
+  return regiaoNoInstante(doc, efeitos, t) ?? (Array.isArray(r) && r.length === 0 ? { x: 0, y: 0, w: 1, h: 1 } : avaliarCurva(r, t));
+}
+
+export const _paraTeste = { primitivasProprias, rastreioDoEfeito, regiaoNaVista, tamanhoDoCanvas, urlDaPrimitiva };
 export { rastreioDoEfeito, tamanhoDoCanvas, urlDaPrimitiva, tamanhoDaImagem };
