@@ -276,6 +276,11 @@ fn caixa(c: &Value) -> Option<String> {
     Some(format!("x {}, y {}, largura {}, altura {}", pct(f(c, "x")?), pct(f(c, "y")?), pct(f(c, "w")?), pct(f(c, "h")?)))
 }
 
+/// "largura 50 %, altura 50 %" (região cujo centro vem de outro lugar).
+fn tamanho(c: &Value) -> Option<String> {
+    Some(format!("largura {}, altura {}", pct(f(c, "w")?), pct(f(c, "h")?)))
+}
+
 /// "segue o rastreio R4", pelo `ref_rastreio` de quem monta os dados.
 fn segue(id: &str, ref_rastreio: &dyn Fn(&str) -> String) -> Option<String> {
     (!id.trim().is_empty()).then(|| format!("segue o rastreio {}", ref_rastreio(id)))
@@ -338,22 +343,25 @@ pub(super) fn parametros(nome: &str, p: &Value, ref_rastreio: &dyn Fn(&str) -> S
         "enquadramento" => {
             v.push(rv("ajuste", s(p, "ajuste")));
             v.extend(com("interpolação ", rv("interpolacao", s(p, "interpolacao"))));
+            // Fase 4 (zoom que segue): o centro vem do rastreio; da região valem só largura e altura
+            let segue_id = p["segue"]["rastreio"].as_str().filter(|x| !x.trim().is_empty());
+            let regiao = |c: &Value| if segue_id.is_some() { tamanho(c) } else { caixa(c) };
             match &p["regiao"] {
                 Value::Array(chaves) => {
                     let mut lista: Vec<String> = chaves
                         .iter()
                         .take(MAX_CHAVES)
-                        .map(|k| format!("{}: {}", k["t"].as_f64().map(tempo).unwrap_or_else(|| "—".into()), caixa(&k["v"]).unwrap_or_else(|| "—".into())))
+                        .map(|k| format!("{}: {}", k["t"].as_f64().map(tempo).unwrap_or_else(|| "—".into()), regiao(&k["v"]).unwrap_or_else(|| "—".into())))
                         .collect();
                     if chaves.len() > MAX_CHAVES {
                         lista.push(format!("e mais {}", chaves.len() - MAX_CHAVES));
                     }
                     v.push(format!("região animada em {} chaves (tempos {base}: {})", chaves.len(), lista.join("; ")));
                 }
+                fixa if segue_id.is_some() => v.extend(tamanho(fixa).map(|c| format!("região de {c}"))),
                 fixa => v.extend(caixa(fixa).map(|c| format!("região fixa: {c}"))),
             }
-            // Fase 4 (zoom que segue): o centro da região acompanha o rastreio, suavizado
-            if let Some(id) = p["segue"]["rastreio"].as_str().filter(|x| !x.trim().is_empty()) {
+            if let Some(id) = segue_id {
                 let r = ref_rastreio(id);
                 v.push(match f(&p["segue"], "suavizar_s").filter(|x| *x > 0.0) {
                     Some(x) => frases::preencher(modelo::ACOMPANHANDO, &[("r", &r), ("s", &num(x, 2))]),

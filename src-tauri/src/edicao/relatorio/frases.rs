@@ -174,10 +174,11 @@ const ROTULOS: &[(&str, &str)] = &[
     ("derivacao.com_perdas", "com recompressão"),
     // P4.R: cópia de gravador recodificada sem perda (FFV1: a prova da cópia confere imagem por imagem)
     ("derivacao.sem_perdas_recodificada", "regravada em formato sem perda: cada imagem é igual à do original"),
-    // P4.R: relógio do gravador no começo do original (`Derivacao.inicio_epoca_s`)
-    ("relogio.inicio", "{quando} no início do arquivo"),
+    // P4.R: relógio do gravador no começo do original (`Derivacao.inicio_epoca_s`), o 0:00,000 dos tempos da cópia (a
+    // primeira imagem pode vir depois: no Dahua o som começa 1 s antes)
+    ("relogio.inicio", "{quando} no início do arquivo (0:00,000)"),
     // P4.R: fluxo cru sem temporização (`Derivacao.taxa_suposta`)
-    ("ritmo.suposto", "{fps} imagens por segundo, supostas: o arquivo do gravador não informa o ritmo"),
+    ("ritmo.suposto", "o arquivo do gravador não informa; a perícia supôs {fps} imagens por segundo"),
     // P4.R: entrada e saída do texto sobreposto quando não são o padrão ("aparecer" nos dois lados)
     ("surgir.entrada.corte", "aparece de uma vez"),
     ("surgir.entrada.aparecer", "aparece aos poucos em {d} s"),
@@ -438,7 +439,7 @@ const CONDICOES: &[(&str, &str)] = &[
     (codigo::SINCRONIA_SEM_CONFERENCIA, "As câmeras foram alinhadas pelo som ou pelo relógio, sem conferência por um acontecimento visível nas duas."),
     (codigo::SINCRONIA_EXTRAPOLADA, "O alinhamento entre as câmeras foi usado fora do intervalo em que foi medido."),
     (codigo::RELOGIO_DISTANTE, "O relógio da câmera mostrado na imagem foi acertado em momento distante do trecho exibido e pode ter se desviado."),
-    (codigo::TAXA_SUPOSTA, "Há gravação de aparelho gravador que não informa quantas imagens por segundo registrou. A perícia leu essa gravação supondo um ritmo, e os tempos e as velocidades vistos nela dependem dessa suposição."),
+    (codigo::TAXA_SUPOSTA, "Há gravação cujo arquivo não informa quantas imagens por segundo foram registradas (seção 3). A perícia leu essa gravação supondo um ritmo; os tempos e as velocidades vistos nela dependem dessa suposição."),
     (condicao::COM_PERDAS, "O vídeo entregue foi gravado em formato com compressão. Para exame técnico valem as gravações originais, e não este vídeo."),
     (condicao::SO_COMO_DOCUMENTO, "Este vídeo foi preparado para envio por aplicativo de mensagens. O código de verificação só confere se ele for enviado como documento. Enviado como vídeo, o aplicativo o comprime de novo e o arquivo recebido passa a ser outro."),
     (condicao::SELO_DESLIGADO, "O perito desligou o aviso que o programa escreve na imagem quando ela é mostrada de outro jeito. As mudanças continuam listadas neste relatório."),

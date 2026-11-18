@@ -98,7 +98,7 @@
         "texto": "Este arquivo foi feito pela perícia a partir do arquivo «cam02.dav», também do caso (cópia convertida do formato do gravador, sem recompressão).",
         "origem_sha256": "1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014"
       },
-      "relogio": "18/09/2017, 19:24:59 no início do arquivo · relógio do gravador adiantado 2 min 14 s (informado na coleta)",
+      "relogio": "18/09/2017, 19:24:59 no início do arquivo (0:00,000) · relógio do gravador adiantado 2 min 14 s (informado na coleta)",
       "cobertura": {
         "usado": "14,0 s",
         "total": "20,0 s",

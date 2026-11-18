@@ -1252,6 +1252,10 @@ fn original(i: usize, m: &FMidia, passos: Option<&[i64]>) -> Original {
     if m.giro != 0 {
         obs.push(format!("giro: {}°", m.giro));
     }
+    // fluxo cru: os intervalos acima são os da taxa suposta, não medidos no arquivo do gravador
+    if let Some(r) = suposta {
+        obs.push(format!("intervalos postos pela taxa suposta ({}/{}): o arquivo do gravador não tem tempos", r.num, r.den));
+    }
     Original {
         id: letra(i),
         especie: rot(especie).to_string(),
@@ -1940,9 +1944,13 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     }
     let procs = || f.roteiro.iter().flat_map(|it| it.processamentos.iter().map(move |p| (it, p)));
     // marcações e ampliações que acompanham alvo de origem automática, contadas por rastreio
+    // ampliação = a que o item e as mudanças chamam assim (região inteira não amplia nem se desloca)
     let automaticos = |enquadramento: bool| -> usize {
         let mut v: Vec<&str> = procs()
-            .filter(|(_, p)| p.nome != "ocultar" && (p.nome == "enquadramento") == enquadramento)
+            .filter(|(_, p)| match enquadramento {
+                true => tipo_do_proc(p) == Some(tipo::AMPLIACAO_QUE_SEGUE),
+                false => p.nome != "ocultar" && p.nome != "enquadramento",
+            })
             .filter_map(|(_, p)| rastreio_do_proc(p))
             .filter(|id| rastreio(id).is_some_and(automatico))
             .collect();
@@ -3933,7 +3941,8 @@ mod testes {
         let proc_ = d["processamentos"].as_array().unwrap().iter().find(|p| p["item"] == "2" && p["ordem"] == "1").unwrap();
         assert_eq!(proc_["nome"], json!(rotulo));
         let parametros = proc_["parametros"].as_str().unwrap();
-        assert!(parametros.ends_with("região fixa: x 25\u{a0}%, y 25\u{a0}%, largura 50\u{a0}%, altura 50\u{a0}% · acompanhando o rastreio R1 (média de 1,5 s)"), "{parametros}");
+        // com `segue` o centro vem do rastreio: da região, só o tamanho
+        assert!(parametros.ends_with("região de largura 50\u{a0}%, altura 50\u{a0}% · acompanhando o rastreio R1 (média de 1,5 s)"), "{parametros}");
         // o R1 do anexo H: o rastreio da detecção, usado no item 2 pelo zoom
         assert_eq!((d["rastreios"][0]["id"].as_str(), d["rastreios"][0]["uso"].as_str()), (Some("R1"), Some("item 2")));
         let ia: Vec<String> = serde_json::from_value(d["ia_resumo"].clone()).unwrap();
@@ -3945,11 +3954,20 @@ mod testes {
         for s in ["acompanhando o rastreio R1 (média de 1,5 s)", "Ampliação que acompanha o alvo", "Ampliações que acompanham alvo achado por detecção automática"] {
             assert!(texto.contains(s), "falta no PDF: {s}");
         }
+        // região em chaves com `segue`: cada chave só com o tamanho
+        let k = |t: f64, w: f64| json!({ "t": t, "pts": null, "v": { "x": 0.1, "y": 0.2, "w": w, "h": w }, "interp": "suave" });
+        plano.proveniencia.roteiro[1].processamentos = vec![enq(json!([k(1.0, 1.0), k(2.0, 0.5)]), 1.0)];
+        let d = dados(&montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap(), &[], &[]).unwrap();
+        let p = d["processamentos"].to_string().replace('\u{a0}', " ");
+        assert!(p.contains("região animada em 2 chaves (tempos da gravação: 0:01,000: largura 100 %, altura 100 %; 0:02,000: largura 50 %, altura 50 %) · acompanhando o rastreio R1 (média de 1 s)"), "{p}");
+        assert!(!p.contains("x 10 %"), "{p}");
         // região inteira: nada é ampliado nem se desloca (fica o "Preencher"); o anexo C segue dizendo o rastreio
         plano.proveniencia.roteiro[1].processamentos = vec![enq(json!({ "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 }), 0.0)];
         let d = dados(&montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap(), &[], &[]).unwrap();
         assert_eq!(d["roteiro"][1]["efeitos"][0]["texto"], json!(frases::rotulo_do_efeito(tipo::PREENCHER).unwrap()));
         assert!(d["processamentos"].to_string().contains("acompanhando o rastreio R1, sem média"), "{}", d["processamentos"]);
+        // e o resumo de IA não conta ampliação que não há
+        assert!(!d["ia_resumo"].to_string().contains("Ampliações"), "{}", d["ia_resumo"]);
         // rastreio do perito, fora do anexo H: o anexo C diz a origem e as marcações do perito
         plano.proveniencia.roteiro[1].processamentos = vec![enq(metade, 1.0)];
         (plano.proveniencia.rastreios[0].origem, plano.proveniencia.rastreios[0].corridas) = (OrigemRastreio::Manual, vec![]);

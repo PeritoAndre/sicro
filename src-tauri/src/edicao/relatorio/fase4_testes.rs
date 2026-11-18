@@ -238,13 +238,15 @@ fn contagens_do_pdf_conferem_com_o_projeto() {
         let o = &dd["originais"][0];
         let como = if codec == "ffv1" { "regravada em formato sem perda: cada imagem é igual à do original" } else { "sem recompressão" };
         assert_eq!(o["derivacao"]["texto"], json!(format!("Este arquivo foi feito pela perícia a partir do arquivo «cam 1.dav», também do caso (cópia convertida do formato do gravador, {como}).")));
-        assert_eq!(o["relogio"], json!("18/09/2017, 19:24:59,250 no início do arquivo"));
-        assert_eq!(o["ritmo"], json!("25 imagens por segundo, supostas: o arquivo do gravador não informa o ritmo"));
+        assert_eq!(o["relogio"], json!("18/09/2017, 19:24:59,250 no início do arquivo (0:00,000)"));
+        assert_eq!(o["ritmo"], json!("o arquivo do gravador não informa; a perícia supôs 25 imagens por segundo"));
+        // anexo B: o intervalo da cópia não foi medido no arquivo do gravador
+        assert!(o["tecnico"]["observacoes"].as_str().unwrap().contains("intervalos postos pela taxa suposta (25/1)"), "{}", o["tecnico"]);
         assert_eq!(o["tecnico"]["derivacao"], json!("cópia convertida do formato do gravador · FFmpeg n9.0.1 · taxa suposta 25/1 quadros/s · início no relógio do gravador 18/09/2017, 19:24:59,250 (1505762699,25 s desde 1970)"));
         assert_eq!(o["tecnico"]["comando"], json!("ffmpeg -fflags +genpts -i cam 1.dav -c copy -copyinkf cam 1.mkv"));
         let limite = frases::da_condicao(codigo::TAXA_SUPOSTA).unwrap();
         assert!(dd["limitacoes"].as_array().unwrap().iter().any(|l| l.as_str().unwrap().starts_with(limite)), "{}", dd["limitacoes"]);
-        for s in ["«cam 1.dav»", "19:24:59,250 no início do arquivo", "FFmpeg n9.0.1", "supostas: o arquivo do gravador não informa o ritmo", como, "-copyinkf"] {
+        for s in ["«cam 1.dav»", "19:24:59,250 no início do arquivo", "FFmpeg n9.0.1", "a perícia supôs 25 imagens por segundo", como, "-copyinkf"] {
             no_pdf(s);
         }
         no_pdf("A perícia leu essa gravação supondo um ritmo");
@@ -276,4 +278,76 @@ fn zoom_que_segue_pelo_motor() {
     assert!(texto(&dd["processamentos"]).contains("acompanhando o rastreio R1 (média de 1 s)"), "{}", dd["processamentos"]);
     assert!(dd["rastreios"][0]["uso"].as_str().unwrap().contains("item 1"), "{}", dd["rastreios"]);
     assert!(texto(&dd["roteiro"][0]["efeitos"]).contains(frases::rotulo_do_efeito(frases::tipo::AMPLIACAO_QUE_SEGUE).unwrap()));
+}
+
+/// Duas cópias de gravador, como saem do P4.6 (revisão do P4.R): Dahua com relógio (remux) e fluxo cru HEVC com
+/// quadros B (FFV1) e taxa suposta. Cada gravação diz só o que é dela; o limite da taxa suposta sai uma vez; e, com o
+/// zoom que segue posto na proveniência como o ZS grava, nada passa da margem. `SICRO_GUARDAR_PDF=<pasta>` grava os PDFs.
+#[test]
+fn duas_copias_de_gravador_no_pdf() {
+    let tab = tabela();
+    let corrida = corrida_da_deteccao(&tab);
+    let d = denso_da_deteccao(&tab, &corrida);
+    let (sha_denso, leitor) = gravado(&d, tab.tb);
+    let mut v = serde_json::to_value(projeto_da_fase4(&tab, &sha_denso)).unwrap();
+    v["midias"][0]["derivacao"].as_object_mut().unwrap().remove("taxa_suposta");
+    v["midias"][0]["derivacao"]["inicio_epoca_s"] = json!(1505762699.0);
+    let tb2 = (1, 1000);
+    let tab2 = q::tabela(tb2, q::pts_regulares(200, (1, 25), tb2, 0));
+    let mut m2 = crate::edicao::testes::aceite::midia("m2", "video", json!([]));
+    m2["nome"] = json!("cam 2.mkv");
+    m2["sha256"] = json!("c".repeat(64));
+    m2["derivacao"] = json!({ "tipo": "copia_dvr", "de_sha256": "d".repeat(64), "raiz_sha256": "d".repeat(64),
+        "comando": "/usr/bin/ffmpeg -framerate 25 -f hevc -fflags +genpts -i /caso/Mídias/Vídeos/cam 2.h265 -map 0:v -map 0:a? -c:v ffv1 -level 3 -g 1 -c:a copy /caso/Sistema/videos/copias-dvr/cam 2.mkv",
+        "com_perdas": false, "taxa_suposta": { "num": 25, "den": 1 }, "de_nome": "cam 2.h265", "ffmpeg_versao": "n9.0.1" });
+    v["midias"].as_array_mut().unwrap().push(m2);
+    v["principal"].as_array_mut().unwrap().push(trecho("c2", "m2", &tab2, 0, 100, 1.0, json!([])));
+    let p: ProjetoEdicao = serde_json::from_value(v).unwrap();
+    let fontes: std::collections::HashMap<String, FonteInfo> = {
+        let mut f1 = q::fonte(tab.clone(), (320, 180));
+        f1.conteiner = "matroska,webm".into();
+        let mut f2 = q::fonte(tab2, (320, 180));
+        (f2.codec, f2.conteiner, f2.sha256) = ("ffv1".into(), "matroska,webm".into(), "c".repeat(64));
+        [("m1".to_string(), f1), ("m2".to_string(), f2)].into()
+    };
+    let mut cap = q::cap_falsa();
+    cap.filtros.insert("perspective".into());
+    let ctx = Contexto { fontes: &fontes, cap: &cap, rastreios: &leitor, pasta_projeto: std::path::Path::new("/nao/existe"), midias: &[] };
+    let mut plano = crate::edicao::motor::compilar(&p, &ctx, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{e}"));
+    let projeto_bytes = serde_json::to_vec(&p).unwrap();
+    for segue in [false, true] {
+        if segue {
+            let enq = plano.proveniencia.roteiro[0].processamentos.iter_mut().find(|x| x.nome == "enquadramento").unwrap();
+            enq.parametros["regiao"] = json!({ "x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5 });
+            enq.parametros["segue"] = json!({ "rastreio": "rd", "suavizar_s": 1.0 });
+        }
+        let c = Cena::nova("fase4-duas");
+        let res = apoio::resultado(&c, &plano, "t1");
+        let fecho = Fecho { projeto_sha256: format!("{:x}", Sha256::digest(&projeto_bytes)), arquivo_rel: "Exportações/Vídeos/Edições/Caso/Caso.mp4".into(), ocultacoes: None };
+        let t = montar(&plano, &res, &c.ambiente("t1"), &fecho).unwrap();
+        let dd = dados_com(&t, &[], &[], Complementos { projeto: Some(&projeto_bytes), mapa: None }).unwrap();
+        let e = entrada(&t, dd.clone(), &[], &projeto_bytes, ModoPdf::A3).unwrap();
+        if let Ok(pasta) = std::env::var("SICRO_GUARDAR_PDF") {
+            let nome = if segue { "fase4-duas-copias-segue" } else { "fase4-duas-copias" };
+            std::fs::write(std::path::Path::new(&pasta).join(format!("{nome}.pdf")), relatorio_pdf::gerar(&e).unwrap().pdf).unwrap();
+        }
+        assert_eq!(relatorio_pdf::testes::transbordos(&e), vec![], "segue {segue}");
+        let (a, b) = (&dd["originais"][0], &dd["originais"][1]);
+        // A: Dahua, remux, relógio; ritmo medido
+        assert_eq!(a["ritmo"], json!("30 imagens por segundo, constante"));
+        assert_eq!(a["relogio"], json!("18/09/2017, 19:24:59 no início do arquivo (0:00,000)"));
+        assert!(a["derivacao"]["texto"].as_str().unwrap().ends_with("«cam 1.dav», também do caso (cópia convertida do formato do gravador, sem recompressão)."), "{a}");
+        assert_eq!(a["tecnico"]["observacoes"], json!("—"));
+        // B: fluxo cru, FFV1, taxa suposta; sem relógio
+        assert_eq!(b["ritmo"], json!("o arquivo do gravador não informa; a perícia supôs 25 imagens por segundo"));
+        assert_eq!(b["relogio"], json!(frases::rotulo("relogio.sem").unwrap()));
+        assert!(b["derivacao"]["texto"].as_str().unwrap().contains("«cam 2.h265»") && b["derivacao"]["texto"].as_str().unwrap().contains("cada imagem é igual à do original"), "{b}");
+        assert!(b["tecnico"]["observacoes"].as_str().unwrap().starts_with("intervalos postos pela taxa suposta (25/1)"), "{b}");
+        assert!(b["tecnico"]["comando"].as_str().unwrap().contains("-c:v ffv1"), "{b}");
+        // o limite da taxa suposta, uma vez
+        let limite = frases::da_condicao(codigo::TAXA_SUPOSTA).unwrap();
+        assert_eq!(dd["limitacoes"].as_array().unwrap().iter().filter(|l| l.as_str().unwrap().starts_with(limite)).count(), 1, "{}", dd["limitacoes"]);
+        let ia: Vec<String> = serde_json::from_value(dd["ia_resumo"].clone()).unwrap();
+        assert_eq!(ia.iter().any(|l| l.starts_with("Ampliações que acompanham")), segue, "{ia:?}");
+    }
 }

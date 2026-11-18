@@ -10,7 +10,8 @@ use super::quadros::{Busca, OrigemTabela};
 pub const ESQUEMA: u32 = 2;
 /// Sobe a cada campo novo com efeito no render; arquivo com valor maior abre só para leitura.
 // CONTRATO: 1 desde a abertura da Fase 4 (contratos-fase4.md B1): `EstiloTexto.sombra`, `CaixaTexto.faixa`,
-// `SobBase.animacao` e `EfEnquadramento.segue`. Só o documento que usa um deles grava 1 (`menor_necessario`).
+// `SobBase.animacao` e `EfEnquadramento.segue`; e `Derivacao.taxa_suposta` (P4.R, sem efeito no render: a 6.3 daria a
+// taxa como medida). Só o documento que usa um deles grava 1 (`menor_necessario`).
 pub const ESQUEMA_MENOR: u32 = 1;
 
 fn sim() -> bool {
