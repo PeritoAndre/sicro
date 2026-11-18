@@ -8,7 +8,7 @@ import type { ClipeAudio, ClipePrincipal, ClipeSobreposto, Id, LinhaResolvida, P
 import { clipeConhecido, efeitoConhecido, moverClipe, novoId, sobrepostoConhecido } from "../modelo/projeto";
 import { exibido, type ContextoTempo } from "../modelo/tempo";
 import { aparar as apararFaixa } from "../palco/faixa";
-import { comIdsNovos } from "../sequencia/contas";
+import { comIdsNovos, presosNoCorte } from "../sequencia/contas";
 import { donoDoClipe, marcadoresNaLinha, quadroNoSlot, tempoDoSlot, trilhasDaLinha, type MarcadorNaLinha, type TrilhaNaLinha } from "./modelo";
 import { tabelasDaTela } from "./tabelas";
 
@@ -156,6 +156,7 @@ export function dividirSemFonte(d: Draft<ProjetoEdicao>, linha: LinhaResolvida, 
   }
   (c as { duracao_s: Seg }).duracao_s = d1;
   d.principal.splice(i + 1, 0, copia as Draft<ClipePrincipal>);
+  presosNoCorte(d as ProjetoEdicao, c.id, copia.id, s, rc.n_q);
   return copia.id;
 }
 

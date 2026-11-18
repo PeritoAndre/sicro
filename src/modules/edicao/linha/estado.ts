@@ -80,7 +80,8 @@ export function lerGuardado(o: unknown): Guardado {
   return {
     aberta: x.aberta !== false,
     pxPorS: finito(x.pxPorS, PX_POR_S_MIN, PX_POR_S_MAX, PX_POR_S_PADRAO),
-    ferramenta: x.ferramenta === "lamina" ? "lamina" : "selecionar",
+    // a lâmina não volta armada ao reabrir o projeto (o primeiro clique cortaria)
+    ferramenta: "selecionar",
     ima: x.ima !== false,
     rolagem_s: finito(x.rolagem_s, 0, 1e7, 0),
     alturas: registros(x.alturas, (h) => typeof h === "number" && h >= ALTURA_TRILHA_MIN && h <= ALTURA_TRILHA_MAX),

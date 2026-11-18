@@ -53,6 +53,7 @@ describe("estado da linha", () => {
     useLinhaUi.getState().carregar("p2");
     expect(useLinhaUi.getState().pxPorS).toBe(PX_POR_S_PADRAO);
     useLinhaUi.getState().carregar("p1");
-    expect(useLinhaUi.getState()).toMatchObject({ projeto: "p1", ajustarAoAbrir: false, pxPorS: 33, ferramenta: "lamina", travadas: { principal: true } });
+    // a ferramenta não é guardada: reabre em Selecionar
+    expect(useLinhaUi.getState()).toMatchObject({ projeto: "p1", ajustarAoAbrir: false, pxPorS: 33, ferramenta: "selecionar", travadas: { principal: true } });
   });
 });

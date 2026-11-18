@@ -21,7 +21,7 @@ import type {
   TabelaQuadros,
 } from "@domain/edicao";
 import { clipeConhecido, efeitoConhecido, novoId, sobrepostoConhecido } from "../modelo/projeto";
-import { ptsDaTabela, tempoDoQuadro } from "../modelo/tempo";
+import { ptsDaTabela, resolver, tempoDoQuadro } from "../modelo/tempo";
 import { faixaDoClipe, tempoDaFronteira } from "../palco/faixa";
 
 /** Duração padrão de quadro congelado, título e imagem novos (a do v1). */
@@ -174,6 +174,7 @@ export function dividirTrecho(d: ProjetoEdicao, id: Id, j: number, tab: TabelaQu
   if (!c || !clipeConhecido(c) || c.tipo !== "trecho") return null;
   const [a, b] = faixaDoClipe(c, tab);
   if (j <= a || j >= b) return null;
+  const nTodo = slotsDoClipe(d, c, tab);
   const f = tempoDaFronteira(tab, j);
   const segunda = comIdsNovos(c) as ClipeTrecho;
   segunda.inicio_s = f.t;
@@ -182,7 +183,40 @@ export function dividirTrecho(d: ProjetoEdicao, id: Id, j: number, tab: TabelaQu
   c.fim_s = f.t;
   c.fim_pts = f.pts;
   d.principal.splice(i + 1, 0, segunda);
+  presosNoCorte(d, c.id, segunda.id, slotsDoClipe(d, c, tab), nTodo);
   return segunda.id;
+}
+
+// Fase 4 (revisão P4.1): o corte não muda o programa.
+/** Slots do clipe sozinho (a conta da linha resolvida, com a tabela da mídia dele). */
+function slotsDoClipe(d: ProjetoEdicao, c: ClipePrincipal, tab: TabelaQuadros): number {
+  const so = { saida: d.saida, principal: [c], sobreposicoes: [], audios: [], midias: [] } as unknown as ProjetoEdicao;
+  return resolver(so, { tabela: () => tab }).clipes[0]?.n_q ?? 0;
+}
+
+/**
+ * Depois de dividir `esq` em `esq` + `dir` (contíguos; `nEsq` slots na esquerda, `nTodo` no clipe antes do corte):
+ * nada preso a `esq` muda de lugar no programa. Sobreposto, clipe de áudio e marcador que começam no pedaço da direita
+ * passam a `dir` (como o arrasto, contratos-fase4.md D5); sobreposto "até o fim do clipe" que fica na esquerda ganha a
+ * duração explícita (senão encolheria até o corte). Assim apagar ou mover um pedaço só leva o que começa nele.
+ */
+export function presosNoCorte(d: ProjetoEdicao, esq: Id, dir: Id, nEsq: number, nTodo: number): void {
+  if (!(nEsq > 0) || !(nTodo > nEsq)) return;
+  const { num, den } = d.saida.fps;
+  const slot = (s: Seg) => {
+    const v = (s * num) / den;
+    return v < 0 ? -Math.round(-v) : Math.round(v);
+  };
+  const corte = (nEsq * den) / num;
+  const passa = (pos: { ref: string; clipe?: Id; desloc?: Seg }) => pos.ref === "clipe" && pos.clipe === esq && slot(pos.desloc ?? 0) >= nEsq;
+  for (const t of d.sobreposicoes)
+    for (const c of t.clipes) {
+      if (!sobrepostoConhecido(c) || c.pos.ref !== "clipe" || c.pos.clipe !== esq) continue;
+      if (passa(c.pos)) c.pos = { ref: "clipe", clipe: dir, desloc: c.pos.desloc - corte };
+      else if (c.duracao_s === null) c.duracao_s = (Math.max(nTodo - slot(c.pos.desloc), 1) * den) / num;
+    }
+  for (const t of d.audios) for (const c of t.clipes) if (c.pos.ref === "clipe" && passa(c.pos)) c.pos = { ref: "clipe", clipe: dir, desloc: c.pos.desloc - corte };
+  for (const m of d.marcadores) if (m.pos.ref === "clipe" && passa(m.pos)) m.pos = { ref: "clipe", clipe: dir, desloc: m.pos.desloc - corte };
 }
 
 /** Congelar aqui (§8.1): divide no quadro exibido `j` e põe o quadro congelado entre as partes (antes do trecho

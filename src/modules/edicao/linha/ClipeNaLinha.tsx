@@ -143,7 +143,8 @@ export const ClipeNaLinha = memo(function ClipeNaLinha(p: ClipeNaLinhaProps) {
       >
         <span>{w > 28 ? it.rotulo : ""}</span>
         {(it.chaves ?? []).map((q) => (
-          <i key={q} className={styles.losango} style={{ left: L(q - de + 0.5) }} data-chave={q} />
+          // na ponta da barra o losango não sai cortado ao meio
+          <i key={q} className={styles.losango} style={{ left: `clamp(4px, ${L(q - de + 0.5)}, calc(100% - 4px))` }} data-chave={q} />
         ))}
         {p.pegaInicio && w > 14 && <span className={`${styles.borda} ${styles.bordaE} ${p.bordaAtiva === "inicio" ? styles.bordaAtiva : ""}`} onPointerDown={pegar("inicio")} data-borda="inicio" />}
         {p.pegaFim && w > 14 && <span className={`${styles.borda} ${styles.bordaD} ${p.bordaAtiva === "fim" ? styles.bordaAtiva : ""}`} onPointerDown={pegar("fim")} data-borda="fim" />}

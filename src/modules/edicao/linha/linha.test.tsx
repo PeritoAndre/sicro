@@ -36,7 +36,7 @@ import { textoPermitido, ROTULOS } from "../inspetor/rotulos.teste";
 import { LinhaDoTempo } from "./LinhaDoTempo";
 import { useLinhaUi } from "./estado";
 import { aparar, apararLivre, destinoNaPrincipal, dividirSemFonte, moverLivre, moverNaPrincipal } from "./arrastar";
-import { tabelaSintetica } from "./testeLinha";
+import { tabelaSintetica, textoLivre } from "./testeLinha";
 import type { PalcoApi } from "../palco/Palco";
 
 const WS = "/casos/c1";
@@ -230,8 +230,9 @@ describe("gestos na tela", () => {
     await act(async () => {});
     await act(async () => useLinhaUi.setState({ ferramenta: "lamina" }));
     const n0 = st().doc!.principal.length;
-    // trecho 2 (m1, 12 a 15,5 s) começa no slot 90 (x = 150 + 42); 1 s depois
-    await act(async () => void v1Item(t.raiz, 1).dispatchEvent(pointer("pointerdown", 150 + 42 + 14.2)));
+    // trecho 2 (m1, 12 a 15,5 s) começa no slot 90 (x = 150 + 42); 1 s depois, na metade direita do slot (o corte é o
+    // do slot sob o ponteiro, não o mais perto)
+    await act(async () => void v1Item(t.raiz, 1).dispatchEvent(pointer("pointerdown", 150 + 42 + 14.4)));
     expect(st().doc!.principal.length).toBe(n0 + 1);
     const [a, b] = [st().doc!.principal[1] as { fim_s: number }, st().doc!.principal[2] as { inicio_s: number }];
     expect(a.fim_s).toBe(13);
@@ -254,6 +255,64 @@ describe("gestos na tela", () => {
     expect(st().selecao.itens.map((x) => x.id)).toEqual([a.dataset.item, b.dataset.item]);
     expect(st().selecao.foco?.id).toBe(b.dataset.item);
     expect(t.raiz.querySelector('[data-cartao="2"]')?.getAttribute("aria-selected")).toBe("true");
+  });
+
+  it("clique num clipe com a cabeça dentro dele: seleciona e a cabeça fica (o Ctrl+B corta onde ela está); fora: vai ao ponto", async () => {
+    const t = await telaComLinha();
+    await act(async () => {});
+    const [titulo, trecho] = st().doc!.principal.map((c) => (c as { id: string }).id);
+    // cabeça parada no trecho (slots 90..195), um segundo depois do começo dele
+    const parado = { modo: "clipe" as const, clipe: trecho!, t: 13 + 1 / 60 };
+    await act(async () => st().posicionar(parado));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 50))));
+    // clique no mesmo trecho, longe da cabeça (slot 160): seleciona, o cursor não anda
+    const x = 150 + (160 * 14) / 30;
+    await act(async () => void v1Item(t.raiz, 1).dispatchEvent(pointer("pointerdown", x)));
+    await act(async () => void rolo(t.raiz).dispatchEvent(pointer("pointerup", x)));
+    expect(st().selecao.foco?.id).toBe(trecho);
+    expect(st().cursor).toEqual(parado);
+    // aparar mostra a borda no palco; Esc desiste e a cabeça volta ao quadro parado
+    const passos = st().passado.length;
+    await arrastarEl(v1Item(t.raiz, 1).querySelector("[data-borda=fim]")!, rolo(t.raiz), 500, 472, { esc: true });
+    expect(st().passado.length).toBe(passos);
+    expect(st().cursor).toEqual(parado);
+    // clique noutro clipe: a cabeça vai ao ponto do clique
+    await act(async () => void v1Item(t.raiz, 0).dispatchEvent(pointer("pointerdown", 150 + 14)));
+    await act(async () => void rolo(t.raiz).dispatchEvent(pointer("pointerup", 150 + 14)));
+    expect(st().cursor).toMatchObject({ modo: "clipe", clipe: titulo });
+  });
+
+  it("textos selecionados com Shift andam juntos: o mesmo deslocamento, um passo", async () => {
+    st().alterar("x", (d) => {
+      d.sobreposicoes.push({ id: "s1", nome: "", oculta: false, clipes: [{ ...textoLivre({ ref: "programa", t: 1 }, 1, "a"), id: "ta" }, { ...textoLivre({ ref: "programa", t: 5 }, 1, "b"), id: "tb" }] });
+    });
+    const t = await telaComLinha();
+    await act(async () => {});
+    const item = (id: string) => t.raiz.querySelector<HTMLElement>(`[data-k="livre"][data-item="${id}"]`)!;
+    await act(async () => void item("ta").dispatchEvent(pointer("pointerdown", 200)));
+    await act(async () => void rolo(t.raiz).dispatchEvent(pointer("pointerup", 200)));
+    await act(async () => void item("tb").dispatchEvent(pointer("pointerdown", 300, { shift: true })));
+    await act(async () => void rolo(t.raiz).dispatchEvent(pointer("pointerup", 300)));
+    const passos = st().passado.length;
+    // 14 px = 30 slots = 1 s (sem ímã: o fim do trecho 2 está a 15 slots)
+    await act(async () => useLinhaUi.setState({ ima: false }));
+    await arrastarEl(item("tb"), rolo(t.raiz), 300, 314);
+    const pos = (id: string) => (st().doc!.sobreposicoes[0]!.clipes.find((c) => (c as { id: string }).id === id) as { pos: { t: number } }).pos.t;
+    expect([pos("ta"), pos("tb")]).toEqual([2, 6]);
+    expect(st().passado.length).toBe(passos + 1);
+  });
+
+  it("atalhos desligados (diálogo ou menu aberto): B, S, V, J, L, =, - e 0 não fazem nada", async () => {
+    await montar(<LinhaDoTempo palco={() => palcoFalso} atalhos={false} />);
+    await act(async () => {});
+    vi.mocked(palcoFalso.tocar).mockClear();
+    const antes = { ...useLinhaUi.getState() };
+    for (const [code, key] of [["KeyB", "b"], ["KeyS", "s"], ["KeyV", "v"], ["KeyJ", "j"], ["KeyL", "l"], ["Equal", "="], ["Minus", "-"], ["Digit0", "0"]] as const)
+      await act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true })));
+    await act(async () => void (await new Promise((r) => setTimeout(r, 200))));
+    const depois = useLinhaUi.getState();
+    expect([depois.ferramenta, depois.ima, depois.pxPorS]).toEqual([antes.ferramenta, antes.ima, antes.pxPorS]);
+    expect(palcoFalso.tocar).not.toHaveBeenCalled();
   });
 
   it("Travar: a trilha não arrasta; Mudo da trilha de áudio é edição do documento (um passo)", async () => {

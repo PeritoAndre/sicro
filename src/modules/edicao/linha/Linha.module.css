@@ -262,6 +262,13 @@
 .mini[aria-pressed="true"] {
   color: var(--sicro-accent);
 }
+/* "Ver" ligado é o normal (apagado como na maquete); destaca quando a trilha está oculta */
+.mini[data-ver][aria-pressed="true"] {
+  color: var(--sicro-fg-faint);
+}
+.mini[data-ver][aria-pressed="false"] {
+  color: var(--sicro-accent);
+}
 .alturaCab {
   position: absolute;
   left: 0;

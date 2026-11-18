@@ -21,10 +21,10 @@ import { capturar } from "../palco/capturar";
 import { dividir as dividirNoCursor, selecionarClipe } from "../sequencia/acoes";
 import { useInspetorUi } from "../inspetor/ui";
 import { PREVIA_VIVA_PRONTA } from "../palco/motor/motor";
-import { acharItem, marcadoresNaLinha, pxDoSlot, trilhasDaLinha, type ItemNaLinha, type TrilhaNaLinha } from "./modelo";
+import { acharItem, donoNaLinha, marcadoresNaLinha, pxDoSlot, tempoDoSlot, trilhasDaLinha, type ItemNaLinha, type TrilhaNaLinha } from "./modelo";
 import { alvosDasTrilhas, aparar, apararLivre, destinoNaPrincipal, dividirSemFonte, fronteiraDoDestino, imantar, IMA_PX, moverLivre, moverNaPrincipal, type Ferramenta } from "./arrastar";
 import { ativoDoArrasto } from "./efeitos";
-import { cabecaNoCursor, cursorNoSlot } from "./cursor";
+import { cabecaNoCursor, clipeNoSlot, cursorNoSlot, slotNoTempo } from "./cursor";
 import { tabelasDaTela } from "./tabelas";
 import { alturaPedida, blocosDoTrecho, tiras, useTirasVisiveis, type BlocoTira } from "./tiras";
 import { ouvirOndas } from "./ondas";
@@ -67,6 +67,8 @@ export interface AcoesLinha {
   abrirEntrada(clipe: Id): void;
   /** J e L. */
   tocar(sentido: 1 | -1): void;
+  /** Guarda o cursor de agora e devolve quem o põe de volta (Esc no aparar: a borda mostrada no palco desiste junto). */
+  guardarCursor?(): () => void;
 }
 
 /** Onde está a cabeça de leitura (lida a cada quadro de tela enquanto muda) e quem avisa que mudou. */
@@ -175,6 +177,10 @@ export function LinhaDoTempo({ palco, atalhos }: LinhaProps) {
         });
       },
       tocar: (d) => palco()?.tocar(d),
+      guardarCursor: () => {
+        const c = st().cursor;
+        return () => st().posicionar(c);
+      },
     };
   }, [palco]);
 
@@ -245,6 +251,8 @@ interface Gesto {
   alt: boolean;
   /** Clique num item já selecionado (de um grupo): a seleção vira só ele ao soltar sem arrastar. */
   soEleAoSoltar: boolean;
+  /** Aparar mexe no cursor (o palco mostra a borda): Esc o põe onde estava antes do clique. */
+  voltarCursor: (() => void) | null;
 }
 
 const tipoItemSel = (it: ItemNaLinha): ItemSel["k"] | null => (it.k === "efeito" ? null : it.k);
@@ -457,6 +465,7 @@ export function VistaLinha(p: VistaLinhaProps) {
 
   // ---- cabeça de leitura (fora do React) ----
   const cabecaQ = useRef<number | null>(null);
+  const cabecaFora = useRef(false);
   useEffect(() => {
     let raf = 0;
     let parado = 0;
@@ -469,6 +478,7 @@ export function VistaLinha(p: VistaLinhaProps) {
       const antes = cabecaQ.current;
       ultimo = chave;
       cabecaQ.current = c?.q ?? null;
+      cabecaFora.current = !!c?.fora;
       for (const el of [cabecaRef.current, cabecaTopoRef.current]) {
         if (!el) continue;
         el.style.display = c ? "" : "none";
@@ -758,10 +768,15 @@ export function VistaLinha(p: VistaLinhaProps) {
       const jaSel = pp.selecao.itens.some((x) => x.id === it.id) && pp.selecao.itens.length > 1 && !e.shiftKey && it.k !== "efeito";
       if (!jaSel) pp.acoes.selecionar(selecaoDe(it, t, e.shiftKey));
       const q0 = slotDoPonteiro(e.clientX);
+      // o cursor de antes do clique: Esc no aparar o põe de volta
+      const voltarCursor = alvo !== "corpo" ? (pp.acoes.guardarCursor?.() ?? null) : null;
       if (!e.shiftKey && it.k !== "marcador") {
-        // clique leva a cabeça ao ponto (no clipe da principal clicado, ou no clipe sob o ponto)
+        // clique leva a cabeça ao ponto (no clipe da principal clicado, ou no clipe sob o ponto); com a cabeça já
+        // dentro do item ela fica: selecionar não tira o quadro parado (Ctrl+B corta onde a cabeça está)
         const clipe = t.tipo === "principal" || t.tipo === "som" ? it.id : it.k === "efeito" && linha.clipes.some((c) => c.id === it.clipe) ? (it.clipe ?? null) : null;
-        if (it.ate_q > it.de_q) pp.acoes.posicionar(Math.floor(q0), clipe);
+        const cab = cabecaQ.current;
+        const naCabeca = cab !== null && !cabecaFora.current && cab >= it.de_q && cab < it.ate_q && (clipe === null || clipeNoSlot(linha, cab) === clipe);
+        if (it.ate_q > it.de_q && !naCabeca) pp.acoes.posicionar(Math.floor(q0), clipe);
       }
       if (travada || it.apagado || it.k === "legenda") return;
       if (alvo === "corpo" && it.cortado && (it.cortado.de || it.cortado.ate)) return;
@@ -787,6 +802,7 @@ export function VistaLinha(p: VistaLinhaProps) {
         trilhaDestino: null,
         alt: e.altKey,
         soEleAoSoltar: jaSel,
+        voltarCursor,
       };
       gesto.current = g;
       let ultimoEv: PointerEvent | null = null;
@@ -825,6 +841,7 @@ export function VistaLinha(p: VistaLinhaProps) {
         setGuia(null);
         setInsercao(null);
         if (ok) soltar(g);
+        else g.voltarCursor?.();
       };
       const subir = (ev: PointerEvent) => {
         if (g.ativo) calcular(g, ev.clientX, ev.clientY, ev.altKey);
@@ -988,7 +1005,14 @@ export function VistaLinha(p: VistaLinhaProps) {
       l.style.display = "none";
       return;
     }
-    const q = Math.floor(slotDoPonteiro(e.clientX));
+    let q = Math.floor(slotDoPonteiro(e.clientX));
+    // o corte cai na fronteira do quadro exibido no slot (a 0,5× um quadro ocupa dois slots): a guia vai até ela
+    const id = clipeNoSlot(linha, q);
+    const rc = id ? linha.clipes.find((c) => c.id === id) : undefined;
+    if (rc && q >= rc.inicio_q && q < rc.inicio_q + rc.n_q) {
+      const d = donoNaLinha(doc, linha, rc.id, ctx);
+      if (d?.mapa) q = rc.inicio_q + slotNoTempo(d, tempoDoSlot(d, q - rc.inicio_q)).s;
+    }
     l.style.display = "";
     l.style.transform = `translateX(${q * pxAgora()}px)`;
   };
