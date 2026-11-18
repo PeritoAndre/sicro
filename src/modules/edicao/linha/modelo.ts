@@ -26,6 +26,8 @@ import { clipeConhecido, efeitoConhecido, sobrepostoConhecido } from "../modelo/
 import { mapaTrecho, tempoDoQuadro, type ContextoTempo, type MapaQuadros } from "../modelo/tempo";
 import { tabelaDoClipe } from "../modelo/realce";
 import { tabelasDaTela } from "./tabelas";
+import { chavesDe } from "./curvas/chaves";
+import { baseDoItem, lerProp, propsDe, type ItemComCurva } from "./curvas/itens";
 
 /** De cima para baixo: sobreposições (a de cima primeiro), principal (V1), faixas de efeito, som dos trechos,
  *  trilhas de áudio (na ordem do documento) e legendas (D2). */
@@ -48,8 +50,11 @@ export interface ItemNaLinha {
   rotulo: string;
   /** Efeito: o clipe da principal (ou sobreposto) dono dele. */
   clipe?: Id;
-  /** Slots dos quadros-chave (losangos), dentro de `[de_q, ate_q)`. */
+  /** Slots dos quadros-chave (losangos), dentro de `[de_q, ate_q)`; o ímã pega todos. */
   chaves?: number[];
+  // CONTRATO: fecho do bloco 6.4 (P4.1 × P4.2).
+  /** Slots das chaves que o editor de curva (P4.2, `CurvasNaLinha`) desenha por cima: a barra não repete o losango. */
+  curva?: number[];
   /** Item citado num problema da análise. */
   erro?: boolean;
   /** Item de versão futura (`Desconhecido`): aparece apagado, sem arrasto. */
@@ -449,6 +454,25 @@ function lugarDesconhecido(c: Desconhecido, linha: LinhaResolvida): [number, num
 
 /** As trilhas da linha, na ordem da tela, do documento e da linha resolvida (lista e linha sempre iguais). */
 // CONTRATO: `ctx` opcional (tabelas das mídias); sem ele, as da tela (`palco/recursos`, as da Sequência).
+/** Slots das chaves de todas as curvas do item (P4.2: `chavesDe` + `base.paraSlot`), dentro de `[de_q, ate_q)`. */
+function chavesDaCurva(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: ContextoTempo, item: ItemComCurva, de_q: number, ate_q: number): number[] {
+  const qs = new Set<number>();
+  let base: ReturnType<typeof baseDoItem> | undefined;
+  for (const p of propsDe(doc, item))
+    for (const a of lerProp(doc, item, p) ?? []) {
+      const ts = chavesDe(a);
+      if (!ts.length) continue;
+      if (base === undefined) base = baseDoItem(doc, linha, item, (m) => ctx.tabela(m));
+      if (!base) return [];
+      for (const t of ts) {
+        const q = base.paraSlot(t);
+        if (q >= de_q && q < ate_q) qs.add(q);
+      }
+    }
+  return [...qs].sort((a, b) => a - b);
+}
+const comChaves = (qs: number[]) => (qs.length ? { chaves: qs } : {});
+
 export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: ContextoTempo = tabelasDaTela(doc)): TrilhaNaLinha[] {
   const fps = linha.fps;
   const saida: TrilhaNaLinha[] = [];
@@ -462,7 +486,9 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       if (sobrepostoConhecido(c)) {
         const l = livres.get(c.id);
         if (!l) return;
-        itens.push({ id: c.id, k: "livre", trilha: t.id, de_q: l.inicio_q, ate_q: l.inicio_q + l.n_q, rotulo: nomeDoSobreposto(c, doc), tipo: c.tipo, midia: c.tipo === "titulo" ? undefined : c.midia });
+        const de_q = l.inicio_q;
+        const ate_q = l.inicio_q + l.n_q;
+        itens.push({ id: c.id, k: "livre", trilha: t.id, de_q, ate_q, rotulo: nomeDoSobreposto(c, doc), tipo: c.tipo, midia: c.tipo === "titulo" ? undefined : c.midia, ...comChaves(chavesDaCurva(doc, linha, ctx, { k: "livre", id: c.id }, de_q, ate_q)) });
         return;
       }
       const lugar = lugarDesconhecido(c, linha);
@@ -528,6 +554,8 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
     // ocultação da mídia que passa da borda do clipe (vale também nos vizinhos da mesma mídia): a barra está cortada
     const cortado = base === "fonte" ? { de: s[0] === d.inicio_q && passaAntes(d, at?.de ?? null), ate: s[1] === d.inicio_q + d.n_q && passaDepois(d, at?.ate ?? null) } : null;
     const chaves = conhecido ? chavesEmSlots(doc, e, d) : [];
+    // as chaves da região (zoom) o editor de curva desenha por cima, arrastáveis
+    const curva = conhecido && e.tipo === "enquadramento" && Array.isArray(e.regiao) && d.instante_s === undefined ? slotsDosInstantes(e.regiao.map((k) => k.t), d) : [];
     naFaixa(e, {
       id: typeof (e as { id?: unknown }).id === "string" ? (e as { id: Id }).id : `?${d.id}:${tipoDe(e)}`,
       k: "efeito",
@@ -537,6 +565,7 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       clipe: d.id,
       tipo: tipoDe(e),
       ...(chaves.length ? { chaves } : {}),
+      ...(curva.length ? { curva } : {}),
       ...(conhecido ? (e.ligado ? {} : { desligado: true }) : { apagado: true }),
       ...(cortado && (cortado.de || cortado.ate) ? { cortado } : {}),
       ...extra,
@@ -579,7 +608,8 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
     const midia = midiaDeFonte(c);
     const m = midia ? doc.midias.find((x) => x.id === midia) : null;
     if (!m?.tem_audio) continue;
-    som.push({ id: c.id, k: "clipe", trilha: TRILHA_SOM, de_q: rc.inicio_q, ate_q: rc.inicio_q + rc.n_q, rotulo: nomeDoClipe(c, doc), tipo: c.tipo, midia: m.id, ...(c.audio.mudo ? { mudo: true } : {}) });
+    const chs = c.tipo === "trecho" ? chavesDaCurva(doc, linha, ctx, { k: "som", id: c.id }, rc.inicio_q, rc.inicio_q + rc.n_q) : [];
+    som.push({ id: c.id, k: "clipe", trilha: TRILHA_SOM, de_q: rc.inicio_q, ate_q: rc.inicio_q + rc.n_q, rotulo: nomeDoClipe(c, doc), tipo: c.tipo, midia: m.id, ...(c.audio.mudo ? { mudo: true } : {}), ...comChaves(chs) });
   }
   // maquete: "A1 Som" (o som dos trechos); as trilhas de áudio do documento seguem como A2, A3…
   saida.push({ id: TRILHA_SOM, tipo: "som", nome: "Som", sigla: "A1", itens: som });
@@ -591,7 +621,9 @@ export function trilhasDaLinha(doc: ProjetoEdicao, linha: LinhaResolvida, ctx: C
       const l = livres.get(c.id);
       if (!l) continue;
       const m = doc.midias.find((x) => x.id === c.midia);
-      itens.push({ id: c.id, k: "audio", trilha: t.id, de_q: l.inicio_q, ate_q: l.inicio_q + l.n_q, rotulo: c.nome || (m ? semExtensao(m.nome) : ""), tipo: t.papel, midia: c.midia });
+      const de_q = l.inicio_q;
+      const ate_q = l.inicio_q + l.n_q;
+      itens.push({ id: c.id, k: "audio", trilha: t.id, de_q, ate_q, rotulo: c.nome || (m ? semExtensao(m.nome) : ""), tipo: t.papel, midia: c.midia, ...comChaves(chavesDaCurva(doc, linha, ctx, { k: "audio", id: c.id }, de_q, ate_q)) });
     }
     saida.push({ id: t.id, tipo: "audio", nome: PAPEL[t.papel] ?? t.papel, sigla: `A${i + 2}`, itens, muda: t.mudo, indice: i });
   });
@@ -648,8 +680,9 @@ export function emendarBarras(itens: ItemNaLinha[], limites: ReadonlyMap<Id, rea
     }
     const partes = [...(ant.partes ?? [parte(ant)]), parte(it)];
     const chaves = [...new Set([...(ant.chaves ?? []), ...(it.chaves ?? [])])];
+    const curva = [...new Set([...(ant.curva ?? []), ...(it.curva ?? [])])];
     const cortado = { de: !!ant.cortado?.de, ate: !!it.cortado?.ate };
-    const junta: ItemNaLinha = { ...ant, ate_q: Math.max(ant.ate_q, it.ate_q), partes, ...(chaves.length ? { chaves } : {}) };
+    const junta: ItemNaLinha = { ...ant, ate_q: Math.max(ant.ate_q, it.ate_q), partes, ...(chaves.length ? { chaves } : {}), ...(curva.length ? { curva } : {}) };
     if (cortado.de || cortado.ate) junta.cortado = cortado;
     else delete junta.cortado;
     if (ant.erro || it.erro) junta.erro = true;
@@ -683,8 +716,13 @@ export function instantesDasChaves(doc: ProjetoEdicao, e: Efeito): Seg[] {
 /** Losangos da barra em slots do programa, só os que caem no clipe. Rastreio de base "fonte" num congelado: nenhum. */
 function chavesEmSlots(doc: ProjetoEdicao, e: Efeito, d: Dono): number[] {
   if (d.instante_s !== undefined) return [];
+  return slotsDosInstantes(instantesDasChaves(doc, e), d);
+}
+
+/** Slots do programa dos instantes (base do clipe) que caem no clipe. */
+function slotsDosInstantes(ts: readonly Seg[], d: Dono): number[] {
   const qs: number[] = [];
-  for (const t of instantesDasChaves(doc, e)) {
+  for (const t of ts) {
     const s = slotDoTempo(d, t);
     if (s !== null) qs.push(d.inicio_q + s);
   }

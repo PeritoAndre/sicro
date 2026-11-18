@@ -12,6 +12,7 @@ import { acharEfeito, acharMidia, clipeConhecido, sobrepostoConhecido } from "..
 import { ehChaves } from "../../modelo/curva";
 import { exibido, instanteDoSlot, mapaTrecho, ptsDaTabela, slotsDoQuadro, tempoDoQuadro, type MapaQuadros } from "../../modelo/tempo";
 import { clipeNoSlot, slotDoCursor } from "../../inspetor/secoes/textoLivre";
+import { tempoNoPrograma } from "../../palco/motor/cursor";
 
 export type PropSobreposto = "posicao" | "rotacao" | "escala" | "opacidade";
 export type Propriedade = PropSobreposto | "volume" | "regiao";
@@ -234,7 +235,9 @@ export function instanteNoItem(doc: ProjetoEdicao, linha: LinhaResolvida, item: 
   }
   const q = cursor.modo === "programa" ? Math.round(cursor.q) : slotDoCursor(doc, linha, cursor);
   const dentro = q >= base.de_q && q < base.ate_q;
-  return { t: base.deSlot(limitar(q, base.de_q, base.ate_q - 1)), dentro };
+  // som do trecho com o cursor de programa: a conta do palco e do Inspetor (P3.3, `tempoNoClipe`)
+  const noPrograma = c && cursor.modo === "programa" && dentro ? tempoNoPrograma(doc, c.id, q) : null;
+  return { t: noPrograma ?? base.deSlot(limitar(q, base.de_q, base.ate_q - 1)), dentro };
 }
 
 /** Cursor no slot `q` do programa, no modo em que o cursor já está: no programa, o slot; no clipe, o clipe da

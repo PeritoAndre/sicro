@@ -40,6 +40,10 @@ import { alcasDoLivre, livresNoQuadro } from "../../palco/livres";
 import { useCurvaUi } from "./CurvasDoItem";
 import { CurvasNaLinha, itemComCurva } from "./NaLinha";
 import { LINHA_PRONTA, LinhaDoTempo } from "../LinhaDoTempo";
+import { ClipeNaLinha } from "../ClipeNaLinha";
+import { trilhasDaLinha, type ItemNaLinha } from "../modelo";
+import { tabelasDaTela } from "../tabelas";
+import { alvosDoIma } from "../arrastar";
 
 const st = () => useEdicaoStore.getState();
 const doc = () => st().doc!;
@@ -456,7 +460,70 @@ describe("na linha do tempo (ponto de montagem do P4.1)", () => {
   });
 
   // a linha (P4.1) não está na base desta onda: o fecho liga `CurvasNaLinha` no `ClipeNaLinha` e tira o skip
-  it.skipIf(!LINHA_PRONTA)("fecho do bloco 6.4: P4.1 — losangos da posição no item do texto, na linha do tempo", async () => {
+  it("o ímã pega as chaves das curvas do item (ItemNaLinha.chaves = chavesDe + base.paraSlot)", async () => {
+    const { id, inicio } = await animado();
+    const d = doc();
+    const ctx = tabelasDaTela(d);
+    const linha = resolver(d, ctx);
+    const item = trilhasDaLinha(d, linha, ctx).flatMap((t) => t.itens).find((i) => i.id === id)!;
+    // posição em 0 e 2 s, opacidade em 1 e 3 s
+    expect(item.chaves).toEqual([inicio, inicio + 30, inicio + 60, inicio + 90]);
+    expect(alvosDoIma(d, linha, -1, null, ctx)).toEqual(expect.arrayContaining(item.chaves!));
+  });
+
+  it("barra do zoom na linha: as chaves da região pelo editor de curva, sem o losango repetido; emendada, um editor por efeito", async () => {
+    const tab: TabelaQuadros = { tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(1799).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem: "decodificador" };
+    const sha = doc().midias.find((m) => m.id === "m1")!.sha256;
+    useRecursos.setState({ midias: { [sha]: { info: null, tabela: tab, erro: null, pedindo: false } as never } });
+    try {
+      const pts = ptsDaTabela(tab);
+      const ch = (j: number) => ({ t: tempoDoQuadro(tab, j), pts: pts[j]!, v: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 }, interp: "suave" as const });
+      const loc = (t: number) => ({ t, v: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 }, interp: "suave" as const });
+      await esperar(() =>
+        st().alterar("Chave no cursor", (d) => {
+          (d.principal[1] as { efeitos: unknown[] }).efeitos.push({ tipo: "enquadramento", id: "z1", ligado: true, nome: "", ativo: { de: 12.5, ate: 15 }, regiao: [ch(380), ch(400)], ajuste: "cobrir", interpolacao: "bilinear" });
+          (d.principal[2] as { efeitos: unknown[] }).efeitos.push({ tipo: "enquadramento", id: "z2", ligado: true, nome: "", ativo: null, regiao: [loc(4), loc(5)], ajuste: "cobrir", interpolacao: "bilinear" });
+        }),
+      );
+      const t = await montar(<LinhaDoTempo palco={() => null} atalhos={false} />);
+      const barra = t.raiz.querySelector<HTMLElement>('[data-item="z1"]')!;
+      expect([...barra.querySelectorAll('[data-curva="Enquadramento"] [data-chave]')].map((b) => b.getAttribute("data-q"))).toEqual(["110", "130"]);
+      expect(barra.querySelectorAll("i[data-chave]")).toHaveLength(0);
+      // barra emendada (dois zooms nos dois lados da emenda): cada efeito com a faixa dele, no pedaço dele
+      const emendada: ItemNaLinha = {
+        id: "z1", k: "efeito", trilha: "zoom", de_q: 105, ate_q: 345, rotulo: "Zoom", tipo: "enquadramento", clipe: (doc().principal[1] as { id: string }).id,
+        chaves: [110, 130, 150, 225, 255], curva: [110, 130, 225, 255],
+        partes: [
+          { id: "z1", clipe: (doc().principal[1] as { id: string }).id, de_q: 105, ate_q: 195 },
+          { id: "z2", clipe: (doc().principal[2] as { id: string }).id, de_q: 195, ate_q: 345 },
+        ],
+      };
+      const b = await montar(
+        <ClipeNaLinha item={emendada} pxPorS={30} selecionado={false} fps={{ num: 30, den: 1 }} tipoTrilha="efeito" altura={20} cor="#5aa0e0" raiaPx={20} janela={[0, 20000]} pegaCorpo={false} pegaInicio={false} pegaFim={false} ws={null} raizCache={null} onPegar={() => {}} />,
+      );
+      const faixas = [...b.raiz.querySelectorAll<HTMLElement>('[data-curva="Enquadramento"]')];
+      expect(faixas.map((f) => [...f.querySelectorAll("[data-chave]")].map((x) => x.getAttribute("data-q")))).toEqual([["110", "130"], ["225", "255"]]);
+      // o losango que a barra desenha é só o que não é chave de curva (aqui, uma âncora no 150)
+      expect([...b.raiz.querySelectorAll("i[data-chave]")].map((x) => x.getAttribute("data-chave"))).toEqual(["45"]);
+    } finally {
+      useRecursos.setState({ midias: {} });
+    }
+  });
+
+  it("som do trecho com volume animado: a curva por cima do item na linha", async () => {
+    const trecho = (doc().principal[1] as { id: string }).id;
+    await esperar(() =>
+      st().alterar("Chave no cursor", (d) => {
+        (d.principal[1] as unknown as { audio: { volume: unknown } }).audio.volume = [{ t: 12.5, v: 1 }, { t: 14, v: 0.2 }];
+      }),
+    );
+    const t = await montar(<LinhaDoTempo palco={() => null} atalhos={false} />);
+    const som = t.raiz.querySelector<HTMLElement>(`[data-trilha="som"] [data-item="${trecho}"]`);
+    expect(som?.querySelector('[data-curva="Volume"]')?.querySelectorAll("[data-chave]")).toHaveLength(2);
+  });
+
+  it("losangos da posição no item do texto, na linha do tempo (P4.1)", async () => {
+    expect(LINHA_PRONTA).toBe(true);
     const { id, trilha } = await animado();
     await esperar(() => st().selecionar({ itens: [{ k: "livre", id, trilha }], foco: { k: "livre", id, trilha }, efeito: null }));
     const t = await montar(<LinhaDoTempo palco={() => null} atalhos={false} />);

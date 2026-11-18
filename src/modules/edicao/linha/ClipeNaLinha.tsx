@@ -6,6 +6,7 @@ import { Film, Image as IconeImagem, Snowflake, Type } from "lucide-react";
 import type { Racional, Seg } from "@domain/edicao";
 import type { ItemNaLinha, TipoTrilha } from "./modelo";
 import { imagemDaTira, janelasDaTira, tiras, useTirasVersao, type BlocoTira } from "./tiras";
+import { CurvasNaLinha, itemComCurva } from "./curvas/NaLinha";
 import styles from "./Linha.module.css";
 
 export type AlvoNoItem = "corpo" | "inicio" | "fim";
@@ -220,12 +221,23 @@ function ClipeNaLinhaBase(p: ClipeNaLinhaProps) {
       >
         <MioloBarra
           rotulo={w > 28 ? it.rotulo : ""}
-          chaves={(it.chaves ?? []).map((q) => q - de).join(",")}
+          chaves={(it.chaves ?? [])
+            .filter((q) => !it.curva?.includes(q))
+            .map((q) => q - de)
+            .join(",")}
           pegaInicio={p.pegaInicio && w > 14}
           pegaFim={p.pegaFim && w > 14}
           bordaAtiva={p.bordaAtiva ?? null}
           pegar={pegar}
         />
+        {/* P4.2: chaves da região do zoom, uma faixa por efeito (barra emendada: cada pedaço no lugar dele) */}
+        {!fantasma &&
+          it.tipo === "enquadramento" &&
+          (it.partes ?? [{ id: it.id, de_q: it.de_q, ate_q: it.ate_q }]).map((x) => (
+            <span key={x.id} className={styles.curvaDaParte} style={{ left: L(x.de_q - de), width: L(x.ate_q - x.de_q) }}>
+              <CurvasNaLinha item={{ k: "efeito", id: x.id, trilha: it.trilha, tipo: "enquadramento", de_q: x.de_q, ate_q: x.ate_q }} />
+            </span>
+          ))}
       </div>
     );
   }
@@ -247,6 +259,7 @@ function ClipeNaLinhaBase(p: ClipeNaLinhaProps) {
           bordaAtiva={p.bordaAtiva ?? null}
           pegar={pegar}
         />
+        {!fantasma && itemComCurva(it) && <CurvasNaLinha item={it} />}
       </div>
       {entrada && entrada.sobrepoe_q > 0 && <span className={styles.sobrepoe} style={{ left: L(de), width: L(entrada.sobrepoe_q) }} aria-hidden />}
       {entrada && (

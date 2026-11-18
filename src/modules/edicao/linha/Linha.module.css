@@ -619,3 +619,11 @@
   pointer-events: none;
   transform-origin: 0 0;
 }
+
+/* P4.2 na barra do zoom: a faixa do editor de curva de cada efeito, no pedaço dele */
+.curvaDaParte {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  pointer-events: none;
+}
