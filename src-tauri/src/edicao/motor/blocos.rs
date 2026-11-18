@@ -107,6 +107,20 @@ pub fn dividir(p: &ProjetoEdicao, linha: &LinhaResolvida, alvo: &Alvo) -> Vec<Ja
             blocos.extend(janela(inicio, corte));
             (inicio, peso) = (corte, PESO_ENTRADA);
         }
+        // Fase 4 (ZS): o clipe com zoom que acompanha um rastreio vai em pedaços de até `segue::BLOCO_Q` slots: a
+        // tabela da região sai num `perspective`, que a relê a cada quadro; o pedaço curto a encurta e o quadro não
+        // muda (a conta não depende da janela)
+        if crate::edicao::segue::clipe_segue(p, &c.id) {
+            let limite = crate::edicao::segue::BLOCO_Q.min(max_q);
+            while fim - inicio.max(c.inicio_q) > limite {
+                let corte = (inicio.max(c.inicio_q) + limite).clamp(c.inicio_q + entra as u64, fim.saturating_sub(sai as u64).max(c.inicio_q + entra as u64));
+                if corte <= inicio || corte >= fim {
+                    break;
+                }
+                blocos.extend(janela(inicio, corte));
+                (inicio, peso) = (corte, PESO_ENTRADA);
+            }
+        }
     }
     blocos.extend(janela(inicio, total));
     blocos

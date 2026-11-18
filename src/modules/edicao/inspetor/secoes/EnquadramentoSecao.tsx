@@ -77,7 +77,7 @@ export function EnquadramentoSecao({ clipe: c, info }: SecaoProps<ClipeQualquer>
   const origem = info?.exibido ?? saida;
   const proporcao = proporcaoDaSaida(c.efeitos, origem, saida);
   const ks = e && ehChaves(e.regiao) ? (e.regiao as Chave<Caixa>[]) : null;
-  const rotulos = ks ? rotulosDasChaves(ks) : [];
+  const rotulos = ks && e ? rotulosDasChaves(ks, e.ajuste, proporcao) : [];
   const atual = cursor === null ? null : noCursor(c);
   const naChave = (k: Chave<Caixa>) => !!atual && (atual.pts != null && k.pts != null ? atual.pts === k.pts : atual.t === k.t);
   const candidatos = doc ? candidatosDoSegue(doc, c) : [];

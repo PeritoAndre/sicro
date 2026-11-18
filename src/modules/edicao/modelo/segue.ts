@@ -7,10 +7,10 @@
 import type { ArquivoDenso, Caixa, Chave, ClipePrincipal, ClipeSobreposto, Desconhecido, EfEnquadramento, Efeito, Id, Ponto, ProjetoEdicao, Pts, Rastreio, Seg, TabelaQuadros } from "@domain/edicao";
 import { avaliar as avaliarCurva, ehChaves } from "./curva";
 import { afimGiro, IDENTIDADE, ponto, seguidaDe, type Afim } from "./geometria";
-import { acharMidia, acharRastreio, efeitoConhecido, porChave } from "./projeto";
+import { acharMidia, acharRastreio, efeitoConhecido } from "./projeto";
 import { avaliar as avaliarRastreio } from "./rastreio";
 import { ptsDaTabela } from "./tempo";
-import { comAjusteDoZoom } from "../palco/alcas";
+import { chaveDoZoom, comAjusteDoZoom } from "../palco/alcas";
 import { recursoDe } from "../palco/recursos";
 import { densoEmCache } from "../store/rastreioStore";
 
@@ -65,37 +65,59 @@ function particao<T>(v: readonly T[], cond: (x: T) => boolean): number {
   return a;
 }
 
-function centroEm(amostras: readonly AmostraSegue[], t: Seg, s: number): Ponto | null {
+/** Para cada amostra, a última com centro até ela e a primeira a partir dela (o `Vizinhos` do Rust). */
+function vizinhos(amostras: readonly AmostraSegue[]): { antes: (number | null)[]; depois: (number | null)[] } {
+  const n = amostras.length;
+  const antes = new Array<number | null>(n).fill(null);
+  const depois = new Array<number | null>(n).fill(null);
+  let u: number | null = null;
+  for (let i = 0; i < n; i++) {
+    if ((amostras[i] as AmostraSegue).centro) u = i;
+    antes[i] = u;
+  }
+  u = null;
+  for (let i = n - 1; i >= 0; i--) {
+    if ((amostras[i] as AmostraSegue).centro) u = i;
+    depois[i] = u;
+  }
+  return { antes, depois };
+}
+
+function maisProxima(amostras: readonly AmostraSegue[], a: number | null, d: number | null, t: Seg): Ponto | null {
+  if (a !== null && d !== null) return (amostras[t - (amostras[a] as AmostraSegue).t <= (amostras[d] as AmostraSegue).t - t ? a : d] as AmostraSegue).centro;
+  const i = a ?? d;
+  return i === null ? null : (amostras[i] as AmostraSegue).centro;
+}
+
+/** Média de TODAS as amostras da janela; a sem centro vale a com centro mais próxima no tempo (empate: a anterior):
+ *  a lacuna passa em `s` segundos em vez de saltar (espelho de `segue::centro_em`). */
+function centroEm(amostras: readonly AmostraSegue[], viz: ReturnType<typeof vizinhos>, t: Seg, s: number): Ponto | null {
   const de = t - s / 2 - FOLGA_S;
   const ate = t + s / 2 + FOLGA_S;
   const lo = particao(amostras, (a) => a.t < de);
   const hi = Math.max(particao(amostras, (a) => a.t <= ate), lo);
+  if (hi === lo) return maisProxima(amostras, lo > 0 ? (viz.antes[lo - 1] ?? null) : null, viz.depois[hi] ?? null, t);
   let sx = 0;
   let sy = 0;
-  let n = 0;
   for (let i = lo; i < hi; i++) {
-    const c = (amostras[i] as AmostraSegue).centro;
-    if (!c) continue;
+    const a = amostras[i] as AmostraSegue;
+    const c = a.centro ?? maisProxima(amostras, viz.antes[i] ?? null, viz.depois[i] ?? null, a.t);
+    if (!c) return null;
     sx += c.x;
     sy += c.y;
-    n += 1;
   }
-  if (n > 0) return { x: sx / n, y: sy / n };
-  let antes: AmostraSegue | null = null;
-  for (let i = lo - 1; i >= 0 && !antes; i--) if ((amostras[i] as AmostraSegue).centro) antes = amostras[i] as AmostraSegue;
-  let depois: AmostraSegue | null = null;
-  for (let i = hi; i < amostras.length && !depois; i++) if ((amostras[i] as AmostraSegue).centro) depois = amostras[i] as AmostraSegue;
-  if (antes && depois) return t - antes.t <= depois.t - t ? antes.centro : depois.centro;
-  return (antes ?? depois)?.centro ?? null;
+  const n = hi - lo;
+  return { x: sx / n, y: sy / n };
 }
 
 /** Região (0..1 da origem girada) em cada instante de `em` (espelho de `segue::regiao_seguida`). `amostras` em
  *  ordem de `t`. */
 export function regiaoSeguida(e: EfEnquadramento, amostras: readonly AmostraSegue[], em: readonly Seg[]): Caixa[] {
   const s = suavizarDe(e);
+  const viz = vizinhos(amostras);
   return em.map((t) => {
     const r = regiaoGravada(e, t);
-    const c = centroEm(amostras, t, s) ?? { x: r.x + r.w / 2, y: r.y + r.h / 2 };
+    const c = centroEm(amostras, viz, t, s) ?? { x: r.x + r.w / 2, y: r.y + r.h / 2 };
     return { x: dentro(c.x, r.w), y: dentro(c.y, r.h), w: r.w, h: r.h };
   });
 }
@@ -135,7 +157,7 @@ function guardadoDe(r: Rastreio, tab: TabelaQuadros, denso: ArquivoDenso | null,
 }
 
 /** As amostras que dão, em cada instante de `instantes` (crescentes), o mesmo que todos os quadros da mídia (como
- *  `segue::amostras`): os quadros da janela e, sem centro nela, o mais próximo com centro de cada lado. */
+ *  `segue::amostras`): os quadros da janela e, com quadro sem centro nela, o mais próximo com centro de cada lado. */
 export function amostrasDoSegue(r: Rastreio, tab: TabelaQuadros, denso: ArquivoDenso | null, giro: Afim, instantes: readonly Seg[], s: number): AmostraSegue[] {
   const g = guardadoDe(r, tab, denso, giro);
   const pts = ptsDaTabela(tab);
@@ -152,12 +174,13 @@ export function amostrasDoSegue(r: Rastreio, tab: TabelaQuadros, denso: ArquivoD
   for (const t of instantes) {
     const lo = particao(pts, (p) => tempo(p) < t - s / 2 - FOLGA_S);
     const hi = Math.max(particao(pts, (p) => tempo(p) <= t + s / 2 + FOLGA_S), lo);
-    let algum = false;
+    // janela com quadro sem centro (ou vazia): entra o com centro mais próximo de cada lado dela
+    let falta = hi === lo;
     for (let j = lo; j < hi; j++) {
       usados.add(j);
-      if (centro(j)) algum = true;
+      if (!centro(j)) falta = true;
     }
-    if (algum) continue;
+    if (!falta) continue;
     let a = g.antes.get(lo);
     if (a === undefined) {
       a = null;
@@ -223,13 +246,21 @@ export const fatorDe = (c: Caixa): number => Math.min(1 / c.w, 1 / c.h);
 const QUASE = 1e-6;
 export type RotuloChave = "Cena inteira" | "Aproximar" | "Segurar" | "Afastar";
 
+/** A região mostra a fonte inteira: cobre a imagem (0..1 nos dois eixos) e, em "Preencher", tem a proporção da saída
+ *  (`proporcao`, a da origem girada; senão o corte tira as bordas). Em "Inteiro" basta cobrir. */
+export function mostraTudo(c: Caixa, ajuste: EfEnquadramento["ajuste"], proporcao: number | null): boolean {
+  const cobre = c.x <= QUASE && c.y <= QUASE && c.x + c.w >= 1 - QUASE && c.y + c.h >= 1 - QUASE;
+  if (!cobre || ajuste === "conter") return cobre;
+  return proporcao !== null && proporcao > 0 && Math.abs(c.w / c.h - proporcao) <= QUASE * Math.max(1, proporcao);
+}
+
 /** Rótulo de cada chave pelo fator da anterior (a primeira, pela cena inteira): maior aproxima, menor afasta,
- *  igual segura (na cena inteira, "Cena inteira"). */
-export function rotulosDasChaves(ks: readonly Chave<Caixa>[]): { rotulo: RotuloChave; fator: number }[] {
+ *  igual segura; igual e mostrando a fonte inteira de verdade (`mostraTudo`), "Cena inteira". */
+export function rotulosDasChaves(ks: readonly Chave<Caixa>[], ajuste: EfEnquadramento["ajuste"] = "cobrir", proporcao: number | null = 1): { rotulo: RotuloChave; fator: number }[] {
   let antes = 1;
   return ks.map((k) => {
     const f = fatorDe(k.v);
-    const rotulo: RotuloChave = f > antes + QUASE ? "Aproximar" : f < antes - QUASE ? "Afastar" : Math.abs(f - 1) <= QUASE ? "Cena inteira" : "Segurar";
+    const rotulo: RotuloChave = f > antes + QUASE ? "Aproximar" : f < antes - QUASE ? "Afastar" : mostraTudo(k.v, ajuste, proporcao) ? "Cena inteira" : "Segurar";
     antes = f;
     return { rotulo, fator: f };
   });
@@ -238,9 +269,7 @@ export function rotulosDasChaves(ks: readonly Chave<Caixa>[]): { rotulo: RotuloC
 /** "Chave no cursor": `v` (a região do instante, sem dividir o trecho) vira chave em (t, pts); o valor fixo vira a
  *  primeira chave; a mesma chave (mesmo quadro) é trocada. Animado sai em "Preencher". */
 export function comChaveNoCursor(e: EfEnquadramento, t: Seg, pts: Pts | null, v: Caixa): EfEnquadramento {
-  const k: Chave<Caixa> = pts === null ? { t, v } : { t, pts, v };
-  const regiao = ehChaves(e.regiao) && e.regiao.length > 0 ? porChave(e.regiao, k) : [k];
-  return comAjusteDoZoom({ ...e, regiao });
+  return comAjusteDoZoom({ ...e, regiao: chaveDoZoom(ehChaves(e.regiao) ? e.regiao : [], t, pts, v) });
 }
 
 /** A chave `i` sai; a última volta a valor fixo (nunca lista vazia). */

@@ -366,9 +366,13 @@ export function acharRastreio(p: ProjetoEdicao, id: Id): Rastreio | null {
 
 // ---- chaves: o front nunca grava lista vazia ----
 
-/** Põe a chave em ordem de `t`; substitui a do mesmo quadro (mesmo pts) ou do mesmo instante. */
-export function porChave<T>(ks: readonly Chave<T>[], k: Chave<T>): Chave<T>[] {
-  const mesma = (o: Chave<T>) => (o.pts != null && k.pts != null ? o.pts === k.pts : o.t === k.t);
+/** Põe a chave em ordem de `t`; substitui a do mesmo quadro (mesmo pts) ou do mesmo instante. A substituída deixa a
+ *  `interp` dela quando a nova não traz uma (mudar o valor não muda a curva). */
+export function porChave<T>(ks: readonly Chave<T>[], k0: Chave<T>): Chave<T>[] {
+  const mesma = (o: Chave<T>) => (o.pts != null && k0.pts != null ? o.pts === k0.pts : o.t === k0.t);
+  // CONTRATO: rodada 2 do ZS (orquestrador): a `interp` da chave substituída fica
+  const velha = k0.interp === undefined ? ks.find(mesma) : undefined;
+  const k = velha?.interp !== undefined ? { ...k0, interp: velha.interp } : k0;
   const resto = ks.filter((o) => !mesma(o));
   const i = resto.findIndex((o) => o.t > k.t);
   return i < 0 ? [...resto, k] : [...resto.slice(0, i), k, ...resto.slice(i)];

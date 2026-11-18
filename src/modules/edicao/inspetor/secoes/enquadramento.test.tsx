@@ -78,7 +78,7 @@ describe("Clipe · Enquadramento: zoom com chaves", () => {
     const nClipes = doc().principal.length;
     await cursor(12.5);
     await clicar(acao(tela, "chave-no-cursor")!);
-    expect(chaves()).toEqual([{ t: 12.5, v: { x: 0, y: 0, w: 1, h: 1 } }]);
+    expect(chaves()).toEqual([{ t: 12.5, v: { x: 0, y: 0, w: 1, h: 1 }, interp: "suave" }]);
     expect([ultimo(), st().selecao.efeito]).toEqual(["Chave no cursor", enq()!.id]);
     expect(rotulos(tela)).toEqual(["Cena inteira"]);
     // uma chave só vale como fixa: o Ajuste aparece
@@ -97,7 +97,8 @@ describe("Clipe · Enquadramento: zoom com chaves", () => {
     await cursor(15.2);
     await clicar(acao(tela, "chave-no-cursor")!);
     await alca(15.2, { x: 0.1, y: 0.1, w: 0.8, h: 0.8 });
-    expect(rotulos(tela)).toEqual(["Cena inteira", "Aproximar", "Segurar", "Afastar"]);
+    // o trecho tem `girar` 90°: a fonte em pé numa saída 16:9; a região inteira em Preencher recorta e não é "Cena inteira"
+    expect(rotulos(tela)).toEqual(["Segurar", "Aproximar", "Segurar", "Afastar"]);
     const dados = [...tela.raiz.querySelectorAll("[data-chave] [data-dado]")].map((x) => x.textContent);
     expect(dados).toEqual(["1,0×", "00:00:12,500", "2,0×", "00:00:13,500", "2,0×", "00:00:14,500", "1,3×", "00:00:15,200"]);
     // o trecho não foi dividido
@@ -127,15 +128,16 @@ describe("Clipe · Enquadramento: zoom com chaves", () => {
     await clicar(acao(tela, "chave-no-cursor")!);
     await alca(15.2, { x: 0, y: 0, w: 1, h: 1 });
     const cheio = structuredClone(enq());
-    expect(rotulos(tela)).toEqual(["Cena inteira", "Aproximar", "Segurar", "Afastar"]);
+    // girar 90° no trecho: em Preencher a região inteira recorta (Segurar); em Inteiro, "Cena inteira"
+    expect(rotulos(tela)).toEqual(["Segurar", "Aproximar", "Segurar", "Afastar"]);
     await clicar(tela.raiz.querySelector<HTMLButtonElement>('[data-chave="2"] button[aria-label="Tirar chave"]')!);
-    expect([rotulos(tela), ultimo()]).toEqual([["Cena inteira", "Aproximar", "Afastar"], "Tirar chave"]);
+    expect([rotulos(tela), ultimo()]).toEqual([["Segurar", "Aproximar", "Afastar"], "Tirar chave"]);
     await esperar(() => st().desfazer());
     expect(enq()).toEqual(cheio);
     const passos: [string[], string][] = [
-      [["Cena inteira", "Aproximar", "Segurar", "Segurar"], "cobrir"],
-      [["Cena inteira", "Aproximar", "Segurar"], "cobrir"],
-      [["Cena inteira", "Aproximar"], "cobrir"],
+      [["Segurar", "Aproximar", "Segurar", "Segurar"], "cobrir"],
+      [["Segurar", "Aproximar", "Segurar"], "cobrir"],
+      [["Segurar", "Aproximar"], "cobrir"],
       [["Cena inteira", "Cena inteira"], "conter"],
       [["Cena inteira"], "conter"],
     ];
@@ -147,7 +149,7 @@ describe("Clipe · Enquadramento: zoom com chaves", () => {
     expect(enq()).toBeUndefined();
     for (let i = 0; i < 6; i++) await esperar(() => st().refazer());
     expect(enq()).toEqual(cheio);
-    expect(rotulos(tela)).toEqual(["Cena inteira", "Aproximar", "Segurar", "Afastar"]);
+    expect(rotulos(tela)).toEqual(["Segurar", "Aproximar", "Segurar", "Afastar"]);
   });
 
   it("Marcar no palco grava a chave do instante na proporção da saída", async () => {

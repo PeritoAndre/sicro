@@ -10,6 +10,7 @@ import {
   comChaveNoCursor,
   comSegue,
   efeitosNoInstante,
+  mostraTudo,
   nomeDoCandidato,
   recusa,
   regiaoDoSegue,
@@ -25,7 +26,7 @@ import {
 } from "./segue";
 import { IDENTIDADE, ponto } from "./geometria";
 import { avaliar as avaliarRastreio } from "./rastreio";
-import { novoProjeto, novoTrecho } from "./projeto";
+import { novoProjeto, novoTrecho, porChave } from "./projeto";
 import { ptsDaTabela } from "./tempo";
 import { useRecursos } from "../palco/recursos";
 import { alcasDaRegiao, comRegiao, regiaoNaSaida } from "../palco/alcas";
@@ -171,10 +172,33 @@ describe("chaves do zoom", () => {
     expect(rotulosDasChaves([k(0, 0.25)])[0]).toEqual({ rotulo: "Aproximar", fator: 4 });
   });
 
+  it("porChave: a chave trocada deixa a `interp` dela; a que traz a sua troca", () => {
+    const ks: Chave<number>[] = [{ t: 1, v: 1, interp: "degrau" }, { t: 2, v: 2 }];
+    expect(porChave(ks, { t: 1, v: 5 })).toEqual([{ t: 1, v: 5, interp: "degrau" }, { t: 2, v: 2 }]);
+    expect(porChave(ks, { t: 1, v: 5, interp: "suave" })[0]).toEqual({ t: 1, v: 5, interp: "suave" });
+    expect(porChave(ks, { t: 2, v: 7 })[1]).toEqual({ t: 2, v: 7 });
+    expect(porChave(ks, { t: 3, v: 7 })).toHaveLength(3);
+  });
+
+  it("Cena inteira só quando a região mostra a fonte inteira: com fonte de outra proporção, Preencher recorta", () => {
+    // fonte 4:3 na saída 16:9: a proporção da saída na origem é 4/3
+    const p43 = 4 / 3;
+    expect(rotulosDasChaves([k(0, 1), k(1, 0.5), k(2, 1)], "cobrir", p43).map((x) => x.rotulo)).toEqual(["Segurar", "Aproximar", "Afastar"]);
+    expect(rotulosDasChaves([k(0, 1)], "conter", p43)[0]!.rotulo).toBe("Cena inteira");
+    // a mesma proporção: Preencher mostra tudo
+    expect(rotulosDasChaves([k(0, 1), k(1, 0.5), k(2, 1), k(3, 1)], "cobrir", 1).map((x) => x.rotulo)).toEqual(["Cena inteira", "Aproximar", "Afastar", "Cena inteira"]);
+    expect(rotulosDasChaves([k(0, 1), k(1, 1)], "cobrir", p43).map((x) => x.rotulo)).toEqual(["Segurar", "Segurar"]);
+    // a maior região na proporção da saída corta as bordas da fonte 4:3: não é a cena inteira
+    const corte: Chave<Caixa> = { t: 0, v: { x: 0, y: 0.125, w: 1, h: 0.75 } };
+    expect(rotulosDasChaves([corte], "cobrir", p43)[0]!.rotulo).toBe("Segurar");
+    expect([mostraTudo({ x: 0, y: 0, w: 1, h: 1 }, "cobrir", 1), mostraTudo({ x: 0, y: 0, w: 1, h: 1 }, "cobrir", p43), mostraTudo({ x: 0.1, y: 0, w: 0.9, h: 1 }, "conter", 1)]).toEqual([true, false, false]);
+  });
+
   it("chave no cursor: fixa vira a primeira chave; outra chave no mesmo trecho; a segunda diferente grava Preencher", () => {
     const fixa = enq({ x: 0, y: 0, w: 1, h: 1 }, { interpolacao: "vizinho" });
     const um = comChaveNoCursor(fixa, 2, 60, { x: 0, y: 0, w: 1, h: 1 });
-    expect(um.regiao).toEqual([{ t: 2, pts: 60, v: { x: 0, y: 0, w: 1, h: 1 } }]);
+    // chave nova do zoom nasce suave (maquete: entra e sai devagar)
+    expect(um.regiao).toEqual([{ t: 2, pts: 60, v: { x: 0, y: 0, w: 1, h: 1 }, interp: "suave" }]);
     expect([um.ajuste, um.interpolacao]).toEqual(["conter", "vizinho"]);
     const dois = comChaveNoCursor(um, 4, null, { x: 0, y: 0, w: 1, h: 1 });
     expect([dois.ajuste, (dois.regiao as Chave<Caixa>[]).length]).toEqual(["conter", 2]);
@@ -191,7 +215,11 @@ describe("chaves do zoom", () => {
     const e = enq([k(1, 1), k(5, 1)]);
     const novo = comRegiao(e, { x: 0.2, y: 0.2, w: 0.5, h: 0.5 }, 3, null);
     expect((novo.regiao as Chave<Caixa>[]).map((x) => x.t)).toEqual([1, 3, 5]);
-    expect((novo.regiao as Chave<Caixa>[])[1]).toEqual({ t: 3, v: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 } });
+    expect((novo.regiao as Chave<Caixa>[])[1]).toEqual({ t: 3, v: { x: 0.2, y: 0.2, w: 0.5, h: 0.5 }, interp: "suave" });
+    // arrastar de novo no mesmo instante troca o valor e deixa a curva da chave (a antiga, sem `interp`, fica linear)
+    const de_novo = comRegiao(novo, { x: 0.1, y: 0.1, w: 0.6, h: 0.6 }, 3, null);
+    expect((de_novo.regiao as Chave<Caixa>[])[1]).toEqual({ t: 3, v: { x: 0.1, y: 0.1, w: 0.6, h: 0.6 }, interp: "suave" });
+    expect((comRegiao(novo, { x: 0.1, y: 0.1, w: 0.6, h: 0.6 }, 1, null).regiao as Chave<Caixa>[])[0]).toEqual({ t: 1, v: { x: 0.1, y: 0.1, w: 0.6, h: 0.6 } });
     expect(novo.ajuste).toBe("cobrir");
     // fixa troca o valor e fica como estava
     expect(comRegiao(enq({ x: 0, y: 0, w: 1, h: 1 }), { x: 0.2, y: 0.2, w: 0.5, h: 0.5 }, 3, 90).ajuste).toBe("conter");

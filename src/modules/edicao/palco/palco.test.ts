@@ -407,7 +407,8 @@ describe("alças", () => {
     const anim = { ...e, regiao: [{ t: 1, pts: 30, v: { x: 0, y: 0, w: 1, h: 1 } }, { t: 3, pts: 90, v: { x: 0, y: 0, w: 1, h: 1 } }] };
     const r = comRegiao(anim, nova, 2, 60).regiao;
     expect(Array.isArray(r) && r.map((k) => k.t)).toEqual([1, 2, 3]);
-    expect(Array.isArray(r) && r[1]).toEqual({ t: 2, pts: 60, v: nova });
+    // ZS (rodada 2): chave nova do zoom nasce suave
+    expect(Array.isArray(r) && r[1]).toEqual({ t: 2, pts: 60, v: nova, interp: "suave" });
     // a alça de canto da região guarda a proporção da saída
     const g = aDaGirada([], { w: 1920, h: 1080 }, { w: 1920, h: 1080 });
     const prop = proporcaoDaSaida([], { w: 1920, h: 1080 }, { w: 1080, h: 1080 })!;

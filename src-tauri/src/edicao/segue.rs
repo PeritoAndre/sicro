@@ -31,6 +31,25 @@ const INTEIRA: Caixa = Caixa { x: 0.0, y: 0.0, w: 1.0, h: 1.0 };
 /// `t ± s/2` punha e tirava esse quadro de um slot para o outro e o zoom tremia. Espelho: `FOLGA_S` em segue.ts.
 const FOLGA_S: f64 = 1e-9;
 
+/// Slots de um bloco do clipe que acompanha (`motor/blocos.rs::dividir`): o `perspective` relê (analisa de novo) a
+/// tabela da região a cada quadro, e o custo cresce com os slots do bloco. Medido em `desempenho_trecho_longo` (2 min
+/// a 60 qps, 720p): num bloco só, 3,3× (9.0.1) e 5,6× (7.0.2) o tempo do zoom com chaves; em blocos de 300 slots,
+/// 0,75× a 0,84×, com o mesmo composto quadro a quadro.
+pub(crate) const BLOCO_Q: u64 = 300;
+
+/// O clipe `id` da principal tem o enquadramento que vale (o primeiro ligado) acompanhando um rastreio?
+pub(crate) fn clipe_segue(p: &ProjetoEdicao, id: &str) -> bool {
+    p.principal.iter().any(|c| match c {
+        Tolerante::Conhecido(ClipePrincipal::Trecho(t)) if t.base.id == id => {
+            t.base.efeitos.iter().find_map(|e| match e {
+                Tolerante::Conhecido(Efeito::Enquadramento(q)) if q.base.ligado => Some(q.segue.is_some()),
+                _ => None,
+            }) == Some(true)
+        }
+        _ => false,
+    })
+}
+
 /// Detalhe do `nao_suportado`; None = renderiza. Convertida: o motor faz o zoom que segue (a validação e o despacho
 /// do motor continuam perguntando aqui).
 pub fn recusa(q: &EfEnquadramento) -> Option<&'static str> {
@@ -94,39 +113,78 @@ fn dentro(c: f64, lado: f64) -> f64 {
     }
 }
 
-/// Centro em `t`: média (na ordem das amostras) das que têm centro em [t − s/2, t + s/2]; sem nenhuma, a mais
-/// próxima com centro (empate: a anterior). `amostras` em ordem de `t`.
-fn centro_em(amostras: &[AmostraSegue], t: f64, s: f64) -> Option<Ponto> {
-    let (de, ate) = (t - s / 2.0 - FOLGA_S, t + s / 2.0 + FOLGA_S);
-    let lo = amostras.partition_point(|a| a.t < de);
-    let hi = amostras.partition_point(|a| a.t <= ate).max(lo);
-    let (mut sx, mut sy, mut n) = (0.0, 0.0, 0u32);
-    for c in amostras[lo..hi].iter().filter_map(|a| a.centro) {
-        sx += c.x;
-        sy += c.y;
-        n += 1;
+/// Para cada amostra, o índice da última com centro até ela e o da primeira com centro a partir dela.
+struct Vizinhos {
+    antes: Vec<Option<usize>>,
+    depois: Vec<Option<usize>>,
+}
+
+impl Vizinhos {
+    fn de(amostras: &[AmostraSegue]) -> Self {
+        let n = amostras.len();
+        let (mut antes, mut depois) = (vec![None; n], vec![None; n]);
+        let mut u = None;
+        for (i, a) in amostras.iter().enumerate() {
+            if a.centro.is_some() {
+                u = Some(i);
+            }
+            antes[i] = u;
+        }
+        u = None;
+        for i in (0..n).rev() {
+            if amostras[i].centro.is_some() {
+                u = Some(i);
+            }
+            depois[i] = u;
+        }
+        Self { antes, depois }
     }
-    if n > 0 {
-        return Some(Ponto { x: sx / n as f64, y: sy / n as f64 });
-    }
-    let antes = amostras[..lo].iter().rev().find_map(|a| a.centro.map(|c| (a.t, c)));
-    let depois = amostras[hi..].iter().find_map(|a| a.centro.map(|c| (a.t, c)));
-    match (antes, depois) {
-        (Some((ta, a)), Some((td, d))) => Some(if t - ta <= td - t { a } else { d }),
-        (Some((_, a)), None) => Some(a),
-        (None, d) => d.map(|(_, d)| d),
+
+    /// O centro com amostra mais próxima de `t` entre a anterior `a` e a seguinte `d` (empate: a anterior).
+    fn mais_proxima(amostras: &[AmostraSegue], a: Option<usize>, d: Option<usize>, t: f64) -> Option<Ponto> {
+        match (a, d) {
+            (Some(a), Some(d)) => amostras[if t - amostras[a].t <= amostras[d].t - t { a } else { d }].centro,
+            (Some(i), None) | (None, Some(i)) => amostras[i].centro,
+            (None, None) => None,
+        }
     }
 }
 
+/// Centro em `t`: média, na ordem das amostras, de TODAS as da janela [t − s/2, t + s/2]; a que não tem centro vale
+/// o da amostra com centro mais próxima no tempo (empate: a anterior), e assim uma lacuna do rastreio é atravessada
+/// em `s` segundos em vez de saltar num quadro (com s = 0, corte). Janela vazia: a mais próxima de `t`. Nenhum
+/// centro em lugar nenhum: None. `amostras` em ordem de `t`.
+fn centro_em(amostras: &[AmostraSegue], viz: &Vizinhos, t: f64, s: f64) -> Option<Ponto> {
+    let (de, ate) = (t - s / 2.0 - FOLGA_S, t + s / 2.0 + FOLGA_S);
+    let lo = amostras.partition_point(|a| a.t < de);
+    let hi = amostras.partition_point(|a| a.t <= ate).max(lo);
+    if hi == lo {
+        return Vizinhos::mais_proxima(amostras, lo.checked_sub(1).and_then(|i| viz.antes[i]), viz.depois.get(hi).copied().flatten(), t);
+    }
+    let (mut sx, mut sy) = (0.0, 0.0);
+    for i in lo..hi {
+        let c = match amostras[i].centro {
+            Some(c) => c,
+            None => Vizinhos::mais_proxima(amostras, viz.antes[i], viz.depois[i], amostras[i].t)?,
+        };
+        sx += c.x;
+        sy += c.y;
+    }
+    let n = (hi - lo) as f64;
+    Some(Ponto { x: sx / n, y: sy / n })
+}
+
 /// Região (0..1 da origem já girada) em cada instante de `em` (base do clipe): centro = média das `amostras` em
-/// [t − suavizar_s/2, t + suavizar_s/2] (sem amostra na janela: a mais próxima; nenhuma: o centro de `regiao`),
-/// tamanho = `regiao` em t, deslocada para dentro de [0, 1]² (lado de 1 ou mais fica em 0).
+/// [t − suavizar_s/2, t + suavizar_s/2], cada uma sem centro valendo a mais próxima com centro (janela vazia: a mais
+/// próxima; nenhum centro: o centro de `regiao`), tamanho = `regiao` em t, deslocada para dentro de [0, 1]² (lado de
+/// 1 ou mais fica em 0).
 pub fn regiao_seguida(e: &EfEnquadramento, amostras: &[AmostraSegue], em: &[f64]) -> Vec<Caixa> {
     let s = suavizar(e);
+    let viz = Vizinhos::de(amostras);
     em.iter()
         .map(|&t| {
             let r = gravada(e, t);
-            let c = centro_em(amostras, t, s).unwrap_or(Ponto { x: r.x + r.w / 2.0, y: r.y + r.h / 2.0 });
+            let c = centro_em(amostras, &viz, t, s).unwrap_or(Ponto { x: r.x + r.w / 2.0, y: r.y + r.h / 2.0 });
             Caixa { x: dentro(c.x, r.w), y: dentro(c.y, r.h), w: r.w, h: r.h }
         })
         .collect()
@@ -170,7 +228,7 @@ impl Centros<'_> {
 }
 
 /// As amostras que dão, em cada instante de `instantes` (crescentes), o mesmo que todos os quadros da mídia: os
-/// quadros de cada janela e, na janela sem centro, o quadro com centro mais próximo de cada lado.
+/// quadros de cada janela e, na janela com quadro sem centro, o quadro com centro mais próximo de cada lado dela.
 fn amostras(r: &Rastreio, tab: &TabelaQuadros, giro: Afim, instantes: &[f64], s: f64, rs: &mut Rastreios<'_>) -> Result<Vec<AmostraSegue>> {
     let n = tab.pts.len();
     // a mesma conta de `TabelaQuadros::tempo`
@@ -192,7 +250,8 @@ fn amostras(r: &Rastreio, tab: &TabelaQuadros, giro: Afim, instantes: &[f64], s:
         }
         ate = ate.max(hi);
     }
-    let vazias: Vec<(usize, usize)> = janelas.iter().copied().filter(|&(lo, hi)| (lo..hi).all(|j| c.feitos.get(&j).copied().flatten().is_none())).collect();
+    // janela com quadro sem centro (ou vazia): o com centro mais próximo de cada lado dela entra (é o que vale no lugar)
+    let vazias: Vec<(usize, usize)> = janelas.iter().copied().filter(|&(lo, hi)| hi == lo || (lo..hi).any(|j| c.feitos.get(&j).copied().flatten().is_none())).collect();
     // para trás em ordem crescente e para a frente em ordem decrescente: cada quadro é lido no máximo uma vez
     let mut ant: Option<(usize, Option<usize>)> = None;
     for &(lo, _) in &vazias {
@@ -367,6 +426,19 @@ mod testes {
                         "saida": regiao_seguida(&e, &a, &instantes) })
             })
             .collect();
+        // lacuna de 5 s (rastreio seguido que perdeu a pessoa): com média atravessa em `s`; sem média, corte no meio
+        let lacuna: Vec<AmostraSegue> = (0..360).map(|j| am(j as f64 / 30.0, (!(120..270).contains(&j)).then(|| (0.15 + j as f64 * 0.002, 0.4 + j as f64 * 0.0005)))).collect();
+        let na_lacuna: Vec<f64> = (100..300).step_by(3).map(|j| j as f64 / 30.0).collect();
+        let tarde: Vec<AmostraSegue> = (0..120).map(|j| am(j as f64 / 30.0, (j >= 60).then(|| (0.3 + j as f64 * 0.003, 0.5)))).collect();
+        let no_comeco: Vec<f64> = (0..90).step_by(2).map(|j| j as f64 / 30.0).collect();
+        for (nome, e, a, em) in [
+            ("lacuna de 5 s, média de 1 s: atravessa em 1 s", com(fixa.clone(), 1.0), &lacuna, &na_lacuna),
+            ("lacuna de 5 s, média de 3 s", com(fixa.clone(), 3.0), &lacuna, &na_lacuna),
+            ("lacuna de 5 s, sem média: corte no meio", com(fixa.clone(), 0.0), &lacuna, &na_lacuna),
+            ("rastreio que começa depois, média de 1 s", com(fixa.clone(), 1.0), &tarde, &no_comeco),
+        ] {
+            lista.push(json!({ "nome": nome, "entrada": { "efeito": serde_json::to_value(&e).unwrap(), "amostras": a, "em": em }, "saida": regiao_seguida(&e, a, em) }));
+        }
         // ponta da janela caindo em quadro (tempos de pts 512·j em 1/15360): o arredondamento não pode tirar o quadro
         let (pts_t, e) = (|j: usize| (512 * j) as f64 / 15360.0, com(fixa.clone(), 3.0));
         let a: Vec<AmostraSegue> = (40..176).map(|j| am(pts_t(j), Some((0.2 + j as f64 * 0.002, 0.5)))).collect();
@@ -502,8 +574,15 @@ mod testes {
             { "t": t.tempo(200), "v": { "x": 0.3, "y": 0.3, "w": 0.3, "h": 0.3 } },
             { "t": t.tempo(260), "v": { "x": 0.0, "y": 0.0, "w": 0.9, "h": 0.9 } }
         ]);
-        for (regiao, s) in [(json!({ "x": 0.3, "y": 0.3, "w": 0.4, "h": 0.4 }), 1.0), (chaves, 0.5), (json!({ "x": 0.3, "y": 0.3, "w": 0.4, "h": 0.4 }), 0.0)] {
-            let p = projeto(320, 180, (30, 1), midias.clone(), vec![trecho("c1", "m1", &t, 0, 300, 1.0, json!([enq_segue(regiao.clone(), s, "cobrir")]))], json!({ "rastreios": [r1_andando(&t, 300)] }));
+        // rastreio seguido com lacuna de 4,3 s (âncoras longe: nada no meio): a janela que pega a borda da lacuna
+        // precisa do quadro com centro de cada lado dela, mesmo fora da janela do bloco
+        let mut com_lacuna = r1_andando(&t, 300);
+        com_lacuna["origem"] = json!({ "tipo": "assistido" });
+        let ks: Vec<Value> = com_lacuna["ancoras"].as_array().unwrap().iter().filter(|k| !(3.0..7.4).contains(&k["t"].as_f64().unwrap())).cloned().collect();
+        com_lacuna["ancoras"] = Value::Array(ks);
+        let fixa = || json!({ "x": 0.3, "y": 0.3, "w": 0.4, "h": 0.4 });
+        for (regiao, s, r) in [(fixa(), 1.0, r1_andando(&t, 300)), (chaves, 0.5, r1_andando(&t, 300)), (fixa(), 0.0, r1_andando(&t, 300)), (fixa(), 1.0, com_lacuna.clone()), (fixa(), 3.0, com_lacuna)] {
+            let p = projeto(320, 180, (30, 1), midias.clone(), vec![trecho("c1", "m1", &t, 0, 300, 1.0, json!([enq_segue(regiao.clone(), s, "cobrir")]))], json!({ "rastreios": [r] }));
             let efs = efeitos_do(&p);
             let taus = |a: usize, b: usize| -> Vec<f64> { (a..b).map(|j| t.tempo(j)).collect() };
             let mut rs = Rastreios::novo(&p, &ctx);
@@ -515,7 +594,7 @@ mod testes {
                 Some(Animavel::Chaves(ks)) => ks.iter().map(|k| 1.0 / k.v.w).fold(0.0, f64::max),
                 _ => unreachable!(),
             };
-            for (a, b) in [(0usize, 16usize), (37, 38), (100, 116), (5, 299), (288, 300), (250, 251)] {
+            for (a, b) in [(0usize, 16usize), (37, 38), (100, 116), (5, 299), (288, 300), (250, 251), (80, 96), (215, 231), (219, 220), (95, 96)] {
                 let mut rs = Rastreios::novo(&p, &ctx);
                 let janela = na_cauda(&efs, &taus(a, b), &mut rs, &ctx).unwrap().expect("segue");
                 assert!(enquadramento::animado(&janela), "janela [{a}, {b}) sem o caminho animado");
@@ -872,23 +951,28 @@ mod testes {
         }
     }
 
-    /// Regra D9 refeita aqui, sem o código do motor: média dos centros dos quadros da mídia com tempo em
-    /// [t − s/2, t + s/2] (quadro na ponta conta); sem nenhum, o mais próximo com centro (empate: o anterior).
+    /// Regra D9 (com a emenda da rodada 2) refeita aqui, sem o código do motor: média de TODOS os quadros da mídia com
+    /// tempo em [t − s/2, t + s/2] (quadro na ponta conta), o sem centro valendo o do quadro com centro mais próximo no
+    /// tempo (empate: o anterior); sem quadro na janela, o mais próximo de t.
     fn centro_pela_regra(tab: &TabelaQuadros, centros: &[Option<(f64, f64)>], t: f64, s: f64) -> Option<(f64, f64)> {
-        let na: Vec<(f64, f64)> = (0..centros.len()).filter(|&i| (tab.tempo(i) - t).abs() <= s / 2.0 + 1e-9).filter_map(|i| centros[i]).collect();
-        if !na.is_empty() {
-            let n = na.len() as f64;
-            return Some((na.iter().map(|c| c.0).sum::<f64>() / n, na.iter().map(|c| c.1).sum::<f64>() / n));
-        }
-        let mut melhor: Option<(f64, (f64, f64))> = None;
-        for (i, c) in centros.iter().enumerate() {
-            let Some(c) = c else { continue };
-            let d = (tab.tempo(i) - t).abs();
-            if melhor.is_none_or(|(m, _)| d < m) {
-                melhor = Some((d, *c));
+        let perto = |t0: f64| -> Option<(f64, f64)> {
+            let mut melhor: Option<(f64, (f64, f64))> = None;
+            for (i, c) in centros.iter().enumerate() {
+                let Some(c) = c else { continue };
+                let d = (tab.tempo(i) - t0).abs();
+                if melhor.is_none_or(|(m, _)| d < m) {
+                    melhor = Some((d, *c));
+                }
             }
+            melhor.map(|(_, c)| c)
+        };
+        let na: Vec<usize> = (0..centros.len()).filter(|&i| (tab.tempo(i) - t).abs() <= s / 2.0 + 1e-9).collect();
+        if na.is_empty() {
+            return perto(t);
         }
-        melhor.map(|(_, c)| c)
+        let cs: Vec<(f64, f64)> = na.iter().map(|&i| centros[i].or_else(|| perto(tab.tempo(i)))).collect::<Option<_>>()?;
+        let n = cs.len() as f64;
+        Some((cs.iter().map(|c| c.0).sum::<f64>() / n, cs.iter().map(|c| c.1).sum::<f64>() / n))
     }
 
     /// Por slot: marca medida e prevista (px do canvas 320×180) e o centro da região que o render usou e o previsto
@@ -1047,7 +1131,8 @@ mod testes {
 
     /// Pessoa some 5 s (rastreio seguido: âncoras longe, sem caixa no meio) e volta noutro lugar; rastreio que começa
     /// depois do início do trecho. O render bate com a regra onde a marca aparece inteira, sem borda em nenhum slot.
-    /// O salto no meio da lacuna é a regra D9 ("a mais próxima"): medido no relato, a decisão é do orquestrador.
+    /// Emenda D9 (rodada 2): na lacuna o zoom atravessa em `s` (1 s), sem salto: o maior passo do centro da região,
+    /// previsto e medido no render, não passa da maior velocidade da marca (px do canvas por quadro) mais 1 px.
     #[test]
     fn lacuna_longa_e_rastreio_que_comeca_depois() {
         let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
@@ -1061,8 +1146,14 @@ mod testes {
         let pior = pior_desvio(&slots);
         let xs: Vec<f64> = slots.iter().map(|x| x.regiao_prevista.0).collect();
         let saltos: Vec<(usize, f64)> = xs.windows(2).enumerate().map(|(k, p)| (k + 1, p[1] - p[0])).filter(|(_, d)| d.abs() > 10.0).collect();
-        eprintln!("lacuna ({}): render×regra {pior:.2} px; saltos > 10 px (slot, px): {saltos:?}", cap.versao);
+        // maior velocidade da marca no canvas (região de 0,5: 2×)
+        let m = apoio::medida(&cap, Fonte::Mp4);
+        let vel = (1..450).map(|j| (fontes::marca_esperada(Fonte::Mp4, m.numeros[j])[0] - fontes::marca_esperada(Fonte::Mp4, m.numeros[j - 1])[0]).abs() / 0.5 * 320.0).fold(0.0, f64::max);
+        let na_lacuna = |x: &[Slot]| -> f64 { x[100..300].windows(2).map(|p| (p[1].regiao_prevista.0 - p[0].regiao_prevista.0).abs()).fold(0.0, f64::max) };
+        let medido = slots[100..300].windows(2).filter(|p| p[0].inteira && p[1].inteira).map(|p| (p[1].regiao_usada.0 - p[0].regiao_usada.0).abs()).fold(0.0, f64::max);
+        eprintln!("lacuna ({}): render×regra {pior:.2} px; maior passo na lacuna: regra {:.2} px, render {medido:.2} px; marca {vel:.2} px/quadro; saltos > 10 px: {saltos:?}", cap.versao, na_lacuna(&slots));
         assert!(pior <= 2.0, "lacuna ({}): {pior:.2}", cap.versao);
+        assert!(saltos.is_empty() && na_lacuna(&slots) <= vel + 1.0 && medido <= vel + 1.0 + 2.0, "lacuna ({}): salto na lacuna", cap.versao);
         let centros = centros_da_marca(&cap, Fonte::Mp4, 150..450, 0.0);
         let caso = CasoSegue { nome: "depois", fonte: Fonte::Mp4, fps: (30, 1), girar90: false, trecho: (30, 300), altura: 0.5, suavizar_s: 1.0, centros, origem: json!({ "tipo": "manual" }), extra: vec![] };
         let (_, slots) = rodar_segue(&cap, &caso);
@@ -1124,5 +1215,148 @@ mod testes {
             n += 1;
         }
         eprintln!("destaque e lupa ({}): {n} slots, destaque × marca {pior_d:.2} px, lupa × centro {pior_l:.2} px", cap.versao);
+    }
+
+    // ------------------------------------------------------------------ blocos curtos (rodada 2)
+
+    /// O clipe que acompanha vai em blocos de até `BLOCO_Q` slots; o resto do programa divide como antes.
+    #[test]
+    fn clipe_que_segue_em_blocos_curtos() {
+        let mut cap = apoio::cap_falsa();
+        cap.filtros.insert("perspective".into());
+        let cap = Arc::new(cap);
+        let fonte = apoio::fonte(apoio::tabela((1, 30), (0..2000).collect()), (320, 180));
+        let mundo = Mundo::novo(&cap).com("m1", &fonte);
+        let t = fonte.quadros.clone();
+        let r = rastreio("r1", Some("m1"), "fonte", vec![ancora(0.0, Some(0), [0.4, 0.4, 0.1, 0.1])]);
+        let fixo = efeito("enquadramento", "q9", json!({ "regiao": { "x": 0.3, "y": 0.3, "w": 0.4, "h": 0.4 }, "ajuste": "cobrir", "interpolacao": "bilinear" }));
+        let principal = |segue: bool| {
+            let e = if segue { enq_segue(json!({ "x": 0.3, "y": 0.3, "w": 0.4, "h": 0.4 }), 1.0, "cobrir") } else { fixo.clone() };
+            vec![trecho("c0", "m1", &t, 0, 100, 1.0, json!([])), trecho("c1", "m1", &t, 100, 1100, 1.0, json!([e])), trecho("c2", "m1", &t, 1100, 1300, 1.0, json!([]))]
+        };
+        let janelas = |segue: bool| -> Vec<(u64, u32)> {
+            let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], principal(segue), json!({ "rastreios": [r.clone()] }));
+            mundo.compilar(&p, &alvo_final("cpu")).unwrap().blocos.iter().map(|b| (b.de_q, b.n_q)).collect()
+        };
+        assert_eq!(janelas(false), [(0, 1300)]);
+        // c1 = [100, 1100): 300 slots por bloco a partir do começo dele; o primeiro leva c0 junto
+        assert_eq!(janelas(true), [(0, 400), (400, 300), (700, 300), (1000, 300)]);
+        assert!(!clipe_segue(&projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], principal(false), json!({})), "c1"));
+    }
+
+    /// Bloco curto no clipe que acompanha não muda nenhum quadro: o composto (hash por quadro) dividido é o do bloco
+    /// único (o de antes da rodada 2 para este trecho), nos dois ffmpeg.
+    #[test]
+    fn blocos_curtos_dao_o_mesmo_composto() {
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let m = apoio::medida(&cap, Fonte::Mp4);
+        let tab = &m.info.quadros;
+        let mut ruido_ = ruido(0x11);
+        let ancoras: Vec<Value> = (0..450)
+            .map(|j| {
+                let c = fontes::marca_esperada(Fonte::Mp4, m.numeros[j]);
+                ancora(tab.tempo(j), Some(tab.pts[j]), [c[0] + 0.01 * ruido_(), c[1] + 0.01 * ruido_(), c[2], c[3]])
+            })
+            .collect();
+        let k = |j: usize, w: f64| json!({ "t": tab.tempo(j), "pts": tab.pts[j], "v": { "x": 0.1, "y": 0.1, "w": w, "h": w }, "interp": "suave" });
+        let mundo = Mundo::novo(&cap).com("m1", &m.info);
+        for s in [1.0, 0.0] {
+            let e = enq_segue(json!([k(0, 0.8), k(200, 0.4), k(400, 0.6)]), s, "cobrir");
+            let p = projeto(320, 180, (30, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", tab, 0, 450, 1.0, json!([e]))], json!({ "rastreios": [rastreio("r1", Some("m1"), "fonte", ancoras.clone())] }));
+            let dividido = mundo.compilar(&p, &alvo_final("cpu")).unwrap();
+            assert_eq!(dividido.blocos.len(), 2);
+            crate::edicao::motor::blocos::UM_BLOCO.with(|c| c.set(true));
+            let inteiro = mundo.compilar(&p, &alvo_final("cpu"));
+            crate::edicao::motor::blocos::UM_BLOCO.with(|c| c.set(false));
+            let inteiro = inteiro.unwrap();
+            assert_eq!(inteiro.blocos.len(), 1);
+            let a = executor::rodar(&cap, &dividido, &fontes::pasta_temporaria("zs-blocos-div"), &Opcoes::default()).unwrap().compostos;
+            let b = executor::rodar(&cap, &inteiro, &fontes::pasta_temporaria("zs-blocos-um"), &Opcoes::default()).unwrap().compostos;
+            assert_eq!(a.len(), 450);
+            let dif = a.iter().zip(&b).filter(|(x, y)| x != y).count();
+            assert_eq!(dif, 0, "suavizar {s} ({}): {dif} quadros diferentes (primeiro {:?})", cap.versao, a.iter().zip(&b).position(|(x, y)| x != y));
+            eprintln!("blocos curtos (s = {s}, {}): 450 quadros iguais ao bloco único; maior grafo {} × {} bytes", cap.versao,
+                      dividido.blocos.iter().map(|b| b.grafo.len()).max().unwrap(), inteiro.blocos[0].grafo.len());
+        }
+    }
+
+    // ------------------------------------------------------------------ desempenho (rodada 2)
+
+    /// Trecho de 2 min a 60 qps (720p): zoom só com chaves × zoom que segue (s = 1 e s = 0 com rastreio que treme).
+    /// Mede o tempo da exportação e o tamanho do grafo; `SICRO_ZS_COMPOSTOS=<pasta>` grava (1ª vez) ou confere
+    /// (depois) o hash do composto por quadro de cada caso, por versão do ffmpeg. Longo: só à mão.
+    #[test]
+    #[ignore = "medida longa (rodada 2 do ZS): rodar à mão"]
+    fn desempenho_trecho_longo() {
+        use std::sync::atomic::AtomicBool;
+        let _sem_selos = crate::edicao::camada::selos::desligar_no_teste();
+        let Some(cap) = fontes::cap() else { return };
+        let pasta = std::env::temp_dir().join("sicro-zs-desempenho").join(&cap.sha256[..16]);
+        std::fs::create_dir_all(&pasta).unwrap();
+        let video = pasta.join("fonte-720p60-2min.mp4");
+        if !video.exists() {
+            let tmp = pasta.join("fonte.tmp.mp4");
+            let st = std::process::Command::new(&cap.binario)
+                .args(["-hide_banner", "-nostdin", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=60", "-t", "120", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-g", "60", "-pix_fmt", "yuv420p"])
+                .arg(&tmp)
+                .status()
+                .unwrap();
+            assert!(st.success());
+            std::fs::rename(&tmp, &video).unwrap();
+        }
+        let tab = TabelaQuadros::do_decodificador(&cap, &video, &AtomicBool::new(false), &mut |_| {}).unwrap();
+        let info = crate::edicao::quadros::fonte_info(&cap, &video, &"0".repeat(64), Arc::new(tab), None).unwrap();
+        let tab = info.quadros.clone();
+        let n = tab.pts.len();
+        assert_eq!(n, 7200);
+        let mut r = ruido(0x2e10);
+        let ancoras: Vec<Value> = (0..n)
+            .map(|j| {
+                let t = tab.tempo(j);
+                let (cx, cy) = (0.5 + 0.25 * (t * std::f64::consts::TAU / 20.0).sin() + 0.012 * r(), 0.5 + 0.1 * (t * std::f64::consts::TAU / 13.0).sin() + 0.012 * r());
+                ancora(t, Some(tab.pts[j]), [cx - 0.04, cy - 0.04, 0.08, 0.08])
+            })
+            .collect();
+        let k = |j: usize, w: f64| json!({ "t": tab.tempo(j), "pts": tab.pts[j], "v": { "x": (1.0 - w) / 2.0, "y": (1.0 - w) / 2.0, "w": w, "h": w } });
+        let chaves = json!([k(0, 0.8), k(1800, 0.4), k(3600, 0.4), k(5400, 0.8)]);
+        let mundo = Mundo::novo(&cap).com("m1", &info);
+        let relato = std::env::var("SICRO_ZS_COMPOSTOS").ok().map(std::path::PathBuf::from);
+        let mut tempos = Vec::new();
+        for (nome, segue) in [("chaves", None), ("segue-1", Some(1.0)), ("segue-0", Some(0.0))] {
+            let mut e = efeito("enquadramento", "q1", json!({ "regiao": chaves.clone(), "ajuste": "cobrir", "interpolacao": "bilinear" }));
+            if let Some(s) = segue {
+                e["segue"] = json!({ "rastreio": "r1", "suavizar_s": s });
+            }
+            let p = projeto(1280, 720, (60, 1), vec![midia("m1", "video", json!([]))], vec![trecho("c1", "m1", &tab, 0, n, 1.0, json!([e]))],
+                            json!({ "rastreios": [rastreio("r1", Some("m1"), "fonte", ancoras.clone())] }));
+            let inicio = std::time::Instant::now();
+            let plano = mundo.compilar(&p, &alvo_final("cpu")).unwrap_or_else(|e| panic!("{nome}: {e}"));
+            let compilar = inicio.elapsed().as_secs_f64();
+            let maior = plano.blocos.iter().map(|b| b.grafo.len()).max().unwrap_or(0);
+            let saida = fontes::pasta_temporaria(&format!("zs-desempenho-{nome}"));
+            let rodado = executor::rodar(&cap, &plano, &saida, &Opcoes::default()).unwrap_or_else(|e| panic!("{nome} ({}): {e}", cap.versao));
+            let total = inicio.elapsed().as_secs_f64();
+            let _ = std::fs::remove_dir_all(&saida);
+            assert_eq!(rodado.compostos.len(), n, "{nome}");
+            eprintln!("desempenho {nome} ({}): {total:.1} s (compilar {compilar:.1} s), {} blocos, maior grafo {:.2} MB, carga {}", cap.versao, plano.blocos.len(), maior as f64 / 1e6,
+                      std::fs::read_to_string("/proc/loadavg").unwrap_or_default().trim());
+            tempos.push(total);
+            if let Some(dir) = &relato {
+                std::fs::create_dir_all(dir).unwrap();
+                let arq = dir.join(format!("{}-{nome}.txt", cap.versao));
+                let texto = rodado.compostos.join("\n");
+                if arq.exists() {
+                    let antes = std::fs::read_to_string(&arq).unwrap();
+                    let (a, b): (Vec<&str>, Vec<&str>) = (antes.lines().collect(), texto.lines().collect());
+                    let dif = a.iter().zip(&b).filter(|(x, y)| x != y).count();
+                    assert!(dif == 0 && a.len() == b.len(), "{nome} ({}): {dif} quadros com outro composto (primeiro: {:?})", cap.versao, a.iter().zip(&b).position(|(x, y)| x != y));
+                    eprintln!("desempenho {nome} ({}): composto igual ao gravado ({} quadros)", cap.versao, a.len());
+                } else {
+                    std::fs::write(&arq, texto).unwrap();
+                }
+            }
+        }
+        eprintln!("desempenho ({}): segue-1 {:.2}×, segue-0 {:.2}× o das chaves", cap.versao, tempos[1] / tempos[0], tempos[2] / tempos[0]);
     }
 }

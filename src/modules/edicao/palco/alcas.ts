@@ -199,10 +199,21 @@ export function comAjusteDoZoom(e: EfEnquadramento): EfEnquadramento {
   return { ...e, ajuste: "cobrir", interpolacao: e.interpolacao === "vizinho" ? "bilinear" : e.interpolacao };
 }
 
+/** Interpolação da chave NOVA do zoom: suave (entra e sai devagar, como na maquete aprovada); a que troca o valor
+ *  de uma chave que já existe fica com a dela (`porChave`). */
+export const INTERP_DO_ZOOM = "suave" as const;
+
+/** A chave do zoom em (t, pts) na lista: nova nasce suave; a do mesmo quadro troca o valor e deixa a curva. Sem
+ *  `pts` (clipe de tempo local) a chave sai sem ele. */
+export function chaveDoZoom(ks: readonly Chave<Caixa>[], t: Seg, pts: Pts | null, v: Caixa): Chave<Caixa>[] {
+  const k: Chave<Caixa> = pts === null ? { t, v } : { t, pts, v };
+  const existe = ks.some((o) => (o.pts != null && pts !== null ? o.pts === pts : o.t === t));
+  return porChave(ks, existe ? k : { ...k, interp: INTERP_DO_ZOOM });
+}
+
 /** Efeito com a região nova: fixa troca o valor; animada ganha (ou troca) a chave do instante (e fica em "Preencher"). */
 export function comRegiao(e: EfEnquadramento, v: Caixa, tau: Seg, pts: Pts | null): EfEnquadramento {
-  // chave sem quadro de mídia (clipe de tempo local) sai sem `pts`, como as do Inspetor
-  if (ehChaves(e.regiao)) return comAjusteDoZoom({ ...e, regiao: porChave(e.regiao, pts === null ? { t: tau, v } : { t: tau, pts, v }) });
+  if (ehChaves(e.regiao)) return comAjusteDoZoom({ ...e, regiao: chaveDoZoom(e.regiao, tau, pts, v) });
   return { ...e, regiao: v };
 }
 
