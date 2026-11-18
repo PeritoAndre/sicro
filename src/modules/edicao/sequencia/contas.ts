@@ -8,6 +8,7 @@ import type {
   Analise,
   ClipeCongelar,
   ClipePrincipal,
+  ClipeSobreposto,
   ClipeTrecho,
   Desconhecido,
   EstadoMidia,
@@ -133,10 +134,14 @@ export interface Preso {
   rotulo: string;
 }
 
+/** Nome do preso: o rótulo; num título sem ele, o primeiro texto (o mesmo da linha do tempo, texto livre incluído). */
+const nomeDoPreso = (c: ClipeSobreposto): string =>
+  c.rotulo || (c.tipo === "titulo" ? (c.titulo.blocos.map((b) => b.conteudo).find((t) => t.trim() !== "") ?? "") : "");
+
 export function presosAoClipe(doc: ProjetoEdicao, id: Id): Preso[] {
   const r: Preso[] = [];
   for (const t of doc.sobreposicoes)
-    for (const c of t.clipes) if (sobrepostoConhecido(c) && c.pos.ref === "clipe" && c.pos.clipe === id) r.push({ k: "livre", id: c.id, trilha: t.id, tipo: c.tipo, rotulo: c.rotulo });
+    for (const c of t.clipes) if (sobrepostoConhecido(c) && c.pos.ref === "clipe" && c.pos.clipe === id) r.push({ k: "livre", id: c.id, trilha: t.id, tipo: c.tipo, rotulo: nomeDoPreso(c) });
   for (const t of doc.audios) for (const c of t.clipes) if (c.pos.ref === "clipe" && c.pos.clipe === id) r.push({ k: "audio", id: c.id, trilha: t.id, tipo: t.papel, rotulo: c.nome });
   return r;
 }

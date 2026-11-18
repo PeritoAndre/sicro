@@ -11,6 +11,7 @@ import { novoDestaque, novoEnquadramento, novoOcultar, novoRastreio, novoTexto, 
 import { REGISTRO } from "../inspetor/registro";
 import { bordaNoX, donoNaLinha, marcadoresNaLinha, ROTULO_DO_EFEITO, slotDoTempo, slotNoX, slotsNaBase, trilhasDaLinha, TRILHA_LEGENDAS, TRILHA_PRINCIPAL, TRILHA_SOM, xDoSlot } from "./modelo";
 import { midiaSintetica, projetoSintetico, textoLivre, trechoNosQuadros, trilhaS } from "./testeLinha";
+import { presosAoClipe } from "../sequencia/contas";
 
 function montar() {
   const { doc, tab, ctx } = projetoSintetico();
@@ -20,6 +21,18 @@ function montar() {
   doc.principal.push(a, b, t);
   return { doc, tab, ctx, a, b, t };
 }
+
+describe("nome do texto livre", () => {
+  it("na linha e nos Presos da Sequência: o conteúdo do texto (sem rótulo)", () => {
+    const { doc, ctx, a } = montar();
+    const tl = textoLivre({ ref: "clipe", clipe: a.id, desloc: 0 }, 1);
+    tl.titulo.blocos = [{ ...tl.titulo.blocos[0]!, conteudo: "Placa ABC-1234" }];
+    doc.sobreposicoes.push(trilhaS([tl]));
+    const item = trilhasDaLinha(doc, resolver(doc, ctx), ctx).flatMap((t) => t.itens).find((i) => i.id === tl.id)!;
+    expect(item.rotulo).toBe("Placa ABC-1234");
+    expect(presosAoClipe(doc, a.id).find((p) => p.id === tl.id)!.rotulo).toBe("Placa ABC-1234");
+  });
+});
 
 describe("trilhas da linha", () => {
   it("ordem e cabeças da maquete: T (a de cima primeiro), V1 Vídeo, faixas, A1 Som, áudios A2…, Legendas só com legenda", () => {

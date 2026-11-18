@@ -316,7 +316,8 @@ describe("Texto livre no Inspetor", () => {
   });
 
   // a conta de aparar é do P4.1 (`linha/arrastar.ts::apararLivre`, D5); a seção só a chama com o slot do cursor
-  it.skipIf(!LINHA_PRONTA)("fecho do bloco 6.4: P4.1 — De, Até, Começar e Terminar no cursor movem as bordas do texto", async () => {
+  it("De, Até, Começar e Terminar no cursor movem as bordas do texto (P4.1)", async () => {
+    expect(LINHA_PRONTA).toBe(true);
     await esperar(() => st().posicionar({ modo: "programa", q: 100 }));
     const id = await criar();
     const raiz = tela.raiz.querySelector(`[data-texto-livre="${id}"]`) as HTMLElement;
