@@ -6,7 +6,7 @@
  * Dono: P4.2.
  */
 
-import type { Draft } from "immer";
+import { isDraft, type Draft } from "immer";
 import type { Animavel, Chave, ClipeTrecho, Cursor, EfEnquadramento, Id, Interp, LinhaResolvida, ProjetoEdicao, Pts, Seg, SobImagem, SobTitulo, TabelaQuadros } from "@domain/edicao";
 import { acharEfeito, acharMidia, clipeConhecido, sobrepostoConhecido } from "../../modelo/projeto";
 import { ehChaves } from "../../modelo/curva";
@@ -53,9 +53,21 @@ function acharAudio(doc: ProjetoEdicao, id: Id) {
   return null;
 }
 
+const porId = new WeakMap<readonly unknown[], Map<Id, ClipeTrecho>>();
+
 function acharTrecho(doc: ProjetoEdicao, id: Id): ClipeTrecho | null {
-  const c = doc.principal.find((x) => clipeConhecido(x) && x.id === id);
-  return c && clipeConhecido(c) && c.tipo === "trecho" ? c : null;
+  // a linha pergunta por cada item a cada mudança: fora de um rascunho do immer, por índice da lista
+  if (isDraft(doc.principal)) {
+    const c = doc.principal.find((x) => clipeConhecido(x) && x.id === id);
+    return c && clipeConhecido(c) && c.tipo === "trecho" ? c : null;
+  }
+  let m = porId.get(doc.principal);
+  if (!m) {
+    m = new Map();
+    for (const x of doc.principal) if (clipeConhecido(x) && x.tipo === "trecho" && !m.has(x.id)) m.set(x.id, x);
+    porId.set(doc.principal, m);
+  }
+  return m.get(id) ?? null;
 }
 
 /** O enquadramento e o clipe da principal dono dele. */

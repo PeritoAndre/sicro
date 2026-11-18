@@ -64,9 +64,17 @@ export function escolherNoDoc(item: ItemComCurva, prop: Propriedade, i: number |
 
 const tabelaDoPalco = (doc: ProjetoEdicao) => tabelaPor(doc, (sha) => recursoDe(sha).tabela);
 
-/** Linha resolvida com as tabelas que o palco já leu (a mesma conta do Inspetor e da linha). */
+const linhas = new WeakMap<ProjetoEdicao, { versao: number; linha: LinhaResolvida }>();
+
+/** Linha resolvida com as tabelas que o palco já leu (a mesma conta do Inspetor e da linha). Uma por documento e
+ *  versão das tabelas: cada item da linha com curva pedia a sua (200 clipes = 200 resolver a cada mudança). */
 export function linhaDoDoc(doc: ProjetoEdicao): LinhaResolvida {
-  return resolver(doc, { tabela: tabelaDoPalco(doc) });
+  const versao = useRecursos.getState().versao;
+  const guardada = linhas.get(doc);
+  if (guardada && guardada.versao === versao) return guardada.linha;
+  const linha = resolver(doc, { tabela: tabelaDoPalco(doc) });
+  linhas.set(doc, { versao, linha });
+  return linha;
 }
 
 /** As curvas de uma propriedade com o que mudou numa delas (a posição leva `y` junto de `x`). */

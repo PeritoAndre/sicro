@@ -44,11 +44,13 @@ export function CurvasNaLinha({ item: it }: { item: ItemDaLinha }) {
   const foco = useCurvaUi((s) => s.foco[it.id]);
   const escolhida = useCurvaUi((s) => (s.escolhida?.item === it.id ? s.escolhida : null));
   const item = itemComCurva(it);
-  const linha = useMemo(() => (doc ? linhaDoDoc(doc) : null), [doc, versao]);
+  const animada = (p: Propriedade) => !!doc && !!item && !!lerProp(doc, item, p)?.some((a) => ehChaves(a));
+  const props = doc && item ? propsDe(doc, item) : [];
+  // só o item com chaves paga a linha e a base (o mapa do trecho): os sem curva não fazem conta a cada mudança
+  const comChaves = props.some(animada);
+  const linha = useMemo(() => (doc && comChaves ? linhaDoDoc(doc) : null), [doc, versao, comChaves]);
   const base = useMemo(() => (doc && linha && item ? baseDoItem(doc, linha, item, tabelaPor(doc, (sha) => recursoDe(sha).tabela)) : null), [doc, linha, item?.k, item?.id]);
   if (!doc || !linha || !item) return null;
-  const props = propsDe(doc, item);
-  const animada = (p: Propriedade) => !!lerProp(doc, item, p)?.some((a) => ehChaves(a));
   const prop = foco && props.includes(foco) ? foco : props.find(animada);
   const vs = prop ? lerProp(doc, item, prop) : null;
   const tabela = tabelaPor(doc, (sha) => recursoDe(sha).tabela);
