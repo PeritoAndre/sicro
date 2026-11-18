@@ -54,6 +54,11 @@ export interface TransporteProps {
   // CONTRATO: acréscimo (P1.9), opcional.
   /** SHA-256 da mídia da pista (onda). Sem a prop: a do clipe do palco (cursor de clipe ou foco). */
   sha256?: string | null;
+  // CONTRATO: acréscimos (P3.3), opcionais: no modo programa o transporte mostra os dois tempos (§3.1) e as pontas
+  // são as do programa.
+  /** Tempo de fonte e quadro da tabela do clipe sob o cursor (null = sem fonte). */
+  fonte?: { t: Seg; quadro: number | null } | null;
+  pontas?: "clipe" | "programa";
 }
 
 /** Mínimo e máximo (s16) de uma coluna de px. */
@@ -230,6 +235,7 @@ export function Transporte(p: TransporteProps) {
   };
 
   const IconeBase = p.base === "fonte" ? Film : Clapperboard;
+  const [inicio, fim] = p.pontas === "programa" ? ["Início", "Fim"] : ["Início do clipe", "Fim do clipe"];
   return (
     <div className={styles.transporte}>
       <div ref={pista} className={styles.pista} onPointerDown={arrastar(p.onBuscar)} data-pista="">
@@ -249,7 +255,7 @@ export function Transporte(p: TransporteProps) {
       </div>
       <div className={styles.controles}>
         <div className={styles.grupo}>
-          <button type="button" className={styles.icone} title="Início do clipe" aria-label="Início do clipe" onClick={p.onInicio} disabled={p.desligado}>
+          <button type="button" className={styles.icone} title={inicio} aria-label={inicio} onClick={p.onInicio} disabled={p.desligado}>
             <ChevronFirst size={16} />
           </button>
           <button type="button" className={styles.icone} title="Quadro anterior" aria-label="Quadro anterior" onClick={() => p.onPasso(-1)} disabled={p.desligado}>
@@ -261,7 +267,7 @@ export function Transporte(p: TransporteProps) {
           <button type="button" className={styles.icone} title="Próximo quadro" aria-label="Próximo quadro" onClick={() => p.onPasso(1)} disabled={p.desligado}>
             <StepForward size={16} />
           </button>
-          <button type="button" className={styles.icone} title="Fim do clipe" aria-label="Fim do clipe" onClick={p.onFim} disabled={p.desligado}>
+          <button type="button" className={styles.icone} title={fim} aria-label={fim} onClick={p.onFim} disabled={p.desligado}>
             <ChevronLast size={16} />
           </button>
         </div>
@@ -270,6 +276,13 @@ export function Transporte(p: TransporteProps) {
           <span>{formatarTempo(p.cursor)}</span>
           {p.quadro !== null && <span className={styles.quadroNum}>quadro {p.quadro}</span>}
         </span>
+        {p.fonte && (
+          <span className={`${styles.tempo} ${styles.tempoFonte}`} data-tempo-fonte="">
+            <Film size={13} aria-hidden className={styles.base} />
+            <span>{formatarTempo(p.fonte.t)}</span>
+            {p.fonte.quadro !== null && <span className={styles.quadroNum}>quadro {p.fonte.quadro}</span>}
+          </span>
+        )}
         <div className={`${styles.grupo} ${styles.direita}`}>
           <button type="button" className={`${styles.mini} ${p.fiel !== "viva" ? styles.ativo : ""}`} onClick={p.onQuadroFinal} disabled={p.desligado} title="Quadro final" data-acao="quadro-final">
             <IconeEstado fiel={p.fiel} />

@@ -38,3 +38,11 @@ export function elementoDe(v: HTMLVideoElement, r: RelogioMidia): ElementoBusca 
     pausado: () => v.paused,
   };
 }
+
+// CONTRATO: acréscimos (P3.3): o motor da prévia viva lê e põe o tempo dos elementos do pool só por aqui.
+/** Tempo do elemento (s do arquivo tocado). */
+export const tempoDoElemento = (v: HTMLMediaElement): number => v.currentTime;
+/** Põe o elemento no tempo `tEl` do arquivo tocado. */
+export function porNoTempo(v: HTMLMediaElement, tEl: number): void {
+  v.currentTime = tEl;
+}

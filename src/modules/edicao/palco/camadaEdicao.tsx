@@ -26,6 +26,11 @@ interface Props {
   onMarcar(v: Caixa | Ponto, fim: boolean): void;
   /** Arrasto no fundo, sem ferramenta e fora das alças: deslocar a vista. */
   onFundo(dx: number, dy: number, fase: Fase): void;
+  // CONTRATO: acréscimos (P3.3), opcionais: o texto livre no palco.
+  /** Contorno girado do selecionado (0..1 do canvas): a caixa do texto livre. */
+  poligono?: readonly Ponto[] | null;
+  /** Clique no fundo que pega um item (dentro da caixa do texto livre): a alça que o arrasto move. */
+  pegar?(p: Ponto): Alca | null;
 }
 
 /** Caixa entre dois pontos do canvas com a proporção pedida (largura/altura em px da saída). */
@@ -40,6 +45,8 @@ export function caixaComProporcao(a: Ponto, b: Ponto, proporcao: number | undefi
 }
 
 const LADO_ALCA = 10;
+/** Haste da alça de giro até a caixa (px da tela; a da maquete). */
+const HASTE = 12;
 
 /** Com a ferramenta de rastreio do próprio efeito ligada (ela segue ligada depois de marcar e depois de o Seguir
  *  perder o alvo), as alças continuam: arrastar ajusta a caixa; desenhar fora delas marca uma caixa nova. */
@@ -92,6 +99,12 @@ export function CamadaEdicao(p: Props) {
       );
       return;
     }
+    // dentro da caixa de um item: o arrasto é a alça "mover" dele
+    const pega = !f && e.button === 0 ? (p.pegar?.(daTela(p.vista, p.img, ini)) ?? null) : null;
+    if (pega) {
+      arrastarAlca(pega, e, raiz);
+      return;
+    }
     let ultimo = ini;
     p.onFundo(0, 0, "inicio");
     capturar(
@@ -109,7 +122,10 @@ export function CamadaEdicao(p: Props) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    const raiz = e.currentTarget.parentElement as HTMLElement;
+    arrastarAlca(a, e, e.currentTarget.parentElement as HTMLElement);
+  };
+
+  function arrastarAlca(a: Alca, e: PE<HTMLElement>, raiz: HTMLElement) {
     const de = daTela(p.vista, p.img, local(e, raiz));
     const mod = (ev: { shiftKey: boolean; altKey: boolean }) => ({ shift: ev.shiftKey, alt: ev.altKey });
     p.onArrasto(a, de, de, mod(e), "inicio");
@@ -118,7 +134,22 @@ export function CamadaEdicao(p: Props) {
       (ev) => p.onArrasto(a, de, daTela(p.vista, p.img, local(ev, raiz)), mod(ev), "move"),
       (ev) => p.onArrasto(a, de, daTela(p.vista, p.img, local(ev, raiz)), mod(ev), "fim"),
     );
-  };
+  }
+
+  // alça de giro: redonda, com a haste apontando para o centro do item (a alça "mover" do mesmo dono)
+  const hastes = p.alcas
+    .filter((a) => a.tipo === "giro")
+    .flatMap((a) => {
+      const dono = a.id.slice(0, a.id.lastIndexOf(":"));
+      const centro = p.alcas.find((x) => x.tipo === "mover" && x.id.startsWith(`${dono}:`));
+      if (!centro) return [];
+      const g = paraTela(p.vista, p.img, a.em);
+      const c = paraTela(p.vista, p.img, centro.em);
+      const d = Math.hypot(c.x - g.x, c.y - g.y);
+      if (!(d > 0)) return [];
+      const k = Math.min(HASTE + LADO_ALCA / 2, d) / d;
+      return [{ id: a.id, a: g, b: { x: g.x + (c.x - g.x) * k, y: g.y + (c.y - g.y) * k } }];
+    });
 
   const caixaNaTela = (c: Caixa) => {
     const a = paraTela(p.vista, p.img, { x: c.x, y: c.y });
@@ -130,15 +161,24 @@ export function CamadaEdicao(p: Props) {
     <div className={`${styles.camada} ${p.ferramenta ? styles.marcando : ""}`} onPointerDown={noFundo} data-camada="">
       {p.contorno && <div className={styles.contorno} style={caixaNaTela(p.contorno)} />}
       {rascunho && <div className={styles.rascunho} style={caixaNaTela(rascunho)} data-rascunho="" />}
+      {(p.poligono?.length || hastes.length > 0) && (
+        <svg className={styles.contornoGirado} aria-hidden data-contorno-livre="">
+          {p.poligono && p.poligono.length > 2 && <polygon points={p.poligono.map((x) => paraTela(p.vista, p.img, x)).map((x) => `${x.x},${x.y}`).join(" ")} />}
+          {hastes.map((h) => (
+            <line key={h.id} x1={h.a.x} y1={h.a.y} x2={h.b.x} y2={h.b.y} />
+          ))}
+        </svg>
+      )}
       {p.alcas.map((a) => {
           const q = paraTela(p.vista, p.img, a.em);
           return (
             <div
               key={a.id}
-              className={`${styles.alca} ${a.tipo === "mover" ? styles.alcaMover : ""}`}
+              className={`${styles.alca} ${a.tipo === "mover" ? styles.alcaMover : ""} ${a.tipo === "giro" ? styles.alcaGiro : ""}`}
               style={{ left: q.x - LADO_ALCA / 2, top: q.y - LADO_ALCA / 2, width: LADO_ALCA, height: LADO_ALCA, cursor: a.cursor }}
               onPointerDown={naAlca(a)}
               data-alca={a.id}
+              data-tipo={a.tipo}
             />
           );
         })}

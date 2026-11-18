@@ -7,6 +7,68 @@
   height: 100%;
   background: var(--sicro-surface-1);
 }
+/* barra do palco: seletor "Programa | Clipe" e o nome do clipe mostrado (maquete aprovada) */
+.barra {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 34px;
+  flex: none;
+  padding: 0 var(--space-3);
+  border-bottom: 1px solid var(--sicro-border);
+  background: var(--sicro-surface-1);
+}
+.seletor {
+  display: inline-flex;
+  flex: none;
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.seletor button {
+  padding: 3px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--sicro-fg-muted);
+  font-size: var(--text-xs);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.seletor button + button {
+  border-left: 1px solid var(--sicro-border);
+}
+.seletor button:hover:not(:disabled) {
+  color: var(--sicro-fg);
+}
+.seletor button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.seletor .ligado {
+  background: var(--sicro-accent-soft);
+  color: var(--sicro-fg);
+}
+.nomeClipe {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--sicro-fg-dim);
+}
+.host {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
 .caixa {
   position: relative;
   flex: 1;
@@ -59,6 +121,29 @@
 .alcaMover {
   border-radius: 50%;
   background: var(--sicro-accent);
+}
+/* giro do texto livre: bolinha com a haste até a caixa (maquete) */
+.alcaGiro {
+  border-radius: 50%;
+  background: var(--sicro-accent);
+  border-color: var(--sicro-accent);
+}
+.contornoGirado {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+}
+.contornoGirado polygon {
+  fill: none;
+  stroke: var(--sicro-accent);
+  stroke-width: 1;
+}
+.contornoGirado line {
+  stroke: var(--sicro-accent);
+  stroke-width: 1;
 }
 .contorno {
   position: absolute;
@@ -234,6 +319,9 @@
 }
 .base {
   color: var(--sicro-fg-dim);
+}
+.tempoFonte {
+  color: var(--sicro-fg-muted);
 }
 .quadroNum {
   color: var(--sicro-fg-muted);

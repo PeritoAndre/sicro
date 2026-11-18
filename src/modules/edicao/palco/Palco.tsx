@@ -7,6 +7,8 @@
  * Fase 1 (§7.5, §7.6): clipe com efeito de origem toca o intermediário quando pronto (o original para marcar
  * `ocultar` e fora da faixa do clipe); anotação só se marca sobre ele. A busca pausada é medida uma vez por mídia e,
  * lenta (ou com o clipe abaixo de 0,25×), o palco pede o proxy. Ré = modo guiado (elemento parado, quadro por busca).
+ * Fase 3 (P3.3): o modo segue o cursor (D10). `{ modo: "programa" }` monta o `PalcoPrograma` (a prévia viva da sequência);
+ * a barra do palco tem o seletor "Programa | Clipe", que converte o cursor pela linha resolvida.
  */
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type WheelEvent as WE } from "react";
@@ -15,7 +17,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { commands } from "@core/commands";
 import { mediaSrc } from "@core/mediaSrc";
 import { caminhoDoCaso } from "@core/caminhoDoCaso";
-import type { Alca, Caixa, ClipePrincipal, ClipeTrecho, Id, Lugar, MidiaRef, PalcoProps, Ponto, PreviaMidia, Primitiva, Pts, Seg, TabelaQuadros } from "@domain/edicao";
+import type { Alca, Caixa, ClipePrincipal, ClipeTrecho, Cursor, Id, Lugar, MidiaRef, PalcoProps, Ponto, PreviaMidia, Primitiva, ProjetoEdicao, Pts, Seg, TabelaQuadros } from "@domain/edicao";
 import { useEdicaoStore, type Gesto } from "../store/edicaoStore";
 import { useRenderStore } from "../store/renderStore";
 import { useFundoStore, fundoPorChave, chaveFundo } from "../store/fundoStore";
@@ -43,6 +45,15 @@ import { useOrigem } from "../inspetor/origemDoClipe";
 import { useOrigemStore } from "../store/origemStore";
 import { PASSO_ZOOM, VISTA_INICIAL, caixaMedida, contido, deslocar, limitar, mostrado, visivel, zoomEm, zoomMaximo, type Tamanho, type Vista } from "./vista";
 import styles from "./Palco.module.css";
+// Fase 3 (P3.3): prévia viva do programa
+import { PREVIA_VIVA_PRONTA } from "./motor/motor";
+import { slotDoTempo, segmentoDoSlot, tempoNoSegmento } from "./motor/plano";
+import { planoDoDoc } from "./motor/cursor";
+import { pintarLivres, primitivasProprias } from "./motor/pintor";
+import { alcasDoLivre, livresNoQuadro } from "./livres";
+import { cantosDoTexto, dentroDoTexto } from "./motor/livresPonte";
+import { PalcoPrograma } from "./motor/PalcoPrograma";
+import { areaVisivelNaOrigem, useAreaVisivel } from "./areaVisivel";
 // Fase 2 (contratos-fase2.md (c)): corrida do rastreio no palco (P2.4), só com a bandeira dele
 import { FerramentaSeguir } from "../rastreio/FerramentaSeguir";
 import { RASTREIO_PRONTO } from "../store/rastreioStore";
@@ -103,35 +114,6 @@ function urlDaPrimitiva(src: string, ws: string, raizCache: string | null, midia
 
 const tamanhoDaImagem = (img: HTMLImageElement | null) => (img ? { w: img.naturalWidth, h: img.naturalHeight } : null);
 
-/** Primitivas que o clipe sem fonte desenha por si (título e imagem). */
-function primitivasProprias(c: ClipePrincipal, W: number, H: number, fontes: FontesCena): Primitiva[] {
-  if (c.tipo === "imagem") {
-    const t = fontes.midia(c.midia);
-    if (!t || !(t.w > 0 && t.h > 0)) return [];
-    // imagem inteira contida no canvas
-    const r = Math.min(W / t.w, H / t.h);
-    const w = (t.w * r) / W;
-    const h = (t.h * r) / H;
-    return [{ k: "sprite", src: `midia:${c.midia}`, caixa: { x: (1 - w) / 2, y: (1 - h) / 2, w, h }, opacidade: 1 }];
-  }
-  if (c.tipo !== "titulo") return [];
-  const saida: Primitiva[] = [];
-  const f = c.titulo.fundo;
-  if (f.tipo === "cor") saida.push({ k: "caminho", d: [["M", 0, 0], ["L", 1, 0], ["L", 1, 1], ["L", 0, 1], ["Z"]], preenche: f.cor });
-  else if (f.tipo === "imagem") saida.push(...primitivasProprias({ ...c, tipo: "imagem", midia: f.midia } as unknown as ClipePrincipal, W, H, fontes));
-  for (const b of c.titulo.blocos) {
-    if (b.conteudo === "") continue;
-    const s = fontes.sprite({ blocos: [b], largura_max: (b.largura_max * W) / H, altura_canvas: H, fundo: true });
-    if (!s) continue;
-    const fh = b.lugar.h === "esq" ? 0 : b.lugar.h === "centro" ? 0.5 : 1;
-    const fv = b.lugar.v === "topo" ? 0 : b.lugar.v === "meio" ? 0.5 : 1;
-    const x = Math.floor(b.lugar.x * W - s.w * fh + 0.5);
-    const y = Math.floor(b.lugar.y * H - s.h * fv + 0.5);
-    saida.push({ k: "sprite", src: s.relativo, caixa: { x: x / W, y: y / H, w: s.w / W, h: s.h / H }, opacidade: 1 });
-  }
-  return saida;
-}
-
 /** Rastreio que o efeito selecionado usa (destaque, lupa, ocultar, holofote, velocidade que acompanha). */
 function rastreioDoEfeito(e: unknown): Id | null {
   const x = e as { tipo?: string; rastreio?: Id; alvo?: { rastreio?: Id }; onde?: { modo?: string; rastreio?: Id } };
@@ -159,7 +141,65 @@ const tentativas = new Map<string, number>();
 /** Só para testes. */
 export const esquecerMedidas = () => tentativas.clear();
 
+/** Cursor do modo pedido a partir do atual (D10): programa → clipe sob q (tempo do quadro do slot); clipe → o primeiro
+ *  slot desse quadro. null = nada a converter. */
+export function cursorNoModo(doc: ProjetoEdicao, atual: Cursor, modo: "clipe" | "programa", foco: Id | null): Cursor | null {
+  if (atual.modo === modo) return null;
+  const plano = planoDoDoc(doc);
+  if (modo === "programa") {
+    const c = atual.modo === "clipe" ? atual : null;
+    const q = c ? slotDoTempo(plano, c.clipe, c.t) : null;
+    return { modo: "programa", q: q ?? 0 };
+  }
+  const q = atual.modo === "programa" ? atual.q : 0;
+  const s = segmentoDoSlot(plano, Math.min(q, Math.max(plano.total_q - 1, 0))) ?? plano.segmentos.find((x) => x.clipe === foco) ?? null;
+  if (!s) return null;
+  const k = Math.min(Math.max(q - s.de_q, 0), s.ate_q - s.de_q - 1);
+  const { t, indice } = tempoNoSegmento(s, k, plano.fps);
+  // trecho: o meio do quadro (como o cursor do modo clipe); os demais: o tempo local do slot
+  const tab = s.tabela;
+  const tc = s.fonte && !s.fonte.congelado && tab && indice !== null ? meioDoQuadro(tab, indice) : t;
+  return { modo: "clipe", clipe: s.clipe, t: tc };
+}
+
+/** Troca o modo do palco pelo seletor: converte o cursor e, indo ao clipe, põe o foco nele. */
+export function trocarModo(modo: "clipe" | "programa"): void {
+  const st = useEdicaoStore.getState();
+  if (!st.doc) return;
+  const foco = st.selecao.foco?.k === "clipe" ? st.selecao.foco.id : null;
+  const novo = cursorNoModo(st.doc, st.cursor, modo, foco);
+  if (!novo) return;
+  if (novo.modo === "clipe" && foco !== novo.clipe) st.selecionar({ itens: [{ k: "clipe", id: novo.clipe }], foco: { k: "clipe", id: novo.clipe }, efeito: null });
+  st.posicionar(novo);
+}
+
+/** Barra do palco (maquete aprovada): o seletor "Programa | Clipe" e o nome do clipe mostrado. */
+export function BarraDoPalco({ modo, nome, clipe }: { modo: "clipe" | "programa"; nome: string; clipe: boolean }) {
+  if (!PREVIA_VIVA_PRONTA) return null;
+  return (
+    <div className={styles.barra} data-barra-palco="">
+      <div className={styles.seletor} role="group">
+        <button type="button" className={modo === "programa" ? styles.ligado : ""} aria-pressed={modo === "programa"} onClick={() => trocarModo("programa")} data-modo="programa">
+          Programa
+        </button>
+        <button type="button" className={modo === "clipe" ? styles.ligado : ""} aria-pressed={modo === "clipe"} disabled={!clipe && modo !== "clipe"} onClick={() => trocarModo("clipe")} data-modo="clipe">
+          Clipe
+        </button>
+      </div>
+      <span className={styles.nomeClipe} data-nome-clipe="">
+        {nome}
+      </span>
+    </div>
+  );
+}
+
+/** Palco: o modo segue o cursor (D10). */
 export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
+  if (PREVIA_VIVA_PRONTA && props.modo === "programa") return <PalcoPrograma ref={ref} {...props} />;
+  return <PalcoClipe ref={ref} {...props} />;
+});
+
+const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
   const { ferramenta, onMarcado } = props;
   const doc = useEdicaoStore((s) => s.doc);
   const ws = useEdicaoStore((s) => s.ws);
@@ -236,6 +276,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const [mostra, setMostra] = useState<{ t: Seg; j: number | null }>({ t: 0, j: null });
   const [alcas, setAlcas] = useState<Alca[]>([]);
   const [contorno, setContorno] = useState<Caixa | null>(null);
+  const [poligono, setPoligono] = useState<Ponto[] | null>(null);
   const [caixa, setCaixa] = useState<Tamanho>({ w: 0, h: 0 });
   const [vista, setVista] = useState<Vista>(VISTA_INICIAL);
   const [fiel, setFiel] = useState<Fiel>("viva");
@@ -260,8 +301,10 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const bloqueado = !clipe || clipe.tipo !== "trecho" || !ref_ || marcarBloqueado(info, tabela) || soLeitura;
 
   // ---- referências vivas para o laço e os eventos ----
-  const vivo = useRef({ doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps, sha, previa, daOrigem, campos, semImagemDaOrigem });
-  vivo.current = { doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps, sha, previa, daOrigem, campos, semImagemDaOrigem };
+  const vivo = useRef({ doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps, sha, previa, daOrigem, campos, semImagemDaOrigem, linha });
+  vivo.current = { doc, clipe, tabela, relogio, mapa, resolvido, ws, raizCache, ref_, info, modoOrigem, efeitoSel, ferramenta, saida, fps, sha, previa, daOrigem, campos, semImagemDaOrigem, linha };
+  /** Canvas de apoio dos sobrepostos (um por título). */
+  const apoiosRef = useRef(new Map<string, HTMLCanvasElement>());
 
   const fontes: FontesCena = useMemo(
     () => ({
@@ -374,9 +417,27 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       imagem,
       rascunho: () => (rascunhoRef.current ??= document.createElement("canvas")),
     });
+    // sobrepostos (texto livre, títulos, imagens) no slot do quadro mostrado, como no programa (P3.3)
+    const qSlot = slotDoCursor();
+    const livresAqui = qSlot !== null && v.linha ? livresNoQuadro(v.doc, v.linha, qSlot, fontes) : [];
+    if (livresAqui.length > 0) {
+      const apoio = (nome: string) => {
+        let cv = apoiosRef.current.get(nome);
+        if (!cv) apoiosRef.current.set(nome, (cv = document.createElement("canvas")));
+        return cv;
+      };
+      pintarLivres(ctx, livresAqui, { imagem, cena: fontes, apoio }, W, H);
+    }
     // alças do item selecionado neste quadro
     const novas: Alca[] = [];
     let cont: Caixa | null = null;
+    let poli: Ponto[] | null = null;
+    const foco = useEdicaoStore.getState().selecao.foco;
+    const livreSel = foco?.k === "livre" && !soLeituraRef.current ? livresAqui.find((x) => x.clipe.id === foco.id) : undefined;
+    if (livreSel) {
+      novas.push(...alcasDoLivre(v.doc, livreSel, v.saida));
+      poli = cantosDoTexto(livreSel, v.saida);
+    }
     const e = v.efeitoSel?.efeito;
     if (e && alcasComFerramenta(v.ferramenta, e.id) && !soLeituraRef.current) {
       if (e.tipo === "enquadramento" && v.modoOrigem) {
@@ -408,9 +469,21 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     // tocando sem seleção nada muda: não redesenha a árvore a cada quadro
     setAlcas((a) => (a.length === 0 && novas.length === 0 ? a : novas));
     setContorno((c0) => (c0 === null && cont === null ? c0 : cont));
-  }, [fontes, instante]);
+    setPoligono((p0) => (p0 === null && (poli === null || poli.length === 0) ? p0 : poli));
+  }, [fontes, instante, slotDoCursor]);
   const soLeituraRef = useRef(soLeitura);
   soLeituraRef.current = soLeitura;
+
+  // área visível do clipe (D9, D12): vista (zoom, deslocamento: arrastar a vista não repinta), tamanho do palco,
+  // clipe, instante e modo de origem; a A é a da pintura
+  useEffect(() => {
+    const v = vivo.current;
+    const pub = useAreaVisivel.getState().publicar;
+    if (!clipe || !v.doc || caixa.w <= 0 || caixa.h <= 0) return pub(null, null);
+    const origemPx = v.info ? { w: v.info.exibido.w, h: v.info.exibido.h } : v.saida;
+    const A = modoOrigem ? aDaOrigem(clipe.efeitos, origemPx, v.saida) : aDe(efeitosNoInstante(v.doc, clipe.efeitos, mostra.t), mostra.t, origemPx, v.saida);
+    pub(clipe.id, areaVisivelNaOrigem(vista, caixa, v.saida, A));
+  }, [clipe, vista, caixa, mostra.t, modoOrigem, info]);
 
   // ---- elemento, relógio e busca ----
   useEffect(() => {
@@ -909,7 +982,10 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
     if (fase === "inicio") {
       // alça de lugar ou de centro mora no canvas e a do `ocultar`, no original: as outras, no espaço de origem
       const naOrigem = alcaNaOrigem(a) && vivo.current.efeitoSel?.efeito.tipo !== "ocultar";
-      if (!livre(naOrigem)) return;
+      // sobreposto: não depende do quadro da mídia (só para de tocar)
+      if (a.id.startsWith("livre:")) {
+        if (tocandoRef.current) parar();
+      } else if (!livre(naOrigem)) return;
       gestoRef.current = { g: useEdicaoStore.getState().iniciarGesto("Marcar") };
     }
     const g = gestoRef.current;
@@ -924,7 +1000,7 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       g.g.concluir();
       gestoRef.current = null;
     }
-  }, [livre]);
+  }, [livre, parar]);
 
   const onMarcar = useCallback(
     (v: Caixa | Ponto) => {
@@ -961,6 +1037,26 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
       onMarcado(r, em.t, em.pts);
     },
     [instante, onMarcado, livre],
+  );
+
+  /** Clique dentro da caixa de um texto livre do slot (o de cima primeiro): seleciona e arrasta pela alça "mover". */
+  const pegar = useCallback(
+    (p: Ponto): Alca | null => {
+      const v = vivo.current;
+      const q = slotDoCursor();
+      if (!v.doc || !v.linha || q === null || soLeituraRef.current || vivo.current.ferramenta) return null;
+      const itens = livresNoQuadro(v.doc, v.linha, q, fontes);
+      for (let i = itens.length - 1; i >= 0; i--) {
+        const l = itens[i]!;
+        if (!dentroDoTexto(l, v.saida, p)) continue;
+        const st = useEdicaoStore.getState();
+        const item = { k: "livre" as const, id: l.clipe.id, trilha: l.trilha };
+        if (st.selecao.foco?.k !== "livre" || st.selecao.foco.id !== l.clipe.id) st.selecionar({ itens: [item], foco: item, efeito: null });
+        return alcasDoLivre(v.doc, l, v.saida).find((a) => a.tipo === "mover") ?? null;
+      }
+      return null;
+    },
+    [fontes, slotDoCursor],
   );
 
   // ---- vista ----
@@ -1099,7 +1195,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
   const pixelado = m.w > saida.w;
 
   return (
-    <div className={styles.palco} data-palco="">
+    <div className={styles.palco} data-palco="" data-modo-palco="clipe">
+      <BarraDoPalco modo="clipe" nome={clipe?.rotulo ?? ""} clipe={!!clipe} />
       <div ref={caixaRef} className={styles.caixa} onWheel={onRoda} onPointerEnter={() => void (sobreRef.current = true)} onPointerLeave={() => void (sobreRef.current = false)} data-caixa="">
         <canvas
           ref={canvasRef}
@@ -1117,6 +1214,8 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
             vista={vista}
             img={img}
             contorno={contorno}
+            poligono={poligono}
+            pegar={pegar}
             ferramenta={soLeitura ? null : ferramenta}
             saida={saida}
             onArrasto={onArrasto}
@@ -1206,3 +1305,4 @@ export const Palco = forwardRef<PalcoApi, Props>(function Palco(props, ref) {
 
 export type { EstadoRender };
 export const _paraTeste = { primitivasProprias, rastreioDoEfeito, tamanhoDoCanvas, urlDaPrimitiva };
+export { rastreioDoEfeito, tamanhoDoCanvas, urlDaPrimitiva, tamanhoDaImagem };

@@ -47,6 +47,7 @@ import {
   novoTexto,
 } from "./novos";
 import { caixaNova } from "../palco/areaVisivel";
+import { tempoNoPrograma } from "../palco/motor/cursor";
 
 const st = () => useEdicaoStore.getState();
 type Mut = (d: Draft<ProjetoEdicao>) => void;
@@ -84,6 +85,10 @@ export function noEfeito<E extends Efeito = Efeito>(id: Id, f: (e: Draft<E>, d: 
 export function tempoNoClipe(c: ClipeQualquer): Seg {
   const cur = st().cursor;
   if (cur.modo === "clipe" && cur.clipe === c.id) return cur.t;
+  // P3.3: palco no modo "Programa" com o clipe no slot do cursor: o tempo dele nesse slot
+  const doc = st().doc;
+  const noPrograma = cur.modo === "programa" && doc ? tempoNoPrograma(doc, c.id, cur.q) : null;
+  if (noPrograma !== null) return noPrograma;
   return c.tipo === "trecho" ? c.inicio_s : c.tipo === "congelar" ? c.instante_s : 0;
 }
 

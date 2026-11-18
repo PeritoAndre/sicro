@@ -1,0 +1,257 @@
+// @vitest-environment happy-dom
+/**
+ * Editor inteiro com o palco no modo "Programa" (P3.3, D10): o modo segue o cursor; o seletor "Programa | Clipe"
+ * converte o cursor pela linha resolvida (ida e volta no mesmo quadro); tocar e pausar devolvem o cursor ao store;
+ * a ferramenta do Inspetor leva ao clipe dela; o Inspetor lê o tempo do clipe no slot; a área visível é publicada
+ * ao mudar a vista sem repintar, e nula sem clipe.
+ */
+
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Caixa, ClipeTrecho, MidiaInfo, MidiaRef, ProjetoAberto, TabelaQuadros } from "@domain/edicao";
+
+const cmd = vi.hoisted(() => ({
+  edicaoAbrir: vi.fn(),
+  edicaoSalvar: vi.fn(),
+  edicaoAnalisar: vi.fn(),
+  edicaoTabelaQuadros: vi.fn(),
+  edicaoMidiaInfo: vi.fn(),
+  edicaoFila: vi.fn(),
+  edicaoFundo: vi.fn(),
+  edicaoSaidas: vi.fn(),
+  edicaoSpriteTexto: vi.fn(),
+  edicaoAtlasCarimbo: vi.fn(),
+  edicaoQuadroFinal: vi.fn(),
+  edicaoEnfileirar: vi.fn(),
+  edicaoProxyPedir: vi.fn(),
+  edicaoOnda: vi.fn(),
+}));
+vi.mock("@core/commands", () => ({ commands: cmd }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) }));
+vi.mock("@tauri-apps/api/core", () => ({ convertFileSrc: (p: string) => `asset://${p}`, invoke: vi.fn() }));
+// a área visível de verdade é do pacote PE: aqui ela diz a vista que recebeu
+vi.mock("../areaVisivel", async (original) => {
+  const m = await original<typeof import("../areaVisivel")>();
+  return { ...m, areaVisivelNaOrigem: (v: { s: number; tx: number; ty: number }) => ({ x: v.tx + 0, y: v.ty + 0, w: 1 / v.s, h: 1 / v.s }) };
+});
+
+import { useEdicaoStore } from "../../store/edicaoStore";
+import { useDialogosAbertos } from "@components/Dialog/Dialog";
+import { EditorEdicao } from "../../EditorEdicao";
+import { novoProjeto, novoTrecho } from "../../modelo/projeto";
+import { tempoDoQuadro } from "../../modelo/tempo";
+import { garantirMidia, useRecursos } from "../recursos";
+import { useFundoStore } from "../../store/fundoStore";
+import { useAreaVisivel } from "../areaVisivel";
+import { meioDoQuadro } from "../faixa";
+import { tempoNoClipe } from "../../inspetor/acoes";
+import { useInspetorUi } from "../../inspetor/ui";
+import { botao, clicar, desmontarTudo, esperar, montar } from "../../inspetor/testeTela";
+import { PREVIA_VIVA_PRONTA } from "./motor";
+
+const WS = "/casos/prog";
+const SHA = "e".repeat(64);
+const st = () => useEdicaoStore.getState();
+const tab: TabelaQuadros = { tb: { num: 1, den: 15360 }, pts0: 0, passos: Array(299).fill(512), passo_mediano: 512, chaves: [0], vfr: false, origem: "decodificador" };
+const info: MidiaInfo = {
+  id: "v1", sha256: SHA, nome: "cam.mp4", exibido: { w: 640, h: 360 }, taxa: { num: 30, den: 1 }, vfr: false, passo: { min: 1 / 30, max: 1 / 30 },
+  de_s: 0, ate_s: 10, n: 300, tem_audio: true, previa: { relativo: "cam.mp4", tipo: "original", desloc_s: 0, de_s: 0, ate_s: 10, largura: 640, altura: 360, pronta: true },
+  tabela: "decodificador", erros: 0, marcavel: true, cor: { matriz: "bt709", faixa: "tv" },
+};
+const espera = (ms: number) => esperar(() => new Promise((r) => setTimeout(r, ms)));
+const tecla = (key: string, code: string) => act(async () => void window.dispatchEvent(new KeyboardEvent("keydown", { key, code, bubbles: true })));
+
+beforeEach(async () => {
+  for (const f of Object.values(cmd)) f.mockReset();
+  cmd.edicaoAnalisar.mockImplementation(() => new Promise(() => {}));
+  cmd.edicaoSalvar.mockImplementation(async () => ({ updated_at: new Date().toISOString() }));
+  for (const f of [cmd.edicaoTabelaQuadros, cmd.edicaoMidiaInfo, cmd.edicaoSpriteTexto, cmd.edicaoAtlasCarimbo, cmd.edicaoQuadroFinal, cmd.edicaoProxyPedir, cmd.edicaoOnda]) f.mockImplementation(() => new Promise(() => {}));
+  cmd.edicaoFila.mockResolvedValue([]);
+  cmd.edicaoFundo.mockResolvedValue([]);
+  cmd.edicaoSaidas.mockResolvedValue([]);
+  const p = novoProjeto();
+  p.midias = [{ id: "m", sha256: SHA, tipo: "video", nome: "cam.mp4", relativo: "cam.mp4", vfr: false, tem_audio: true, ocultacoes: [] } as unknown as MidiaRef];
+  // a: quadros 0..60; b: 100..160 (corte para outro ponto do mesmo arquivo)
+  p.principal = [
+    { ...novoTrecho("m", tempoDoQuadro(tab, 0), tempoDoQuadro(tab, 60)), id: "a", rotulo: "Cena 1", inicio_pts: 0, fim_pts: 60 * 512 } as ClipeTrecho,
+    { ...novoTrecho("m", tempoDoQuadro(tab, 100), tempoDoQuadro(tab, 160)), id: "b", rotulo: "Cena 2", inicio_pts: 100 * 512, fim_pts: 160 * 512 } as ClipeTrecho,
+  ];
+  cmd.edicaoAbrir.mockResolvedValue({ projeto: p, importado_de: null, so_leitura: false, avisos: [], raiz_cache: "/cache/prog" } satisfies ProjetoAberto);
+  await st().abrir(WS, p.id);
+  useDialogosAbertos.setState({ pilha: [] });
+  garantirMidia(WS, SHA);
+  useRecursos.setState((s) => ({ midias: { [SHA]: { info, tabela: tab, erro: null, pedindo: false } }, versao: s.versao + 1 }));
+});
+
+afterEach(async () => {
+  desmontarTudo();
+  vi.restoreAllMocks();
+  useFundoStore.setState({ tarefas: [] });
+  await st()
+    .fechar({ descartar: true })
+    .catch(() => {});
+});
+
+/** O happy-dom não carrega mídia: os elementos do pool com arquivo ficam com dados e cada busca pedida "chega". */
+async function chegar(raiz: HTMLElement) {
+  for (let vez = 0; vez < 3; vez++) {
+    for (const v of [...raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].filter((x) => !!x.src)) {
+      Object.defineProperty(v, "readyState", { value: 4, configurable: true });
+      await act(async () => void v.dispatchEvent(new Event("loadedmetadata")));
+      await act(async () => void v.dispatchEvent(new Event("seeked")));
+    }
+    await espera(40);
+  }
+}
+
+const modo = (raiz: HTMLElement) => raiz.querySelector("[data-modo-palco]")?.getAttribute("data-modo-palco");
+
+describe("palco no modo Programa", () => {
+  it("o projeto abre no programa; o pool fica dentro do palco; o nome é o do clipe sob o cursor", async () => {
+    expect(PREVIA_VIVA_PRONTA).toBe(true);
+    const t = await montar(<EditorEdicao ativo />);
+    await espera(20);
+    expect(modo(t.raiz)).toBe("programa");
+    expect(botao(t.raiz, "Programa").getAttribute("aria-pressed")).toBe("true");
+    const host = t.raiz.querySelector("[data-caixa] [data-pool-host]")!;
+    expect(host.querySelectorAll("video").length).toBeGreaterThanOrEqual(4);
+    expect(t.raiz.querySelector("[data-nome-clipe]")!.textContent).toBe("Cena 1");
+    await act(async () => st().posicionar({ modo: "programa", q: 75 }));
+    await espera(20);
+    expect(t.raiz.querySelector("[data-nome-clipe]")!.textContent).toBe("Cena 2");
+    // o transporte mostra o tempo do programa e o da fonte
+    expect(t.raiz.querySelector("[data-tempo-fonte]")!.textContent).toContain("quadro 115");
+  });
+
+  it("seletor: programa → clipe no meio do quadro do slot, e de volta ao mesmo slot", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 77 }));
+    await espera(20);
+    await clicar(botao(t.raiz, "Clipe"));
+    await espera(20);
+    expect(st().cursor).toEqual({ modo: "clipe", clipe: "b", t: meioDoQuadro(tab, 117) });
+    expect(st().selecao.foco).toEqual({ k: "clipe", id: "b" });
+    expect(modo(t.raiz)).toBe("clipe");
+    await clicar(botao(t.raiz, "Programa"));
+    await espera(20);
+    expect(st().cursor).toEqual({ modo: "programa", q: 77 });
+    expect(modo(t.raiz)).toBe("programa");
+  });
+
+  it("Espaço toca pelo elemento do clipe e, pausado, o cursor volta ao store no slot do relógio", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 10 }));
+    await espera(20);
+    const tocar = t.raiz.querySelector<HTMLButtonElement>('button[aria-label="Reproduzir"]')!;
+    await tecla(" ", "Space");
+    await chegar(t.raiz);
+    expect(tocar.getAttribute("aria-pressed")).toBe("true");
+    const tocando = [...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].filter((v) => !v.paused);
+    expect(tocando).toHaveLength(1);
+    expect(tocando[0]!.src).toContain("cam.mp4");
+    // o elemento que toca é o do quadro do slot (meio do quadro 10); o do clipe b fica parado na entrada dele
+    const parados = [...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].filter((v) => v.paused && !!v.src);
+    expect(parados.map((v) => v.currentTime)).toEqual([meioDoQuadro(tab, 100)]);
+    await tecla(" ", "Space");
+    await espera(30);
+    expect(tocar.getAttribute("aria-pressed")).toBe("false");
+    expect(st().cursor.modo).toBe("programa");
+    expect([...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].every((v) => v.paused)).toBe(true);
+  });
+
+  it("aberto com o cursor no meio do programa, toca dali (o plano chega ao relógio antes do cursor)", async () => {
+    await act(async () => st().posicionar({ modo: "programa", q: 75 }));
+    const t = await montar(<EditorEdicao ativo />);
+    await espera(20);
+    await tecla(" ", "Space");
+    await chegar(t.raiz);
+    const tocando = [...t.raiz.querySelectorAll<HTMLVideoElement>("[data-pool-host] video")].filter((v) => !v.paused);
+    expect(tocando.map((v) => v.currentTime)).toEqual([meioDoQuadro(tab, 115)]);
+    await tecla(" ", "Space");
+    await espera(30);
+    expect(st().cursor).toEqual({ modo: "programa", q: 75 });
+  });
+
+  // o `livres.ts` de verdade (dentroDoTexto, cantosDoTexto, alcasDoLivre) é do TL: na base é casca
+  it.skip("fecho do bloco 6.4: TL", async () => {
+    const getContext = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = (() => new Proxy({}, { get: () => () => undefined, set: () => true })) as unknown as typeof getContext;
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(450);
+    cmd.edicaoSpriteTexto.mockImplementation(async () => ({ relativo: "sprites/t.png", w: 400, h: 60 }));
+    const estilo = { fonte: "sans" as const, negrito: false, italico: false, tamanho: 0.052, cor: "#ffffff", alinhamento: "centro" as const, caixa: null, contorno: null };
+    await act(async () =>
+      st().alterar("Texto livre", (d) => {
+        d.saida.largura = 1600;
+        d.saida.altura = 900;
+        d.sobreposicoes = [{ id: "T1", nome: "", oculta: false, clipes: [{ tipo: "titulo", id: "s1", rotulo: "", pos: { ref: "programa", t: 0 }, duracao_s: 3, entrada_s: 0, saida_s: 0, efeitos: [],
+          transformacao: { x: 0.5, y: 0.5, escala: 1, rotacao: 0, opacidade: 1 },
+          titulo: { modelo: "livre", fundo: { tipo: "transparente" }, blocos: [{ id: "b", papel: "corpo", conteudo: "Placa", estilo, lugar: { x: 0.5, y: 0.5, h: "centro", v: "meio" }, largura_max: 0.3 }] } }] }];
+      }),
+    );
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 20 }));
+    await espera(60);
+    const camada = t.raiz.querySelector("[data-camada]")!;
+    const ponteiro = (tipo: string, x: number) => act(async () => void camada.dispatchEvent(new PointerEvent(tipo, { clientX: x, clientY: 225, bubbles: true, button: 0, pointerId: 1, isPrimary: true })));
+    await ponteiro("pointerdown", 400);
+    await ponteiro("pointermove", 480);
+    await ponteiro("pointerup", 480);
+    await espera(40);
+    expect(st().selecao.foco).toEqual({ k: "livre", id: "s1", trilha: "T1" });
+    expect(st().doc!.sobreposicoes[0]!.clipes[0]).toMatchObject({ transformacao: { x: 0.6 } });
+    expect(t.raiz.querySelector('[data-alca="livre:s1:giro"]')).toBeTruthy();
+    HTMLCanvasElement.prototype.getContext = getContext;
+  });
+
+  it("o Inspetor lê o tempo do clipe no slot do cursor (Começar/Terminar no cursor no modo Programa)", async () => {
+    await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 70 }));
+    const b = st().doc!.principal[1] as ClipeTrecho;
+    const a = st().doc!.principal[0] as ClipeTrecho;
+    expect(tempoNoClipe(b)).toBe(tempoDoQuadro(tab, 110));
+    // fora do slot: o começo, como antes
+    expect(tempoNoClipe(a)).toBe(a.inicio_s);
+  });
+
+  it("ferramenta do Inspetor ligada no programa: o palco vai ao clipe dela, no mesmo quadro", async () => {
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 64 }));
+    await act(async () => st().selecionar({ itens: [{ k: "clipe", id: "b" }], foco: { k: "clipe", id: "b" }, efeito: null }));
+    await espera(20);
+    await act(async () => useInspetorUi.getState().pedir({ tipo: "caixa" }, () => {}, "t"));
+    await espera(20);
+    expect(st().cursor).toEqual({ modo: "clipe", clipe: "b", t: meioDoQuadro(tab, 104) });
+    expect(modo(t.raiz)).toBe("clipe");
+    await act(async () => useInspetorUi.getState().cancelarMarcacao());
+  });
+
+  it("área visível: mudar a vista (sem repintar) publica de novo; sem clipe sob o cursor, nula", async () => {
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(450);
+    const pub = vi.spyOn(useAreaVisivel.getState(), "publicar");
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "programa", q: 5 }));
+    await espera(20);
+    const ultimo = () => pub.mock.calls.at(-1) as [string | null, Caixa | null];
+    expect(ultimo()).toEqual(["a", { x: 0, y: 0, w: 1, h: 1 }]);
+    const caixa = t.raiz.querySelector<HTMLElement>("[data-caixa]")!;
+    await act(async () => void caixa.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: 400, clientY: 225, bubbles: true })));
+    await espera(20);
+    expect(ultimo()[0]).toBe("a");
+    expect(ultimo()[1]!.w).toBeCloseTo(1 / 1.25, 9);
+    // no modo clipe também (o mesmo efeito do palco)
+    await clicar(botao(t.raiz, "Clipe"));
+    await espera(20);
+    const n = pub.mock.calls.length;
+    await act(async () => void t.raiz.querySelector<HTMLElement>("[data-caixa]")!.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, clientX: 400, clientY: 225, bubbles: true })));
+    await espera(20);
+    expect(pub.mock.calls.length).toBeGreaterThan(n);
+    expect(ultimo()[1]!.w).toBeCloseTo(1 / 1.25, 9);
+    // programa vazio: nada sob o cursor
+    await clicar(botao(t.raiz, "Programa"));
+    await act(async () => st().alterar("Remover", (d) => void (d.principal = [])));
+    await espera(20);
+    expect(ultimo()).toEqual([null, null]);
+  });
+});
