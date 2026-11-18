@@ -13,6 +13,15 @@
   height: 30px;
   width: 26px;
 }
+/* meia coluna a 1100 px com o ícone da rampa ao lado: "1,00" saía cortado */
+@media (max-width: 1280px) {
+  .constante {
+    gap: 2px;
+  }
+  .constante [data-campo="Velocidade"] > div > span:last-child > button {
+    width: 22px;
+  }
+}
 
 .rampa {
   display: flex;
