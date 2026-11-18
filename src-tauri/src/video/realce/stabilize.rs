@@ -120,6 +120,16 @@ fn texto(p: &Path) -> String {
     p.to_string_lossy().into_owned()
 }
 
+/// Filtro da 2ª passada (lê `movimento.trf` da pasta do processo). `optalgo=gauss` explícito: o vid.stab 1.4 (ffmpeg
+/// do instalador do Windows) tem o caminho L1 como padrão, outra imagem; no 1.1 (Linux) o padrão já caía no `gauss`.
+fn transformacao(suav: u32, borda: Borda) -> String {
+    let ajuste = match borda {
+        Borda::Cortar => "optzoom=1:zoom=0:crop=black",
+        Borda::Preencher => "optzoom=0:zoom=0:crop=keep",
+    };
+    format!("vidstabtransform=input=movimento.trf:smoothing={suav}:{ajuste}:optalgo=gauss:interpol=bicubic,unsharp=5:5:0.6:3:3:0.3")
+}
+
 /// Estabiliza `entrada` em `saida`. `progresso(fase, fração)`: fase 1 = análise, 2 = gravação.
 pub fn estabilizar(
     entrada: &Path,
@@ -149,12 +159,7 @@ pub fn estabilizar(
         ];
         comandos.push(format!("ffmpeg {}", a1.join(" ")));
         rodar(&a1, Some(tmp.0.as_path()), total_s, cancelar, &mut |f| progresso(1, f))?;
-        let ajuste = match op.borda {
-            Borda::Cortar => "optzoom=1:zoom=0:crop=black",
-            Borda::Preencher => "optzoom=0:zoom=0:crop=keep",
-        };
-        let vf = format!("vidstabtransform=input=movimento.trf:smoothing={suav}:{ajuste}:interpol=bicubic,unsharp=5:5:0.6:3:3:0.3");
-        let mut a2: Vec<String> = vec!["-i".into(), texto(entrada), "-map".into(), "0:v:0".into(), "-vf".into(), vf];
+        let mut a2: Vec<String> = vec!["-i".into(), texto(entrada), "-map".into(), "0:v:0".into(), "-vf".into(), transformacao(suav, op.borda)];
         a2.extend(CODEC.iter().map(|s| s.to_string()));
         a2.extend(audio);
         a2.extend(["-movflags".into(), "+faststart".into(), "-y".into(), texto(saida)]);
@@ -222,4 +227,50 @@ pub fn nome_unico(dir: &Path, base: &str, ext: &str) -> PathBuf {
         n += 1;
     }
     p
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod testes {
+    use super::*;
+
+    /// MD5 de cada quadro decodificado (`framemd5`), sem o cabeçalho.
+    fn quadros(ff: &Path, dir: &Path, args: &[&str]) -> Vec<String> {
+        let out = crate::tools::command(ff).current_dir(dir).args(["-hide_banner", "-nostdin", "-v", "error"]).args(args).args(["-f", "framemd5", "-"]).output().unwrap();
+        assert!(out.status.success(), "{}: {}", ff.display(), String::from_utf8_lossy(&out.stderr));
+        String::from_utf8_lossy(&out.stdout).lines().filter(|l| !l.starts_with('#')).filter_map(|l| l.rsplit(',').next()).map(|h| h.trim().to_string()).collect()
+    }
+
+    /// `optalgo=gauss` não muda nenhum quadro no Linux, nos dois ffmpeg e nas duas bordas; `avg` muda (a medida vê o
+    /// caminho da câmera).
+    #[test]
+    fn optalgo_gauss_nao_muda_os_quadros_no_linux() {
+        let exige = std::env::var("SICRO_EXIGE_FFMPEG").is_ok_and(|v| v == "1");
+        let binarios = [PathBuf::from("/usr/bin/ffmpeg"), Path::new(env!("CARGO_MANIFEST_DIR")).join("ffmpeg-linux/ffmpeg")];
+        for ff in &binarios {
+            if !ff.is_file() {
+                assert!(!exige, "SICRO_EXIGE_FFMPEG=1 e {} não existe", ff.display());
+                eprintln!("aviso: {} dispensado (não existe)", ff.display());
+                continue;
+            }
+            let tmp = PastaTemp::nova().unwrap();
+            let d = tmp.0.as_path();
+            // cena tremida: recorte que anda em seno sobre o testsrc2, sem perdas
+            let st = crate::tools::command(ff).current_dir(d)
+                .args(["-hide_banner", "-nostdin", "-v", "error", "-f", "lavfi", "-i", "testsrc2=size=320x240:rate=30:duration=3",
+                    "-vf", "crop=w=280:h=200:x='20+15*sin(n*1.3)':y='20+10*cos(n*1.7)'", "-c:v", "ffv1", "-y", "tremido.mkv"])
+                .status().unwrap();
+            assert!(st.success());
+            quadros(ff, d, &["-i", "tremido.mkv", "-vf", "vidstabdetect=shakiness=6:accuracy=15:result=movimento.trf"]);
+            for borda in [Borda::Cortar, Borda::Preencher] {
+                let com = transformacao(15, borda);
+                assert!(com.contains(":optalgo=gauss:"), "{com}");
+                let sem = com.replace(":optalgo=gauss", "");
+                let q = |vf: &str| quadros(ff, d, &["-i", "tremido.mkv", "-vf", vf]);
+                let (a, b) = (q(&com), q(&sem));
+                assert_eq!(a.len(), 90, "{}", ff.display());
+                assert_eq!(a, b, "{} {borda:?}: optalgo=gauss mudou quadros", ff.display());
+                assert_ne!(q(&com.replace(":optalgo=gauss", ":optalgo=avg")), a, "{} {borda:?}: avg deu os mesmos quadros", ff.display());
+            }
+        }
+    }
 }
