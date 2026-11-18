@@ -190,6 +190,28 @@ function OndaDaPista({ onda, de, ate, largura }: { onda: Onda; de: Seg; ate: Seg
   );
 }
 
+/** `HH:MM:SS,mmm`; as horas zeradas somem no palco estreito (CSS), o texto fica o mesmo. */
+function TextoTempo({ t }: { t: Seg }) {
+  const s = formatarTempo(t);
+  if (!s.startsWith("00:")) return <span data-dado="">{s}</span>;
+  return (
+    <span data-dado="">
+      <span className={styles.horas}>00:</span>
+      {s.slice(3)}
+    </span>
+  );
+}
+
+/** "quadro N"; no palco estreito, "#N" (CSS). */
+function Quadro({ n }: { n: number }) {
+  return (
+    <span className={styles.quadroNum}>
+      <span className={styles.palavraQuadro}>quadro </span>
+      {n}
+    </span>
+  );
+}
+
 function IconeEstado({ fiel }: { fiel: Fiel }) {
   if (fiel === "pedindo") return <Loader2 size={14} className={styles.gira} aria-hidden />;
   if (fiel !== "viva") return <Check size={14} aria-hidden />;
@@ -271,24 +293,26 @@ export function Transporte(p: TransporteProps) {
             <ChevronLast size={16} />
           </button>
         </div>
-        <span className={styles.tempo} data-tempo="">
-          <IconeBase size={13} aria-hidden className={styles.base} />
-          <span>{formatarTempo(p.cursor)}</span>
-          {p.quadro !== null && <span className={styles.quadroNum}>quadro {p.quadro}</span>}
-        </span>
-        {p.fonte && (
-          <span className={`${styles.tempo} ${styles.tempoFonte}`} data-tempo-fonte="">
-            <Film size={13} aria-hidden className={styles.base} />
-            <span>{formatarTempo(p.fonte.t)}</span>
-            {p.fonte.quadro !== null && <span className={styles.quadroNum}>quadro {p.fonte.quadro}</span>}
+        <span className={styles.tempos} data-dois={p.fonte ? "" : undefined}>
+          <span className={styles.tempo} data-tempo="">
+            <IconeBase size={13} aria-hidden className={styles.base} />
+            <TextoTempo t={p.cursor} />
+            {p.quadro !== null && <Quadro n={p.quadro} />}
           </span>
-        )}
+          {p.fonte && (
+            <span className={`${styles.tempo} ${styles.tempoFonte}`} data-tempo-fonte="">
+              <Film size={13} aria-hidden className={styles.base} />
+              <TextoTempo t={p.fonte.t} />
+              {p.fonte.quadro !== null && <Quadro n={p.fonte.quadro} />}
+            </span>
+          )}
+        </span>
         <div className={`${styles.grupo} ${styles.direita}`}>
-          <button type="button" className={`${styles.mini} ${p.fiel !== "viva" ? styles.ativo : ""}`} onClick={p.onQuadroFinal} disabled={p.desligado} title="Quadro final" data-acao="quadro-final">
+          <button type="button" className={`${styles.mini} ${p.fiel !== "viva" ? styles.ativo : ""}`} onClick={p.onQuadroFinal} disabled={p.desligado} title="Quadro final" aria-label="Quadro final" data-acao="quadro-final">
             <IconeEstado fiel={p.fiel} />
             <span className={styles.rotuloMini}>Quadro final</span>
           </button>
-          <button type="button" className={`${styles.mini} ${p.render === "pedindo" || p.render === "tocando" ? styles.ativo : ""}`} onClick={p.onPreviaRender} disabled={p.desligado} title="Prévia do render" data-acao="previa-render">
+          <button type="button" className={`${styles.mini} ${p.render === "pedindo" || p.render === "tocando" ? styles.ativo : ""}`} onClick={p.onPreviaRender} disabled={p.desligado} title="Prévia do render" aria-label="Prévia do render" data-acao="previa-render">
             {p.render === "pedindo" ? (
               <Loader2 size={14} className={styles.gira} aria-hidden />
             ) : p.render === "tocando" ? (

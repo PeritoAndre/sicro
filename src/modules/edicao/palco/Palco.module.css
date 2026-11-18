@@ -270,12 +270,19 @@
   pointer-events: none;
   z-index: 2;
 }
+/* uma linha só em qualquer largura (maquete): o palco estreito perde rótulos, não altura de imagem */
 .controles {
   display: flex;
   align-items: center;
   gap: var(--space-3);
   min-width: 0;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+}
+.tempos {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
 }
 .grupo {
   display: inline-flex;
@@ -354,10 +361,47 @@
 .falhou {
   color: var(--sicro-danger);
 }
-/* o grupo da direita desce para a segunda linha com os rótulos; só no palco muito estreito, só os ícones
-   (o rótulo segue no title) */
-@container palco (max-width: 340px) {
+/* palco estreito, por degraus: botões só com ícone (o rótulo fica no title); "quadro N" vira "#N"; sem as horas
+   zeradas, letra menor e os dois tempos do Programa um sobre o outro */
+@container palco (max-width: 899px) {
   .rotuloMini {
     display: none;
+  }
+  .mini {
+    padding: 0 6px;
+  }
+}
+@container palco (max-width: 699px) {
+  .palavraQuadro {
+    display: none;
+  }
+  .quadroNum::before {
+    content: "#";
+  }
+}
+@container palco (max-width: 559px) {
+  .controles,
+  .tempos {
+    gap: var(--space-2);
+  }
+  .grupo .icone {
+    width: 26px;
+  }
+  .horas {
+    display: none;
+  }
+  .tempo {
+    gap: 6px;
+    font-size: 12px;
+  }
+  .tempos[data-dois] {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+  }
+  .tempos[data-dois] .tempo {
+    gap: 4px;
+    font-size: 11px;
+    line-height: 13px;
   }
 }

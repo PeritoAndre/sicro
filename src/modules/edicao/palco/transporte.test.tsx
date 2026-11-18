@@ -17,6 +17,8 @@ import { useEdicaoStore } from "../store/edicaoStore";
 import { useFundoStore } from "../store/fundoStore";
 import { novoProjeto, novoTrecho } from "../modelo/projeto";
 import { desmontarTudo, esperar, lerFixture, montar } from "../inspetor/testeTela";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 const SHA = "a".repeat(64);
 
@@ -220,5 +222,25 @@ describe("Transporte com a onda", () => {
     await esperar();
     expect(cmd.edicaoOnda).toHaveBeenCalledTimes(1);
     expect(tracos(b.raiz)).toBe(100);
+  });
+});
+
+describe("Transporte numa linha (palco estreito)", () => {
+  afterEach(() => desmontarTudo());
+  const css = readFileSync(join(process.cwd(), "src/modules/edicao/palco/Palco.module.css"), "utf8");
+
+  it("controles sem quebra; botões só de ícone com o rótulo no aria-label; horas zeradas e \"quadro\" à parte (o texto fica o mesmo)", async () => {
+    cmd.edicaoOnda.mockResolvedValue(null);
+    const t = await montar(createElement(Transporte, props({ cursor: 4.016, quadro: 30, base: "programa", fonte: { t: 3725.5, quadro: 111765 }, pontas: "programa" })));
+    const controles = t.raiz.querySelector("[data-pista]")!.nextElementSibling as HTMLElement;
+    // a regra que deixava os botões descerem para uma segunda linha (a imagem perdia 40 px a 1366×768)
+    expect(css).toMatch(/\.controles\s*\{[^}]*flex-wrap:\s*nowrap/);
+    expect(css).toMatch(/@container palco \(max-width: 899px\)\s*\{\s*\.rotuloMini\s*\{\s*display:\s*none/);
+    for (const b of controles.querySelectorAll("button")) expect(b.getAttribute("aria-label"), b.outerHTML.slice(0, 80)).toBeTruthy();
+    // os dois tempos do Programa num bloco só (um sobre o outro no palco estreito)
+    const tempos = controles.querySelector("[data-dois]")!;
+    expect([...tempos.children].map((e) => e.textContent)).toEqual(["00:00:04,016quadro 30", "01:02:05,500quadro 111765"]);
+    expect([...tempos.querySelectorAll("span")].filter((e) => e.textContent === "00:").length).toBe(1);
+    expect([...tempos.querySelectorAll("span")].filter((e) => e.textContent === "quadro ").length).toBe(2);
   });
 });
