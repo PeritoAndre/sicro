@@ -9,7 +9,7 @@ import { useImmersive } from "@stores/immersiveStore";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { VideoTabs } from "./VideoTabs";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, Cctv, Clock, Columns2, Copy, Repeat, Scissors, Trash2, Wand2, X } from "lucide-react";
+import { ArrowLeft, Cctv, Clock, Columns2, Copy, Gauge, Repeat, Scissors, Trash2, Wand2, X } from "lucide-react";
 import type {
   ClipMode,
   ExportClipResult,
@@ -66,7 +66,8 @@ import styles from "./VideoAnalysisView.module.css";
 import { askConfirm } from "@components/Dialog/ask";
 import { useDialogosAbertos } from "@components/Dialog/Dialog";
 import { confirmarExclusaoVideo } from "../excluirVideo";
-import { EXT_GRAVADOR, copiaDeGravador, registrarVideo } from "../gravador";
+import { EXT_GRAVADOR, copiaDeGravador, ehCancelamento, registrarVideo } from "../gravador";
+import { ImportacaoGravador } from "../ImportacaoGravador";
 
 /** `visivel` falso: a Edição está na frente (§8.1). Fica montada, pausada e sem atalhos. */
 export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}) {
@@ -280,6 +281,8 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
       try {
         last = await registrarVideo(workspacePath, file);
       } catch (e) {
+        // Cancelar (gravador) para a leva inteira
+        if (ehCancelamento(e)) break;
         failed.push(`${file.split(/[\\/]/).pop()}: ${toSicroError(e).message}`);
       }
     }
@@ -931,6 +934,15 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
           <Cctv size={11} /> cópia de trabalho de <strong>{copiaDvr.origem.filename}</strong> (mesmos quadros)
           {copiaDvr.relogio && <> · relógio do gravador {copiaDvr.relogio}</>}
           {copiaDvr.lacunas > 0 && <> · {copiaDvr.lacunas === 1 ? "1 lacuna" : `${copiaDvr.lacunas} lacunas`}</>}
+          {copiaDvr.taxaSuposta && (
+            <span
+              title={`Taxa suposta: ${copiaDvr.taxaSuposta} quadros/s`}
+              data-taxa-suposta
+              style={{ display: "inline-flex", marginLeft: 4, color: "var(--sicro-warning)" }}
+            >
+              <Gauge size={11} aria-label={`Taxa suposta: ${copiaDvr.taxaSuposta} quadros/s`} />
+            </span>
+          )}
           {originalDvr && (
             <button
               type="button"
@@ -1305,6 +1317,7 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
         </aside>
       </div>
       )}
+      <ImportacaoGravador />
     </div>
   );
 }

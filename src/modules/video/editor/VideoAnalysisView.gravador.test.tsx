@@ -93,6 +93,40 @@ describe("cópia de trabalho de gravador aberta", () => {
     expect(aba(original.id)?.querySelector('[aria-label="cópia de trabalho"]')).toBeNull();
   });
 
+  it("fluxo cru sem temporização: ícone de taxa suposta na faixa (só title, sem frase); com a taxa do SPS, sem ícone", async () => {
+    expect(div.querySelector("[data-taxa-suposta]")).toBeNull();
+    const cru = (suposta: boolean) =>
+      midia("cam 2.mkv", {
+        id: `cru-${suposta}`,
+        sha256: "d".repeat(64),
+        derived_from_hash: SHA_O,
+        derivation_json: JSON.stringify({ kind: "copia_dvr", source: { sha256: SHA_O, filename: "cam 2.h265" }, taxa: suposta ? "25/1" : "15/1", taxa_suposta: suposta, lacunas: [] }),
+      });
+    const abre = (m: VideoMedia) => act(async () => useVideoStore.setState({ activeMediaId: m.id, list: [m, original], bundle: { media: m, events: [], storyboard: [] } as unknown as VideoBundle }));
+    await abre(cru(true));
+    const icone = div.querySelector<HTMLElement>("[data-copia-gravador] [data-taxa-suposta]");
+    expect(icone?.getAttribute("title")).toBe("Taxa suposta: 25 quadros/s");
+    expect(icone?.textContent).toBe("");
+    await abre(cru(false));
+    expect(div.querySelector("[data-copia-gravador]")).toBeTruthy();
+    expect(div.querySelector("[data-taxa-suposta]")).toBeNull();
+  });
+
+  it("importação de gravador em curso: o painel do avanço aparece na análise", async () => {
+    const { useImportacaoGravador } = await import("../gravador");
+    expect(div.querySelector("[data-importacao-gravador]")).toBeNull();
+    await act(async () => useImportacaoGravador.setState({ fase: "prova", fracao: 0.42 }));
+    const painel = div.querySelector<HTMLElement>("[data-importacao-gravador]");
+    expect(painel?.querySelector('[title="Prova"]')).toBeTruthy();
+    expect(painel?.querySelector('[role="progressbar"]')?.getAttribute("aria-valuenow")).toBe("42");
+    expect(painel?.textContent).toContain("42%");
+    // no registro não há Cancelar
+    await act(async () => useImportacaoGravador.setState({ fase: "registro", fracao: null }));
+    expect([...div.querySelectorAll("[data-importacao-gravador] button")].map((b) => b.textContent)).toEqual([]);
+    await act(async () => useImportacaoGravador.setState({ fase: null, fracao: null }));
+    expect(div.querySelector("[data-importacao-gravador]")).toBeNull();
+  });
+
   it("vídeo comum aberto: sem a faixa", async () => {
     await act(async () => useVideoStore.setState({ activeMediaId: original.id, bundle: { media: original, events: [], storyboard: [] } as unknown as VideoBundle }));
     expect(div.querySelector("[data-copia-gravador]")).toBeNull();

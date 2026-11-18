@@ -184,6 +184,10 @@ pub fn run() {
             // Fase 4 (P4.6): gravadores
             commands::video_dvr_commands::video_dvr_conferir,
             commands::video_dvr_commands::video_dvr_copia,
+            // P4.6b: importação com avanço e cancelar
+            commands::video_dvr_commands::video_dvr_preparar,
+            commands::video_dvr_commands::video_dvr_registrar,
+            commands::video_dvr_commands::video_dvr_cancelar,
             // Fase 2 (contratos-fase2.md): rastreio, conferência das ocultações e IA
             commands::edicao_rastreio_commands::edicao_rastreio_ler,
             commands::edicao_rastreio_commands::edicao_rastreio_seguir,

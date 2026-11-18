@@ -11,7 +11,8 @@ import type { ResumoProjeto } from "@domain/edicao";
 import { abrirEdicao, duplicarEdicao, excluirEdicao, fraseDoProblema, listarEdicoes, novaEdicao, resumoDaEdicao } from "@modules/edicao/central";
 import { separarErro } from "@modules/edicao/store/edicaoStore";
 import { confirmarExclusaoVideo } from "@modules/video/excluirVideo";
-import { EXT_GRAVADOR, copiaDeGravador, registrarVideo } from "@modules/video/gravador";
+import { EXT_GRAVADOR, copiaDeGravador, ehCancelamento, registrarVideo } from "@modules/video/gravador";
+import { ImportacaoGravador } from "@modules/video/ImportacaoGravador";
 import { commands } from "@core/commands";
 import { toSicroError } from "@core/errors";
 import { useShortcuts } from "@core/useShortcuts";
@@ -152,7 +153,7 @@ export function MidiaCentral() {
       mostrarEdicao(false);
       if (pathname !== "/video") navigate("/video");
     } catch (err) {
-      setError(toSicroError(err).message);
+      if (!ehCancelamento(err)) setError(toSicroError(err).message);
     } finally {
       setBusy(false);
     }
@@ -277,7 +278,9 @@ export function MidiaCentral() {
       carregando={loadingVideos || loadingAudios}
       busy={busy}
       erro={error}
-    />
+    >
+      <ImportacaoGravador />
+    </Central>
   );
 }
 

@@ -232,6 +232,20 @@ export interface LacunaPts {
   quadros: number;
 }
 
+/** P4.6b: cópia feita e provada à espera do registro do original (`video_dvr_preparar`). */
+export interface PreparoGravador {
+  chave: string;
+  formato: FormatoGravador;
+  /** A cópia deste arquivo já estava no caso: nada foi gravado. */
+  ja_existia: boolean;
+}
+
+/** P4.6b: evento "dvr-progress". `fracao` 0–1; null = sem como medir. */
+export interface AvancoGravador {
+  fase: "copia" | "prova";
+  fracao: number | null;
+}
+
 /** Cópia de trabalho registrada no caso (mídia derivada do original). */
 export interface CopiaGravador {
   media: VideoMedia;

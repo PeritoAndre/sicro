@@ -76,6 +76,11 @@ function derivacao(m: VideoMedia, lista: VideoMedia[]): Derivacao | null {
   const sem_perdas = tipo === "copia_dvr" || (tipo === "trecho" && j.mode === "copy");
   const d: Derivacao = { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas: !sem_perdas };
   if (tipo === "copia_dvr" && typeof j.inicio_epoca_s === "number" && Number.isFinite(j.inicio_epoca_s)) d.inicio_epoca_s = j.inicio_epoca_s;
+  // P4.6b: fluxo cru sem temporização no SPS, a taxa que a cópia supôs ("25/1"); espelho de `importar_v1::derivacao`
+  if (tipo === "copia_dvr" && j.taxa_suposta === true && typeof j.taxa === "string") {
+    const [num, den] = j.taxa.split("/").map((x) => Number(x.trim()));
+    if (Number.isInteger(num) && Number.isInteger(den) && num! > 0 && den! > 0) d.taxa_suposta = { num: num!, den: den! };
+  }
   return d;
 }
 

@@ -834,6 +834,12 @@ pub(crate) fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Deri
     };
     let com_perdas = !(tipo == TipoDerivacao::CopiaDvr || (tipo == TipoDerivacao::Trecho && j["mode"].as_str() == Some("copy")));
     let inicio_epoca_s = j["inicio_epoca_s"].as_f64().filter(|s| tipo == TipoDerivacao::CopiaDvr && s.is_finite());
+    // P4.6b: fluxo cru sem temporização no SPS, a taxa que a cópia supôs ("taxa": "25/1")
+    let taxa_suposta = (tipo == TipoDerivacao::CopiaDvr && j["taxa_suposta"] == Value::Bool(true))
+        .then(|| j["taxa"].as_str()?.split_once('/'))
+        .flatten()
+        .and_then(|(n, d)| Some(Racional { num: n.trim().parse().ok()?, den: d.trim().parse().ok()? }))
+        .filter(|r| r.num > 0 && r.den > 0);
     let comando = ["ffmpeg_command", "comando", "comandos"]
         .iter()
         .find_map(|k| match &j[*k] {
@@ -858,7 +864,7 @@ pub(crate) fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Deri
             None => break,
         }
     }
-    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas, inicio_epoca_s }))
+    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas, inicio_epoca_s, taxa_suposta }))
 }
 
 #[cfg(test)]
@@ -1406,7 +1412,7 @@ mod testes {
         assert_eq!(m.recebido, Recebido { nativo: Some(true), obs: "do DVR".into() });
         assert_eq!((m.relogio_desvio_s, m.gravador.as_deref()), (Some(-2.5), Some("DVR 1")));
         assert_eq!(m.derivacao, Some(Derivacao { tipo: TipoDerivacao::Trecho, de_sha256: meio.clone(), raiz_sha256: raiz.clone(),
-                                                 comando: "ffmpeg -ss 1 -c copy".into(), com_perdas: false, inicio_epoca_s: None }));
+                                                 comando: "ffmpeg -ss 1 -c copy".into(), com_perdas: false, inicio_epoca_s: None, taxa_suposta: None }));
         // tamanho exibido (vertical) entra no zoom: h = w × (1080/1920) ÷ (16/9)
         let ClipePrincipal::Trecho(t) = clipes(&p)[0] else { panic!() };
         assert_eq!((t.inicio_pts, t.fim_pts), (None, None), "sem tabela de quadros aqui");

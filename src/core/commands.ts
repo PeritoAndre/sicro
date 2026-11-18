@@ -40,6 +40,7 @@ import type {
   SetVideoClockInput,
   UpdateVideoEventInput,
   FormatoGravador,
+  PreparoGravador,
   VideoBundle,
   VideoClockCalibration,
   VideoEvent,
@@ -1604,6 +1605,22 @@ export const commands = {
   /** Cópia de trabalho (MKV, mesma lista framemd5) do vídeo de gravador já registrado; a que já existe volta igual. */
   videoDvrCopia(workspacePath: string, mediaId: string): Promise<CopiaGravador> {
     return safeInvoke<CopiaGravador>("video_dvr_copia", { workspacePath, mediaId });
+  },
+
+  /** P4.6b: cópia de trabalho do arquivo escolhido, provada antes de o original entrar no caso (avanço no evento
+   *  "dvr-progress"); cancelada, erro "cancelado" e nada no caso. */
+  videoDvrPreparar(workspacePath: string, sourcePath: string): Promise<PreparoGravador> {
+    return safeInvoke<PreparoGravador>("video_dvr_preparar", { workspacePath, sourcePath });
+  },
+
+  /** P4.6b: registra a cópia preparada para o original já registrado. */
+  videoDvrRegistrar(workspacePath: string, mediaId: string, chave: string): Promise<CopiaGravador> {
+    return safeInvoke<CopiaGravador>("video_dvr_registrar", { workspacePath, mediaId, chave });
+  },
+
+  /** P4.6b: cancela a cópia em curso. */
+  videoDvrCancelar(): Promise<void> {
+    return safeInvoke<void>("video_dvr_cancelar", {});
   },
 
   // --- Fase 2 (contratos-fase2.md): rastreio e conferência das ocultações (`edicao_rastreio_commands.rs`) ---

@@ -17,6 +17,9 @@ const cmd = vi.hoisted(() => ({
   edicaoListar: vi.fn(),
   videoDvrConferir: vi.fn(),
   videoDvrCopia: vi.fn(),
+  videoDvrPreparar: vi.fn(),
+  videoDvrRegistrar: vi.fn(),
+  videoDvrCancelar: vi.fn(),
   registerVideoMedia: vi.fn(),
   openVideoMedia: vi.fn(),
 }));
@@ -84,13 +87,15 @@ describe("Central: vídeo de gravador", () => {
   it("o diálogo aceita as extensões de gravador; o .dav entra com a cópia de trabalho, que abre", async () => {
     dialogo.open.mockResolvedValue("/ext/cam 1.dav");
     cmd.videoDvrConferir.mockResolvedValue("dahua");
-    cmd.videoDvrCopia.mockResolvedValue({ media: copia, formato: "dahua", lacunas: [], inicio_epoca_s: 1505762699, ja_existia: false });
+    cmd.videoDvrPreparar.mockResolvedValue({ chave: "k1", formato: "dahua", ja_existia: false });
+    cmd.videoDvrRegistrar.mockResolvedValue({ media: copia, formato: "dahua", lacunas: [], inicio_epoca_s: 1505762699, ja_existia: false });
     await act(async () => lamina().click());
     await fila();
     const filtros = (dialogo.open.mock.calls[0]![0] as { filters: { extensions: string[] }[] }).filters[0]!.extensions;
     for (const x of ["mp4", "avi", "dav", "ifv", "lvf", "264", "h264", "265", "hevc"]) expect(filtros).toContain(x);
     expect(cmd.registerVideoMedia).toHaveBeenCalledWith(WS, { source_path: "/ext/cam 1.dav" });
-    expect(cmd.videoDvrCopia).toHaveBeenCalledWith(WS, original.id);
+    expect(cmd.videoDvrPreparar).toHaveBeenCalledWith(WS, "/ext/cam 1.dav");
+    expect(cmd.videoDvrRegistrar).toHaveBeenCalledWith(WS, original.id, "k1");
     expect(cmd.openVideoMedia).toHaveBeenCalledWith(WS, copia.id);
     expect(useVideoStore.getState().activeMediaId).toBe(copia.id);
     expect(document.querySelector("p")?.textContent ?? "").not.toMatch(/gravador|cópia/i);
@@ -114,6 +119,32 @@ describe("Central: vídeo de gravador", () => {
     expect(cmd.openVideoMedia).not.toHaveBeenCalled();
   });
 
+  it("durante a cópia: fase por ícone com title, barra e Cancelar; cancelada, nada registrado, aberto nem dito", async () => {
+    dialogo.open.mockResolvedValue("/ext/cam 1.dav");
+    cmd.videoDvrConferir.mockResolvedValue("dahua");
+    let recusar!: (e: unknown) => void;
+    cmd.videoDvrPreparar.mockImplementation(() => new Promise((_, r) => (recusar = r)));
+    cmd.videoDvrCancelar.mockImplementation(async () => recusar({ kind: "validation", message: "cancelado" }));
+    await act(async () => lamina().click());
+    await fila();
+    const painel = document.querySelector<HTMLElement>("[data-importacao-gravador]")!;
+    expect(painel.dataset.importacaoGravador).toBe("copia");
+    expect(painel.querySelector('[title="Cópia"]')).toBeTruthy();
+    expect(painel.querySelector('[role="progressbar"]')).toBeTruthy();
+    // nenhuma frase no painel: só a porcentagem (vazia sem medida) e o botão
+    expect((painel.textContent ?? "").trim()).toBe("Cancelar");
+    expect(lamina().disabled).toBe(true);
+    const cancelar = [...painel.querySelectorAll("button")].find((b) => b.textContent === "Cancelar")!;
+    await act(async () => cancelar.click());
+    await fila();
+    expect(cmd.videoDvrCancelar).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-importacao-gravador]")).toBeNull();
+    expect(cmd.registerVideoMedia).not.toHaveBeenCalled();
+    expect(cmd.openVideoMedia).not.toHaveBeenCalled();
+    expect([...document.querySelectorAll("p")].map((p) => p.textContent).join("")).not.toMatch(/cancel/i);
+    expect(lamina().disabled).toBe(false);
+  });
+
   it("vídeo comum: registra e abre o próprio, sem cópia", async () => {
     const mp4 = midia("cena.mp4");
     dialogo.open.mockResolvedValue("/ext/cena.mp4");
@@ -122,7 +153,7 @@ describe("Central: vídeo de gravador", () => {
     cmd.openVideoMedia.mockResolvedValue({ media: mp4, events: [], storyboard: [], exports: [] });
     await act(async () => lamina().click());
     await fila();
-    expect(cmd.videoDvrCopia).not.toHaveBeenCalled();
+    expect(cmd.videoDvrPreparar).not.toHaveBeenCalled();
     expect(cmd.openVideoMedia).toHaveBeenCalledWith(WS, mp4.id);
   });
 });

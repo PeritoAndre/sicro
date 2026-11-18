@@ -91,7 +91,10 @@ export interface Derivacao { tipo: "trecho" | "estabilizado" | "lente" | "copia_
                              de_sha256: string; raiz_sha256: string; comando: string; com_perdas: boolean;
                              // CONTRATO: acréscimo (P4.6). start_time do original quando é data do relógio do gravador
                              // (s desde 1970); a cópia de trabalho começa em zero. Ausente = não há.
-                             inicio_epoca_s?: number }
+                             inicio_epoca_s?: number;
+                             // CONTRATO: acréscimo (P4.6b). Fluxo cru sem temporização no SPS: a taxa que a cópia supôs
+                             // (a padrão do demuxer, 25). Ausente = não supôs.
+                             taxa_suposta?: Racional }
 
 // ---- posição de clipe livre ----
 export type Posicao =

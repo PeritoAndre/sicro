@@ -158,6 +158,7 @@ pub(crate) mod apoio {
                 comando: format!("ffmpeg -i {caso}/Mídias/orig.dav -c copy /mnt/dvr 1/out.mp4"),
                 com_perdas: false,
                 inicio_epoca_s: None,
+                taxa_suposta: None,
             }),
             recebido: Recebido { nativo: Some(false), obs: "veio por pendrive".into() },
             relogio_desvio_s: Some(-2.5),

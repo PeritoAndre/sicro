@@ -1,0 +1,75 @@
+.painel {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 9200;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(380px, calc(100vw - 32px));
+  box-sizing: border-box;
+  padding: 8px 10px;
+  background: var(--sicro-surface-1);
+  border: 1px solid var(--sicro-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+  color: var(--sicro-fg);
+  font-size: 12px;
+}
+
+.fase {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--sicro-accent);
+}
+
+.barra {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-full);
+  background: var(--sicro-surface-3);
+}
+
+.cheio {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--sicro-accent);
+  transition: width 0.2s linear;
+}
+
+/* sem como medir: um trecho que corre */
+.barra[data-indefinida] .cheio {
+  position: absolute;
+  width: 30%;
+  animation: corre 1.2s ease-in-out infinite;
+}
+
+@keyframes corre {
+  from {
+    left: -30%;
+  }
+  to {
+    left: 100%;
+  }
+}
+
+.pct {
+  flex-shrink: 0;
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--sicro-fg-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .barra[data-indefinida] .cheio {
+    animation: none;
+    left: 0;
+    width: 100%;
+    opacity: 0.4;
+  }
+}

@@ -394,6 +394,10 @@ pub struct Derivacao {
     /// de trabalho começa em zero.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub inicio_epoca_s: Option<f64>,
+    // CONTRATO: acréscimo (P4.6b); espelho em `types/edicao.ts`. Ausente no fio = None (retrato antigo lê igual).
+    /// Cópia de gravador de fluxo cru sem temporização no SPS: a taxa que a cópia supôs (a padrão do demuxer, 25).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub taxa_suposta: Option<Racional>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]

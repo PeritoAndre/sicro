@@ -3,11 +3,17 @@
 //! igual à do original (vídeo e áudio), tempos no mesmo passo e o som no mesmo lugar em relação à imagem. O original
 //! fica como chegou; a cópia entra no caso como mídia derivada (`derivation_json.kind = "copia_dvr"`), com o
 //! `start_time` do original e as lacunas de pts.
+//!
+//! Importação (P4.6b): `preparar` faz e prova a cópia a partir do arquivo escolhido, com avanço (`Fase`, fração pelo
+//! pts lido) e cancelamento, antes de o original entrar no caso; `registrar_pendente` registra a cópia depois que o
+//! original foi registrado. Cancelada, nada fica no caso.
 
 use std::fs::File;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::Mutex;
+use std::time::Duration;
 
 use chrono::Utc;
 use rusqlite::Connection;
@@ -274,35 +280,45 @@ fn ffprobe_json(cap: &Capacidades, t: &Trabalho, nome: &str, args: Vec<String>) 
     Ok(serde_json::from_slice(&out)?)
 }
 
-/// `format.start_time` do original (s); None se o contêiner não tem.
-fn inicio_do_conteiner(cap: &Capacidades, t: &Trabalho, video: &Path) -> Result<Option<f64>> {
-    let j = ffprobe_json(cap, t, "inicio", textos(&["-v", "error", "-show_entries", "format=start_time", "-of", "json", &video.to_string_lossy()]))?;
-    Ok(numero(&j["format"]["start_time"]))
+/// `format.start_time` e `format.duration` (s); None no que o contêiner não traz.
+fn inicio_e_duracao(cap: &Capacidades, t: &Trabalho, video: &Path) -> Result<(Option<f64>, Option<f64>)> {
+    let j = ffprobe_json(cap, t, "inicio", textos(&["-v", "error", "-show_entries", "format=start_time,duration", "-of", "json", &video.to_string_lossy()]))?;
+    Ok((numero(&j["format"]["start_time"]), numero(&j["format"]["duration"]).filter(|d| *d > 0.0)))
 }
 
-/// Taxa do fluxo cru pela duração que o analisador dá ao primeiro pacote (sai do SPS quando ele traz a temporização;
-/// sem ela, a padrão do demuxer, 25). Fora de 1 a 240 qps: 25.
-fn taxa_do_fluxo(cap: &Capacidades, t: &Trabalho, video: &Path, f: Formato) -> Result<Racional> {
+/// Taxa padrão do demuxer de fluxo cru (`-framerate`), a que vale quando o SPS não traz temporização.
+const TAXA_PADRAO: Racional = Racional { num: 25, den: 1 };
+
+/// Taxa do fluxo cru pela duração que o analisador dá ao primeiro pacote com `-framerate` posto. Medida com duas taxas
+/// postas: a temporização do SPS vence o `-framerate`; sem ela, a duração segue o que foi posto (25 ≠ 7) e a taxa é
+/// suposta (a padrão, 25). Fora de 1 a 240 qps: 25, suposta. Volta (taxa, suposta).
+fn taxa_do_fluxo(cap: &Capacidades, t: &Trabalho, video: &Path, f: Formato) -> Result<(Racional, bool)> {
     let demuxer = f.demuxer().unwrap_or("h264");
-    let j = ffprobe_json(
-        cap,
-        t,
-        "taxa",
-        textos(&[
-            "-v", "error", "-f", demuxer, "-select_streams", "v:0", "-show_entries", "stream=time_base:packet=duration", "-read_intervals", "%+#2",
-            "-of", "json", &video.to_string_lossy(),
-        ]),
-    )?;
-    let tb = j["streams"][0]["time_base"].as_str().and_then(fracao);
-    let dur = j["packets"].as_array().and_then(|p| p.iter().find_map(|x| numero(&x["duration"]))).filter(|d| *d >= 1.0).map(|d| d as i64);
-    let taxa = match (tb, dur) {
-        (Some(tb), Some(d)) => {
-            let (num, den) = (tb.den, tb.num.saturating_mul(d));
-            Some(Racional { num: num / mdc(num, den), den: den / mdc(num, den) })
-        }
-        _ => None,
+    let medir = |posta: &str| -> Result<Option<Racional>> {
+        let j = ffprobe_json(
+            cap,
+            t,
+            "taxa",
+            textos(&[
+                "-v", "error", "-framerate", posta, "-f", demuxer, "-select_streams", "v:0", "-show_entries", "stream=time_base:packet=duration",
+                "-read_intervals", "%+#2", "-of", "json", &video.to_string_lossy(),
+            ]),
+        )?;
+        let tb = j["streams"][0]["time_base"].as_str().and_then(fracao);
+        let dur = j["packets"].as_array().and_then(|p| p.iter().find_map(|x| numero(&x["duration"]))).filter(|d| *d >= 1.0).map(|d| d as i64);
+        Ok(match (tb, dur) {
+            (Some(tb), Some(d)) => {
+                let (num, den) = (tb.den, tb.num.saturating_mul(d));
+                Some(Racional { num: num / mdc(num, den), den: den / mdc(num, den) })
+            }
+            _ => None,
+        })
     };
-    Ok(taxa.filter(|r| r.num >= r.den && r.num <= 240 * r.den).unwrap_or(Racional { num: 25, den: 1 }))
+    let (a, b) = (medir("25/1")?, medir("7/1")?);
+    match a.filter(|r| r.num >= r.den && r.num <= 240 * r.den) {
+        Some(r) if a == b => Ok((r, false)),
+        _ => Ok((TAXA_PADRAO, true)),
+    }
 }
 
 /// Opções de entrada (antes do `-i`): fluxo cru vai pelo demuxer com a taxa posta.
@@ -310,6 +326,155 @@ fn entrada(f: Formato, taxa: Option<Racional>) -> Vec<String> {
     match (f.cru(), taxa) {
         (true, Some(r)) => vec!["-framerate".into(), format!("{}/{}", r.num, r.den), "-f".into(), f.demuxer().unwrap_or("h264").into()],
         _ => Vec::new(),
+    }
+}
+
+// ---------------------------------------------------------------- avanço
+
+/// Fase da cópia que a tela mostra.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum Fase {
+    /// Gravando o MKV (remux; FFV1 no fluxo cru com quadros B).
+    Copia,
+    /// Decodificando original e cópia para as listas `framemd5`.
+    Prova,
+}
+
+/// Recebe a fase e a fração feita (0 a 1; None = sem como medir).
+pub type AoAvanco<'a> = &'a (dyn Fn(Fase, Option<f64>) + Sync);
+
+/// Intervalo do relator: avanço e repasse do pedido de cancelamento aos processos.
+const RELATOR: Duration = Duration::from_millis(50);
+/// Menor mudança de fração que vai para a tela.
+const PASSO_AVANCO: f64 = 0.005;
+
+/// f64 ≥ 0 num átomo; nos não negativos a ordem dos bits é a dos números (`fetch_max`).
+struct Numero(AtomicU64);
+
+impl Numero {
+    fn novo() -> Self {
+        Numero(AtomicU64::new(0))
+    }
+
+    fn ler(&self) -> f64 {
+        f64::from_bits(self.0.load(Ordering::Relaxed))
+    }
+
+    fn por(&self, x: f64) {
+        self.0.store(if x.is_finite() && x > 0.0 { x } else { 0.0 }.to_bits(), Ordering::Relaxed);
+    }
+
+    fn subir(&self, x: f64) {
+        if x.is_finite() && x > 0.0 {
+            self.0.fetch_max(x.to_bits(), Ordering::Relaxed);
+        }
+    }
+}
+
+/// O que o relator lê enquanto a cópia anda.
+struct Andamento {
+    prova: AtomicBool,
+    /// Fração da gravação; `copia_medida` false = sem como medir.
+    copia: Numero,
+    copia_medida: AtomicBool,
+    /// Duração da cópia gravada (s); 0 = ainda não se sabe.
+    duracao: Numero,
+    /// Vídeo já decodificado (s), do original e da cópia.
+    original: Numero,
+    lida: Numero,
+    /// O que os processos olham: o pedido de quem chamou (repassado pelo relator) ou a falha de um dos lados.
+    parar: AtomicBool,
+    fim: AtomicBool,
+}
+
+impl Andamento {
+    fn novo() -> Self {
+        Andamento {
+            prova: AtomicBool::new(false),
+            copia: Numero::novo(),
+            copia_medida: AtomicBool::new(false),
+            duracao: Numero::novo(),
+            original: Numero::novo(),
+            lida: Numero::novo(),
+            parar: AtomicBool::new(false),
+            fim: AtomicBool::new(false),
+        }
+    }
+
+    fn agora(&self) -> (Fase, Option<f64>) {
+        if self.prova.load(Ordering::SeqCst) {
+            (Fase::Prova, fracao_da_prova(self.original.ler(), self.lida.ler(), self.duracao.ler()))
+        } else {
+            (Fase::Copia, self.copia_medida.load(Ordering::SeqCst).then(|| self.copia.ler().min(1.0)))
+        }
+    }
+}
+
+/// Fração da prova: o lado mais atrasado (original ou cópia) sobre a duração da cópia.
+fn fracao_da_prova(original_s: f64, copia_s: f64, duracao_s: f64) -> Option<f64> {
+    (duracao_s > 0.0).then(|| (original_s.min(copia_s) / duracao_s).clamp(0.0, 1.0))
+}
+
+/// Laço do relator até o fim do trabalho: repassa o cancelamento e manda o avanço quando muda.
+fn relatar(a: &Andamento, cancelar: &AtomicBool, avanco: AoAvanco) {
+    let mut ultimo: Option<(Fase, Option<f64>)> = None;
+    loop {
+        if cancelar.load(Ordering::SeqCst) {
+            a.parar.store(true, Ordering::SeqCst);
+        }
+        let fim = a.fim.load(Ordering::SeqCst);
+        let atual = a.agora();
+        let mudou = match ultimo {
+            None => true,
+            Some((f, x)) => {
+                f != atual.0
+                    || match (x, atual.1) {
+                        (Some(x), Some(y)) => (y - x).abs() >= PASSO_AVANCO,
+                        (x, y) => x.is_some() != y.is_some(),
+                    }
+            }
+        };
+        if mudou && !a.parar.load(Ordering::SeqCst) {
+            avanco(atual.0, atual.1);
+            ultimo = Some(atual);
+        }
+        if fim {
+            return;
+        }
+        std::thread::park_timeout(RELATOR);
+    }
+}
+
+/// Marca o fim ao sair, inclusive em pânico, e acorda a thread que espera por ele.
+struct AoSair<'a>(&'a AtomicBool, std::thread::Thread);
+
+impl Drop for AoSair<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+        self.1.unpark();
+    }
+}
+
+fn cancelado() -> SicroError {
+    SicroError::Validation("cancelado".into())
+}
+
+/// SHA-256 em blocos, parando quando `parar` vira true (o arquivo de um gravador passa de gigabytes).
+fn sha256_parando(caminho: &Path, parar: &AtomicBool) -> Result<String> {
+    let mut f = File::open(caminho).map_err(|e| SicroError::Filesystem(format!("{}: {e}", caminho.display())))?;
+    let mut h = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        if parar.load(Ordering::Relaxed) {
+            return Err(cancelado());
+        }
+        match f.read(&mut buf) {
+            Ok(0) => return Ok(format!("{:x}", h.finalize())),
+            Ok(n) => h.update(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(SicroError::Filesystem(format!("{}: {e}", caminho.display()))),
+        }
     }
 }
 
@@ -334,7 +499,8 @@ pub struct Lista {
 }
 
 /// Leitura em fluxo das linhas do `framemd5` (o arquivo de um dia de gravação não cabe inteiro na memória como texto).
-struct Leitor {
+/// `lido` recebe o trecho de vídeo já decodificado, em s (maior pts − primeiro): é o avanço da prova.
+struct Leitor<'a> {
     h: [Sha256; 2],
     n: [u64; 2],
     tb: Option<Racional>,
@@ -343,11 +509,24 @@ struct Leitor {
     pts_ok: bool,
     audio_pts0: Option<i64>,
     resto: Vec<u8>,
+    pts0: Option<i64>,
+    lido: Option<&'a Numero>,
 }
 
-impl Leitor {
-    fn novo() -> Self {
-        Leitor { h: [Sha256::new(), Sha256::new()], n: [0, 0], tb: None, tb_audio: None, pts: Vec::new(), pts_ok: true, audio_pts0: None, resto: Vec::new() }
+impl<'a> Leitor<'a> {
+    fn novo(lido: Option<&'a Numero>) -> Self {
+        Leitor {
+            h: [Sha256::new(), Sha256::new()],
+            n: [0, 0],
+            tb: None,
+            tb_audio: None,
+            pts: Vec::new(),
+            pts_ok: true,
+            audio_pts0: None,
+            resto: Vec::new(),
+            pts0: None,
+            lido,
+        }
     }
 
     fn pedaco(&mut self, b: &[u8]) -> Result<()> {
@@ -391,7 +570,13 @@ impl Leitor {
                 return Err(SicroError::Validation(codigo::TABELA_GRANDE.into()));
             }
             match pts.parse::<i64>() {
-                Ok(p) => self.pts.push(p),
+                Ok(p) => {
+                    self.pts.push(p);
+                    let p0 = *self.pts0.get_or_insert(p);
+                    if let (Some(l), Some(tb)) = (self.lido, self.tb) {
+                        l.subir((p - p0) as f64 * tb.num as f64 / tb.den as f64);
+                    }
+                }
                 Err(_) => self.pts_ok = false,
             }
         }
@@ -432,8 +617,13 @@ fn tem_audio(cap: &Capacidades, t: &Trabalho, video: &Path, entrada: &[String]) 
 /// Lista `framemd5` decodificando em uma thread (o decodificador com várias threads entrega outros quadros em fluxo
 /// danificado: LVF truncado), pts sem arredondar (`-enc_time_base demux`), `-copyts`. Áudio que não decodifica: só o vídeo.
 pub fn lista_framemd5(cap: &Capacidades, video: &Path, entrada: &[String], cancelar: &AtomicBool) -> Result<Lista> {
+    let audio = tem_audio(cap, &Trabalho::nova()?, video, entrada)?;
+    lista(cap, video, entrada, audio, cancelar, None)
+}
+
+/// `lista_framemd5` com o áudio já sondado e o avanço em `lido` (s de vídeo decodificados).
+fn lista(cap: &Capacidades, video: &Path, entrada: &[String], audio: bool, cancelar: &AtomicBool, lido: Option<&Numero>) -> Result<Lista> {
     let t = Trabalho::nova()?;
-    let audio = tem_audio(cap, &t, video, entrada)?;
     let rodar = |com_audio: bool| -> Result<Option<Lista>> {
         let mut a = textos(&["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-threads", "1"]);
         a.extend(entrada.iter().cloned());
@@ -443,7 +633,7 @@ pub fn lista_framemd5(cap: &Capacidades, video: &Path, entrada: &[String], cance
         }
         a.extend(textos(&["-fps_mode", "passthrough", "-enc_time_base", "demux", "-f", "framemd5", "-"]));
         let cmd = t.comando(if com_audio { "framemd5-va" } else { "framemd5-v" }, &cap.binario, a);
-        let mut leitor = Leitor::novo();
+        let mut leitor = Leitor::novo(lido);
         let mut falha = None;
         let fim = exec::rodar_com_fluxo(&cmd, cancelar, &mut |b| match leitor.pedaco(b) {
             Ok(()) => Ok(true),
@@ -567,6 +757,8 @@ pub struct Copia {
     pub recodificado: bool,
     /// Fluxo cru: a taxa posta no `-framerate`.
     pub taxa: Option<Racional>,
+    /// Fluxo cru sem temporização no SPS: `taxa` é a padrão do demuxer (25), não do arquivo.
+    pub taxa_suposta: bool,
     pub quadros: u64,
     pub framemd5_sha256: String,
     pub audio: Option<Resumo>,
@@ -594,14 +786,46 @@ fn apagando<T>(destino: &Path, r: Result<T>) -> Result<T> {
 
 /// Faz a cópia de trabalho de `origem` em `destino` (MKV) e prova pelos quadros e pelos tempos (`provar`). Prova
 /// que falha apaga o destino e devolve `copia_divergente`. Fluxo cru: remux com a taxa do fluxo e, se não prova,
-/// FFV1 sem perdas; contêiner: remux da receita e, se não prova, o mesmo sem `+genpts`.
+/// FFV1 sem perdas; contêiner: remux da receita e, se não prova, o mesmo sem `+genpts` (AVI sem índice com som: nesta
+/// ordem invertida). `cancelar` mata os processos; cancelada, o destino some e o erro é `cancelado`.
 pub fn copiar(cap: &Capacidades, origem: &Path, formato: Formato, destino: &Path, cancelar: &AtomicBool) -> Result<Copia> {
+    copiar_com(cap, origem, formato, destino, cancelar, &|_, _| {})
+}
+
+/// `copiar` mandando o avanço a `avanco`: fase Cópia (pts gravado sobre a duração do original; sem ela, bytes) e fase
+/// Prova (pts lido do original e da cópia sobre a duração da cópia, o mais atrasado).
+pub fn copiar_com(cap: &Capacidades, origem: &Path, formato: Formato, destino: &Path, cancelar: &AtomicBool, avanco: AoAvanco) -> Result<Copia> {
     exigir_suportado(formato)?;
+    let a = Andamento::novo();
+    std::thread::scope(|s| {
+        let relator = s.spawn(|| relatar(&a, cancelar, avanco));
+        let _fim = AoSair(&a.fim, relator.thread().clone());
+        let r = copiar_andando(cap, origem, formato, destino, &a);
+        // cancelada: o erro é o do pedido, qualquer que seja o processo que ele derrubou
+        if cancelar.load(Ordering::SeqCst) {
+            return apagando(destino, Err(cancelado()));
+        }
+        r
+    })
+}
+
+fn copiar_andando(cap: &Capacidades, origem: &Path, formato: Formato, destino: &Path, a: &Andamento) -> Result<Copia> {
+    let cancelar = &a.parar;
     let t = Trabalho::nova()?;
-    let taxa = if formato.cru() { Some(taxa_do_fluxo(cap, &t, origem, formato)?) } else { None };
+    let (taxa, taxa_suposta) = match formato.cru() {
+        true => taxa_do_fluxo(cap, &t, origem, formato).map(|(r, s)| (Some(r), s))?,
+        false => (None, false),
+    };
     let ent = entrada(formato, taxa);
-    let inicio = if formato.cru() { None } else { inicio_do_conteiner(cap, &t, origem)? };
-    let modos = if formato.cru() { [Modo::Remux, Modo::Ffv1] } else { [Modo::Remux, Modo::RemuxSemGenpts] };
+    let (inicio, duracao) = if formato.cru() { (None, None) } else { inicio_e_duracao(cap, &t, origem)? };
+    let audio = tem_audio(cap, &t, origem, &ent)?;
+    let tamanho = std::fs::metadata(origem).map(|m| m.len()).unwrap_or(0).max(1);
+    // AVI sem índice com som: o `+genpts` põe o vídeo um quadro depois do som e a receita nunca prova
+    let modos = match (formato, audio) {
+        (f, _) if f.cru() => [Modo::Remux, Modo::Ffv1],
+        (Formato::AviSemIndice, true) => [Modo::RemuxSemGenpts, Modo::Remux],
+        _ => [Modo::Remux, Modo::RemuxSemGenpts],
+    };
     // o que um modo gravou: comando como rodou, a lista da cópia (None = não gravou ou não se lê) e o erro do
     // processo quando ele não terminou bem
     struct Feita {
@@ -610,55 +834,80 @@ pub fn copiar(cap: &Capacidades, origem: &Path, formato: Formato, destino: &Path
         lista: Option<Lista>,
         falha: Option<SicroError>,
     }
-    let fazer = |modo: Modo| -> Result<Feita> {
-        let mut a = textos(&["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-y"]);
-        a.extend(ent.iter().cloned());
+    // `quadros` = os do original, quando já contados: avanço do FFV1, que não tem duração nem bytes comparáveis
+    let fazer = |modo: Modo, quadros: Option<u64>| -> Result<Feita> {
+        a.prova.store(false, Ordering::SeqCst);
+        a.copia.por(0.0);
+        a.lida.por(0.0);
+        let mut v = textos(&["-hide_banner", "-nostdin", "-nostats", "-loglevel", "error", "-y"]);
+        v.extend(ent.iter().cloned());
         if modo != Modo::RemuxSemGenpts {
-            a.extend(textos(&["-fflags", "+genpts"]));
+            v.extend(textos(&["-fflags", "+genpts"]));
         }
-        a.extend(textos(&["-i", &origem.to_string_lossy(), "-map", "0:v", "-map", "0:a?"]));
+        v.extend(textos(&["-i", &origem.to_string_lossy(), "-map", "0:v", "-map", "0:a?"]));
         if modo == Modo::Ffv1 {
-            a.extend(textos(&["-c:v", "ffv1", "-level", "3", "-g", "1", "-c:a", "copy"]));
+            v.extend(textos(&["-c:v", "ffv1", "-level", "3", "-g", "1", "-c:a", "copy"]));
         } else {
-            a.extend(textos(&["-c", "copy", "-copyinkf"]));
+            v.extend(textos(&["-c", "copy", "-copyinkf"]));
         }
         // `+bitexact`: sem os identificadores aleatórios do MKV, a mesma cópia dá os mesmos bytes
-        a.extend(textos(&["-map_metadata", "0", "-fflags", "+bitexact", "-f", "matroska", &destino.to_string_lossy()]));
+        v.extend(textos(&["-map_metadata", "0", "-fflags", "+bitexact", "-f", "matroska", &destino.to_string_lossy()]));
         let nome = match modo {
             Modo::Remux => "remux",
             Modo::RemuxSemGenpts => "remux-sem-genpts",
             Modo::Ffv1 => "ffv1",
         };
-        let cmd = t.comando(nome, &cap.binario, a);
-        let fim = exec::rodar(&cmd, cancelar)?;
+        let cmd = t.comando(nome, &cap.binario, v);
+        let mut gravado_us = 0i64;
+        let fim = exec::rodar_com_progresso(&cmd, cancelar, &mut |p| {
+            gravado_us = gravado_us.max(p.tempo_us.unwrap_or(0));
+            let f = match (p.tempo_us, duracao, quadros) {
+                _ if p.fim => Some(1.0),
+                (Some(us), Some(d), _) => Some(us as f64 / 1e6 / d),
+                (_, _, Some(n)) if n > 0 => Some(p.quadro as f64 / n as f64),
+                _ if modo != Modo::Ffv1 => std::fs::metadata(destino).ok().map(|m| m.len() as f64 / tamanho as f64),
+                _ => None,
+            };
+            a.copia.por(f.unwrap_or(0.0).min(1.0));
+            a.copia_medida.store(f.is_some(), Ordering::SeqCst);
+        })?;
         if fim.cancelado {
-            return Err(SicroError::Validation("cancelado".into()));
+            return Err(cancelado());
         }
         let mut comando = vec![cap.binario.to_string_lossy().into_owned()];
         comando.extend(cmd.args.iter().cloned());
         if let Err(falha) = exec::exigir_sucesso(&cmd, &fim) {
             return Ok(Feita { modo, comando, lista: None, falha: Some(falha) });
         }
+        // denominador da prova: o tempo gravado (sem ele, a duração que o MKV declara)
+        let gravado = (gravado_us > 0).then(|| gravado_us as f64 / 1e6);
+        a.duracao.por(gravado.or_else(|| inicio_e_duracao(cap, &t, destino).ok().and_then(|x| x.1)).unwrap_or(0.0));
+        a.prova.store(true, Ordering::SeqCst);
         // cópia que nem se lê (IFV sem `-copyinkf`: 0 pacotes de vídeo, código 0) é cópia divergente
-        let lista = match lista_framemd5(cap, destino, &[], cancelar) {
+        let lista = match tem_audio(cap, &t, destino, &[]).and_then(|au| lista(cap, destino, &[], au, cancelar, Some(&a.lida))) {
             Ok(l) => Some(l),
             Err(e) if cancelar.load(Ordering::Relaxed) => return Err(e),
             Err(_) => None,
         };
         Ok(Feita { modo, comando, lista, falha: None })
     };
-    // a lista do original sai enquanto a cópia é feita
+    // a lista do original sai enquanto a cópia é feita; a cópia que não sai (erro, não divergência) para o original
     let (original, primeira) = std::thread::scope(|s| {
-        let o = s.spawn(|| lista_framemd5(cap, origem, &ent, cancelar));
-        let c = fazer(modos[0]);
+        let o = s.spawn(|| lista(cap, origem, &ent, audio, cancelar, Some(&a.original)));
+        let c = fazer(modos[0], None);
+        if c.is_err() {
+            a.parar.store(true, Ordering::SeqCst);
+        }
         (o.join().unwrap_or_else(|_| Err(SicroError::Validation(codigo::PANICO.into()))), c)
     });
-    let original = apagando(destino, original)?;
     let primeira = apagando(destino, primeira)?;
+    let original = apagando(destino, original)?;
+    // o original já foi inteiro: o avanço da prova é o da cópia
+    a.original.por(f64::MAX);
     let (feita, desloc_s) = match provar(formato, &original, primeira.lista.as_ref()) {
         Ok(d) => (primeira, d),
         Err(detalhe1) => {
-            let segunda = apagando(destino, fazer(modos[1]))?;
+            let segunda = apagando(destino, fazer(modos[1], Some(original.video.quadros)))?;
             match provar(formato, &original, segunda.lista.as_ref()) {
                 Ok(d) => (segunda, d),
                 Err(detalhe2) => {
@@ -686,6 +935,7 @@ pub fn copiar(cap: &Capacidades, origem: &Path, formato: Formato, destino: &Path
         comando,
         recodificado,
         taxa,
+        taxa_suposta,
         quadros: original.video.quadros,
         framemd5_sha256: original.video.sha256.clone(),
         audio: original.audio.clone(),
@@ -740,8 +990,9 @@ fn relogio(s: f64) -> Option<String> {
     chrono::DateTime::from_timestamp_millis(ms).map(|d| d.naive_utc().format("%Y-%m-%d %H:%M:%S%.3f").to_string())
 }
 
-/// Faz (ou acha) a cópia de trabalho do vídeo `media_id` do caso e a registra como mídia derivada, com log e auditoria.
-pub fn copia_no_caso(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &AtomicBool) -> Result<CopiaRegistrada> {
+
+/// O original do caso: banco, ocorrência, mídia, arquivo e formato.
+fn original_do_caso(ws: &Path, media_id: &str) -> Result<(Connection, Uuid, VideoMedia, PathBuf, Formato)> {
     let id = Uuid::parse_str(media_id.trim()).map_err(|_| validacao(codigo::ITEM_INVALIDO, Some("media_id")))?;
     let (conn, occ) = crate::edicao::executar::abrir_banco(ws)?;
     let orig = video_repo::find_media_by_id(&conn, &id)?
@@ -753,43 +1004,83 @@ pub fn copia_no_caso(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &At
     }
     let formato = reconhecer(&caminho)?.ok_or_else(|| validacao(codigo::GRAVADOR_NAO_SUPORTADO, None))?;
     exigir_suportado(formato)?;
-    if let Some(m) = copia_existente(&conn, ws, &occ, &orig.sha256)? {
-        let (lacunas, inicio_epoca_s) = de_derivacao(&m);
-        return Ok(CopiaRegistrada { media: m, formato, lacunas, inicio_epoca_s, ja_existia: true });
-    }
+    Ok((conn, occ, orig, caminho, formato))
+}
+
+fn ja_registrada(m: VideoMedia, formato: Formato) -> CopiaRegistrada {
+    let (lacunas, inicio_epoca_s) = de_derivacao(&m);
+    CopiaRegistrada { media: m, formato, lacunas, inicio_epoca_s, ja_existia: true }
+}
+
+/// `.<uuid>.parcial` na pasta das cópias: grava com nome oculto e só ganha o nome de cópia depois de provada
+/// (processo morto no meio não deixa um `<nome>.mkv` pela metade com cara de cópia).
+fn novo_parcial(ws: &Path) -> Result<PathBuf> {
     let pasta = ws.join(REL_COPIAS_DVR);
     std::fs::create_dir_all(&pasta).map_err(|e| SicroError::Filesystem(format!("{}: {e}", pasta.display())))?;
+    Ok(pasta.join(format!(".{}.parcial", Uuid::new_v4())))
+}
+
+/// Faz (ou acha) a cópia de trabalho do vídeo `media_id` do caso e a registra como mídia derivada, com log e auditoria.
+pub fn copia_no_caso(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &AtomicBool) -> Result<CopiaRegistrada> {
+    copia_no_caso_com(cap, ws, media_id, cancelar, &|_, _| {})
+}
+
+/// `copia_no_caso` com o avanço da cópia (`copiar_com`).
+pub fn copia_no_caso_com(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &AtomicBool, avanco: AoAvanco) -> Result<CopiaRegistrada> {
+    let (conn, occ, orig, caminho, formato) = original_do_caso(ws, media_id)?;
+    if let Some(m) = copia_existente(&conn, ws, &occ, &orig.sha256)? {
+        return Ok(ja_registrada(m, formato));
+    }
+    let parcial = novo_parcial(ws)?;
+    let c = copiar_com(cap, &caminho, formato, &parcial, cancelar, avanco)?;
+    registrar_copia(cap, ws, &conn, &occ, &orig, &caminho, &caminho, &parcial, c)
+}
+
+/// Registra a cópia provada em `parcial` (lida de `lido_de`) como derivada do original `orig` do caso (`caminho`).
+#[allow(clippy::too_many_arguments)]
+fn registrar_copia(
+    cap: &Capacidades,
+    ws: &Path,
+    conn: &Connection,
+    occ: &Uuid,
+    orig: &VideoMedia,
+    caminho: &Path,
+    lido_de: &Path,
+    parcial: &Path,
+    mut c: Copia,
+) -> Result<CopiaRegistrada> {
+    let formato = c.formato;
+    let pasta = ws.join(REL_COPIAS_DVR);
     let base = Path::new(&orig.filename).file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    // grava com nome oculto e só ganha o nome de cópia depois de provada: processo morto no meio não deixa um
-    // `<nome>.mkv` pela metade com cara de cópia
-    let parcial = pasta.join(format!(".{}.parcial", Uuid::new_v4()));
-    let mut c = copiar(cap, &caminho, formato, &parcial, cancelar)?;
-    let sha256 = apagando(&parcial, sha256_file(&parcial))?;
+    let sha256 = apagando(parcial, sha256_file(parcial))?;
     // a mesma cópia deste original já registrada (o arquivo sumiu da pasta, por exemplo): volta para o lugar dele.
     // A de outro original com os mesmos bytes não serve: a derivação apontaria para o outro.
-    let ja = video_repo::list_media_for_occurrence(&conn, &occ)?
+    let ja = video_repo::list_media_for_occurrence(conn, occ)?
         .into_iter()
         .find(|m| m.sha256 == sha256 && m.derived_from_hash.as_deref() == Some(orig.sha256.as_str()));
     if let Some(m) = ja {
         let lugar = resolver_relativo(ws, &m.relative_path);
         if lugar.is_file() {
-            let _ = std::fs::remove_file(&parcial);
+            let _ = std::fs::remove_file(parcial);
         } else {
             if let Some(p) = lugar.parent() {
-                apagando(&parcial, std::fs::create_dir_all(p).map_err(SicroError::from))?;
+                apagando(parcial, std::fs::create_dir_all(p).map_err(SicroError::from))?;
             }
-            apagando(&parcial, std::fs::rename(&parcial, &lugar).map_err(SicroError::from))?;
+            apagando(parcial, std::fs::rename(parcial, &lugar).map_err(SicroError::from))?;
         }
-        let (lacunas, inicio_epoca_s) = de_derivacao(&m);
-        return Ok(CopiaRegistrada { media: m, formato, lacunas, inicio_epoca_s, ja_existia: true });
+        return Ok(ja_registrada(m, formato));
     }
     let nome = nome_livre(&pasta, &base);
     let destino = pasta.join(&nome);
-    apagando(&parcial, std::fs::rename(&parcial, &destino).map_err(SicroError::from))?;
-    // o comando registrado grava no nome final (a troca de nome não muda um byte)
-    let p = parcial.to_string_lossy();
-    for a in c.comando.iter_mut().filter(|a| **a == *p) {
-        *a = destino.to_string_lossy().into_owned();
+    apagando(parcial, std::fs::rename(parcial, &destino).map_err(SicroError::from))?;
+    // o comando registrado lê o original do caso e grava no nome final (os bytes são os mesmos: SHA-256 conferido)
+    let (p, de) = (parcial.to_string_lossy().into_owned(), lido_de.to_string_lossy().into_owned());
+    for a in c.comando.iter_mut() {
+        if *a == p {
+            *a = destino.to_string_lossy().into_owned();
+        } else if *a == de {
+            *a = caminho.to_string_lossy().into_owned();
+        }
     }
     let agora = Utc::now();
     let derivacao = json!({
@@ -801,6 +1092,7 @@ pub fn copia_no_caso(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &At
         "ffmpeg": { "versao": cap.versao, "sha256": cap.sha256 },
         "recodificado": c.recodificado,
         "taxa": c.taxa.map(|r| format!("{}/{}", r.num, r.den)),
+        "taxa_suposta": c.taxa.map(|_| c.taxa_suposta),
         "quadros": c.quadros,
         "framemd5_sha256": c.framemd5_sha256,
         "audio": c.audio,
@@ -815,7 +1107,7 @@ pub fn copia_no_caso(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &At
     let probe = crate::video::probe_media(&destino).ok();
     let media = VideoMedia {
         id: Uuid::new_v4(),
-        occurrence_id: occ,
+        occurrence_id: *occ,
         original_path: None,
         relative_path: format!("{REL_COPIAS_DVR}/{nome}"),
         filename: nome,
@@ -840,17 +1132,140 @@ pub fn copia_no_caso(cap: &Capacidades, ws: &Path, media_id: &str, cancelar: &At
         derivation_json: Some(derivacao.to_string()),
     };
     // mídia, log e auditoria juntos; sem registro, o arquivo não fica
-    let registrar = || -> Result<()> {
+    let gravar = || -> Result<()> {
         let tx = conn.unchecked_transaction()?;
         video_repo::insert_media(&tx, &media)?;
         let detalhe = json!({ "media_id": media.id.to_string(), "sha256": media.sha256, "filename": media.filename, "derivation": derivacao });
-        video_repo::insert_log(&tx, &occ, Some(&orig.sha256), "dvr.copia", &detalhe.to_string())?;
-        occurrence_repo::record_audit(&tx, Some(&occ), "video.dvr.copia", Some("video"), Some("video_media"), Some(&media.id), Some(&media.sha256))?;
+        video_repo::insert_log(&tx, occ, Some(&orig.sha256), "dvr.copia", &detalhe.to_string())?;
+        occurrence_repo::record_audit(&tx, Some(occ), "video.dvr.copia", Some("video"), Some("video_media"), Some(&media.id), Some(&media.sha256))?;
         Ok(tx.commit()?)
     };
-    apagando(&destino, registrar())?;
+    apagando(&destino, gravar())?;
     Ok(CopiaRegistrada { media, formato, lacunas: c.lacunas, inicio_epoca_s: c.inicio_epoca_s, ja_existia: false })
 }
+
+// ---------------------------------------------------------------- importação (P4.6b)
+
+/// Cópia feita e provada à espera do registro do original (`registrar_pendente`).
+struct Pendente {
+    chave: String,
+    ws: PathBuf,
+    formato: Formato,
+    /// SHA-256 do arquivo de que a cópia saiu: o original registrado tem de ser ele.
+    sha256: String,
+    origem: PathBuf,
+    /// O `.parcial` e a prova; None = a cópia deste arquivo já estava no caso.
+    feita: Option<(PathBuf, Copia)>,
+}
+
+fn pendentes() -> std::sync::MutexGuard<'static, Vec<Pendente>> {
+    static P: Mutex<Vec<Pendente>> = Mutex::new(Vec::new());
+    P.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// O que a tela recebe de `preparar`.
+#[derive(Debug, Clone, Serialize)]
+pub struct Preparo {
+    pub chave: String,
+    pub formato: Formato,
+    /// A cópia deste arquivo já estava no caso: nada foi gravado.
+    pub ja_existia: bool,
+}
+
+/// Esquece as pendentes do caso e apaga os `.parcial` que sobraram (importação abandonada, processo morto).
+fn descartar_pendentes(ws: &Path) {
+    pendentes().retain(|p| p.ws != ws);
+    let Ok(rd) = std::fs::read_dir(ws.join(REL_COPIAS_DVR)) else { return };
+    for e in rd.flatten() {
+        let n = e.file_name().to_string_lossy().into_owned();
+        if n.starts_with('.') && n.ends_with(".parcial") {
+            let _ = std::fs::remove_file(e.path());
+        }
+    }
+}
+
+/// Faz e prova a cópia de trabalho do arquivo escolhido (`origem`, ainda fora do caso) num `.parcial` da pasta das
+/// cópias, com o SHA-256 dele em paralelo. Nada entra no banco: o registro é `registrar_pendente`, depois do original.
+/// Cancelada ou com erro, o `.parcial` some. Cópia deste arquivo já no caso: para assim que o SHA-256 sai.
+pub fn preparar(cap: &Capacidades, ws: &Path, origem: &Path, cancelar: &AtomicBool, avanco: AoAvanco) -> Result<Preparo> {
+    let formato = reconhecer(origem)?.ok_or_else(|| validacao(codigo::GRAVADOR_NAO_SUPORTADO, None))?;
+    exigir_suportado(formato)?;
+    // o caso abre antes de gravar nele
+    crate::edicao::executar::abrir_banco(ws)?;
+    descartar_pendentes(ws);
+    let parcial = novo_parcial(ws)?;
+    let (parar, fim, existente) = (AtomicBool::new(false), AtomicBool::new(false), AtomicBool::new(false));
+    let (copia, sha256) = std::thread::scope(|s| {
+        let h = s.spawn(|| -> Result<String> {
+            let sha = sha256_parando(origem, &parar)?;
+            let (conn, occ) = crate::edicao::executar::abrir_banco(ws)?;
+            if copia_existente(&conn, ws, &occ, &sha)?.is_some() {
+                existente.store(true, Ordering::SeqCst);
+                parar.store(true, Ordering::SeqCst);
+            }
+            Ok(sha)
+        });
+        // o pedido de quem chamou chega aqui por `parar`, que o SHA-256 achando a cópia no caso também liga
+        let espelho = s.spawn(|| {
+            while !fim.load(Ordering::SeqCst) {
+                if cancelar.load(Ordering::SeqCst) {
+                    parar.store(true, Ordering::SeqCst);
+                }
+                std::thread::park_timeout(Duration::from_millis(10));
+            }
+        });
+        let _fim = AoSair(&fim, espelho.thread().clone());
+        let c = copiar_com(cap, origem, formato, &parcial, &parar, avanco);
+        // sem cópia, o SHA-256 não serve mais
+        if c.is_err() {
+            parar.store(true, Ordering::SeqCst);
+        }
+        (c, h.join().unwrap_or_else(|_| Err(SicroError::Validation(codigo::PANICO.into()))))
+    });
+    let chave = Uuid::new_v4().to_string();
+    let pendente = |sha256: String, feita| Pendente { chave: chave.clone(), ws: ws.to_path_buf(), formato, sha256, origem: origem.to_path_buf(), feita };
+    if existente.load(Ordering::SeqCst) {
+        let _ = std::fs::remove_file(&parcial);
+        pendentes().push(pendente(sha256?, None));
+        return Ok(Preparo { chave, formato, ja_existia: true });
+    }
+    if cancelar.load(Ordering::SeqCst) {
+        let _ = std::fs::remove_file(&parcial);
+        return Err(cancelado());
+    }
+    let copia = copia?;
+    let sha256 = apagando(&parcial, sha256)?;
+    pendentes().push(pendente(sha256, Some((parcial, copia))));
+    Ok(Preparo { chave, formato, ja_existia: false })
+}
+
+/// Registra a cópia que `preparar` deixou (`chave`) como derivada do original `media_id`, já registrado pela
+/// importação: o SHA-256 dele tem de ser o do arquivo de que a cópia saiu. A cópia que já estava no caso volta igual.
+pub fn registrar_pendente(cap: &Capacidades, ws: &Path, media_id: &str, chave: &str) -> Result<CopiaRegistrada> {
+    let p = {
+        let mut v = pendentes();
+        let i = v.iter().position(|p| p.chave == chave && p.ws == ws).ok_or_else(|| validacao(codigo::ITEM_INVALIDO, Some("chave")))?;
+        v.swap_remove(i)
+    };
+    let parcial = p.feita.as_ref().map(|f| f.0.clone());
+    let r = (|| {
+        let (conn, occ, orig, caminho, _) = original_do_caso(ws, media_id)?;
+        if let Some(m) = copia_existente(&conn, ws, &occ, &orig.sha256)? {
+            return Ok(ja_registrada(m, p.formato));
+        }
+        let Some((parcial, copia)) = p.feita else { return Err(validacao(codigo::ARQUIVO_AUSENTE, None)) };
+        if orig.sha256 != p.sha256 {
+            return Err(validacao(codigo::COPIA_DIVERGENTE, Some("original")));
+        }
+        registrar_copia(cap, ws, &conn, &occ, &orig, &caminho, &p.origem, &parcial, copia)
+    })();
+    // registrada, o `.parcial` já mudou de nome; nos outros casos ele sobra
+    if let Some(x) = parcial {
+        let _ = std::fs::remove_file(x);
+    }
+    r
+}
+
 
 #[cfg(test)]
 mod testes {
@@ -1460,6 +1875,312 @@ mod testes {
         assert!(casos >= 10 && com_busca >= 2, "{casos} trechos, {com_busca} com busca");
     }
 
+    // ------------------------------------------------------------ importação: avanço, cancelar, taxa suposta (P4.6b)
+
+    /// Do pedido de cancelamento à volta de `preparar` (vigia de 10 ms, relator de 50 ms, espera dos processos): o
+    /// medido fica abaixo de 0,3 s; 3× de folga mais a carga da máquina.
+    const CANCELAR_MAX_S: f64 = 2.0;
+
+    /// Avanço da prova pelo pts lido: maior pts − primeiro, em s, só do vídeo e só de linha inteira; a fração é a do
+    /// lado mais atrasado sobre a duração da cópia.
+    #[test]
+    fn avanco_pelo_pts_lido() {
+        let lido = Numero::novo();
+        let mut l = Leitor::novo(Some(&lido));
+        l.pedaco(b"#tb 0: 1/90000\n#tb 1: 1/8000\n0, 900000, 900000, 3600, 100, aaaa\n1, 8000, 8000, 160, 20, bbbb\n").unwrap();
+        assert_eq!(lido.ler(), 0.0);
+        // ordem de exibição com quadro B: o maior vale
+        l.pedaco(b"0, 907200, 907200, 3600, 100, cccc\n0, 903600, 903600, 3600, 100, dddd\n1, 80000, 80000, 160, 20, eeee\n").unwrap();
+        assert!((lido.ler() - 0.08).abs() < 1e-12, "{}", lido.ler());
+        l.pedaco(b"0, 990000, 990000, 3600, 100, ff").unwrap();
+        assert!((lido.ler() - 0.08).abs() < 1e-12, "linha partida contou");
+        l.pedaco(b"ff\n").unwrap();
+        assert!((lido.ler() - 1.0).abs() < 1e-12, "{}", lido.ler());
+        assert_eq!(l.fim(true).unwrap().video.quadros, 4);
+        assert_eq!(fracao_da_prova(1.0, 0.5, 2.0), Some(0.25));
+        assert_eq!(fracao_da_prova(0.5, 1.0, 2.0), Some(0.25));
+        assert_eq!(fracao_da_prova(3.0, 3.0, 2.0), Some(1.0));
+        assert_eq!(fracao_da_prova(1.0, 1.0, 0.0), None);
+        // fase Cópia: sem medida, sem fração
+        let a = Andamento::novo();
+        a.copia.por(0.4);
+        assert_eq!(a.agora(), (Fase::Copia, None));
+        a.copia_medida.store(true, Ordering::SeqCst);
+        assert_eq!(a.agora(), (Fase::Copia, Some(0.4)));
+        a.prova.store(true, Ordering::SeqCst);
+        a.duracao.por(10.0);
+        a.original.por(f64::MAX);
+        a.lida.por(2.5);
+        assert_eq!(a.agora(), (Fase::Prova, Some(0.25)));
+    }
+
+    /// Caso vazio (o original ainda não entrou) dentro de `pasta`, com acento, espaço e % no caminho.
+    fn caso_vazio(pasta: &Path) -> PathBuf {
+        let pai = pasta.join("Casos ç 100%");
+        std::fs::create_dir_all(&pai).unwrap();
+        crate::workspace::create::create_workspace(crate::models::NewOccurrenceInput::default(), &pai).unwrap().path
+    }
+
+    fn registrar_original(ws: &Path, origem: &Path, duplicado: bool) -> VideoMedia {
+        let input = crate::models::RegisterVideoInput { source_path: origem.to_string_lossy().into(), allow_duplicate: duplicado };
+        tauri::async_runtime::block_on(crate::commands::video_commands::register_video_media(ws.to_string_lossy().into(), input)).unwrap()
+    }
+
+    /// Fonte que leva segundos para provar: o Dahua real (4 MP) ou, sem ele, um AVI sem índice de 40 s em 720p com som.
+    fn fonte_longa(cap: &Capacidades, pasta: &Path) -> PathBuf {
+        let (fonte, ext) = match amostra("dahua.dav") {
+            Some(p) => (p, "dav"),
+            None => {
+                ffmpeg(
+                    cap,
+                    pasta,
+                    &[
+                        "-f", "lavfi", "-i", "testsrc2=size=1280x720:rate=25", "-f", "lavfi", "-i", "sine=f=440:r=8000", "-t", "40", "-c:v", "libx264",
+                        "-preset", "ultrafast", "-bf", "0", "-pix_fmt", "yuv420p", "-c:a", "pcm_mulaw", "-ar", "8000", "longo.avi",
+                    ],
+                );
+                let b = std::fs::read(pasta.join("longo.avi")).unwrap();
+                let k = b.windows(4).rposition(|w| w == b"idx1").unwrap();
+                std::fs::write(pasta.join("longo-cortado.avi"), &b[..k - 5000]).unwrap();
+                (pasta.join("longo-cortado.avi"), "avi")
+            }
+        };
+        let origem = pasta.join(format!("câm 1 %d.{ext}"));
+        std::fs::copy(fonte, &origem).unwrap();
+        origem
+    }
+
+    /// Processos vivos filhos deste com `marca` na linha de comando.
+    #[cfg(target_os = "linux")]
+    fn filhos_com(marca: &Path) -> Vec<String> {
+        let (eu, marca) = (std::process::id(), marca.to_string_lossy().into_owned());
+        std::fs::read_dir("/proc")
+            .unwrap()
+            .flatten()
+            .filter_map(|e| {
+                let p: u32 = e.file_name().to_string_lossy().parse().ok()?;
+                let stat = std::fs::read_to_string(format!("/proc/{p}/stat")).ok()?;
+                let mut c = stat[stat.rfind(')')? + 2..].split_whitespace();
+                let (estado, pai) = (c.next()?, c.next()?.parse::<u32>().ok()?);
+                if pai != eu || estado == "Z" {
+                    return None;
+                }
+                let cmd = String::from_utf8_lossy(&std::fs::read(format!("/proc/{p}/cmdline")).ok()?).replace('\0', " ");
+                cmd.contains(&marca).then_some(cmd)
+            })
+            .collect()
+    }
+
+    fn arquivos_das_copias(ws: &Path) -> Vec<String> {
+        match std::fs::read_dir(ws.join(REL_COPIAS_DVR)) {
+            Ok(rd) => rd.flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect(),
+            Err(_) => Vec::new(),
+        }
+    }
+
+    /// Cancelar na fase Cópia e no meio da prova: volta logo com `cancelado`, nenhum ffmpeg vivo, nenhum arquivo na
+    /// pasta das cópias, nenhuma mídia nem registro no caso e o arquivo escolhido com o mesmo SHA-256.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn cancelar_mata_os_processos_e_nao_deixa_nada_no_caso() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("dvr-cancelar");
+        let ws = caso_vazio(&d);
+        let origem = fonte_longa(&cap, &d);
+        let antes = sha256_file(&origem).unwrap();
+        type Quando = fn(Fase, Option<f64>) -> bool;
+        let pontos: [(&str, Quando); 2] = [("cópia", |f, _| f == Fase::Copia), ("prova", |f, x| f == Fase::Prova && x.is_some_and(|x| x >= 0.2))];
+        for (rotulo, quando) in pontos {
+            let cancelar = AtomicBool::new(false);
+            let pedido = Mutex::new(None::<(std::time::Instant, usize)>);
+            let avanco = |f: Fase, x: Option<f64>| {
+                if quando(f, x) && !cancelar.swap(true, Ordering::SeqCst) {
+                    *pedido.lock().unwrap() = Some((std::time::Instant::now(), filhos_com(&d).len()));
+                }
+            };
+            let r = preparar(&cap, &ws, &origem, &cancelar, &avanco);
+            let (quando_pediu, vivos_no_pedido) = pedido.lock().unwrap().expect("o ponto de cancelar não chegou");
+            let espera = quando_pediu.elapsed().as_secs_f64();
+            let e = r.map(|_| ()).unwrap_err().to_string();
+            eprintln!("cancelar na {rotulo} ({}): {espera:.3} s, {vivos_no_pedido} processos no pedido: {e}", cap.versao);
+            assert!(e.contains("cancelado"), "{rotulo}: {e}");
+            assert!(espera < CANCELAR_MAX_S, "{rotulo}: {espera} s do pedido à volta");
+            if rotulo == "prova" {
+                assert!(vivos_no_pedido >= 2, "{rotulo}: {vivos_no_pedido} (original e cópia decodificando)");
+            }
+            assert_eq!(filhos_com(&d), Vec::<String>::new(), "{rotulo}: ffmpeg vivo");
+            assert_eq!(arquivos_das_copias(&ws), Vec::<String>::new(), "{rotulo}: sobrou arquivo");
+            let (conn, occ) = crate::edicao::executar::abrir_banco(&ws).unwrap();
+            assert!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().is_empty(), "{rotulo}: mídia no caso");
+            let contar = |sql: &str| -> i64 { conn.query_row(sql, [], |r| r.get(0)).unwrap() };
+            assert_eq!(contar("SELECT COUNT(*) FROM video_operation_logs"), 0, "{rotulo}: registro no caso");
+            assert_eq!(contar("SELECT COUNT(*) FROM audit_logs WHERE module = 'video'"), 0, "{rotulo}: auditoria no caso");
+            assert!(pendentes().iter().all(|p| p.ws != ws), "{rotulo}: pendente");
+            assert_eq!(sha256_file(&origem).unwrap(), antes, "{rotulo}: arquivo escolhido alterado");
+        }
+    }
+
+    /// A importação: a cópia sai do arquivo escolhido antes de o original entrar no caso (nada no banco até lá), com
+    /// avanço real (Cópia, depois Prova, sem voltar, com passos no meio); registrado o original, a cópia entra derivada
+    /// dele e o comando gravado lê o original do caso. Reimportar o mesmo arquivo para logo e devolve a mesma cópia;
+    /// original que não é o arquivo de que a cópia saiu é recusado.
+    #[test]
+    fn importacao_prepara_antes_e_registra_depois_do_original() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("dvr-importar");
+        let ws = caso_vazio(&d);
+        let origem = fonte_longa(&cap, &d);
+        let antes = sha256_file(&origem).unwrap();
+        let eventos = Mutex::new(Vec::<(Fase, Option<f64>)>::new());
+        let p = preparar(&cap, &ws, &origem, &AtomicBool::new(false), &|f, x| eventos.lock().unwrap().push((f, x))).unwrap();
+        assert!(!p.ja_existia);
+        let (conn, occ) = crate::edicao::executar::abrir_banco(&ws).unwrap();
+        assert!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().is_empty(), "mídia antes do original");
+        let nomes = arquivos_das_copias(&ws);
+        assert!(nomes.len() == 1 && nomes[0].starts_with('.') && nomes[0].ends_with(".parcial"), "{nomes:?}");
+        // avanço
+        let ev = eventos.into_inner().unwrap();
+        eprintln!("avanço ({}): {} eventos, {:?}", cap.versao, ev.len(), ev.iter().map(|(f, x)| format!("{f:?} {x:.3?}")).collect::<Vec<_>>());
+        let k = ev.iter().position(|e| e.0 == Fase::Prova).expect("sem fase Prova");
+        assert!(k > 0 && ev[k..].iter().all(|e| e.0 == Fase::Prova), "Cópia depois de Prova");
+        for fase in [&ev[..k], &ev[k..]] {
+            let x: Vec<f64> = fase.iter().filter_map(|e| e.1).collect();
+            assert!(x.windows(2).all(|w| w[1] >= w[0]), "fração voltou: {x:?}");
+        }
+        let prova: Vec<f64> = ev[k..].iter().filter_map(|e| e.1).collect();
+        assert!(prova.iter().filter(|x| **x > 0.05 && **x < 0.95).count() >= 3, "prova sem passos no meio: {prova:?}");
+        assert!(prova.last().is_some_and(|x| *x >= 0.9), "prova não chegou ao fim: {prova:?}");
+        // registro
+        let orig = registrar_original(&ws, &origem, false);
+        let r = registrar_pendente(&cap, &ws, &orig.id.to_string(), &p.chave).unwrap();
+        assert!(!r.ja_existia);
+        assert_eq!(r.media.derived_from_hash.as_deref(), Some(orig.sha256.as_str()));
+        let arquivo = resolver_relativo(&ws, &r.media.relative_path);
+        assert_eq!(sha256_file(&arquivo).unwrap(), r.media.sha256);
+        assert_eq!(arquivos_das_copias(&ws), vec![r.media.filename.clone()]);
+        let j: Value = serde_json::from_str(r.media.derivation_json.as_deref().unwrap()).unwrap();
+        let cmd: Vec<&str> = j["ffmpeg_command"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
+        let no_caso = resolver_relativo(&ws, &orig.relative_path);
+        assert!(cmd.windows(2).any(|w| w[0] == "-i" && w[1] == no_caso.to_string_lossy()), "{cmd:?}");
+        assert_eq!(cmd.last().copied(), Some(arquivo.to_string_lossy().as_ref()));
+        assert!(!cmd.iter().any(|a| *a == origem.to_string_lossy()), "{cmd:?}");
+        assert_eq!(sha256_file(&origem).unwrap(), antes, "arquivo escolhido alterado");
+        // a chave vale uma vez
+        let e = registrar_pendente(&cap, &ws, &orig.id.to_string(), &p.chave).unwrap_err().to_string();
+        assert!(e.contains(codigo::ITEM_INVALIDO), "{e}");
+        // reimportar: para assim que o SHA-256 sai, nada gravado, a mesma cópia
+        let eventos = Mutex::new(Vec::<(Fase, Option<f64>)>::new());
+        let p2 = preparar(&cap, &ws, &origem, &AtomicBool::new(false), &|f, x| eventos.lock().unwrap().push((f, x))).unwrap();
+        assert!(p2.ja_existia);
+        let ev = eventos.into_inner().unwrap();
+        assert!(!ev.iter().any(|e| e.0 == Fase::Prova && e.1.is_some_and(|x| x >= 0.5)), "reimportação provou de novo: {ev:?}");
+        assert_eq!(arquivos_das_copias(&ws), vec![r.media.filename.clone()]);
+        let n = video_repo::list_media_for_occurrence(&conn, &occ).unwrap().len();
+        let r2 = registrar_pendente(&cap, &ws, &orig.id.to_string(), &p2.chave).unwrap();
+        assert_eq!((r2.ja_existia, r2.media.id), (true, r.media.id));
+        assert_eq!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().len(), n);
+        // original registrado que não é o arquivo de que a cópia saiu (um byte a mais no fim): recusado
+        let outro = d.join(format!("outro.{}", origem.extension().unwrap().to_string_lossy()));
+        let mut b = std::fs::read(&origem).unwrap();
+        b.push(0);
+        std::fs::write(&outro, b).unwrap();
+        std::fs::remove_file(&arquivo).unwrap();
+        let p3 = preparar(&cap, &ws, &origem, &AtomicBool::new(false), &|_, _| {}).unwrap();
+        assert!(!p3.ja_existia);
+        let orig_outro = registrar_original(&ws, &outro, false);
+        let e = registrar_pendente(&cap, &ws, &orig_outro.id.to_string(), &p3.chave).unwrap_err().to_string();
+        assert!(e.contains(codigo::COPIA_DIVERGENTE) && e.ends_with("original"), "{e}");
+        assert_eq!(arquivos_das_copias(&ws), Vec::<String>::new(), "sobrou o .parcial");
+        assert_eq!(video_repo::list_media_for_occurrence(&conn, &occ).unwrap().len(), n + 1, "só o outro original entrou");
+    }
+
+    /// AVI sem índice com som grava uma cópia só (a sem `+genpts` primeiro); o Dahua e o AVI sem som, a da receita.
+    #[cfg(unix)]
+    #[test]
+    fn uma_gravacao_quando_a_primeira_prova() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("dvr-uma");
+        let conta = ffmpeg_com_defeito(&cap, &d, "ffmpeg-conta", r#"echo x >> "$(dirname "$fim")/gravacoes"; exec "$real" "$@""#);
+        let com_som = sinteticos(&cap, &d).into_iter().find(|x| x.1 == Formato::AviSemIndice).unwrap().0;
+        ffmpeg(&cap, &d, &["-i", &com_som.to_string_lossy(), "-map", "0:v", "-c", "copy", "mudo.avi"]);
+        let b = std::fs::read(d.join("mudo.avi")).unwrap();
+        let k = b.windows(4).rposition(|w| w == b"idx1").unwrap();
+        std::fs::write(d.join("mudo-cortado.avi"), &b[..k - 5000]).unwrap();
+        let mut casos = vec![(com_som, Formato::AviSemIndice, false), (d.join("mudo-cortado.avi"), Formato::AviSemIndice, true)];
+        casos.extend(amostra("dahua.dav").map(|p| (p, Formato::Dahua, true)));
+        for (i, (origem, f, genpts)) in casos.iter().enumerate() {
+            let pasta = d.join(format!("u{i}"));
+            std::fs::create_dir_all(&pasta).unwrap();
+            let c = copiar(&conta, origem, *f, &pasta.join("c.mkv"), &AtomicBool::new(false)).unwrap();
+            let n = std::fs::read_to_string(pasta.join("gravacoes")).unwrap().lines().count();
+            assert_eq!((n, c.comando.iter().any(|a| a == "+genpts")), (1, *genpts), "{} ({})", origem.display(), cap.versao);
+        }
+    }
+
+    /// Fluxo cru sem temporização no SPS (x265 sem VUI de tempo): a taxa é a padrão (25), marcada como suposta na cópia,
+    /// no `derivation_json` e na `Derivacao` da Edição; com a temporização (x264, 15 qps), não.
+    #[test]
+    fn fluxo_cru_sem_temporizacao_marca_a_taxa_suposta() {
+        let Some(cap) = fontes::cap() else { return };
+        let d = fontes::pasta_temporaria("dvr-taxa");
+        let src = ["-f", "lavfi", "-i", "testsrc2=size=320x240:rate=15", "-t", "6", "-pix_fmt", "yuv420p"];
+        let mut a = src.to_vec();
+        a.extend(["-c:v", "libx265", "-preset", "veryfast", "-x265-params", "log-level=error:bframes=0:vui-timing-info=0:hrd=0", "-f", "hevc", "sem.h265"]);
+        ffmpeg(&cap, &d, &a);
+        let mut a = src.to_vec();
+        a.extend(["-c:v", "libx264", "-preset", "veryfast", "-bf", "0", "-f", "h264", "com.264"]);
+        ffmpeg(&cap, &d, &a);
+        let t = Trabalho::nova().unwrap();
+        let quinze = Racional { num: 15, den: 1 };
+        assert_eq!(taxa_do_fluxo(&cap, &t, &d.join("sem.h265"), Formato::HevcCru).unwrap(), (TAXA_PADRAO, true), "{}", cap.versao);
+        assert_eq!(taxa_do_fluxo(&cap, &t, &d.join("com.264"), Formato::H264Cru).unwrap(), (quinze, false), "{}", cap.versao);
+        for (nome, f, taxa, suposta) in [("sem.h265", Formato::HevcCru, TAXA_PADRAO, true), ("com.264", Formato::H264Cru, quinze, false)] {
+            let origem = d.join(nome);
+            let destino = d.join(format!("{nome}.mkv"));
+            let c = copiar(&cap, &origem, f, &destino, &AtomicBool::new(false)).unwrap();
+            assert_eq!((c.taxa, c.taxa_suposta, c.quadros), (Some(taxa), suposta, 90), "{nome}");
+            assert!(c.comando.windows(2).any(|w| w[0] == "-framerate" && w[1] == format!("{}/{}", taxa.num, taxa.den)), "{:?}", c.comando);
+            conferir_copia(&cap, &origem, &destino, &c, &d);
+            let (_t, ws, orig) = caso_com(&origem);
+            let r = copia_no_caso(&cap, &ws, &orig.id.to_string(), &AtomicBool::new(false)).unwrap();
+            let j: Value = serde_json::from_str(r.media.derivation_json.as_deref().unwrap()).unwrap();
+            assert_eq!((&j["taxa_suposta"], j["taxa"].as_str()), (&json!(suposta), Some(format!("{}/{}", taxa.num, taxa.den).as_str())), "{nome}");
+            let (conn, _) = crate::edicao::executar::abrir_banco(&ws).unwrap();
+            let der = crate::edicao::importar_v1::derivacao(&conn, &r.media).unwrap().unwrap();
+            assert_eq!(der.taxa_suposta, suposta.then_some(taxa), "{nome}");
+            // no fio só quando supôs
+            assert_eq!(serde_json::to_value(&der).unwrap().get("taxa_suposta").is_some(), suposta, "{nome}");
+        }
+    }
+
+    // ------------------------------------------------------------ bancada
+
+    /// Tempo da cópia provada (fora da suíte): o Dahua real e o mesmo conteúdo em AVI sem índice, com som (a primeira
+    /// cópia não passa pelos tempos e entra a segunda). `SICRO_BANCADA_VEZES` repetições (3).
+    #[test]
+    #[ignore = "bancada"]
+    fn bancada_tempo_da_copia() {
+        let Some(cap) = fontes::cap() else { return };
+        let Some(dav) = amostra("dahua.dav") else { return };
+        let d = fontes::pasta_temporaria("dvr-bancada");
+        ffmpeg(&cap, &d, &["-i", &dav.to_string_lossy(), "-map", "0:v", "-map", "0:a", "-c", "copy", "dahua.avi"]);
+        let b = std::fs::read(d.join("dahua.avi")).unwrap();
+        let k = b.windows(4).rposition(|w| w == b"idx1").unwrap();
+        std::fs::write(d.join("dahua-cortado.avi"), &b[..k - 5000]).unwrap();
+        let vezes: usize = std::env::var("SICRO_BANCADA_VEZES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
+        for (origem, f) in [(dav, Formato::Dahua), (d.join("dahua-cortado.avi"), Formato::AviSemIndice)] {
+            for i in 0..vezes {
+                let destino = d.join(format!("b{i}.mkv"));
+                let t0 = std::time::Instant::now();
+                let c = copiar(&cap, &origem, f, &destino, &AtomicBool::new(false)).unwrap();
+                let s = t0.elapsed().as_secs_f64();
+                let genpts = c.comando.iter().any(|a| a == "+genpts");
+                eprintln!("bancada {} ({}): {s:.2} s, {} quadros, genpts {genpts}", origem.display(), cap.versao, c.quadros);
+                std::fs::remove_file(&destino).unwrap();
+            }
+        }
+    }
+
     // ------------------------------------------------------------ registro no caso
 
     /// Caso de verdade (acento, espaço e % no caminho e no nome) com o original registrado pelo comando da importação.
@@ -1503,6 +2224,8 @@ mod testes {
             (crate::edicao::modelo::TipoDerivacao::CopiaDvr, orig.sha256.as_str(), orig.sha256.as_str(), false, epoca)
         );
         assert!(der.comando.contains("-c copy -copyinkf") || der.comando.contains("-c:v ffv1"), "{}", der.comando);
+        // contêiner com tempos: nada suposto
+        assert!(j["taxa_suposta"].is_null() && der.taxa_suposta.is_none(), "{}", j["taxa_suposta"]);
         // o comando registrado lê o original do caso e grava no nome final da cópia
         let cmd: Vec<&str> = j["ffmpeg_command"].as_array().unwrap().iter().filter_map(Value::as_str).collect();
         assert_eq!(cmd.last().copied(), Some(arquivo.to_string_lossy().as_ref()));
