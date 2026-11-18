@@ -1,11 +1,15 @@
 import { readFileSync } from "node:fs";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// a etapa da linha (P4.1) monta React: aqui só a ligação ao plano
+const linhaFalsa = vi.hoisted(() => ({ rodar: vi.fn() }));
+vi.mock("../linha/diagnostico", () => ({ ETAPA_LINHA: linhaFalsa }));
 import { Agenda, ambienteFalso, fonteCodigo, fonteR, type FonteFalsa } from "./falsos";
 import { baseDeTempo, previstoAbsoluto, tempo3 } from "./tempo3";
 import { pool8 } from "./pool8";
 import { compose } from "./compose";
 import { trocaDeClipe } from "./switch";
-import { diagnosticar, isoLocal, motorDoWebview, PLANO, type Dependencias, type Etapa, type Relatorio } from "./executar";
+import { diagnosticar, isoLocal, MEDIDAS, motorDoWebview, PLANO, type Dependencias, type Etapa, type Relatorio } from "./executar";
 import { resumir } from "./resumo";
 import type { MidiasDiagnostico } from "./comandos";
 
@@ -148,6 +152,9 @@ const MIDIAS: MidiasDiagnostico = {
 const p0 = (n: string) => MIDIAS.midias.find((m) => m.nome === n)?.p0_s;
 const UA_WEBKIT = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15";
 
+/** O plano sem a linha do tempo (que não usa mídia; teste próprio). */
+const PLANO_DE_MIDIA = PLANO.filter((e) => e.medida !== "linha");
+
 /** Plano curto: uma variante de cada medida, com os tempos reduzidos. */
 const PLANO_CURTO: Etapa[] = [
   { medida: "tempo3", chave: "copias", rodar: (amb, m) => tempo3(amb, ["cp_r3_mkv.mp4"], [m.midias.find((x) => x.nome === "cp_r3_mkv.mp4")?.p0_s]) },
@@ -204,7 +211,8 @@ describe("diagnosticar (um clique)", () => {
     const ult = progresso[progresso.length - 1]!;
     expect(ult.feitas).toBe(4);
     expect(ult.total).toBe(4);
-    expect(Object.values(ult.estados)).toEqual(["feita", "feita", "feita", "feita", "feita"]);
+    // a linha não estava no plano curto
+    expect(Object.values(ult.estados)).toEqual(["feita", "feita", "feita", "feita", "feita", "espera"]);
     for (const m of ["tempo3", "pool8", "compose", "switch"] as const) expect(progresso.some((p) => p.estados[m] === "rodando")).toBe(true);
     // tabela curta
     const linhas = resumir(j, p0);
@@ -236,6 +244,34 @@ describe("diagnosticar (um clique)", () => {
     expect(salvos).toHaveLength(0);
   });
 
+  it("a linha do tempo (P4.1) é a última etapa do plano: vai ao JSON, ao progresso e à tabela (p95 < 16 ms)", async () => {
+    const fase = (p95: number) => ({ quadros: 4, js_p50: 1, trabalho_p50: 2, trabalho_p95: p95, trabalho_max: p95, intervalo_p50: 16, intervalo_p95: 17 });
+    const res = { clipes: 200, fases: { rolar: fase(5), zoom: fase(9), cabeca: fase(3), arrastar: fase(20) }, assentar: { quadros: 40, intervalo_p50: 16, intervalo_p95: 17, intervalo_max: 20 }, ok: false };
+    linhaFalsa.rodar.mockReset();
+    linhaFalsa.rodar.mockResolvedValue(res);
+    expect(MEDIDAS).toContain("linha");
+    const etapa = PLANO.at(-1)!;
+    expect([etapa.medida, etapa.chave]).toEqual(["linha", "200"]);
+    const { amb, d, salvos, progresso } = deps([etapa]);
+    await amb.ag.rodar(diagnosticar(d));
+    expect(linhaFalsa.rodar).toHaveBeenCalledWith(amb);
+    const j = salvos[0]!;
+    expect(j.linha["200"]).toEqual(res);
+    expect(progresso.at(-1)!.estados.linha).toBe("feita");
+    expect(resumir(j, p0)).toEqual([
+      {
+        medida: "linha",
+        variante: "200 clipes",
+        valores: [
+          { rotulo: "rolar", valor: "5", ok: true },
+          { rotulo: "zoom", valor: "9", ok: true },
+          { rotulo: "cabeça", valor: "3", ok: true },
+          { rotulo: "arrastar", valor: "20", ok: false },
+        ],
+      },
+    ]);
+  });
+
   it("o plano completo roda inteiro e só pede mídias que o backend gera", async () => {
     // nomes que as receitas do Rust gravam
     const rs = readFileSync(new URL("../../../../src-tauri/src/commands/edicao_diagnostico_commands.rs", import.meta.url), "utf8");
@@ -255,11 +291,11 @@ describe("diagnosticar (um clique)", () => {
     amb.url = (n) => (pedidas.add(n), url(n));
     const salvos: Relatorio[] = [];
     const r = await amb.ag.rodar(
-      diagnosticar({ ...deps(PLANO).d, midias: async () => midias, ambiente: () => amb, salvar: async (j) => (salvos.push(j), "/c/d.json"), plano: undefined }),
+      diagnosticar({ ...deps(PLANO).d, midias: async () => midias, ambiente: () => amb, salvar: async (j) => (salvos.push(j), "/c/d.json"), plano: PLANO_DE_MIDIA }),
     );
     expect([...pedidas].filter((n) => !doBackend.has(n))).toEqual([]);
     expect(r?.caminho).toBe("/c/d.json");
-    expect(salvos[0]?.etapas.map((e) => `${e.medida}/${e.chave}/${e.ok}`)).toEqual(PLANO.map((e) => `${e.medida}/${e.chave}/true`));
+    expect(salvos[0]?.etapas.map((e) => `${e.medida}/${e.chave}/${e.ok}`)).toEqual(PLANO_DE_MIDIA.map((e) => `${e.medida}/${e.chave}/true`));
     for (const [m, ks] of Object.entries({ tempo3: ["fontes", "copias"], pool8: ["p720", "1080p", "p720_n2"], compose: ["v1080_g30", "cam1_p720"], switch: ["padrao", "mesmo_arquivo", "velb_0_5"] })) {
       expect(Object.keys(salvos[0]![m as "tempo3"])).toEqual(ks);
     }

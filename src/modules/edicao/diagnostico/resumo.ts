@@ -4,6 +4,10 @@ import type { ResCompose } from "./compose";
 import type { ResPool8 } from "./pool8";
 import type { ResSwitch } from "./switch";
 import { type ResTempo3, baseDeTempo } from "./tempo3";
+import type { ResLinha } from "../linha/diagnostico";
+
+/** O `LIMITE_MS` de `linha/diagnostico.tsx` (aceite do P4.1), sem carregar a linha aqui. */
+export const LIMITE_LINHA_MS = 16;
 
 export interface Valor { rotulo: string; valor: string; ok?: boolean }
 export interface LinhaResumo { medida: string; variante: string; valores: Valor[]; erro?: string }
@@ -19,6 +23,7 @@ const VARIANTES: Record<string, string> = {
   padrao: "cam1 → cam2",
   mesmo_arquivo: "cam1 → cam1",
   velb_0_5: "0,5×",
+  "200": "200 clipes",
 };
 
 const n0 = (v: number | null | undefined) => (v == null || !Number.isFinite(v) ? "—" : String(Math.round(v)));
@@ -76,6 +81,12 @@ function troca(r: ResSwitch): Valor[] {
   ];
 }
 
+/** Linha do tempo: o p95 do trabalho por quadro de cada fase, certo abaixo de `LIMITE_LINHA_MS`. */
+function linha(r: ResLinha): Valor[] {
+  const nomes: Record<keyof ResLinha["fases"], string> = { rolar: "rolar", zoom: "zoom", cabeca: "cabeça", arrastar: "arrastar" };
+  return (Object.keys(nomes) as (keyof ResLinha["fases"])[]).map((k) => ({ rotulo: nomes[k], valor: n0(r.fases[k]?.trabalho_p95), ok: (r.fases[k]?.trabalho_p95 ?? Infinity) < LIMITE_LINHA_MS }));
+}
+
 export function resumir(rel: Relatorio, p0: (nome: string) => number | undefined): LinhaResumo[] {
   const linhas: LinhaResumo[] = [];
   for (const e of rel.etapas) {
@@ -92,7 +103,9 @@ export function resumir(rel: Relatorio, p0: (nome: string) => number | undefined
           ? pool8(r as unknown as ResPool8)
           : e.medida === "compose"
             ? compose(r as unknown as ResCompose)
-            : troca(r as unknown as ResSwitch);
+            : e.medida === "linha"
+              ? linha(r as unknown as ResLinha)
+              : troca(r as unknown as ResSwitch);
     linhas.push({ ...base, valores });
   }
   return linhas;

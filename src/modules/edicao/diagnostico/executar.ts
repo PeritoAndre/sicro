@@ -1,6 +1,6 @@
 /**
- * Diagnóstico de vídeo (P0.9, arquitetura §7.7): um clique prepara as mídias, roda `tempo3`, `pool8`, `compose` e
- * `switch` no webview do app e grava `diagnostico-<data>.json`. Falha numa etapa fica no JSON e não para as outras.
+ * Diagnóstico de vídeo (P0.9, arquitetura §7.7): um clique prepara as mídias, roda `tempo3`, `pool8`, `compose`,
+ * `switch` e `linha` (P4.1) no webview do app e grava `diagnostico-<data>.json`. Falha numa etapa fica no JSON e não para as outras.
  */
 import { toSicroError } from "@core/errors";
 import { type Ambiente, Cancelado, esperar, textoDeErro } from "./base";
@@ -11,7 +11,7 @@ import { COPIAS_TEMPO3, FONTES_TEMPO3, tempo3 } from "./tempo3";
 import type { MidiasDiagnostico } from "./comandos";
 
 export const ESQUEMA_DIAGNOSTICO = "sicro.edicao.diagnostico/1";
-export const MEDIDAS = ["tempo3", "pool8", "compose", "switch"] as const;
+export const MEDIDAS = ["tempo3", "pool8", "compose", "switch", "linha"] as const;
 export type Medida = (typeof MEDIDAS)[number];
 
 export interface Etapa {
@@ -34,6 +34,8 @@ export const PLANO: Etapa[] = [
   { medida: "switch", chave: "padrao", rodar: (amb) => trocaDeClipe(amb) },
   { medida: "switch", chave: "mesmo_arquivo", rodar: (amb) => trocaDeClipe(amb, { fa: "cam1.mp4", fb: "cam1.mp4" }) },
   { medida: "switch", chave: "velb_0_5", rodar: (amb) => trocaDeClipe(amb, { velb: 0.5 }) },
+  // linha do tempo com 200 clipes (P4.1, `linha/diagnostico.tsx::ETAPA_LINHA`); carregada só ao medir
+  { medida: "linha", chave: "200", rodar: async (amb) => (await import("../linha/diagnostico")).ETAPA_LINHA.rodar(amb) },
 ];
 
 export type Estado = "espera" | "rodando" | "feita" | "falhou";
@@ -73,6 +75,7 @@ export interface Relatorio {
   pool8: Record<string, unknown>;
   compose: Record<string, unknown>;
   switch: Record<string, unknown>;
+  linha: Record<string, unknown>;
 }
 
 export interface Dependencias {
@@ -155,7 +158,7 @@ export async function diagnosticar(d: Dependencias): Promise<Resultado | null> {
   const plano = d.plano ?? PLANO;
   const inicio = d.agora();
   const p: Progresso = {
-    estados: { midias: "rodando", tempo3: "espera", pool8: "espera", compose: "espera", switch: "espera" },
+    estados: { midias: "rodando", tempo3: "espera", pool8: "espera", compose: "espera", switch: "espera", linha: "espera" },
     feitas: 0,
     total: plano.length,
     midias: null,
@@ -193,6 +196,7 @@ export async function diagnosticar(d: Dependencias): Promise<Resultado | null> {
       pool8: {},
       compose: {},
       switch: {},
+      linha: {},
     };
     for (const e of plano) {
       if (p.estados[e.medida] === "espera") p.estados[e.medida] = "rodando";

@@ -12,9 +12,14 @@ vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn(async () => () => {}) })
 import { useEdicaoStore } from "../store/edicaoStore";
 import { resolver } from "../modelo/tempo";
 import { LIMITE_MS, medirLinha, N_CLIPES, projetoDe200 } from "./diagnostico";
+import { LIMITE_LINHA_MS } from "../diagnostico/resumo";
 import { trilhasDaLinha, TRILHA_PRINCIPAL } from "./modelo";
 
 describe("medida da linha (Diagnóstico)", () => {
+  it("a tabela do Diagnóstico usa o mesmo limite", () => {
+    expect(LIMITE_LINHA_MS).toBe(LIMITE_MS);
+  });
+
   it("projeto de 200 clipes com sobreposições, áudio e efeitos", () => {
     const { doc, ctx } = projetoDe200();
     const linha = resolver(doc, ctx);

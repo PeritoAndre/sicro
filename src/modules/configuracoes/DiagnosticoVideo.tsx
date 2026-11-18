@@ -178,7 +178,7 @@ function Capacidades() {
 
 type Fase = "parado" | "rodando" | "pronto" | "falhou";
 
-const ESTADOS_INICIAIS: Record<Linha, Estado> = { midias: "espera", tempo3: "espera", pool8: "espera", compose: "espera", switch: "espera" };
+const ESTADOS_INICIAIS: Record<Linha, Estado> = { midias: "espera", tempo3: "espera", pool8: "espera", compose: "espera", switch: "espera", linha: "espera" };
 
 function Diagnostico() {
   const [fase, setFase] = useState<Fase>("parado");
