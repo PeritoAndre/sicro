@@ -102,9 +102,13 @@ describe("Transporte", () => {
   it("tempo HH:MM:SS,mmm e o quadro da tabela; só os rótulos do §8.6", () => {
     const html = renderToStaticMarkup(createElement(Transporte, transporte()));
     const ts = textos(html);
-    expect(ts).toContain("00:00:12,345");
-    expect(ts).toContain("quadro 371");
-    for (const t of ts.filter((x) => x !== "00:00:12,345" && x !== "quadro 371")) expect(ROTULOS.has(t), t).toBe(true);
+    // o tempo e o quadro vêm em pedaços (as horas zeradas e a palavra "quadro" somem no palco estreito); o texto é o mesmo
+    const corrido = html.replace(/<[^>]+>/g, "");
+    expect(corrido).toContain("00:00:12,345");
+    expect(corrido).toContain("quadro 371");
+    const dados = ["00:", "00:12,345", "quadro", "371"];
+    expect(ts).toEqual(expect.arrayContaining(dados));
+    for (const t of ts.filter((x) => !dados.includes(x))) expect(ROTULOS.has(t), t).toBe(true);
     for (const r of ["Reproduzir", "Quadro anterior", "Próximo quadro", "Início do clipe", "Fim do clipe", "Quadro final", "Prévia do render", "Ajustar à tela", "Expandir"]) expect(ts).toContain(r);
     expect(html).toContain('data-borda="inicio"');
     expect(html).not.toMatch(/placeholder/i);
