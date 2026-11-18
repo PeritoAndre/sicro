@@ -81,6 +81,14 @@ function derivacao(m: VideoMedia, lista: VideoMedia[]): Derivacao | null {
     const [num, den] = j.taxa.split("/").map((x) => Number(x.trim()));
     if (Number.isInteger(num) && Number.isInteger(den) && num! > 0 && den! > 0) d.taxa_suposta = { num: num!, den: den! };
   }
+  // P4.R: de que arquivo e com que ffmpeg a cópia de gravador foi feita; espelho de `importar_v1::derivacao`
+  if (tipo === "copia_dvr") {
+    const texto = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? v.trim() : undefined);
+    const nome = texto((j.source as { filename?: unknown } | undefined)?.filename);
+    const versao = texto((j.ffmpeg as { versao?: unknown } | undefined)?.versao);
+    if (nome !== undefined) d.de_nome = nome;
+    if (versao !== undefined) d.ffmpeg_versao = versao;
+  }
   return d;
 }
 

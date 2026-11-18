@@ -9,6 +9,8 @@
 // CONTRATO: acréscimo da Fase 2 (P2.R) ao `/2`, só campos novos (dados e modelo andam juntos no binário):
 // `ocultacoes[].{n, arquivo, forma, regiao}` (planilha do 18-M §11; `filtro` sem a forma), `modelos_ia[].{execucao,
 // desvio}` (o provedor sai de `origem`) e `rastreios[]` (anexo H: cada rastreio em que um programa atuou).
+// CONTRATO: acréscimo do P4.R (bloco 6.4, só campos novos): `originais[].tecnico.{derivacao, comando}` (como a cópia
+// foi feita: ffmpeg, taxa suposta, relógio do gravador; e o comando registrado).
 // CONTRATO: acréscimo da revisão do relatório (só campos novos): `programa` ("SICRO 6.0.0"), `roteiro[].textos` (o
 // texto das telas de texto, do `projeto.json`), `roteiro[].efeitos[]` passa a `{ texto, marcas[] }` (marcas com a cor
 // para a amostra) e `originais[].tecnico.intervalos_usados` (percentis dos intervalos nos trechos usados, do `mapa.csv`).
@@ -95,6 +97,7 @@ struct Feito {
 #[derive(Debug, Default, Deserialize)]
 #[serde(default)]
 struct FSobreposto {
+    clipe: String,
     tipo: String,
     nome: String,
     na_saida: FNaSaida,
@@ -151,7 +154,12 @@ struct FMidia {
 struct FDerivacao {
     tipo: String,
     raiz_sha256: String,
+    comando: String,
     com_perdas: bool,
+    inicio_epoca_s: Option<f64>,
+    taxa_suposta: Option<R>,
+    de_nome: Option<String>,
+    ffmpeg_versao: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -649,6 +657,8 @@ struct OriginalTecnico {
     cor: String,
     observacoes: String,
     intervalos_usados: Option<String>,
+    derivacao: Option<String>,
+    comando: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -892,6 +902,19 @@ fn data_curta(rfc3339: &str) -> String {
     let (Some(d), Some(fuso)) = (instante(rfc3339), FixedOffset::west_opt(3 * 3600)) else { return ou_traco(rfc3339) };
     let l = d.with_timezone(&fuso);
     format!("{:02}/{:02}/{}, {}h{:02} (Brasília)", l.day(), l.month(), l.year(), l.hour(), l.minute())
+}
+
+/// Relógio do gravador (`Derivacao.inicio_epoca_s`, como o gravador gravou, sem fuso): "18/09/2017, 19:24:59" e os
+/// milésimos quando há ("…:59,250").
+fn relogio_do_gravador(s: f64) -> Option<String> {
+    let ms = (s * 1000.0).round();
+    if !ms.is_finite() || ms.abs() > 1e15 {
+        return None;
+    }
+    let d = DateTime::<Utc>::from_timestamp_millis(ms as i64)?;
+    let mili = d.timestamp_subsec_millis();
+    let seg = if mili > 0 { format!("{:02},{mili:03}", d.second()) } else { format!("{:02}", d.second()) };
+    Some(format!("{:02}/{:02}/{}, {:02}:{:02}:{seg}", d.day(), d.month(), d.year(), d.hour(), d.minute()))
 }
 
 /// `cpu` | `cuda` do fio (B2) como o PDF mostra; fora do catálogo, como veio.
@@ -1138,8 +1161,11 @@ fn original(i: usize, m: &FMidia, passos: Option<&[i64]>) -> Original {
     // percentis 10, 50 e 90 dos intervalos nos trechos usados: o mínimo e o máximo absolutos (1 tique, um buraco de
     // segundos) não dizem o ritmo a quem assiste; ficam no anexo B
     let passos = passos.filter(|p| med.quadros > 1 && p.len() >= MIN_INTERVALOS);
+    // fluxo cru sem temporização (P4.6b): a taxa da cópia foi suposta, não medida
+    let suposta = m.derivacao.as_ref().and_then(|d| d.taxa_suposta.as_ref()).filter(|r| r.num > 0 && r.den > 0);
     let ritmo = match (med.quadros, por_segundo(med.passo_med, &med.tb)) {
         (0, _) => rot("ritmo.som").to_string(),
+        (_, _) if suposta.is_some() => frases::preencher(rot("ritmo.suposto"), &[("fps", &suposta.map(|r| taxa(r.num, r.den)).unwrap_or_default())]),
         (1, _) | (_, None) => rot("ritmo.imagem").to_string(),
         (_, Some(f)) if variavel => {
             let faixa = passos.and_then(|p| Some((por_segundo(percentil(p, 0.9), &med.tb)?, por_segundo(percentil(p, 0.1), &med.tb)?)));
@@ -1163,20 +1189,44 @@ fn original(i: usize, m: &FMidia, passos: Option<&[i64]>) -> Original {
     if !m.recebido.obs.trim().is_empty() {
         recebido = format!("{recebido} ({})", m.recebido.obs.trim());
     }
-    let mut relogio = match m.relogio_desvio_s {
-        Some(d) => {
-            let sinal = if d < 0.0 { "−" } else { "+" };
-            frases::preencher(rot("relogio.desvio"), &[("d", &format!("{sinal}{}", duracao(d.abs())))])
-        }
-        None => rot("relogio.sem").to_string(),
+    // P4.6: o relógio do gravador no começo do original, quando ele grava a data
+    let inicio = m.derivacao.as_ref().and_then(|d| d.inicio_epoca_s).and_then(relogio_do_gravador).map(|q| frases::preencher(rot("relogio.inicio"), &[("quando", &q)]));
+    let desvio = m.relogio_desvio_s.map(|d| {
+        let sinal = if d < 0.0 { "−" } else { "+" };
+        frases::preencher(rot("relogio.desvio"), &[("d", &format!("{sinal}{}", duracao(d.abs())))])
+    });
+    let mut relogio = match [inicio, desvio].into_iter().flatten().collect::<Vec<_>>() {
+        v if v.is_empty() => rot("relogio.sem").to_string(),
+        v => v.join(" · "),
     };
     if let Some(g) = m.gravador.as_deref().filter(|g| !g.trim().is_empty()) {
         relogio = format!("{relogio} · {g}");
     }
     let derivacao = m.derivacao.as_ref().map(|d| {
-        let como = format!("{}, {}", rot_ou("derivacao", &d.tipo), rot(if d.com_perdas { "derivacao.com_perdas" } else { "derivacao.sem_perdas" }));
-        Derivada { texto: frases::preencher(modelo::DERIVADA, &[("como", &como)]), origem_sha256: d.raiz_sha256.clone() }
+        // cópia de gravador em FFV1 (fluxo cru com quadros B): recodificada, sem perda (a prova confere cada imagem)
+        let perdas = match (d.com_perdas, d.tipo == "copia_dvr" && m.codec.eq_ignore_ascii_case("ffv1")) {
+            (true, _) => "derivacao.com_perdas",
+            (false, true) => "derivacao.sem_perdas_recodificada",
+            (false, false) => "derivacao.sem_perdas",
+        };
+        let como = format!("{}, {}", rot_ou("derivacao", &d.tipo), rot(perdas));
+        let texto = match d.de_nome.as_deref().map(str::trim).filter(|n| !n.is_empty()) {
+            Some(nome) => frases::preencher(modelo::DERIVADA_DE, &[("nome", nome), ("como", &como)]),
+            None => frases::preencher(modelo::DERIVADA, &[("como", &como)]),
+        };
+        Derivada { texto, origem_sha256: d.raiz_sha256.clone() }
     });
+    // anexo B: como a cópia foi feita (ffmpeg, taxa suposta, relógio) e o comando registrado
+    let (derivacao_tecnica, comando) = match &m.derivacao {
+        Some(d) => {
+            let mut v = vec![rot_ou("derivacao", &d.tipo)];
+            v.extend(d.ffmpeg_versao.iter().filter(|x| !x.trim().is_empty()).map(|x| format!("FFmpeg {}", x.trim())));
+            v.extend(suposta.map(|r| format!("taxa suposta {}/{} quadros/s", r.num, r.den)));
+            v.extend(d.inicio_epoca_s.filter(|x| x.is_finite()).map(|x| format!("início no relógio do gravador {} ({} s desde 1970)", relogio_do_gravador(x).unwrap_or_else(|| "—".into()), num(x, 3))));
+            (Some(v.join(" · ")), Some(d.comando.trim().to_string()).filter(|c| !c.is_empty()))
+        }
+        None => (None, None),
+    };
     let cobertura = (med.quadros > 1).then(|| Cobertura {
         usado: duracao(m.usado_total_s),
         total: duracao(med.ate_s - med.de_s),
@@ -1231,6 +1281,8 @@ fn original(i: usize, m: &FMidia, passos: Option<&[i64]>) -> Original {
             cor: if m.cor.matriz.is_empty() { "—".into() } else { format!("{}, faixa {}", m.cor.matriz.to_uppercase().replace("BT", "BT."), if m.cor.faixa == "pc" { "cheia" } else { "limitada" }) },
             observacoes: if obs.is_empty() { "—".into() } else { obs.join("; ") },
             intervalos_usados,
+            derivacao: derivacao_tecnica,
+            comando,
         },
     }
 }
@@ -1350,6 +1402,9 @@ fn regiao_parcial(regiao: &Value) -> bool {
 fn tipo_do_proc(p: &FProc) -> Option<&str> {
     if p.nome == "ocultar" {
         Some(tipo_da_ocultacao(p.parametros["modo"].as_str().unwrap_or("")))
+    } else if p.nome == "enquadramento" && segue_rastreio(p).is_some() && regiao_parcial(&p.parametros["regiao"]) {
+        // Fase 4 (ZS): a parte mostrada se desloca com o alvo
+        Some(tipo::AMPLIACAO_QUE_SEGUE)
     } else if p.nome != "enquadramento" || regiao_parcial(&p.parametros["regiao"]) {
         Some(&p.nome)
     } else if p.parametros["ajuste"] == "cobrir" {
@@ -1373,10 +1428,15 @@ fn itens_nos_slots(roteiro: &[FItem], de_q: u64, n_q: u32) -> Vec<u32> {
     roteiro.iter().filter(|it| it.na_saida.de_q < ate && de_q < it.na_saida.de_q + it.na_saida.n_q as u64).map(|it| it.n).collect()
 }
 
+/// Rastreio que o enquadramento acompanha (`EfEnquadramento.segue`, Fase 4); None = região própria.
+fn segue_rastreio(p: &FProc) -> Option<&str> {
+    p.parametros["segue"]["rastreio"].as_str().filter(|x| !x.trim().is_empty())
+}
+
 /// Id do rastreio que o processamento usa (destaque e lupa; ocultar e holofote pelo `alvo`; velocidade que
-/// acompanha pelo `onde`, como `efeitos::rastreio_seguido`).
+/// acompanha pelo `onde`; enquadramento que segue pelo `segue`, como `efeitos::rastreio_seguido`).
 fn rastreio_do_proc(p: &FProc) -> Option<&str> {
-    p.parametros["rastreio"].as_str().or_else(|| p.parametros["alvo"]["rastreio"].as_str()).or_else(|| p.parametros["onde"]["rastreio"].as_str())
+    p.parametros["rastreio"].as_str().or_else(|| p.parametros["alvo"]["rastreio"].as_str()).or_else(|| p.parametros["onde"]["rastreio"].as_str()).or_else(|| segue_rastreio(p))
 }
 
 fn automatico(r: &FRastreio) -> bool {
@@ -1475,6 +1535,20 @@ fn corridas_de(r: &FRastreio) -> (Vec<Corrida>, Vec<Corrida>, usize) {
 
 fn neural(c: &Corrida) -> bool {
     matches!(c.motor.motor, MotorRastreio::Edgetam | MotorRastreio::Vittrack)
+}
+
+/// Corrida feita por modelo de IA identificado por arquivos: os rastreadores neurais e a detecção (P4.5).
+fn com_modelo(c: &Corrida) -> bool {
+    neural(c) || c.motor.motor == MotorRastreio::Deteccao
+}
+
+/// `uso` da corrida em `feito.ia` (a regra de `ia::uso::da_proveniencia`).
+fn uso_da(c: &Corrida) -> &'static str {
+    if c.motor.motor == MotorRastreio::Deteccao {
+        "deteccao"
+    } else {
+        "rastreio"
+    }
 }
 
 /// Como o rastreio nasceu; None = tipo que o catálogo não conhece (não se afirma).
@@ -1577,6 +1651,33 @@ fn textos_das_telas(projeto: &Value) -> HashMap<String, Vec<TextoTela>> {
     telas
 }
 
+/// Entrada e saída de cada sobreposto com `animacao` (Fase 4; sem ela, "aparecer" nos dois lados, o padrão: nada a
+/// dizer), por id do clipe: "Entra deslizando de baixo em 0,3 s e some de uma vez." Valor fora do catálogo: nada.
+fn entradas_e_saidas(projeto: &Value) -> HashMap<String, String> {
+    let parte = |qual: &str, a: &Value, d: f64| -> Option<String> {
+        // aparecer ou deslizar sem duração é corte (`sobreposto::transformacao_em`); sem o campo, nada se afirma
+        let s = a[qual].as_str()?;
+        let s = if s == "corte" || (d > 0.0 && d.is_finite()) { s } else { "corte" };
+        let lado = frases::rotulo(&format!("surgir.{}.{}", if qual == "entrada" { "de" } else { "para" }, a["lado"].as_str().unwrap_or("baixo")))?;
+        Some(frases::preencher(frases::rotulo(&format!("surgir.{qual}.{s}"))?, &[("d", &num(d, 2)), ("lado", lado)]))
+    };
+    let mut v = HashMap::new();
+    for c in projeto["sobreposicoes"].as_array().into_iter().flatten().flat_map(|t| t["clipes"].as_array().into_iter().flatten()) {
+        let (Some(id), a) = (c["id"].as_str(), &c["animacao"]) else { continue };
+        // "aparecer" nos dois lados é o padrão, com ou sem o campo
+        if !a.is_object() || (a["entrada"] == "aparecer" && a["saida"] == "aparecer") {
+            continue;
+        }
+        let d = |k: &str| c[k].as_f64().unwrap_or(0.0);
+        if let (Some(e), Some(s)) = (parte("entrada", a, d("entrada_s")), parte("saida", a, d("saida_s"))) {
+            let frase = format!("{e} e {s}.");
+            let mut cs = frase.chars();
+            v.insert(id.to_string(), cs.next().map(|p| p.to_uppercase().chain(cs).collect()).unwrap_or_default());
+        }
+    }
+    v
+}
+
 /// `dados.json` do modelo, com todos os valores já em texto pronto para imprimir.
 pub fn dados(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoDoPacote]) -> Result<Value> {
     dados_com(tecnico, miniaturas, arquivos, Complementos::default())
@@ -1590,12 +1691,12 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     let t: Tecnico = serde_json::from_value(tecnico.clone())?;
     let (f, e) = (&t.feito, &t.execucao);
     // o projeto só conta se é o que o `feito` registra
-    let mut telas = extra
+    let projeto_lido = extra
         .projeto
         .filter(|b| !f.projeto.sha256.is_empty() && format!("{:x}", Sha256::digest(b)) == f.projeto.sha256)
-        .and_then(|b| serde_json::from_slice::<Value>(b).ok())
-        .map(|p| textos_das_telas(&p))
-        .unwrap_or_default();
+        .and_then(|b| serde_json::from_slice::<Value>(b).ok());
+    let mut telas = projeto_lido.as_ref().map(textos_das_telas).unwrap_or_default();
+    let surgir = projeto_lido.as_ref().map(entradas_e_saidas).unwrap_or_default();
     let intervalos = extra.mapa.map(intervalos_do_mapa).unwrap_or_default();
     let com_som = f.audio.mixagem.is_some() || e.conteudo.audio_sha256.is_some();
     let id_da_midia = |id: &str| f.midias.iter().position(|m| m.id == id).map(letra).unwrap_or_else(|| "—".into());
@@ -1763,7 +1864,9 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
         let itens = itens_nos_slots(&f.roteiro, s.na_saida.de_q, s.na_saida.n_q);
         let faixa = frases::preencher(rot("onde.de_ate"), &[("de", &tempo(s.na_saida.de_s)), ("ate", &tempo(s.na_saida.ate_s))]);
         let onde = if itens.is_empty() { faixa } else { format!("{}, {faixa}", onde(&itens)) };
-        acrescimos.push(Linha { o_que, onde, explicacao: frases::do_efeito(t).unwrap_or("").to_string() });
+        // entrada e saída quando não são o padrão (Fase 4, texto livre)
+        let explicacao = [frases::do_efeito(t).unwrap_or(""), surgir.get(&s.clipe).map(String::as_str).unwrap_or("")].iter().filter(|x| !x.is_empty()).copied().collect::<Vec<_>>().join(" ");
+        acrescimos.push(Linha { o_que, onde, explicacao });
     }
     // avisos que o programa escreve na imagem (selos): também são acréscimo; um por texto, com os itens que o levam
     let mut avisos: Vec<(&str, Vec<u32>)> = Vec::new();
@@ -1820,13 +1923,40 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     if n_oc > 0 {
         ia_resumo.push(frases::preencher(modelo::IA_OCULTACOES, &[("n", &n_oc.to_string())]));
     }
+    // como cada imagem coberta por elas obteve a posição (propostas, confirmadas e calculadas: P4.5)
+    let q = f.ocultacoes.iter().filter(|o| rastreio(&o.rastreio).is_some_and(automatico)).fold(FQuadros::default(), |mut a, o| {
+        a.ancora += o.quadros.ancora;
+        a.medido += o.quadros.medido + o.quadros.ancora_do_programa;
+        a.interpolado += o.quadros.interpolado;
+        a
+    });
+    if n_oc > 0 {
+        let (achadas, calculadas, marcadas) = (milhar(q.medido as u64), milhar(q.interpolado as u64), milhar(q.ancora as u64));
+        ia_resumo.push(if q.ancora > 0 {
+            frases::preencher(modelo::IA_OCULTACOES_QUADROS_PERITO, &[("achadas", &achadas), ("calculadas", &calculadas), ("marcadas", &marcadas)])
+        } else {
+            frases::preencher(modelo::IA_OCULTACOES_QUADROS, &[("achadas", &achadas), ("calculadas", &calculadas)])
+        });
+    }
     let procs = || f.roteiro.iter().flat_map(|it| it.processamentos.iter().map(move |p| (it, p)));
-    let mut marcados: Vec<&str> =
-        procs().filter(|(_, p)| p.nome != "ocultar").filter_map(|(_, p)| rastreio_do_proc(p)).filter(|id| rastreio(id).is_some_and(automatico)).collect();
-    marcados.sort_unstable();
-    marcados.dedup();
-    if !marcados.is_empty() {
-        ia_resumo.push(frases::preencher(modelo::IA_MARCACOES, &[("n", &marcados.len().to_string())]));
+    // marcações e ampliações que acompanham alvo de origem automática, contadas por rastreio
+    let automaticos = |enquadramento: bool| -> usize {
+        let mut v: Vec<&str> = procs()
+            .filter(|(_, p)| p.nome != "ocultar" && (p.nome == "enquadramento") == enquadramento)
+            .filter_map(|(_, p)| rastreio_do_proc(p))
+            .filter(|id| rastreio(id).is_some_and(automatico))
+            .collect();
+        v.sort_unstable();
+        v.dedup();
+        v.len()
+    };
+    let marcados = automaticos(false);
+    if marcados > 0 {
+        ia_resumo.push(frases::preencher(modelo::IA_MARCACOES, &[("n", &marcados.to_string())]));
+    }
+    let ampliacoes = automaticos(true);
+    if ampliacoes > 0 {
+        ia_resumo.push(frases::preencher(modelo::IA_AMPLIACOES, &[("n", &ampliacoes.to_string())]));
     }
     // rastreios em que um programa atuou (anexo H), na ordem do `feito`: "R1", "R2"…; `lidas` = as corridas que deram
     // amostra a algum quadro usado (`corridas_no_video`), `fora` = as outras
@@ -1888,8 +2018,8 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     // que podem ter dado amostra ao vídeo, e os delas que ele ainda não traz
     let no_video_ia = |m: &FIa| m.uso.trim() != "rastreio" || listados.iter().flat_map(|l| &l.lidas).filter(|c| neural(c)).any(|c| FIa::da_corrida(c, "rastreio").mesmo(m));
     let mut modelos: Vec<FIa> = f.ia.iter().filter(|m| no_video_ia(m)).cloned().collect();
-    for c in listados.iter().flat_map(|l| &l.lidas).filter(|c| neural(c)) {
-        let x = FIa::da_corrida(c, "rastreio");
+    for c in listados.iter().flat_map(|l| &l.lidas).filter(|c| com_modelo(c)) {
+        let x = FIa::da_corrida(c, uso_da(c));
         if !modelos.iter().any(|m| m.mesmo(&x)) {
             modelos.push(x);
         }
@@ -2024,8 +2154,9 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     let ref_rastreio = |id: &str| -> String {
         id_listado(id).unwrap_or_else(|| {
             let curto: String = id.chars().take(8).collect();
-            match rastreio(id).and_then(origem_do_rastreio) {
-                Some(o) => format!("{curto} ({o})"),
+            // origem e "marcações do perito: n" (o contador do painel, `marcadasAMao`)
+            match rastreio(id).map(origem_e_marcacoes).filter(|v| !v.is_empty()) {
+                Some(partes) => format!("{curto} ({})", partes.join(" · ")),
                 None => curto,
             }
         })
@@ -2243,7 +2374,11 @@ pub fn dados_com(tecnico: &Value, miniaturas: &[Miniatura], arquivos: &[ArquivoD
     software.push(["Sistema".to_string(), ou_traco(&e.sistema.so), maquina.join(" · ")]);
     // rastreios em que cada modelo rodou
     let refs = |m: &FIa| -> Vec<String> {
-        listados.iter().filter(|l| l.lidas.iter().filter(|c| neural(c)).any(|c| FIa::da_corrida(c, &m.uso).mesmo(m))).map(|l| l.id.clone()).collect()
+        listados
+            .iter()
+            .filter(|l| l.lidas.iter().filter(|c| com_modelo(c) && uso_da(c) == m.uso.trim()).any(|c| FIa::da_corrida(c, &m.uso).mesmo(m)))
+            .map(|l| l.id.clone())
+            .collect()
     };
     let mut modelos_ia: Vec<ModeloIa> = modelos
         .iter()
@@ -2870,7 +3005,7 @@ mod testes {
         plano.proveniencia.rastreios[0].corridas.clear();
         assert_eq!(resumo(&plano), [nenhuma]);
         plano.proveniencia.rastreios[0].origem = serde_json::from_value(json!({ "tipo": "pessoas", "pessoa_id": "p1", "estado": "revisada", "copiado_em": "2026-11-14T09:00:00Z" })).unwrap();
-        assert_eq!(resumo(&plano), ["Ocultações propostas por detecção automática e confirmadas pelo perito: 1."]);
+        assert_eq!(resumo(&plano), ["Ocultações propostas por detecção automática e confirmadas pelo perito: 1.", "Nessas ocultações, imagens com a posição achada pelo programa: 0; calculada a partir das posições vizinhas: 0; marcada pelo perito: 2."]);
     }
 
     /// Legendas: o relatório só fala delas quando o `feito` diz que saíram (`legendas.modo`, que a proveniência ainda
@@ -3255,7 +3390,7 @@ mod testes {
         assert!(dados(&t2, &[], &[]).unwrap()["rastreios"][0]["corridas"][0].as_str().unwrap().contains("para a frente, pts 15360 a 30720 · "));
         // resumo para leigo: detecção, alvo seguido por IA (só o r2: o r3 é correlação) e a remissão ao anexo H
         let ia: Vec<String> = serde_json::from_value(d["ia_resumo"].clone()).unwrap();
-        assert_eq!(ia, ["Ocultações propostas por detecção automática e confirmadas pelo perito: 1.", "Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1.", modelo::IA_MODELOS]);
+        assert_eq!(ia, ["Ocultações propostas por detecção automática e confirmadas pelo perito: 1.", "Nessas ocultações, imagens com a posição achada pelo programa: 0; calculada a partir das posições vizinhas: 0; marcada pelo perito: 2.", "Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1.", modelo::IA_MODELOS]);
         // no PDF: arquivos e SHA-256 inteiros, provedor em maiúsculas, as corridas
         let (_, texto) = pdf_de(&t, ModoPdf::A3);
         let tem = |s: &str| assert!(texto.contains(s), "falta no PDF: {s}\n{texto}");
@@ -3759,6 +3894,156 @@ mod testes {
             let o = original(0, &m, Some(&[40; 30]));
             assert_eq!((o.especie.as_str(), o.ritmo.as_str(), o.duracao.as_str(), o.cobertura.is_none(), o.taxa_variavel), (especie, ritmo, "—", true, false));
             assert_eq!(o.tecnico.intervalos_usados, None);
+        }
+    }
+
+    /// Texto do PDF numa linha só (a quebra de linha do leiaute vira espaço).
+    fn plano_do_pdf(e: &relatorio_pdf::Entrada) -> String {
+        relatorio_pdf::texto(e).unwrap().split_whitespace().collect::<Vec<_>>().join(" ")
+    }
+
+    /// Zoom que acompanha o rastreio (ZS; contratos-fase4 D9 e (f) P4.R), pelo `feito` que o motor grava
+    /// (`parametros.segue` e o rastreio em `feito.rastreios`): o item e as mudanças dizem "Ampliação que acompanha o
+    /// alvo", o anexo C diz "acompanhando o rastreio R1 (média de 1,5 s)" e o R1 do anexo H tem o uso do item; alvo de
+    /// detecção conta à parte das marcações no resumo de IA; região inteira não é ampliação; sem média, diz.
+    #[test]
+    fn zoom_que_segue() {
+        let c = Cena::nova("juri-segue");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let pv = &mut plano.proveniencia;
+        // o r1 só no zoom (a ocultação dele sai)
+        pv.ocultacoes.clear();
+        pv.rastreios[0].origem = OrigemRastreio::Deteccao { classe: ClasseDeteccao::Pessoa };
+        let enq = |regiao: Value, suavizar: f64| ProvProcessamento {
+            ordem: 1,
+            nome: "enquadramento".into(),
+            parametros: json!({ "tipo": "enquadramento", "id": "q1", "ligado": true, "nome": "", "ativo": null, "regiao": regiao, "ajuste": "cobrir",
+                                "interpolacao": "bilinear", "segue": { "rastreio": "r1", "suavizar_s": suavizar } }),
+        };
+        let metade = json!({ "x": 0.25, "y": 0.25, "w": 0.5, "h": 0.5 });
+        pv.roteiro[1].processamentos = vec![enq(metade.clone(), 1.5)];
+        let base = montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap();
+        let d = dados(&base, &[], &[]).unwrap();
+        let rotulo = frases::rotulo_do_efeito(tipo::AMPLIACAO_QUE_SEGUE).unwrap();
+        assert_eq!(rotulo, "Ampliação que acompanha o alvo");
+        let efeitos: Vec<&str> = d["roteiro"][1]["efeitos"].as_array().unwrap().iter().map(|e| e["texto"].as_str().unwrap()).collect();
+        assert_eq!(efeitos, [rotulo]);
+        let linha = d["mudancas"].as_array().unwrap().iter().find(|l| l["o_que"] == rotulo).expect("nas mudanças");
+        assert_eq!((linha["onde"].as_str(), linha["explicacao"].as_str()), (Some("item 2"), frases::do_efeito(tipo::AMPLIACAO_QUE_SEGUE)));
+        let proc_ = d["processamentos"].as_array().unwrap().iter().find(|p| p["item"] == "2" && p["ordem"] == "1").unwrap();
+        assert_eq!(proc_["nome"], json!(rotulo));
+        let parametros = proc_["parametros"].as_str().unwrap();
+        assert!(parametros.ends_with("região fixa: x 25\u{a0}%, y 25\u{a0}%, largura 50\u{a0}%, altura 50\u{a0}% · acompanhando o rastreio R1 (média de 1,5 s)"), "{parametros}");
+        // o R1 do anexo H: o rastreio da detecção, usado no item 2 pelo zoom
+        assert_eq!((d["rastreios"][0]["id"].as_str(), d["rastreios"][0]["uso"].as_str()), (Some("R1"), Some("item 2")));
+        let ia: Vec<String> = serde_json::from_value(d["ia_resumo"].clone()).unwrap();
+        assert!(ia.contains(&"Ampliações que acompanham alvo achado por detecção automática e confirmado pelo perito: 1.".to_string()), "{ia:?}");
+        assert!(!ia.iter().any(|l| l.starts_with("Marcações")), "zoom não é marcação: {ia:?}");
+        // no PDF
+        let e = entrada(&base, d, &[], b"{}", ModoPdf::A3).unwrap();
+        let texto = plano_do_pdf(&e);
+        for s in ["acompanhando o rastreio R1 (média de 1,5 s)", "Ampliação que acompanha o alvo", "Ampliações que acompanham alvo achado por detecção automática"] {
+            assert!(texto.contains(s), "falta no PDF: {s}");
+        }
+        // região inteira: nada é ampliado nem se desloca (fica o "Preencher"); o anexo C segue dizendo o rastreio
+        plano.proveniencia.roteiro[1].processamentos = vec![enq(json!({ "x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0 }), 0.0)];
+        let d = dados(&montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap(), &[], &[]).unwrap();
+        assert_eq!(d["roteiro"][1]["efeitos"][0]["texto"], json!(frases::rotulo_do_efeito(tipo::PREENCHER).unwrap()));
+        assert!(d["processamentos"].to_string().contains("acompanhando o rastreio R1, sem média"), "{}", d["processamentos"]);
+        // rastreio do perito, fora do anexo H: o anexo C diz a origem e as marcações do perito
+        plano.proveniencia.roteiro[1].processamentos = vec![enq(metade, 1.0)];
+        (plano.proveniencia.rastreios[0].origem, plano.proveniencia.rastreios[0].corridas) = (OrigemRastreio::Manual, vec![]);
+        let d = dados(&montar(&plano, &res, &c.ambiente("t1"), &fecho()).unwrap(), &[], &[]).unwrap();
+        assert_eq!(d["rastreios"], json!([]));
+        assert!(d["processamentos"].to_string().contains("acompanhando o rastreio r1 (marcação do perito · marcações do perito: 2) (média de 1 s)"), "{}", d["processamentos"]);
+        assert!(!d["ia_resumo"].to_string().contains("Ampliações"));
+    }
+
+    /// Texto livre (TL; (f) P4.R): entrada e saída quando não são o padrão ("aparecer" nos dois lados), lidas do
+    /// `projeto.json` que o `feito` registra; uma linha de acréscimo por texto do projeto; sombra e faixa no anexo C.
+    #[test]
+    fn texto_livre_entrada_saida() {
+        use crate::edicao::modelo::ModeloTitulo;
+        use crate::edicao::motor::plano::{ProvNaSaida, ProvSobreposto};
+        let c = Cena::nova("juri-texto");
+        let (mut plano, res) = apoio::plano_e_resultado(&c);
+        let fps = plano.proveniencia.saida.fps;
+        let s = |q: u64| crate::edicao::tempo::instante_do_slot(q, fps);
+        let sob = |id: &str, texto: &str, de_q: u64, n_q: u32| ProvSobreposto {
+            trilha: "t1".into(),
+            clipe: id.into(),
+            tipo: "titulo".into(),
+            nome: String::new(),
+            na_saida: ProvNaSaida { de_q, n_q, de_s: s(de_q), ate_s: s(de_q + n_q as u64) },
+            midia: None,
+            preso_a: Some("c2".into()),
+            modelo: Some(ModeloTitulo::Livre),
+            textos: vec![texto.into()],
+            selos: vec![],
+        };
+        plano.proveniencia.sobrepostos =
+            vec![sob("s1", "Portão", 30, 30), sob("s2", "Vítima", 40, 20), sob("s3", "Carro", 50, 30), sob("s4", "Moto", 55, 10), sob("s5", "Placa", 60, 10)];
+        plano.proveniencia.roteiro[1].processamentos = vec![ProvProcessamento { ordem: 1, nome: "texto".into(), parametros: json!({ "tipo": "texto", "id": "e1",
+            "conteudo": "Portão", "lugar": { "x": 0.5, "y": 0.5, "h": "centro", "v": "meio" }, "largura_max": 0.6,
+            "estilo": { "tamanho": 0.052, "cor": "#ffffff", "caixa": { "cor": "#000000a0", "margem": 0.012, "raio": 0.0, "faixa": true },
+                        "sombra": { "cor": "#000000b3", "dx": 0.0, "dy": 0.003, "desfoque": 0.004 } } }) }];
+        let clipe = |id: &str, e: f64, sa: f64, animacao: Value| {
+            let mut v = json!({ "tipo": "titulo", "id": id, "entrada_s": e, "saida_s": sa });
+            if !animacao.is_null() {
+                v["animacao"] = animacao;
+            }
+            v
+        };
+        let anima = |e: &str, s: &str, lado: &str| json!({ "entrada": e, "saida": s, "lado": lado });
+        let projeto = serde_json::to_vec(&json!({ "sobreposicoes": [{ "id": "t1", "clipes": [
+            clipe("s1", 0.3, 0.3, anima("deslizar", "corte", "baixo")),
+            clipe("s2", 0.3, 0.3, Value::Null),
+            clipe("s3", 0.5, 0.25, anima("aparecer", "deslizar", "esq")),
+            clipe("s4", 0.0, 0.3, anima("deslizar", "aparecer", "dir")),
+        ] }, { "id": "t2", "clipes": [clipe("s5", 0.3, 0.3, anima("aparecer", "aparecer", "cima"))] }] }))
+        .unwrap();
+        let sha = format!("{:x}", Sha256::digest(&projeto));
+        let t = montar(&plano, &res, &c.ambiente("t1"), &Fecho { projeto_sha256: sha, ..fecho() }).unwrap();
+        let extra = Complementos { projeto: Some(&projeto), mapa: None };
+        let d = dados_com(&t, &[], &[], extra).unwrap();
+        let base = frases::do_efeito(tipo::TEXTO_SOBREPOSTO).unwrap();
+        let rotulo = frases::rotulo_do_efeito(tipo::TEXTO_SOBREPOSTO).unwrap();
+        let linhas: Vec<(String, String)> = d["acrescimos"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter(|l| l["o_que"].as_str().unwrap().starts_with(rotulo))
+            .map(|l| (l["o_que"].as_str().unwrap().to_string(), l["explicacao"].as_str().unwrap().to_string()))
+            .collect();
+        // uma linha por texto que sai no vídeo (os cinco do `feito`)
+        assert_eq!(linhas.len(), plano.proveniencia.sobrepostos.len());
+        let esperado = [
+            ("Portão", "Entra deslizando de baixo em 0,3 s e some de uma vez."),
+            ("Vítima", ""),
+            ("Carro", "Aparece aos poucos em 0,5 s e sai deslizando para a esquerda em 0,25 s."),
+            // deslizar sem duração = corte (`sobreposto::transformacao_em`)
+            ("Moto", "Aparece de uma vez e some aos poucos em 0,3 s."),
+            // "aparecer" nos dois lados é o padrão, com o campo gravado ou não
+            ("Placa", ""),
+        ];
+        for ((o_que, explicacao), (texto, frase)) in linhas.iter().zip(esperado) {
+            assert_eq!(o_que, &format!("{rotulo}: {texto}"));
+            let todo = if frase.is_empty() { base.to_string() } else { format!("{base} {frase}") };
+            assert_eq!(explicacao, &todo, "{texto}");
+        }
+        // sombra e faixa do texto no anexo C
+        let p = d["processamentos"].as_array().unwrap().iter().find(|p| p["item"] == "2" && p["ordem"] == "1").unwrap()["parametros"].as_str().unwrap().replace('\u{a0}', " ");
+        assert!(p.contains("faixa preta (#000000), sombra preta (#000000) desfocada 0,4 %"), "{p}");
+        // no PDF
+        let e = entrada(&t, d, &[], &projeto, ModoPdf::A3).unwrap();
+        let texto = plano_do_pdf(&e);
+        for s in ["Entra deslizando de baixo em 0,3 s e some de uma vez.", "sai deslizando para a esquerda em 0,25 s."] {
+            assert!(texto.contains(s), "falta no PDF: {s}");
+        }
+        // sem o projeto, ou com outro projeto (SHA-256 diferente do `feito`): nada sobre entrada e saída
+        for extra in [Complementos::default(), Complementos { projeto: Some(b"{}"), mapa: None }] {
+            let d = dados_com(&t, &[], &[], extra).unwrap();
+            assert!(!d["acrescimos"].to_string().contains("deslizando"), "{}", d["acrescimos"]);
         }
     }
 }

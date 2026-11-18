@@ -2579,6 +2579,8 @@ mod testes {
             (crate::edicao::modelo::TipoDerivacao::CopiaDvr, orig.sha256.as_str(), orig.sha256.as_str(), false, epoca)
         );
         assert!(der.comando.contains("-c copy -copyinkf") || der.comando.contains("-c:v ffv1"), "{}", der.comando);
+        // P4.R: o PDF cita o nome do original e a versão do ffmpeg da cópia
+        assert_eq!((der.de_nome.as_deref(), der.ffmpeg_versao.as_deref()), (Some(orig.filename.as_str()), Some(cap.versao.as_str())));
         // contêiner com tempos: nada suposto
         assert!(j["taxa_suposta"].is_null() && der.taxa_suposta.is_none(), "{}", j["taxa_suposta"]);
         // o comando registrado lê o original do caso e grava no nome final da cópia

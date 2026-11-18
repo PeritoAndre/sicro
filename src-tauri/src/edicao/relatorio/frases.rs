@@ -36,6 +36,9 @@ pub mod tipo {
     // CONTRATO: acréscimo (verificação da Fase 1).
     /// Ocultação por mosaico ou desfoque: só o sólido opaco é irreversível (D17); a frase não promete o que não é.
     pub const OCULTAR_PARCIAL: &str = "ocultar_parcial";
+    // CONTRATO: acréscimo (P4.R, zoom que segue).
+    /// Enquadramento cujo centro acompanha um rastreio (`EfEnquadramento.segue`): a parte mostrada se desloca.
+    pub const AMPLIACAO_QUE_SEGUE: &str = "ampliacao_que_segue";
 }
 
 /// Condições que não são código de validação (seções 6 a 8 e anexos).
@@ -119,6 +122,19 @@ pub mod modelo {
     // CONTRATO: acréscimo (fecho da Fase 2).
     /// Corrida que não deu amostra a nenhum quadro usado (fora do trecho, ou substituída ali por outra): fica só a conta.
     pub const CORRIDAS_FORA: &str = "corridas sem amostra nos trechos usados: {n}";
+    // CONTRATO: acréscimos do P4.R (bloco 6.4).
+    /// Ocultações de origem automática (`IA_OCULTACOES`): como cada imagem coberta obteve a posição, pelas contagens de
+    /// `feito.ocultacoes[].quadros` (achada = linha medida do programa; calculada = interpolada ou estendida).
+    pub const IA_OCULTACOES_QUADROS: &str = "Nessas ocultações, imagens com a posição achada pelo programa: {achadas}; calculada a partir das posições vizinhas: {calculadas}.";
+    pub const IA_OCULTACOES_QUADROS_PERITO: &str =
+        "Nessas ocultações, imagens com a posição achada pelo programa: {achadas}; calculada a partir das posições vizinhas: {calculadas}; marcada pelo perito: {marcadas}.";
+    /// Zoom que acompanha alvo de origem automática (contado à parte das marcações).
+    pub const IA_AMPLIACOES: &str = "Ampliações que acompanham alvo achado por detecção automática e confirmado pelo perito: {n}.";
+    /// Mídia derivada de arquivo com nome conhecido (`Derivacao.de_nome`).
+    pub const DERIVADA_DE: &str = "Este arquivo foi feito pela perícia a partir do arquivo «{nome}», também do caso ({como}).";
+    /// Anexo C do enquadramento que segue (`EfEnquadramento.segue`).
+    pub const ACOMPANHANDO: &str = "acompanhando o rastreio {r} (média de {s} s)";
+    pub const ACOMPANHANDO_SEM_MEDIA: &str = "acompanhando o rastreio {r}, sem média";
 }
 
 /// (chave, texto): rótulos de valores do modelo (`grupo.valor`) usados nas tabelas.
@@ -156,6 +172,27 @@ const ROTULOS: &[(&str, &str)] = &[
     ("derivacao.outro", "outro processamento"),
     ("derivacao.sem_perdas", "sem recompressão"),
     ("derivacao.com_perdas", "com recompressão"),
+    // P4.R: cópia de gravador recodificada sem perda (FFV1: a prova da cópia confere imagem por imagem)
+    ("derivacao.sem_perdas_recodificada", "regravada em formato sem perda: cada imagem é igual à do original"),
+    // P4.R: relógio do gravador no começo do original (`Derivacao.inicio_epoca_s`)
+    ("relogio.inicio", "{quando} no início do arquivo"),
+    // P4.R: fluxo cru sem temporização (`Derivacao.taxa_suposta`)
+    ("ritmo.suposto", "{fps} imagens por segundo, supostas: o arquivo do gravador não informa o ritmo"),
+    // P4.R: entrada e saída do texto sobreposto quando não são o padrão ("aparecer" nos dois lados)
+    ("surgir.entrada.corte", "aparece de uma vez"),
+    ("surgir.entrada.aparecer", "aparece aos poucos em {d} s"),
+    ("surgir.entrada.deslizar", "entra deslizando {lado} em {d} s"),
+    ("surgir.saida.corte", "some de uma vez"),
+    ("surgir.saida.aparecer", "some aos poucos em {d} s"),
+    ("surgir.saida.deslizar", "sai deslizando {lado} em {d} s"),
+    ("surgir.de.cima", "de cima"),
+    ("surgir.de.baixo", "de baixo"),
+    ("surgir.de.esq", "da esquerda"),
+    ("surgir.de.dir", "da direita"),
+    ("surgir.para.cima", "para cima"),
+    ("surgir.para.baixo", "para baixo"),
+    ("surgir.para.esq", "para a esquerda"),
+    ("surgir.para.dir", "para a direita"),
     ("conteudo.rosto", "rosto"),
     ("conteudo.placa", "placa"),
     ("conteudo.corpo", "corpo"),
@@ -381,6 +418,7 @@ const EFEITOS: &[(&str, Classe, &str, &str)] = &[
     (tipo::TEXTO_SOBREPOSTO, Classe::Acrescimo, "Texto sobreposto", "Escrito pelo perito e mostrado sobre a imagem. Não faz parte das gravações."),
     (tipo::AVISO_NA_IMAGEM, Classe::Acrescimo, "Aviso escrito na imagem", "Escrito pelo programa no canto da imagem para avisar que ela é mostrada de outro jeito. Não faz parte das gravações."),
     (tipo::VOLUME, Classe::Mudanca, "Volume alterado", "O som da gravação foi deixado mais alto ou mais baixo. Nada foi acrescentado a ele."),
+    (tipo::AMPLIACAO_QUE_SEGUE, Classe::Mudanca, "Ampliação que acompanha o alvo", "Mostra em tamanho maior uma parte da imagem que se desloca junto com um alvo acompanhado imagem a imagem. O deslocamento foi feito pela perícia e não é movimento da câmera. Ampliar não cria detalhe que a câmera não registrou."),
 ];
 
 /// (código, frase).
@@ -400,6 +438,7 @@ const CONDICOES: &[(&str, &str)] = &[
     (codigo::SINCRONIA_SEM_CONFERENCIA, "As câmeras foram alinhadas pelo som ou pelo relógio, sem conferência por um acontecimento visível nas duas."),
     (codigo::SINCRONIA_EXTRAPOLADA, "O alinhamento entre as câmeras foi usado fora do intervalo em que foi medido."),
     (codigo::RELOGIO_DISTANTE, "O relógio da câmera mostrado na imagem foi acertado em momento distante do trecho exibido e pode ter se desviado."),
+    (codigo::TAXA_SUPOSTA, "Há gravação de aparelho gravador que não informa quantas imagens por segundo registrou. A perícia leu essa gravação supondo um ritmo, e os tempos e as velocidades vistos nela dependem dessa suposição."),
     (condicao::COM_PERDAS, "O vídeo entregue foi gravado em formato com compressão. Para exame técnico valem as gravações originais, e não este vídeo."),
     (condicao::SO_COMO_DOCUMENTO, "Este vídeo foi preparado para envio por aplicativo de mensagens. O código de verificação só confere se ele for enviado como documento. Enviado como vídeo, o aplicativo o comprime de novo e o arquivo recebido passa a ser outro."),
     (condicao::SELO_DESLIGADO, "O perito desligou o aviso que o programa escreve na imagem quando ela é mostrada de outro jeito. As mudanças continuam listadas neste relatório."),
@@ -478,7 +517,7 @@ mod testes {
             .filter_map(|l| l.split('"').nth(1))
             .filter(|c| mensagens::nivel(c) == Some(Nivel::Pericial))
             .collect();
-        assert_eq!(periciais.len(), 14, "{periciais:?}");
+        assert_eq!(periciais.len(), 15, "{periciais:?}");
         for c in periciais {
             assert!(da_condicao(c).is_some(), "{c} sem frase de limite");
         }
@@ -505,7 +544,8 @@ mod testes {
         // as da parte para leigo (as do anexo técnico, `CORRIDA` e afins, levam sigla e não terminam em ponto)
         let modelos = [modelo::IA_OCULTACOES, modelo::IA_MARCACOES, modelo::IA_ASSISTIDO, modelo::IA_ASSISTIDO_SEM_REGISTRO, modelo::IA_IMAGENS, modelo::IA_MODELOS,
                        modelo::MEDIDA_REGUA, modelo::MEDIDA_VELOCIDADE, modelo::MEDIDA_VELOCIDADE_SEM_FAIXA, modelo::DERIVADA, modelo::IA_LEGENDAS,
-                       modelo::IA_LEGENDAS_SEM_CONFERENCIA];
+                       modelo::IA_LEGENDAS_SEM_CONFERENCIA, modelo::IA_OCULTACOES_QUADROS, modelo::IA_OCULTACOES_QUADROS_PERITO,
+                       modelo::IA_AMPLIACOES, modelo::DERIVADA_DE];
         let frases = EFEITOS.iter().map(|x| x.3).chain(CONDICOES.iter().map(|x| x.1)).chain(modelos);
         for f in frases {
             let baixo = f.to_lowercase();

@@ -383,6 +383,8 @@ Trechos em câmera lenta, acelerados ou parados estão indicados no roteiro acim
       ("Intervalo medido entre quadros", o.tecnico.intervalo_quadros),
       ("Intervalos nos trechos usados", o.tecnico.intervalos_usados),
       ("Observações", o.tecnico.observacoes),
+      ("Como foi feita", o.tecnico.derivacao),
+      ("Comando registrado", if o.tecnico.comando != none { mono(tecnico(o.tecnico.comando)) }),
     ))
   ]
 ]

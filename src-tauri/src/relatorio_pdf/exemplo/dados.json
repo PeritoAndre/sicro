@@ -48,7 +48,9 @@
         "intervalo_quadros": "33,333 ms (mín. = máx.)",
         "cor": "BT.709, faixa limitada",
         "observacoes": "sem divergência entre o declarado e o medido",
-        "intervalos_usados": null
+        "intervalos_usados": null,
+        "derivacao": null,
+        "comando": null
       },
       "especie": "Gravação",
       "recebido": "no formato próprio do aparelho gravador",
@@ -86,15 +88,17 @@
         "intervalo_quadros": "40,000 a 83,333 ms",
         "cor": "BT.709, faixa limitada",
         "observacoes": "sem divergência entre o declarado e o medido",
-        "intervalos_usados": "percentis 10, 50 e 90: 40,000 · 40,000 · 83,333 ms (346 intervalos nos trechos usados)"
+        "intervalos_usados": "percentis 10, 50 e 90: 40,000 · 40,000 · 83,333 ms (346 intervalos nos trechos usados)",
+        "derivacao": "cópia convertida do formato do gravador · FFmpeg n9.0.1 · início no relógio do gravador 18/09/2017, 19:24:59 (1505762699 s desde 1970)",
+        "comando": "ffmpeg -fflags +genpts -i cam02.dav -map 0:v -map 0:a? -c copy -copyinkf -map_metadata 0 -fflags +bitexact -f matroska cam02.mkv"
       },
       "especie": "Gravação",
       "recebido": "já convertida, e não no formato próprio do aparelho gravador",
       "derivacao": {
-        "texto": "Este arquivo foi feito pela perícia a partir de outra gravação do caso (cópia convertida do formato do gravador, sem recompressão).",
+        "texto": "Este arquivo foi feito pela perícia a partir do arquivo «cam02.dav», também do caso (cópia convertida do formato do gravador, sem recompressão).",
         "origem_sha256": "1b4f0e9851971998e732078544c96b36c3d01cedf7caa332359d6f1d83567014"
       },
-      "relogio": "relógio do gravador adiantado 2 min 14 s (informado na coleta)",
+      "relogio": "18/09/2017, 19:24:59 no início do arquivo · relógio do gravador adiantado 2 min 14 s (informado na coleta)",
       "cobertura": {
         "usado": "14,0 s",
         "total": "20,0 s",

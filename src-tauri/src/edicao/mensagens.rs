@@ -115,6 +115,12 @@ pub mod codigo {
     // Fase 4 (P4.6): gravadores (`video/dvr.rs`)
     pub const GRAVADOR_NAO_SUPORTADO: &str = "gravador_nao_suportado";
     pub const COPIA_DIVERGENTE: &str = "copia_divergente";
+    // P4.R: outra cópia de gravador já em andamento (`commands/video_dvr_commands.rs`, uma por vez)
+    pub const COPIA_EM_CURSO: &str = "copia_em_curso";
+    // P4.R: cópia de fluxo cru sem temporização (`Derivacao.taxa_suposta`): os tempos dela dependem da taxa suposta
+    pub const TAXA_SUPOSTA: &str = "taxa_suposta";
+    // P4.R: entrada e saída do sobreposto somam mais que ele (a opacidade nunca chega à cheia)
+    pub const ENTRADA_SAIDA_LONGA: &str = "entrada_saida_longa";
     // integrador do bloco 6.4 (§12 item 2): sonda reprovada, a Edição abre mas não renderiza
     pub const FFMPEG_ABAIXO_DO_MINIMO: &str = "ffmpeg_abaixo_do_minimo";
 }
@@ -251,6 +257,9 @@ const CATALOGO: &[Entrada] = &[
     // Fase 4 (P4.6): o detalhe é o rótulo do formato (`dvr::Formato::rotulo`) e a contagem de quadros
     com_detalhe(GRAVADOR_NAO_SUPORTADO, Erro, "Formato de gravador não suportado"),
     com_detalhe(COPIA_DIVERGENTE, Erro, "Cópia de trabalho diferente do original"),
+    e(COPIA_EM_CURSO, Erro, "Outra cópia de gravador em andamento"),
+    e(TAXA_SUPOSTA, Pericial, "Taxa de quadros suposta na cópia do gravador"),
+    e(ENTRADA_SAIDA_LONGA, Aviso, "Entrada e saída mais longas que o item"),
     e(FFMPEG_ABAIXO_DO_MINIMO, Erro, "Versão do ffmpeg abaixo do mínimo"),
 ];
 
@@ -402,7 +411,7 @@ mod testes {
     #[test]
     fn todo_codigo_tem_nivel_e_frase() {
         let cods = constantes();
-        assert_eq!(cods.len(), 99, "constantes de `codigo`");
+        assert_eq!(cods.len(), 102, "constantes de `codigo`");
         let unicos: BTreeSet<_> = cods.iter().collect();
         assert_eq!(unicos.len(), cods.len(), "código repetido");
         for c in &cods {
@@ -424,7 +433,7 @@ mod testes {
         }
         for c in [TAXA_VARIAVEL, QUADROS_DESCARTADOS, FONTE_DANIFICADA, MIDIA_DERIVADA_COM_PERDAS, OCULTACAO_REVERSIVEL, OCULTACAO_FRACA,
                   OCULTAR_INTERPOLADO, OCULTAR_INCERTO, SILHUETA_EM_OCULTAR, MEDIA_DE_QUADROS, IMAGEM_IA, SINCRONIA_SEM_CONFERENCIA,
-                  SINCRONIA_EXTRAPOLADA, RELOGIO_DISTANTE] {
+                  SINCRONIA_EXTRAPOLADA, RELOGIO_DISTANTE, TAXA_SUPOSTA] {
             assert_eq!(nivel(c), Some(Pericial), "{c}");
         }
         for c in [FPS_DIFERENTE, AMPLIACAO_ALTA, FONTE_10BITS, ENTRELACADO, TEXTO_FORA, QUADRO_AJUSTADO, RETRATO_DESATUALIZADO, SELO_DESLIGADO] {
@@ -530,6 +539,24 @@ mod testes {
                        ("pessoas", "trilha da análise"), ("conferencia", "conferência das ocultações")] {
             assert_eq!(msg(erro_de_comando(v(&format!("nao_suportado: {d}")))), format!("nao_suportado: Ainda não suportado: {r}"));
         }
+    }
+
+    /// Códigos do P4.R: nível, frase e o que o comando devolve; o pericial tem frase de limite no relatório.
+    #[test]
+    fn codigos_do_p4r() {
+        let msg = |e: SicroError| match e {
+            SicroError::Validation(m) => m,
+            outro => panic!("{outro:?}"),
+        };
+        for (c, n, f) in [
+            (COPIA_EM_CURSO, Erro, "Outra cópia de gravador em andamento"),
+            (TAXA_SUPOSTA, Pericial, "Taxa de quadros suposta na cópia do gravador"),
+            (ENTRADA_SAIDA_LONGA, Aviso, "Entrada e saída mais longas que o item"),
+        ] {
+            assert_eq!((nivel(c), frase(c, None, None).as_str()), (Some(n), f), "{c}");
+            assert_eq!(msg(erro_de_comando(SicroError::Validation(c.into()))), format!("{c}: {f}"));
+        }
+        assert!(crate::edicao::relatorio::frases::da_condicao(TAXA_SUPOSTA).is_some());
     }
 
     #[test]

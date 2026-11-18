@@ -931,8 +931,15 @@ export function VideoAnalysisView({ visivel = true }: { visivel?: boolean } = {}
 
       {copiaDvr && (
         <div className={styles.derivedBar} data-copia-gravador>
-          <Cctv size={11} /> cópia de trabalho de <strong>{copiaDvr.origem.filename}</strong> (mesmos quadros)
-          {copiaDvr.relogio && <> · relógio do gravador {copiaDvr.relogio}</>}
+          <Cctv size={11} aria-hidden /> Cópia de trabalho · <strong title="Original">{copiaDvr.origem.filename}</strong>
+          {copiaDvr.relogio && (
+            <>
+              {" · "}
+              <span title="Relógio do gravador" data-relogio-gravador style={{ display: "inline-flex", alignItems: "center", gap: 3 }}>
+                <Clock size={11} aria-label="Relógio do gravador" /> {copiaDvr.relogio}
+              </span>
+            </>
+          )}
           {copiaDvr.lacunas > 0 && <> · {copiaDvr.lacunas === 1 ? "1 lacuna" : `${copiaDvr.lacunas} lacunas`}</>}
           {copiaDvr.taxaSuposta && (
             <span

@@ -79,8 +79,12 @@ describe("cópia de trabalho de gravador aberta", () => {
     const faixa = div.querySelector<HTMLElement>("[data-copia-gravador]");
     expect(faixa).toBeTruthy();
     const texto = (faixa!.textContent ?? "").replace(/\s+/g, " ");
-    expect(texto).toContain("cópia de trabalho de cam 1.dav");
-    expect(texto).toContain("relógio do gravador 2017-09-18 19:24:59");
+    // rótulos curtos: o que é, o original e o relógio (ícone com title), sem frase
+    expect(texto).toContain("Cópia de trabalho · cam 1.dav");
+    expect(texto).not.toContain("mesmos quadros");
+    expect(faixa!.querySelector('[title="Original"]')?.textContent).toBe("cam 1.dav");
+    expect(faixa!.querySelector('[data-relogio-gravador]')?.getAttribute("title")).toBe("Relógio do gravador");
+    expect(faixa!.querySelector('[data-relogio-gravador]')?.textContent?.trim()).toBe("2017-09-18 19:24:59.000");
     expect(texto).toContain("1 lacuna");
     const botao = [...faixa!.querySelectorAll("button")].find((b) => b.textContent === "abrir original")!;
     await act(async () => botao.click());

@@ -49,7 +49,7 @@ const midia = (id: string, x: Partial<VideoMedia> = {}): VideoMedia => ({
 const derivacaoDvr = (epoca: number | null, cru: { taxa: string; suposta: boolean } | null = null) => JSON.stringify({
   kind: "copia_dvr", formato: cru ? "hevc_cru" : "dahua", rotulo: "Dahua (DAV)", source: { sha256: SHA_O, filename: "cam 1.dav", relative_path: "Mídias/Vídeos/cam 1.dav" },
   ffmpeg_command: ["/usr/bin/ffmpeg", "-fflags", "+genpts", "-i", "/caso/Mídias/Vídeos/cam 1.dav", "-c", "copy", "-copyinkf", "/caso/Sistema/videos/copias-dvr/cam 1.mkv"],
-  recodificado: false, taxa: cru?.taxa ?? null, taxa_suposta: cru ? cru.suposta : null, quadros: 726, framemd5_sha256: "f".repeat(64),
+  ffmpeg: { versao: "n9.0.1", sha256: "e".repeat(64) }, recodificado: false, taxa: cru?.taxa ?? null, taxa_suposta: cru ? cru.suposta : null, quadros: 726, framemd5_sha256: "f".repeat(64),
   inicio_s: epoca ?? 40001.404, inicio_epoca_s: epoca, desloc_s: epoca ?? 40001.404,
   lacunas: [{ de_s: 1505762700.2, ate_s: 1505762701, quadros: 10 }],
 });
@@ -199,7 +199,8 @@ describe("a cópia na Edição (coleta)", () => {
   it("copia_dvr, sem perdas, com a data do relógio do gravador; sem data, o campo não vai", () => {
     const lista = [original, copia];
     const d = midiaDoCaso(copia, lista, null).derivacao!;
-    expect(d).toEqual({ tipo: "copia_dvr", de_sha256: SHA_O, raiz_sha256: SHA_O, comando: expect.stringContaining("-c copy -copyinkf"), com_perdas: false, inicio_epoca_s: 1505762699 });
+    expect(d).toEqual({ tipo: "copia_dvr", de_sha256: SHA_O, raiz_sha256: SHA_O, comando: expect.stringContaining("-c copy -copyinkf"), com_perdas: false, inicio_epoca_s: 1505762699,
+      de_nome: "cam 1.dav", ffmpeg_versao: "n9.0.1" });
     const semData = { ...copia, derivation_json: derivacaoDvr(null) };
     const d2 = midiaDoCaso(semData, [original, semData], null).derivacao!;
     expect(d2.tipo).toBe("copia_dvr");
@@ -207,6 +208,10 @@ describe("a cópia na Edição (coleta)", () => {
     // outro tipo nunca leva o campo
     const trecho = { ...copia, derivation_json: JSON.stringify({ kind: "clip", mode: "copy", inicio_epoca_s: 1 }) };
     expect(midiaDoCaso(trecho, [original, trecho], null).derivacao).toEqual({ tipo: "trecho", de_sha256: SHA_O, raiz_sha256: SHA_O, comando: "", com_perdas: false });
+    // P4.R: nome do original e versão do ffmpeg só na cópia de gravador
+    const comFonte = { ...copia, derivation_json: JSON.stringify({ kind: "clip", source: { filename: "x.mp4" }, ffmpeg: { versao: "n9.0.1" } }) };
+    const t2 = midiaDoCaso(comFonte, [original, comFonte], null).derivacao!;
+    expect("de_nome" in t2 || "ffmpeg_versao" in t2).toBe(false);
   });
 
   it("fluxo cru sem temporização: a taxa suposta vai na Derivacao (igual a importar_v1::derivacao); do SPS, não vai", () => {

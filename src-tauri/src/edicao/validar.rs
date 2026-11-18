@@ -1176,6 +1176,10 @@ impl<'a> Validacao<'a> {
                 }
                 Efeito::Carimbo(c) => {
                     self.estilo(&c.estilo, &onde);
+                    // o atlas do carimbo não desenha sombra nem faixa (regra do texto livre, `recusa_do_atlas`)
+                    if let Some(d) = camada::texto::recusa_do_atlas(&c.estilo) {
+                        self.add(NAO_SUPORTADO, &onde.campo("estilo"), None, Some(d), None);
+                    }
                     if self.lugar_valido(&c.lugar, &onde) {
                         self.lugar(&c.lugar, c.estilo.tamanho, &onde);
                     }
@@ -1226,9 +1230,13 @@ impl<'a> Validacao<'a> {
         if let Some(c) = &e.contorno {
             self.cor(&c.cor, &o);
         }
-        // Fase 4 (contratos-fase4.md B2): sombra e faixa, regra do pacote do texto livre
+        // Fase 4 (contratos-fase4.md B2): sombra e faixa, regra do pacote do texto livre; sombra fora da faixa que o
+        // sprite desenha é `item_invalido` (o sprite recusa com o mesmo código)
         if let Some(c) = e.sombra.as_ref() {
             self.cor(&c.cor, &o);
+            if !camada::texto::sombra_ok(c) {
+                self.add(ITEM_INVALIDO, &o, None, Some("sombra"), None);
+            }
         }
         if let Some(d) = crate::edicao::camada::texto::recusa_estilo(e) {
             self.add(NAO_SUPORTADO, &o, None, Some(d), None);
@@ -1646,6 +1654,13 @@ impl<'a> Validacao<'a> {
                     self.add(NAO_SUPORTADO, &onde.campo("animacao"), None, Some(d), None);
                 }
                 let n_q = self.linha.livres.iter().find(|l| l.id == b.id).map_or(1, |l| l.n_q);
+                // só o que está na linha: fora dela não há duração para medir
+                let na_linha = self.linha.livres.iter().find(|l| l.id == b.id).map(|l| l.n_q);
+                if let Some(n) = na_linha.filter(|_| self.fps_ok()) {
+                    if !assenta(b, tempo::instante_do_slot(n as u64, self.fps)) {
+                        self.por(ENTRADA_SAIDA_LONGA, &onde.campo("animacao"));
+                    }
+                }
                 match c {
                     ClipeSobreposto::Video(v) => {
                         self.add(NAO_SUPORTADO, &onde, None, Some("video"), None);
@@ -1888,6 +1903,10 @@ impl<'a> Validacao<'a> {
                 if d.tipo == TipoDerivacao::Superres {
                     self.por(IMAGEM_IA, &onde);
                 }
+                // cópia de fluxo cru sem temporização: a taxa dela foi suposta (P4.6b)
+                if d.taxa_suposta.is_some() {
+                    self.por(TAXA_SUPOSTA, &onde);
+                }
             }
         }
         self.usadas = usadas;
@@ -2026,6 +2045,15 @@ fn filtros_de(e: &Efeito, todos: &[Tolerante<Efeito>]) -> Vec<&'static str> {
         Efeito::Enquadramento(q) if primeiro_enquadramento(todos).is_some_and(|p| std::ptr::eq(p, q)) && enquadramento::animado(todos) => vec!["perspective"],
         _ => Vec::new(),
     }
+}
+
+/// O sobreposto de `dur` s chega à opacidade e à posição cheias em algum instante: a entrada e a saída que não são
+/// "corte" (as durações que `sobreposto::transformacao_em` usa) cabem nele.
+fn assenta(b: &super::modelo::SobBase, dur: f64) -> bool {
+    use super::modelo::Surgir;
+    let (entrada, saida) = b.animacao.map_or((Surgir::Aparecer, Surgir::Aparecer), |a| (a.entrada, a.saida));
+    let usada = |s: Surgir, d: f64| if s != Surgir::Corte && d > 0.0 && d.is_finite() { d } else { 0.0 };
+    usada(entrada, b.entrada_s) + usada(saida, b.saida_s) <= dur + 1e-9
 }
 
 fn caixa_finita(c: &Caixa) -> bool {
@@ -4531,5 +4559,95 @@ mod testes {
             let Efeito::Lupa(tipada) = serde_json::from_value::<Efeito>(l).unwrap() else { panic!() };
             assert_eq!(lupa::campo_invalido(&tipada, TamanhoPx { w: 1280, h: 720 }), esperado, "{campo} = {v}");
         }
+    }
+
+    /// P4.R (texto livre): sombra fora da faixa do sprite = `item_invalido` antes do render (o sprite recusa igual); o
+    /// carimbo não desenha sombra nem faixa (`recusa_do_atlas`, `nao_suportado` como o atlas); o texto livre com
+    /// sombra e faixa válidas passa.
+    #[test]
+    fn sombra_e_faixa_acusadas_como_o_render() {
+        use crate::edicao::camada::texto::{recusa_do_atlas, sombra_ok, SOMBRA_MAX};
+        let sombra = |dx: f64, desfoque: f64| json!({ "cor": "#000000b3", "dx": dx, "dy": 0.003, "desfoque": desfoque });
+        let texto = |e: Value| com(base("texto", "e2"), json!({ "conteudo": "Portão", "estilo": e, "lugar": { "x": 0.5, "y": 0.5, "h": "centro", "v": "meio" }, "largura_max": 0.8 }));
+        for (dx, desfoque, ok) in [(0.0, 0.004, true), (SOMBRA_MAX, SOMBRA_MAX, true), (0.06, 0.0, false), (0.0, -0.001, false), (0.0, 0.051, false)] {
+            let mut c = cena();
+            let mut e = estilo();
+            e["sombra"] = sombra(dx, desfoque);
+            efeito(&mut c, texto(e.clone()));
+            let tipada: EstiloTexto = serde_json::from_value(e).unwrap();
+            assert_eq!(sombra_ok(tipada.sombra.as_ref().unwrap()), ok);
+            let esperado = if ok { vec![] } else { vec![(ITEM_INVALIDO, Some("estilo".to_string()))] };
+            assert_eq!(do_efeito(&c, "e2"), esperado, "dx {dx} desfoque {desfoque}");
+            if !ok {
+                assert!(c.problemas().iter().any(|p| p.mensagem == "Item inválido: sombra"), "{:?}", c.problemas());
+            }
+        }
+        // faixa no texto: passa; no carimbo, sombra e faixa = `nao_suportado` com o rótulo do catálogo
+        let mut c = cena();
+        let mut faixa = estilo();
+        faixa["caixa"] = json!({ "cor": "#000000a0", "margem": 0.012, "raio": 0.0, "faixa": true });
+        efeito(&mut c, texto(faixa.clone()));
+        c.so(&[]);
+        for (e, rotulo) in [(faixa, "faixa atrás do texto"), (com(estilo(), json!({ "sombra": sombra(0.0, 0.004) })), "sombra do texto")] {
+            let mut c = cena();
+            efeito(&mut c, com(base("carimbo", "e3"), json!({ "mostra": "tempo_fonte", "formato": "hms_ms", "relogio": null, "estilo": e.clone(),
+                "lugar": { "x": 0.05, "y": 0.05, "h": "esq", "v": "topo" } })));
+            assert_eq!(do_efeito(&c, "e3"), vec![(NAO_SUPORTADO, Some("estilo".to_string()))]);
+            assert!(c.problemas().iter().any(|p| p.mensagem == format!("Ainda não suportado: {rotulo}")), "{:?}", c.problemas());
+            assert!(recusa_do_atlas(&serde_json::from_value(e).unwrap()).is_some());
+        }
+    }
+
+    /// P4.R (texto livre): entrada e saída que somam mais que o item = aviso (a opacidade nunca chega à cheia); "corte"
+    /// não conta a duração; o que não está na linha não é medido.
+    #[test]
+    fn entrada_e_saida_mais_longas_que_o_item() {
+        let livre = |dur: f64, entrada: f64, saida: f64, animacao: Value| {
+            let mut x = json!({ "tipo": "titulo", "id": "x1", "rotulo": "", "pos": { "ref": "clipe", "clipe": "c1", "desloc": 0.0 }, "duracao_s": dur,
+                "transformacao": { "x": 0.5, "y": 0.5, "escala": 1.0, "rotacao": 0.0, "opacidade": 1.0 }, "entrada_s": entrada, "saida_s": saida,
+                "efeitos": [], "titulo": { "modelo": "livre", "fundo": { "tipo": "transparente" }, "blocos": [] } });
+            if !animacao.is_null() {
+                x["animacao"] = animacao;
+            }
+            json!([{ "id": "t1", "nome": "", "oculta": false, "clipes": [x] }])
+        };
+        let anima = |e: &str, s: &str| json!({ "entrada": e, "saida": s, "lado": "baixo" });
+        for (dur, e, s, a, avisa) in [
+            (1.0, 0.3, 0.3, Value::Null, false),
+            (1.0, 0.5, 0.5, Value::Null, false),
+            (1.0, 0.6, 0.5, Value::Null, true),
+            (1.0, 0.6, 0.5, anima("deslizar", "aparecer"), true),
+            (1.0, 0.6, 0.5, anima("corte", "aparecer"), false),
+            (1.0, 0.6, 0.5, anima("deslizar", "corte"), false),
+            (0.5, 2.0, 2.0, anima("corte", "corte"), false),
+        ] {
+            let mut c = cena();
+            c.p["sobreposicoes"] = livre(dur, e, s, a.clone());
+            let p: Vec<_> = c.problemas().into_iter().filter(|p| p.codigo == ENTRADA_SAIDA_LONGA).collect();
+            assert_eq!(p.len(), usize::from(avisa), "{dur} {e} {s} {a}");
+            if avisa {
+                assert_eq!((p[0].nivel, p[0].campo.as_deref(), p[0].clipe.as_deref()), (Nivel::Aviso, Some("animacao"), Some("x1")));
+            }
+        }
+        // preso a clipe fora da linha: só o intervalo
+        let mut c = cena();
+        c.p["sobreposicoes"] = livre(1.0, 0.6, 0.5, Value::Null);
+        c.p["sobreposicoes"][0]["clipes"][0]["pos"]["clipe"] = json!("c9");
+        c.so(&[INTERVALO]);
+    }
+
+    /// P4.R (gravador): cópia de fluxo cru que supôs a taxa (`Derivacao.taxa_suposta`) = aviso pericial, com ciência
+    /// antes de exportar e frase de limite no relatório; sem a suposição, nada.
+    #[test]
+    fn taxa_suposta_da_copia_do_gravador() {
+        let mut c = cena();
+        c.p["midias"][0]["derivacao"] = json!({ "tipo": "copia_dvr", "de_sha256": SHA2, "raiz_sha256": SHA2, "comando": "ffmpeg -c copy", "com_perdas": false });
+        c.so(&[]);
+        c.p["midias"][0]["derivacao"]["taxa_suposta"] = json!({ "num": 25, "den": 1 });
+        c.so(&[TAXA_SUPOSTA]);
+        let p = c.problemas();
+        assert_eq!((p[0].nivel, p[0].midia.as_deref()), (Nivel::Pericial, Some("m1")));
+        assert_eq!(sem_ciencia(&p, &[]), vec![TAXA_SUPOSTA]);
+        assert!(crate::edicao::relatorio::frases::da_condicao(TAXA_SUPOSTA).is_some());
     }
 }

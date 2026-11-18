@@ -119,6 +119,7 @@
       "gerado_em": "14 de novembro de 2026, às 7h00 (horário de Brasília)",
       "ia_resumo": [
         "Ocultações propostas por detecção automática e confirmadas pelo perito: 1.",
+        "Nessas ocultações, imagens com a posição achada pelo programa: 0; calculada a partir das posições vizinhas: 0; marcada pelo perito: 2.",
         "Marcações que acompanham alvo achado por detecção automática e confirmado pelo perito: 1.",
         "Alvos acompanhados por programa de inteligência artificial a partir de marcação do perito: 1.",
         "Os programas de inteligência artificial usados estão identificados no anexo técnico, item H."
@@ -270,8 +271,10 @@
           "taxa_variavel": false,
           "tecnico": {
             "codec": "h264",
+            "comando": "ffmpeg -i orig.dav -c copy out.mp4",
             "conteiner": "mov,mp4,m4a,3gp,3g2,mj2",
             "cor": "BT.709, faixa limitada",
+            "derivacao": "cópia convertida do formato do gravador",
             "fps_nominal": "30/1",
             "intervalo_quadros": "33,333 ms (mín. = máx.)",
             "intervalos_usados": "percentis 10, 50 e 90: 33,333 · 33,333 · 33,333 ms (57 intervalos nos trechos usados)",

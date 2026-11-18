@@ -6,7 +6,7 @@
 use serde::Serialize;
 use serde_json::{Map, Value};
 
-use super::frases::{self, CORES, FORMAS_DESTAQUE};
+use super::frases::{self, modelo, CORES, FORMAS_DESTAQUE};
 use super::juri::{dec, num, rot, rot_ou, tempo};
 
 /// Teto da linha de um processamento que o relatório não conhece (o inteiro está no `tecnico.json` anexado).
@@ -242,7 +242,13 @@ fn estilo(e: &Value) -> String {
         v.push(format!("contorno {}{}", cor_txt(s(c, "cor"), false), f(c, "largura").map(|l| format!(" {}", pct(l))).unwrap_or_default()));
     }
     if e["caixa"].is_object() {
-        v.push(format!("caixa {}", cor_txt(s(&e["caixa"], "cor"), true)));
+        // Fase 4 (texto livre): a faixa vai de uma borda à outra do bloco
+        let nome = if e["caixa"]["faixa"] == true { "faixa" } else { "caixa" };
+        v.push(format!("{nome} {}", cor_txt(s(&e["caixa"], "cor"), true)));
+    }
+    if e["sombra"].is_object() {
+        let sb = &e["sombra"];
+        v.push(format!("sombra {}{}", cor_txt(s(sb, "cor"), true), f(sb, "desfoque").filter(|d| *d > 0.0).map(|d| format!(" desfocada {}", pct(d))).unwrap_or_default()));
     }
     v.join(", ")
 }
@@ -345,6 +351,14 @@ pub(super) fn parametros(nome: &str, p: &Value, ref_rastreio: &dyn Fn(&str) -> S
                     v.push(format!("região animada em {} chaves (tempos {base}: {})", chaves.len(), lista.join("; ")));
                 }
                 fixa => v.extend(caixa(fixa).map(|c| format!("região fixa: {c}"))),
+            }
+            // Fase 4 (zoom que segue): o centro da região acompanha o rastreio, suavizado
+            if let Some(id) = p["segue"]["rastreio"].as_str().filter(|x| !x.trim().is_empty()) {
+                let r = ref_rastreio(id);
+                v.push(match f(&p["segue"], "suavizar_s").filter(|x| *x > 0.0) {
+                    Some(x) => frases::preencher(modelo::ACOMPANHANDO, &[("r", &r), ("s", &num(x, 2))]),
+                    None => frases::preencher(modelo::ACOMPANHANDO_SEM_MEDIA, &[("r", &r)]),
+                });
             }
         }
         "ocultar" => {

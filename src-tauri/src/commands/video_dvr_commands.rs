@@ -34,7 +34,7 @@ impl Tarefa {
     fn nova() -> Result<Self> {
         let mut g = TAREFA.lock().unwrap_or_else(|e| e.into_inner());
         if g.is_some() {
-            return Err(SicroError::Validation("cópia de gravador em andamento".into()));
+            return Err(mensagens::erro_de_comando(SicroError::Validation(mensagens::codigo::COPIA_EM_CURSO.into())));
         }
         let f = Arc::new(AtomicBool::new(false));
         *g = Some(f.clone());
@@ -125,4 +125,19 @@ pub async fn video_dvr_copia(app: AppHandle, workspace_path: String, media_id: S
         dvr::copia_no_caso_com(&cap, &PathBuf::from(workspace_path), &media_id, &tarefa.0, &emissor(app))
     })
     .await
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    /// Segunda cópia com uma em curso: o código do catálogo e a frase dele; a vaga volta quando a primeira acaba.
+    #[test]
+    fn segunda_copia_com_uma_em_curso() {
+        let primeira = Tarefa::nova().unwrap();
+        let erro = Tarefa::nova().err().unwrap().to_string();
+        assert!(erro.contains("copia_em_curso: Outra cópia de gravador em andamento"), "{erro}");
+        drop(primeira);
+        assert!(Tarefa::nova().is_ok());
+    }
 }

@@ -864,7 +864,10 @@ pub(crate) fn derivacao(conn: &Connection, m: &VideoMedia) -> Result<Option<Deri
             None => break,
         }
     }
-    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas, inicio_epoca_s, taxa_suposta }))
+    // P4.R: de que arquivo e com que ffmpeg a cópia de gravador foi feita (o PDF cita os dois)
+    let texto = |v: &Value| v.as_str().map(str::trim).filter(|x| !x.is_empty()).map(str::to_string).filter(|_| tipo == TipoDerivacao::CopiaDvr);
+    let (de_nome, ffmpeg_versao) = (texto(&j["source"]["filename"]), texto(&j["ffmpeg"]["versao"]));
+    Ok(Some(Derivacao { tipo, de_sha256: de, raiz_sha256: raiz, comando, com_perdas, inicio_epoca_s, taxa_suposta, de_nome, ffmpeg_versao }))
 }
 
 #[cfg(test)]
@@ -1412,7 +1415,8 @@ mod testes {
         assert_eq!(m.recebido, Recebido { nativo: Some(true), obs: "do DVR".into() });
         assert_eq!((m.relogio_desvio_s, m.gravador.as_deref()), (Some(-2.5), Some("DVR 1")));
         assert_eq!(m.derivacao, Some(Derivacao { tipo: TipoDerivacao::Trecho, de_sha256: meio.clone(), raiz_sha256: raiz.clone(),
-                                                 comando: "ffmpeg -ss 1 -c copy".into(), com_perdas: false, inicio_epoca_s: None, taxa_suposta: None }));
+                                                 comando: "ffmpeg -ss 1 -c copy".into(), com_perdas: false, inicio_epoca_s: None, taxa_suposta: None,
+                                                 de_nome: None, ffmpeg_versao: None }));
         // tamanho exibido (vertical) entra no zoom: h = w × (1080/1920) ÷ (16/9)
         let ClipePrincipal::Trecho(t) = clipes(&p)[0] else { panic!() };
         assert_eq!((t.inicio_pts, t.fim_pts), (None, None), "sem tabela de quadros aqui");

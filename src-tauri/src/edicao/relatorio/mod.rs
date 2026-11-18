@@ -7,6 +7,8 @@ mod legivel;
 pub mod mapa;
 pub mod tecnico;
 #[cfg(test)]
+mod fase4_testes;
+#[cfg(test)]
 mod simplificar_testes;
 
 /// Plano, resultado e ambiente montados à mão (o motor e o executor ainda não existem), e a varredura do texto.
@@ -159,6 +161,8 @@ pub(crate) mod apoio {
                 com_perdas: false,
                 inicio_epoca_s: None,
                 taxa_suposta: None,
+                de_nome: None,
+                ffmpeg_versao: None,
             }),
             recebido: Recebido { nativo: Some(false), obs: "veio por pendrive".into() },
             relogio_desvio_s: Some(-2.5),

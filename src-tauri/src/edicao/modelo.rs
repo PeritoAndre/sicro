@@ -141,6 +141,10 @@ pub struct ProjetoEdicao {
 
 /// Menor `esquema_menor` que lê o documento sem perder nada: 1 se usa um campo da Fase 4 (B1), senão 0.
 /// `armazem::salvar` sobe o do arquivo até ele; quem não usa campo novo segue abrindo na 6.3.
+// CONTRATO: P4.R acrescenta `Derivacao.taxa_suposta`: a 6.3.1 lê o documento (ignora o campo) e renderiza igual, mas
+// exportaria sem o aviso pericial `taxa_suposta` e o PDF daria a taxa como medida. Não sobem: `inicio_epoca_s`,
+// `de_nome` e `ffmpeg_versao` (só informação no PDF) e `MotorRastreio::Deteccao` (só em JSON não tipado, o denso e
+// `corridas_do_programa`, que a 6.3.1 lê como corrida sem registro legível; a origem `deteccao` já existia).
 pub fn menor_necessario(p: &ProjetoEdicao) -> u32 {
     fn estilo(e: &EstiloTexto) -> bool {
         e.sombra.is_some() || e.caixa.as_ref().is_some_and(|c| c.faixa)
@@ -175,7 +179,8 @@ pub fn menor_necessario(p: &ProjetoEdicao) -> u32 {
         };
         b.animacao.is_some() || b.efeitos.iter().any(efeito) || matches!(c, ClipeSobreposto::Titulo(x) if titulo(&x.titulo))
     });
-    u32::from(principal || sobrepostos || estilo(&p.legendas.estilo))
+    let taxa_suposta = p.midias.iter().any(|m| m.derivacao.as_ref().is_some_and(|d| d.taxa_suposta.is_some()));
+    u32::from(principal || sobrepostos || estilo(&p.legendas.estilo) || taxa_suposta)
 }
 
 // ---------------------------------------------------------------------------
@@ -398,6 +403,14 @@ pub struct Derivacao {
     /// Cópia de gravador de fluxo cru sem temporização no SPS: a taxa que a cópia supôs (a padrão do demuxer, 25).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub taxa_suposta: Option<Racional>,
+    // CONTRATO: acréscimo (P4.R, para o PDF dizer de que arquivo e com que ffmpeg a cópia de gravador foi feita);
+    // espelho em `types/edicao.ts`. Só na cópia de gravador; ausente no fio = None (retrato antigo lê igual).
+    /// Nome do arquivo de origem (`derivation_json.source.filename`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub de_nome: Option<String>,
+    /// Versão do ffmpeg que fez a cópia (`derivation_json.ffmpeg.versao`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ffmpeg_versao: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -2385,6 +2398,26 @@ mod testes {
             assert_eq!(menor_necessario(&p), 1, "{nome}");
             assert_eq!(serde_json::to_value(&p).unwrap(), v, "{nome}: não voltou igual");
         }
+        // P4.R: cópia de gravador com a taxa suposta (sem ela a 6.3.1 exportaria sem o aviso pericial)
+        let i = base["midias"].as_array().unwrap().iter().position(|m| m["tipo"] == "video").unwrap();
+        let dvr = json!({ "tipo": "copia_dvr", "de_sha256": "b".repeat(64), "raiz_sha256": "b".repeat(64), "comando": "ffmpeg -c copy", "com_perdas": false });
+        let mut v = base.clone();
+        v["midias"][i]["derivacao"] = dvr.clone();
+        v["midias"][i]["derivacao"]["taxa_suposta"] = json!({ "num": 25, "den": 1 });
+        let p = ler(&v);
+        assert_eq!((menor_necessario(&p), serde_json::to_value(&p).unwrap() == v), (1, true), "taxa suposta");
+        // só informação no PDF, ou o motor de detecção em JSON não tipado: a 6.3.1 lê e renderiza igual
+        let mut v = base.clone();
+        v["midias"][i]["derivacao"] = dvr;
+        for (k, x) in [("inicio_epoca_s", json!(1505762699.0)), ("de_nome", json!("cam 1.dav")), ("ffmpeg_versao", json!("n9.0.1"))] {
+            v["midias"][i]["derivacao"][k] = x;
+        }
+        let r = base["rastreios"].as_array().unwrap().iter().position(|r| r["origem"]["tipo"] == "deteccao").unwrap();
+        v["rastreios"][r]["corridas_do_programa"] = json!([{ "motor": "deteccao", "modelo": { "nome": "YOLOX-S", "origem": "", "commit": "", "arquivos": [], "desvio": "" },
+            "runtime": "onnxruntime 1.31.1", "provedor": "cpu", "sentido": "frente", "ancora_pts": 0, "de_pts": 0, "ate_pts": 100,
+            "limiares": { "ok": 0.5, "perdido": 0.25, "paciencia": 30 }, "parou": "fim", "feito_em": "2026-11-18T00:00:00Z" }]);
+        let p = ler(&v);
+        assert_eq!((menor_necessario(&p), serde_json::to_value(&p).unwrap() == v), (0, true), "informação e detecção");
         let mut v = base.clone();
         v["legendas"]["estilo"]["caixa"]["faixa"] = json!(false);
         let p = ler(&v);

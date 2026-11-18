@@ -94,7 +94,11 @@ export interface Derivacao { tipo: "trecho" | "estabilizado" | "lente" | "copia_
                              inicio_epoca_s?: number;
                              // CONTRATO: acréscimo (P4.6b). Fluxo cru sem temporização no SPS: a taxa que a cópia supôs
                              // (a padrão do demuxer, 25). Ausente = não supôs.
-                             taxa_suposta?: Racional }
+                             taxa_suposta?: Racional;
+                             // CONTRATO: acréscimo (P4.R). Cópia de gravador: nome do arquivo de origem e versão do
+                             // ffmpeg que fez a cópia (o PDF cita os dois). Ausente = não é cópia de gravador.
+                             de_nome?: string;
+                             ffmpeg_versao?: string }
 
 // ---- posição de clipe livre ----
 export type Posicao =
