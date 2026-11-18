@@ -5,10 +5,10 @@
  * Item desconhecido ou inválido: linha apagada com o tipo, sem editor.
  */
 
-import { ChevronDown, ChevronRight, Crosshair, Eye, EyeOff, Film, Plus, Trash2 } from "lucide-react";
+import { ArrowLeftToLine, ArrowRightToLine, ChevronDown, ChevronRight, Crosshair, Eye, EyeOff, Film, Plus, Trash2 } from "lucide-react";
 import { useContextMenu } from "@components/ContextMenu/ContextMenu";
 import { useEffect, useRef, type MouseEvent } from "react";
-import type { ContextoClipe, Desconhecido, Efeito, Intervalo, TabelaQuadros } from "@domain/edicao";
+import type { ContextoClipe, Desconhecido, Efeito, Intervalo, Seg, TabelaQuadros } from "@domain/edicao";
 import { pushToast } from "@components/toast/toastStore";
 import { separarErro, useEdicaoStore } from "../../store/edicaoStore";
 import { aplicarMudanca, efeitoConhecido } from "../../modelo/projeto";
@@ -20,6 +20,7 @@ import {
   marcacoesNoEspaco,
   marcarAncora,
   MUDA_ESPACO,
+  mudar,
   mudarCom,
   noEfeito,
   rastreioDe,
@@ -28,6 +29,9 @@ import {
   type ClipeQualquer,
 } from "../acoes";
 import { pedirMarcacao, useInvalidos } from "../contexto";
+// Fase 4 (P4.1, contratos-fase4.md D6): "Começar no cursor" e "Terminar no cursor"
+import { ativoNoCursor } from "../../linha/efeitos";
+import { duracaoDoQuadro, exibido, tempoDoQuadro } from "../../modelo/tempo";
 import { Icone, Mini, Secao, Tempo } from "../campos";
 import { ADICIONAR, ADICIONAR_PROPRIO, descritor, REGISTRO, type SecaoProps } from "../registro";
 import { useInspetorUi } from "../ui";
@@ -48,6 +52,19 @@ interface Item {
 function falhou(e: unknown): void {
   const r = separarErro(e);
   pushToast("error", r.frase || r.codigo || "");
+}
+
+/** Instante do cursor na base do efeito e a duração de um quadro nela: fonte = o começo do quadro exibido (o `ativo`
+ *  vale pelo tempo do quadro); local = o slot da saída. null = sem base (ocultação da mídia num congelado). */
+export function cursorNoEfeito(clipe: ClipeQualquer, fonte: boolean, t: Seg, tabela: TabelaQuadros | null, fps: { num: number; den: number }): { t: Seg; passo: Seg } | null {
+  if (fonte) {
+    if (clipe.tipo !== "trecho") return null;
+    if (!tabela) return { t, passo: fps.den / fps.num };
+    const j = exibido(tabela, t);
+    return { t: tempoDoQuadro(tabela, j), passo: duracaoDoQuadro(tabela, j) };
+  }
+  const passo = fps.den / fps.num;
+  return { t: Math.round(t / passo) * passo, passo };
 }
 
 /** A ocultação da mídia vale no clipe quando o `ativo` (tempo de fonte) cruza a faixa dele. */
@@ -195,6 +212,24 @@ function Linha({ e, daMidia, aberta, invalidos, clipe, ctx, tabela }: { e: Efeit
               valido={(t) => ef.ativo?.de == null || t > ef.ativo.de}
               aplicar={(t) => noEfeito(ef.id, (x) => void (x.ativo = { de: x.ativo?.de ?? null, ate: t }))}
             />
+            {(["de", "ate"] as const).map((lado) => {
+              const no = cursorNoEfeito(clipe, fonte, ctx.tempo(), tabela, ctx.projeto.saida.fps);
+              const rot = lado === "de" ? "Começar no cursor" : "Terminar no cursor";
+              return (
+                <Mini
+                  key={lado}
+                  disabled={!no}
+                  data-acao={lado === "de" ? "comecar-no-cursor" : "terminar-no-cursor"}
+                  onClick={() => {
+                    // lido na hora do clique: o cursor anda sem refazer a seção
+                    const agora = cursorNoEfeito(clipe, fonte, ctx.tempo(), tabela, ctx.projeto.saida.fps);
+                    if (agora) mudar(rot, noEfeito(ef.id, (x) => void (x.ativo = ativoNoCursor(x.ativo, lado, agora.t, agora.passo))));
+                  }}
+                >
+                  {lado === "de" ? <ArrowLeftToLine size={12} /> : <ArrowRightToLine size={12} />} {rot}
+                </Mini>
+              );
+            })}
             {rastreio && (
               <div className={styles.larga}>
                 <Mini
