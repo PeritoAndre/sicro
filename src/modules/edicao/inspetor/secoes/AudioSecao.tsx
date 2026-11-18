@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, Circle, Mic, Square, Trash2, Upload, Volume2, VolumeX } from "lucide-react";
+import { ChevronDown, ChevronRight, Circle, EarOff, Mic, Square, Trash2, Upload, Volume2, VolumeX } from "lucide-react";
 import type { ClipeAudio, ClipePrincipal, Id, Posicao as Pos, ProjetoEdicao, TrilhaAudio } from "@domain/edicao";
 import { commands } from "@core/commands";
 import { pushToast } from "@components/toast/toastStore";
@@ -18,6 +18,7 @@ import { adicionarNarracao, mudar, narracaoNoProjeto } from "../acoes";
 import { Deslizante, Grade, Icone, Mini, Numero, Secao, Tempo } from "../campos";
 import { escolherMidia } from "./importar";
 import { CurvasDoItem, VolumeNoCursor } from "../../linha/curvas/CurvasDoItem";
+import { passaDeUm } from "../../linha/curvas/chaves";
 import styles from "../Inspetor.module.css";
 
 export const PAPEL: Record<TrilhaAudio["papel"], string> = { narracao: "Narração", musica: "Música", efeitos: "Efeitos" };
@@ -204,6 +205,12 @@ function ClipeNarracao({ c, principal, foco }: { c: ClipeAudio; principal: unkno
           <Numero rotulo="Entrada (s)" item={c.id} valor={c.entrada_s} min={0} max={30} passo={0.1} casas={1} valido={(v) => v >= 0} aplicar={(v) => noClipeAudio(c.id, (x) => void (x.entrada_s = v))} />
           <Numero rotulo="Saída (s)" item={c.id} valor={c.saida_s} min={0} max={30} passo={0.1} casas={1} valido={(v) => v >= 0} aplicar={(v) => noClipeAudio(c.id, (x) => void (x.saida_s = v))} />
           <VolumeNoCursor item={{ k: "audio", id: c.id }} />
+          {/* acima de 100 % a prévia toca em 100 %: só no render */}
+          {passaDeUm(c.volume) && (
+            <span className={styles.dim} data-estado="so-no-render" data-de="volume" aria-hidden>
+              <EarOff size={12} />
+            </span>
+          )}
           <CurvasDoItem item={{ k: "audio", id: c.id }} />
         </div>
       )}

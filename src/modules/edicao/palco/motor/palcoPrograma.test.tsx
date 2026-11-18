@@ -48,6 +48,7 @@ import { tempoNoClipe } from "../../inspetor/acoes";
 import { useInspetorUi } from "../../inspetor/ui";
 import { botao, clicar, desmontarTudo, esperar, montar } from "../../inspetor/testeTela";
 import { PREVIA_VIVA_PRONTA } from "./motor";
+import { _paraTeste } from "../Palco";
 
 const WS = "/casos/prog";
 const SHA = "e".repeat(64);
@@ -322,6 +323,32 @@ describe("palco no modo Programa", () => {
     await espera(20);
     expect(play).toHaveBeenCalledTimes(2);
     expect(el.playbackRate).toBe(2);
+  });
+
+  it("Clipe toca o som do clipe na conta do Programa (volume até 1; mudo 0); parado, volta a 1", async () => {
+    await act(async () => st().alterar("Som", (d) => void ((d.principal[0] as ClipeTrecho).audio.volume = [{ t: tempoDoQuadro(tab, 0), v: 0.5 }, { t: tempoDoQuadro(tab, 59), v: 1.6 }])));
+    const t = await montar(<EditorEdicao ativo />);
+    await act(async () => st().posicionar({ modo: "clipe", clipe: "a", t: meioDoQuadro(tab, 0) }));
+    await espera(20);
+    const el = t.raiz.querySelector<HTMLVideoElement>("video[data-elemento]")!;
+    Object.defineProperty(el, "readyState", { value: 4, configurable: true });
+    let parado = true;
+    Object.defineProperty(el, "paused", { get: () => parado, configurable: true });
+    vi.spyOn(el, "play").mockImplementation(async () => void (parado = false));
+    vi.spyOn(el, "pause").mockImplementation(() => void (parado = true));
+    await tecla(" ", "Space");
+    await espera(20);
+    // linear de 0,5 (quadro 0) a 1,6 (quadro 59), no meio do quadro 0
+    expect(el.volume).toBeCloseTo(0.5 + 1.1 * (0.5 / 59), 9);
+    await tecla(" ", "Space");
+    await espera(20);
+    expect(el.volume).toBe(1);
+    // acima de 1 a prévia fica em 1 (o render é a verdade); mudo = 0
+    const { ganhoNoClipe } = _paraTeste;
+    const a = () => st().doc!.principal[0] as ClipeTrecho;
+    expect(ganhoNoClipe(st().doc!, a(), tempoDoQuadro(tab, 59), true)).toBe(1);
+    expect(ganhoNoClipe(st().doc!, { ...a(), audio: { ...a().audio, mudo: true } }, tempoDoQuadro(tab, 10), true)).toBe(0);
+    expect(ganhoNoClipe(st().doc!, a(), tempoDoQuadro(tab, 80), false)).toBe(1);
   });
 
   it("o Inspetor lê o tempo do clipe no slot do cursor (Começar/Terminar no cursor no modo Programa)", async () => {

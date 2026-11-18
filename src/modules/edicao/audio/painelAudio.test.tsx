@@ -327,6 +327,24 @@ describe("som do clipe", () => {
   });
 
   // P4.2 (D7): a raia "Volume" com "Chave no cursor" / "Tirar chave"; o "Som" do trecho grava a chave do cursor
+  it("volume acima de 100 %: \"só no render\" no Som do trecho e na narração; até 100 %, nada", async () => {
+    await focarTrecho();
+    const icones = (sel: string) => tela.raiz.querySelectorAll(`${sel} [data-estado="so-no-render"][data-de="volume"]`).length;
+    await esperar(() => st().alterar("Som", (d) => void ((d.principal[1] as ClipeTrecho).audio.volume = [{ t: 13, v: 0.8 }, { t: 14, v: 1 }])));
+    expect(icones("")).toBe(0);
+    await esperar(() => st().alterar("Som", (d) => void ((d.principal[1] as ClipeTrecho).audio.volume = [{ t: 13, v: 0.8 }, { t: 14, v: 1.5 }])));
+    expect(icones("")).toBe(1);
+    await esperar(() => st().alterar("Som", (d) => void ((d.principal[1] as ClipeTrecho).audio.volume = 1.2)));
+    expect(icones("")).toBe(1);
+    // narração
+    await clicar(botao(tela.raiz, "Áudio"));
+    await clicar(q<HTMLButtonElement>('[data-acao="abrir-narracao"]'));
+    await esperar(() => st().alterar("Volume", (d) => void (d.audios[0]!.clipes[0]!.volume = [{ t: 0, v: 0.5 }, { t: 1, v: 1 }])));
+    expect(icones("[data-audio]")).toBe(0);
+    await esperar(() => st().alterar("Volume", (d) => void (d.audios[0]!.clipes[0]!.volume = [{ t: 0, v: 0.5 }, { t: 1, v: 2 }])));
+    expect(icones("[data-audio]")).toBe(1);
+  });
+
   it("Som: chave do volume no cursor (tempo de fonte); a última que sai deixa o valor fixo", async () => {
     await focarTrecho();
     await esperar(() => st().alterar("Som", (d) => void ((d.principal[1] as ClipeTrecho).audio.volume = 0.8)));
@@ -339,7 +357,8 @@ describe("som do clipe", () => {
     expect(trecho().audio.volume).toEqual([{ t: 13, v: 0.8 }]);
     expect([passos(), ultimo()]).toEqual([n + 1, "Chave no cursor"]);
     expect(chave().getAttribute("aria-label")).toBe("Tirar chave");
-    expect(tela.raiz.querySelectorAll('[data-estado="so-no-render"][data-de="volume"]').length).toBe(1);
+    // até 100 % a prévia toca o volume (Programa e Clipe): nada de "só no render"
+    expect(tela.raiz.querySelectorAll('[data-estado="so-no-render"][data-de="volume"]').length).toBe(0);
     await esperar(() => st().posicionar({ modo: "clipe", clipe: trecho().id, t: 14 }));
     await clicar(chave());
     expect(trecho().audio.volume).toEqual([

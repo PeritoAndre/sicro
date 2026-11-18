@@ -21,6 +21,10 @@ export function chavesDe<T>(a: Animavel<T>): Seg[] {
   return ehChaves(a) ? a.map((k) => k.t) : [];
 }
 
+/** Volume acima de 100 % em algum instante (a interpolação nunca passa da maior chave): a prévia toca até 1 pelo
+ *  elemento, o resto só se ouve no render. */
+export const passaDeUm = (a: Animavel<number>): boolean => (ehChaves(a) ? a.some((k) => k.v > 1) : a > 1);
+
 /** Índice da chave em `t`; -1 = nenhuma ali (ou valor fixo). */
 export function chaveEm<T>(a: Animavel<T>, t: Seg): number {
   return ehChaves(a) ? a.findIndex((k) => mesmo(k.t, t)) : -1;

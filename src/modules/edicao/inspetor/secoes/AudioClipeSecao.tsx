@@ -10,11 +10,11 @@ import { commands } from "@core/commands";
 import { pushToast } from "@components/toast/toastStore";
 import { formatarTempo } from "@components/CampoTempo/tempoTexto";
 import { separarErro, useEdicaoStore } from "../../store/edicaoStore";
-import { ehChaves } from "../../modelo/curva";
 import { novoId } from "../../modelo/projeto";
 import { mudar, noClipe, tempoNoClipe } from "../acoes";
 import { Escolha, Grade, Icone, Mini, Secao, Tempo, Texto } from "../campos";
 import { CurvasDoItem } from "../../linha/curvas/CurvasDoItem";
+import { passaDeUm } from "../../linha/curvas/chaves";
 import { useShaDe } from "../contexto";
 import type { SecaoProps } from "../registro";
 import styles from "../Inspetor.module.css";
@@ -58,7 +58,6 @@ export function AudioClipeSecao({ clipe: c }: SecaoProps<ClipeTrecho>) {
   const sha = useShaDe(c.midia);
   const [aberto, setAberto] = useState<Id | null>(null);
   const [falas, setFalas] = useState<{ midia: Id; lista: TrechoFala[] } | null>(null);
-  const animado = ehChaves(c.audio.volume);
   const dentro = (t: Seg) => t >= c.inicio_s - 1e-9 && t <= c.fim_s + 1e-9;
 
   const silenciar = () => {
@@ -93,7 +92,7 @@ export function AudioClipeSecao({ clipe: c }: SecaoProps<ClipeTrecho>) {
   return (
     <Secao
       titulo="Som"
-      acoes={animado ? <SoNoRender de="volume" /> : undefined}
+      acoes={passaDeUm(c.audio.volume) ? <SoNoRender de="volume" /> : undefined}
     >
       <CurvasDoItem item={{ k: "som", id }} props={["volume"]} />
       <div className={styles.barra}>

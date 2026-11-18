@@ -704,6 +704,8 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
     const el = elRef.current;
     if (el && v.tabela && v.clipe?.tipo === "trecho") {
       el.pausar();
+      // parado, o volume volta a 1 (o servidor de som guarda o último do aplicativo)
+      if (videoRef.current) videoRef.current.volume = 1;
       // para no quadro exibido, no meio dele (na ré, o último pedido: o elemento já está parado nele)
       irQuadro(el.quadro());
     } else {
@@ -844,11 +846,17 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
       }
       // dentro do clipe: para no fim dele; fora: até o fim da mídia
       const limite = j0 >= a && j0 < b ? b : nQuadros(tab);
-      // o volume vai ao fluxo de novo: o PipeWire dá ao fluxo novo o último volume guardado do aplicativo
+      // o som do clipe na conta do Programa (até 1); fora do clipe, o da mídia
+      const ganho = (j: number) => {
+        const x = vivo.current;
+        return x.doc && x.clipe?.tipo === "trecho" ? ganhoNoClipe(x.doc, x.clipe, meioDoQuadro(tab, j), j >= a && j < b) : 1;
+      };
       const ve = videoRef.current;
       if (ve) {
-        ve.volume = 0.999;
-        ve.volume = 1;
+        // o volume vai ao fluxo de novo: o PipeWire dá ao fluxo novo o último volume guardado do aplicativo
+        const g = ganho(j0);
+        ve.volume = g >= 0.5 ? g - 1e-3 : g + 1e-3;
+        ve.volume = g;
         // parado: o playbackRate só muda com o elemento parado (§7.3)
         ve.playbackRate = velRef.current;
       }
@@ -860,6 +868,8 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
           jRef.current = j;
           pintarAgora();
         }
+        const g = ganho(j);
+        if (ve && Math.abs(ve.volume - g) > 1e-3) ve.volume = g;
         const agora = performance.now();
         if (agora - ultimoPost >= 250) {
           ultimoPost = agora;
@@ -871,6 +881,7 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
         // fim do clipe (o arquivo intermediário acaba ali e para sozinho: vale o limite, não o quadro seguinte)
         if (j >= limite) {
           el.pausar();
+          if (ve) ve.volume = 1;
           tocandoRef.current = false;
           setTocando(false);
           irQuadro(limite - 1);
@@ -1319,11 +1330,20 @@ const PalcoClipe = forwardRef<PalcoApi, Props>(function PalcoClipe(props, ref) {
 });
 
 export type { EstadoRender };
+/** Ganho do som do trecho no modo Clipe, na conta do Programa (`motor.ts::ganhoDoSom`): mixagem × volume no tempo de
+ *  fonte; 0 mudo, em silêncio ou sem som na saída; até 1 (acima, só no render). Fora do clipe, o som da mídia. */
+function ganhoNoClipe(doc: ProjetoEdicao, c: ClipeTrecho, t: Seg, dentro: boolean): number {
+  if (!dentro) return 1;
+  if (!doc.saida.audio || c.audio.mudo || c.audio.silencios.some((x) => t >= x.de && t < x.ate)) return 0;
+  const v = doc.mixagem.volume_original * avaliarCurva(c.audio.volume, t);
+  return Number.isFinite(v) ? Math.min(Math.max(v, 0), 1) : 1;
+}
+
 /** Região do enquadramento na vista de origem no instante `t`: a que acompanha o rastreio (ZS), senão a gravada. */
 function regiaoNaVista(doc: ProjetoEdicao, efeitos: readonly (Efeito | Desconhecido)[], e: EfEnquadramento, t: Seg): Caixa {
   const r = e.regiao;
   return regiaoNoInstante(doc, efeitos, t) ?? (Array.isArray(r) && r.length === 0 ? { x: 0, y: 0, w: 1, h: 1 } : avaliarCurva(r, t));
 }
 
-export const _paraTeste = { primitivasProprias, rastreioDoEfeito, regiaoNaVista, tamanhoDoCanvas, urlDaPrimitiva };
+export const _paraTeste = { ganhoNoClipe, primitivasProprias, rastreioDoEfeito, regiaoNaVista, tamanhoDoCanvas, urlDaPrimitiva };
 export { rastreioDoEfeito, tamanhoDoCanvas, urlDaPrimitiva, tamanhoDaImagem };
