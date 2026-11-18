@@ -128,6 +128,9 @@ describe("item novo (D4, D5)", () => {
     const tr = p.principal[1] as { inicio_s: number };
     expect(slotDoCursor(p, linha, { modo: "clipe", clipe: ids[1]!, t: tr.inicio_s + 2 })).toBe(90 + 60);
     expect(slotDoCursor(p, linha, { modo: "clipe", clipe: ids[1]!, t: tr.inicio_s + 999 })).toBe(90 + 149);
+    // o Clipe põe o cursor no meio do quadro mostrado: o slot é o desse quadro (o texto novo aparece no palco)
+    for (const k of [0, 7, 60]) expect(slotDoCursor(p, linha, { modo: "clipe", clipe: ids[1]!, t: tr.inicio_s + (k + 0.5) / 30 }), String(k)).toBe(90 + k);
+    expect(slotDoCursor(p, linha, { modo: "clipe", clipe: ids[0]!, t: 1 + 0.5 / 30 })).toBe(30);
   });
 
   it("centro da área visível: a do palco na origem do clipe, levada ao canvas pelo enquadramento", () => {

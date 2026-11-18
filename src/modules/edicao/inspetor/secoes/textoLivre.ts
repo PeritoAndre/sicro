@@ -106,7 +106,9 @@ export function slotDoCursor(doc: ProjetoEdicao, linha: LinhaResolvida, cursor: 
   if (!r || !c) return 0;
   let s: number | null = cursor.t;
   if (c.tipo === "trecho" || c.tipo === "tela") s = programaDaFonte(c.velocidade as Parameters<typeof programaDaFonte>[0], c.inicio_s ?? 0, cursor.t);
-  const k = s === null || !Number.isFinite(s) ? 0 : Math.round((s * fpsDe(linha).num) / fpsDe(linha).den);
+  // o slot que contém o instante (o do quadro mostrado): o Clipe põe o cursor no meio do quadro, e arredondar dava o
+  // slot seguinte (o texto novo nascia um quadro depois do palco e não aparecia nele)
+  const k = s === null || !Number.isFinite(s) ? 0 : Math.floor((s * fpsDe(linha).num) / fpsDe(linha).den + 1e-6);
   return r.inicio_q + Math.min(Math.max(k, 0), Math.max(r.n_q - 1, 0));
 }
 
