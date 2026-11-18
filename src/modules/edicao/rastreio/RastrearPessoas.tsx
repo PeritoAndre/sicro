@@ -18,7 +18,7 @@ import { askConfirm } from "@components/Dialog/ask";
 import { pushToast } from "@components/toast/toastStore";
 import { useSettingsStore } from "@stores/settingsStore";
 import { usePessoasStore } from "@modules/video/editor/pessoas/pessoasStore";
-import { separarErro } from "../store/edicaoStore";
+import { separarErro, useEdicaoStore } from "../store/edicaoStore";
 import { Mini } from "../inspetor/campos";
 import styles from "../inspetor/Inspetor.module.css";
 
@@ -28,7 +28,7 @@ export const PESSOAS_NA_EDICAO_PRONTO = true;
 export interface RastrearPessoasProps {
   ws: string;
   midia: MidiaRef;
-  /** Terminou (ou foi cancelado): o painel pede a lista do "Da análise" de novo. */
+  /** Terminou e gravou: o painel pede a lista do "Da análise" de novo. */
   aoTerminar(): void;
 }
 
@@ -45,7 +45,7 @@ export interface TarefaPessoas {
 interface PessoasNaEdicao {
   /** `pessoas_rastrear` pedido daqui (um por vez no backend). */
   tarefa: TarefaPessoas | null;
-  /** Quantas vezes a tarefa de cada mídia acabou (bem, cancelada ou com erro): o painel montado pede a lista. */
+  /** Quantas vezes a tarefa de cada mídia gravou trilhas: o painel montado pede a lista. */
   fins: Record<string, number>;
 }
 
@@ -75,15 +75,23 @@ export function opcoesDaAnalise(): OpcoesRastreio {
   return { limiar, passo, classes: [...classes] };
 }
 
-function acabou(sha: string) {
-  usePessoasNaEdicao.setState((s) => ({ tarefa: null, fins: { ...s.fins, [sha]: (s.fins[sha] ?? 0) + 1 } }));
+/** Cancelada ou com erro, o banco fica como estava: o painel não pede a lista nem põe o "Da análise" em destaque. */
+function acabou(sha: string, gravou: boolean) {
+  usePessoasNaEdicao.setState((s) => ({ tarefa: null, fins: gravou ? { ...s.fins, [sha]: (s.fins[sha] ?? 0) + 1 } : s.fins }));
+}
+
+/** Rastreios do projeto aberto copiados destas trilhas: rodar de novo troca os ids e eles ficam sem a trilha de origem
+ *  ("Atualizar" deixa de achar a pessoa). */
+function copiasNoProjeto(ids: readonly string[]): boolean {
+  const doc = useEdicaoStore.getState().doc;
+  return !!doc && doc.rastreios.some((r) => r.origem.tipo === "pessoas" && ids.includes(r.origem.pessoa_id));
 }
 
 /** "Rastrear pessoas": com trilhas detectadas na mídia, confirma antes (a análise troca as detectadas; as marcadas à
  *  mão ficam); depois roda a tarefa da análise. Devolve sem fazer nada se já há uma tarefa daqui. */
 export async function rastrearPessoas(ws: string, sha: string): Promise<void> {
   if (usePessoasNaEdicao.getState().tarefa) return;
-  let auto: { estado: string }[];
+  let auto: { id: string; estado: string }[];
   try {
     auto = (await commands.pessoasListar(ws, sha)).pessoas.filter((p) => p.origem === "auto");
   } catch (e) {
@@ -95,22 +103,24 @@ export async function rastrearPessoas(ws: string, sha: string): Promise<void> {
       title: "Rastrear pessoas",
       message: auto.length === 1 ? "1 pessoa" : `${auto.length} pessoas`,
       confirmLabel: "Rastrear pessoas",
-      danger: auto.some((p) => p.estado === "editado"),
+      danger: auto.some((p) => p.estado === "editado") || copiasNoProjeto(auto.map((p) => p.id)),
     });
     if (!ok) return;
   }
   if (usePessoasNaEdicao.getState().tarefa) return;
   usePessoasNaEdicao.setState({ tarefa: { sha, feitos: 0, total: 0, pessoas: 0 } });
+  let gravou = false;
   try {
     await ouvir().catch(() => {});
     await commands.pessoasRastrear(ws, sha, opcoesDaAnalise());
+    gravou = true;
     // a aba Pessoas da análise com a mesma mídia aberta mostra o resultado
     const analise = usePessoasStore.getState();
     if (analise.mediaHash === sha) void analise.carregar(ws, sha);
   } catch (e) {
     if (separarErro(e).codigo !== "cancelado") avisar(e);
   } finally {
-    acabou(sha);
+    acabou(sha, gravou);
   }
 }
 

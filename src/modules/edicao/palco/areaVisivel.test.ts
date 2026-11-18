@@ -117,6 +117,69 @@ describe("areaVisivelNaOrigem", () => {
   });
 });
 
+/** Contas feitas à mão: palco 1000×600, saída e origem 1920×1080 → imagem na tela em (0; 18,75) com 1000×562,5.
+ *  Zoom `s` no centro: tx = 500 − 500·s, ty = 300 − 300·s. */
+describe("números à mão", () => {
+  const centrada = (s: number): Vista => ({ s, tx: 500 - 500 * s, ty: 300 - 300 * s });
+  const conferir = (c: Caixa, x: number, y: number, w: number, h: number) => {
+    expect(c.x).toBeCloseTo(x, 6);
+    expect(c.y).toBeCloseTo(y, 6);
+    expect(c.w).toBeCloseTo(w, 6);
+    expect(c.h).toBeCloseTo(h, 6);
+  };
+  const nova = (area: Caixa) => {
+    useAreaVisivel.getState().publicar("c", area);
+    return caixaNova("c");
+  };
+  // Preencher na região (0,2; 0,1; 0,5; 0,5) da origem 16:9: canvas = 2·origem − (0,4; 0,2)
+  const ENQ = enq({ x: 0.2, y: 0.1, w: 0.5, h: 0.5 }, "cobrir");
+
+  it("zoom 3× no centro: canvas x 1/3..2/3, y 543,75/1687,5..1143,75/1687,5; caixa = a do centro", () => {
+    const a = areaVisivelNaOrigem(centrada(3), TELA, SAIDA, aDe([], 0, ORIGEM, SAIDA));
+    conferir(a, 1 / 3, 543.75 / 1687.5, 1 / 3, 600 / 1687.5);
+    conferir(nova(a), 0.4, 0.4, 0.2, 0.2);
+  });
+
+  it("zoom 6× no centro: área 0,1667 × 0,1778; caixa encolhe a 0,6 da largura (0,1) no centro", () => {
+    const a = areaVisivelNaOrigem(centrada(6), TELA, SAIDA, aDe([], 0, ORIGEM, SAIDA));
+    conferir(a, 2500 / 6000, 1387.5 / 3375, 1000 / 6000, 600 / 3375);
+    conferir(nova(a), 0.45, 0.45, 0.1, 0.1);
+  });
+
+  it("enquadramento sem zoom: a própria região; caixa do tamanho de sempre no centro dela", () => {
+    const A = aDe([ENQ], 0, ORIGEM, SAIDA);
+    const a = areaVisivelNaOrigem(VISTA_INICIAL, TELA, SAIDA, A);
+    conferir(a, 0.2, 0.1, 0.5, 0.5);
+    conferir(nova(a), 0.35, 0.25, 0.2, 0.2);
+  });
+
+  it("enquadramento + zoom 3× no centro: origem = (canvas + (0,4; 0,2)) / 2", () => {
+    const A = aDe([ENQ], 0, ORIGEM, SAIDA);
+    const a = areaVisivelNaOrigem(centrada(3), TELA, SAIDA, A);
+    const y0 = 543.75 / 1687.5;
+    const y1 = 1143.75 / 1687.5;
+    conferir(a, (1 / 3 + 0.4) / 2, (y0 + 0.2) / 2, 1 / 6, (y1 - y0) / 2);
+    conferir(nova(a), 0.4, 0.3, 0.1, 0.1);
+  });
+
+  it("enquadramento + zoom 6× no canto de cima à esquerda (tx 0, ty −112,5)", () => {
+    const A = aDe([ENQ], 0, ORIGEM, SAIDA);
+    const a = areaVisivelNaOrigem({ s: 6, tx: 0, ty: -112.5 }, TELA, SAIDA, A);
+    // canvas x 0..1/6, y 0..600/3375
+    conferir(a, 0.2, 0.1, 1 / 12, 600 / 3375 / 2);
+    // 0,6 × 1/12 = 0,05 de lado; centrada na área
+    conferir(nova(a), 0.2 + (1 / 12 - 0.05) / 2, 0.1 + (600 / 3375 / 2 - 0.05) / 2, 0.05, 0.05);
+  });
+
+  it("girada 90° (Inteiro, faixas dos lados) + zoom 3× no centro: a faixa preta some, a altura do quadro inteira", () => {
+    const A = aDe([giro(90)], 0, ORIGEM, SAIDA);
+    const a = areaVisivelNaOrigem(centrada(3), TELA, SAIDA, A);
+    // canvas y 0,3222..0,6778 = x da origem; canvas x 1/3..2/3 passa da coluna da imagem (0,3418..0,6582): y inteiro
+    conferir(a, 543.75 / 1687.5, 0, 600 / 1687.5, 1);
+    conferir(nova(a), 0.4, 0.4, 0.2, 0.2);
+  });
+});
+
 describe("caixaNova", () => {
   it("sem área publicada, ou publicada para outro clipe: a do centro de sempre", () => {
     expect(caixaNova("c")).toEqual(CAIXA_CENTRO);

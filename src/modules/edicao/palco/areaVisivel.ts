@@ -11,6 +11,7 @@ import { caixa as envolvente, inversa, type Afim } from "../modelo/geometria";
 import { CAIXA_CENTRO } from "../inspetor/novos";
 import { contido, mostrado, type Tamanho, type Vista } from "./vista";
 
+// CONTRATO: D12 dizia "limitada a ela"; com zoom acima de ~3× a caixa de sempre cobriria a tela toda (alças na borda).
 /** A caixa nova ocupa no máximo esta fração da área visível em cada lado: com zoom grande as alças ficam na tela. */
 export const FRACAO_DA_AREA = 0.6;
 /** Área menor que isto (fração da origem) não serve de lugar: só faixa preta ou fundo na tela. */

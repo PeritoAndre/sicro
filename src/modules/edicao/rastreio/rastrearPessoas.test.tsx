@@ -8,7 +8,7 @@
 
 import { act } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { MidiaRef } from "@domain/edicao";
+import type { MidiaRef, Rastreio } from "@domain/edicao";
 import type { PessoasEstado, PessoasProgresso } from "@domain/video_pessoas";
 import type { AiSettings } from "@domain/app_settings";
 
@@ -147,7 +147,7 @@ describe("rodar, andamento e fim", () => {
     expect(acao("cancelar-pessoas")).toBeNull();
   });
 
-  it("Cancelar: pessoas_cancelar; o comando volta com cancelado (sem aviso) e o painel é avisado", async () => {
+  it("Cancelar: pessoas_cancelar; o comando volta com cancelado (sem aviso); o banco não mudou, o painel não é avisado", async () => {
     const d = adiada<PessoasEstado>();
     cmd.pessoasRastrear.mockReturnValue(d.p);
     tela = await montar(<RastrearPessoas ws={WS} midia={midia()} aoTerminar={aoTerminar} />);
@@ -161,7 +161,8 @@ describe("rodar, andamento e fim", () => {
     await act(async () => d.rejeitar({ kind: "validation", message: "validation error: cancelado" }));
     await esperar();
     expect(useToastStore.getState().toasts).toEqual([]);
-    expect(aoTerminar).toHaveBeenCalledTimes(1);
+    // "Da análise" em destaque depois de cancelar diria que há trilhas novas
+    expect(aoTerminar).not.toHaveBeenCalled();
     expect(acao("rastrear-pessoas")!.disabled).toBe(false);
   });
 
@@ -172,6 +173,24 @@ describe("rodar, andamento e fim", () => {
     await esperar();
     expect(useToastStore.getState().toasts.map((t) => t.message)).toEqual(["já existe uma tarefa de pessoas em andamento"]);
     expect(acao("rastrear-pessoas")!.disabled).toBe(false);
+    expect(aoTerminar).not.toHaveBeenCalled();
+  });
+
+  it("projeto aberto com rastreio copiado de uma trilha detectada: confirmação em vermelho (rodar de novo troca os ids)", async () => {
+    cmd.pessoasListar.mockResolvedValue(estado([{ id: "a", origem: "auto", estado: "auto" }]));
+    cmd.pessoasRastrear.mockResolvedValue(estado());
+    const doc = novoProjeto("Pessoas");
+    doc.rastreios = [{ id: "r9", origem: { tipo: "pessoas", pessoa_id: "a", estado: "auto", copiado_em: "2026-11-17T10:00:00Z" } } as unknown as Rastreio];
+    useEdicaoStore.setState({ doc });
+    tela = await montar(<RastrearPessoas ws={WS} midia={midia()} aoTerminar={aoTerminar} />);
+    await clicar(acao("rastrear-pessoas")!);
+    await esperar();
+    expect(ask.askConfirm).toHaveBeenLastCalledWith({ title: "Rastrear pessoas", message: "1 pessoa", confirmLabel: "Rastrear pessoas", danger: true });
+    // cópia de outra pessoa (ou trilha à mão): sem vermelho
+    (doc.rastreios[0] as unknown as { origem: { pessoa_id: string } }).origem.pessoa_id = "outra";
+    await clicar(acao("rastrear-pessoas")!);
+    await esperar();
+    expect(ask.askConfirm).toHaveBeenLastCalledWith({ title: "Rastrear pessoas", message: "1 pessoa", confirmLabel: "Rastrear pessoas", danger: false });
   });
 
   it("com trilhas detectadas: confirma antes (vermelho se o perito editou alguma); não confirmou, nada roda", async () => {
