@@ -472,6 +472,7 @@ vídeo, então vídeo e áudio apontam para o mesmo momento.
 
 - **Adicionar vídeo** importa o arquivo (mp4, mov, mkv, avi, webm, m4v), extrai
   metadados técnicos (codec, resolução, fps, duração) e calcula o **SHA-256**.
+  Arquivo de gravador (DVR) entra por uma cópia de trabalho (8.1).
   Na lista, clique no cartão (ou em **Abrir**) para analisar.
 - **Vídeos do caso em abas:** no topo da análise fica uma aba por vídeo (miniatura,
   nome e duração; a do vídeo na tela fica destacada). Um clique troca de vídeo e
@@ -867,6 +868,19 @@ técnico ao lado.
 - **Ctrl+3 na análise:** com entrada e saída marcadas (**I** / **O**), acrescenta
   o trecho à edição corrente sem sair do vídeo; o aviso mostra o número do
   clipe (`Trecho 7`).
+- **Gravadores (DVR):** arquivos Dahua (`.dav`), Hikvision, `.ifv`, `.lvf`, H.264
+  ou HEVC sem contêiner (`.264`, `.h264`, `.265`, `.h265`, `.hevc`) e AVI sem
+  índice entram pela Central ou por **+ Adicionar**:
+  1. o SICRO grava uma **cópia de trabalho** (MKV) e a confere imagem a imagem
+     com o arquivo escolhido, com o andamento na tela e **Cancelar** (cancelado,
+     nada entra no caso);
+  2. conferida, o original e a cópia entram no caso e a cópia abre;
+  3. a faixa no alto da análise diz **Cópia de trabalho ·** o nome do original,
+     o relógio do gravador e **abrir original**.
+
+  A Edição usa a cópia. O relatório diz o nome do original, o relógio do gravador
+  e, quando o arquivo não informa o ritmo das imagens, o que a perícia supôs
+  (aviso pericial, com **Ciente** ao exportar).
 - **Proveniência do vídeo** (propriedades do vídeo, na análise): **Formato do
   gravador** (Sim, Não), **Observação**, **Desvio do relógio (s)** e
   **Gravador**. Vão para o relatório da exportação. Uma edição que já usa o vídeo
@@ -880,7 +894,8 @@ técnico ao lado.
 
 Barra de cima: título da edição (editável), estado da gravação, **Desfazer**,
 **Refazer**, **Fila** e **Exportar…**. Abaixo, três colunas: **Sequência** à
-esquerda, **Palco** no meio e **Inspetor** à direita. As laterais se recolhem
+esquerda, **Palco** no meio e **Inspetor** à direita; embaixo delas, a **linha do
+tempo** (8.4.1). As laterais se recolhem
 pelos botões nas pontas da barra e se alargam arrastando a divisa (a largura
 fica guardada). Rodapé: duração do vídeo, número de clipes e a contagem de
 problemas (`2 avisos`, `1 erro`); clicar na contagem leva ao primeiro erro (sem
@@ -901,6 +916,8 @@ A lista dos clipes, na ordem do vídeo.
 - **Congelar aqui** (**Ctrl+Shift+B**): divide o trecho no cursor e insere o
   quadro mostrado como quadro congelado.
 - **Imagem…**: uma foto ou figura do disco como clipe.
+- **Texto livre**: um texto de 5 s no cursor, preso ao clipe que está ali, no
+  meio do que se vê no palco. Digite em **Texto** no Inspetor (8.4.2).
 
 Cada cartão mostra o tipo (**Trecho**, **Título**, **Quadro congelado**,
 **Imagem**), o nome, a duração no vídeo final e os selos **Taxa variável**,
@@ -913,20 +930,28 @@ clipe**, que acompanham o clipe quando ele muda de lugar ou é aparado:
 
 ### 8.4 Palco
 
-Mostra o clipe selecionado. A roda do mouse aproxima no ponto do cursor; arrastar
-o fundo move a vista; **Ajustar à tela** volta à imagem inteira; **Expandir**
-(**F**) esconde as colunas.
+Na barra de cima do palco, **Programa** ou **Clipe**:
 
-- **Transporte:** a barra é o vídeo inteiro; a parte destacada é o clipe, com as
-  bordas arrastáveis para aparar ou alargar. Ao fundo, a forma de onda do som.
-  Botões **Início do clipe**, **Quadro anterior**, **Reproduzir**, **Próximo
-  quadro**, **Fim do clipe**; o tempo em `HH:MM:SS,mmm` e o número do quadro. **I**
-  e **O** gravam o início e o fim do clipe no quadro mostrado (o **O** inclui
-  esse quadro) e podem alargar o clipe.
-- **Prévia viva** (o palco parado ou tocando): o clipe com as marcações, o
-  enquadramento e o realce aproximados. Transições, itens presos, legendas,
-  selos e os ajustes de som não aparecem nela: veja no **Quadro final** e na
-  **Prévia do render**.
+- **Programa** toca a montagem inteira, com transições, textos, zoom, marcações,
+  legendas na imagem e selos. O transporte é o vídeo final, com dois tempos: o do
+  vídeo final e o do original sob o cursor (com o número do quadro).
+- **Clipe** mostra só o clipe selecionado. Clicar num clipe ou numa faixa da
+  linha do tempo passa a **Clipe**; clicar na régua da linha passa a
+  **Programa**.
+
+A roda do mouse aproxima no ponto do cursor; arrastar o fundo move a vista;
+**Ajustar à tela** volta à imagem inteira; **Expandir** (**F**) esconde as
+colunas.
+
+- **Transporte:** no **Clipe**, a barra é o vídeo inteiro; a parte destacada é o
+  clipe, com as bordas arrastáveis para aparar ou alargar. Ao fundo, a forma de
+  onda do som. Botões **Início**, **Quadro anterior**, **Reproduzir**, **Próximo
+  quadro**, **Fim**; o tempo em `HH:MM:SS,mmm` e o número do quadro (`#312` com o
+  palco estreito). **I** e **O** gravam o início e o fim do clipe no quadro
+  mostrado (o **O** inclui esse quadro) e podem alargar o clipe.
+- **Prévia viva** (o palco parado ou tocando): aproximada. A verdade é o
+  **Quadro final** e a **Prévia do render**; os ajustes de som do vídeo final
+  (abaixar, normalizar, limitador) só aparecem nelas.
 - **Quadro final** (**Q**): o motor de exportação faz o quadro mostrado, como ele
   sai no arquivo.
 - **Prévia do render**: o clipe inteiro feito pelo motor, em até 480 linhas, com
@@ -940,12 +965,55 @@ duas**).
 do realce em preparo. Enquanto o intermediário é feito, o **Marcar** das
 marcações e do enquadramento fica desligado (o da ocultação não).
 
+### 8.4.1 Linha do tempo
+
+As trilhas, de cima para baixo: **T1**, **T2**… **Textos** (textos, títulos e
+imagens por cima do vídeo), **V1 Vídeo** (os clipes, com miniaturas), uma faixa
+por efeito (`PP1 · seta`, `PP1 · ocultar`, **Lupa**, **Zoom**…), **A1 Som** (o som
+dos trechos), **A2 Narração**, **Música**, **Efeitos** e **Legendas**. Na cabeça
+de cada trilha, **Ver** (olho) e **Travar** (cadeado). A lista da Sequência e a
+linha mostram sempre a mesma montagem.
+
+1. **Selecionar** (**V**): clique num item para abri-lo no Inspetor; **Shift**
+   acrescenta à seleção. Arraste um clipe da V1 para mudar a ordem; arraste as
+   bordas para aparar.
+2. Arraste um texto, imagem ou áudio para outro instante ou outra trilha; ele
+   passa a ficar preso ao clipe que está ali (com **Alt**, segue preso ao mesmo
+   clipe). Acima da trilha de cima, nasce uma trilha nova.
+3. Arraste uma faixa de efeito, ou as pontas dela, para mudar quando o efeito
+   aparece. Os losangos são as chaves (8.4.2).
+4. **Lâmina** (**B**): clique no quadro onde cortar. **Ctrl+B** corta no cursor.
+5. **Ímã** (**S**): as bordas grudam nas bordas dos outros itens, na cabeça de
+   leitura, nos marcadores e nas chaves.
+6. Clique ou arraste na régua para levar a cabeça; **M** põe um marcador.
+   **J**, **K** e **L** tocam para trás, param e tocam para a frente (repetir
+   acelera até 8×).
+7. Zoom da linha no **−** ▬ **+** ou **=**, **-** e **0** (linha inteira).
+
+Cada arrasto é um passo do **Desfazer**; **Esc** desiste do arrasto.
+
+### 8.4.2 Texto livre e quadros-chave
+
+- **Texto livre** (botão na Sequência; fica na trilha de textos): no palco, arraste para mover;
+  os cantos mudam o tamanho, os lados a largura e a alça de cima o giro. No
+  Inspetor: **Texto**, **Fonte**, **Tamanho**, **Cor**, **Fundo** (**Nenhum**,
+  **Faixa** ou **Caixa**), **Contorno**, **Sombra**, **Entrada** e **Saída**
+  (**Corte**, **Aparecer** ou **Deslizar**, com **Duração (s)** e **Lado**) e
+  **De** / **Até** com **Começar no cursor** e **Terminar no cursor**.
+- **Quadros-chave:** leve o cursor ao instante e clique **Chave no cursor** em
+  **Posição**, **Giro**, **Escala**, **Opacidade** (texto) ou **Volume** (som).
+  Mude o valor; vá a outro instante e repita. Entre duas chaves o valor anda
+  sozinho. O botão direito numa chave escolhe **Linear**, **Suave** ou **Degrau**;
+  arraste a chave na raia ou na linha do tempo para mudar o instante. **Tirar
+  chave** apaga a do cursor; sem nenhuma, o valor volta a fixo.
+
 ### 8.5 Inspetor: aba Clipe
 
 As seções do clipe selecionado, de cima para baixo.
 
 - **Trecho:** **Nome**, **Vídeo**, **Início**, **Fim**, **Velocidade** (0,05× a
-  16×), **Manter o tom**, **Som** (mudo e volume, 0 a 200 %) e **Cor** (BT.601
+  16×; o ícone **Rampa** faz a velocidade mudar aos poucos dentro do trecho, por
+  pontos de **Tempo** e **Velocidade**), **Manter o tom**, **Som** (mudo e volume, 0 a 200 %) e **Cor** (BT.601
   ou BT.709, faixa Limitada ou Cheia; o ícone **Automática** volta à que o arquivo
   declara). **Quadro congelado**: **Nome**, **Vídeo**, **Posição** (o quadro),
   **Cor** e **Duração (s)**. **Imagem**: **Nome**, **Imagem** e **Duração (s)**.
@@ -957,10 +1025,16 @@ As seções do clipe selecionado, de cima para baixo.
   para a direita, círculo), **Duração (s)** e **Som** (**Acompanhar** ou
   **Cortar**). As transições com ícone sobrepõem o fim do clipe anterior ao
   começo deste.
-- **Enquadramento:** **Girar**, **Espelhar**, região fixa ou animada (**Marcar
-  início**, **Marcar fim**, marcadas no palco), **Ajuste** (**Inteiro** com
-  barras ou **Preencher** cortando) e **Interpolação** (Vizinho, Bilinear,
-  Bicúbica).
+- **Enquadramento:** **Girar**, **Espelhar**, região fixa ou animada, **Ajuste**
+  (**Inteiro** com barras ou **Preencher** cortando) e **Interpolação** (Vizinho,
+  Bilinear, Bicúbica).
+  - **Zoom com chaves:** leve o cursor ao instante, ajuste a região no palco e
+    clique **Chave no cursor**; repita em outros instantes. A lista diz cada
+    chave (**Cena inteira**, **Aproximar**, **Segurar**, **Afastar**, com o
+    fator e o tempo). Aproxima, segura e afasta no mesmo trecho, sem dividir.
+  - **Acompanhar rastreio:** o centro do zoom segue a pessoa de um rastreio do
+    clipe, sem sair da imagem; **Suavizar** (s) tira os trancos. O relatório diz
+    qual rastreio o zoom acompanha.
 - **Realce:** **Estabilizar** (**Suavizar**, **Borda** Preta ou Ampliar,
   **Refazer estabilização**), **Lente**, **Desentrelaçar** (**Quadro** ou
   **Campo**), **Brilho**, **Contraste**, **Gama**, **Saturação**, **Nitidez** e
@@ -968,12 +1042,18 @@ As seções do clipe selecionado, de cima para baixo.
   pede confirmação e diz quantas ficam inválidas.
 - **Marcações:** **Adicionar** → **Destaque**, **Ocultar**, **Lupa**, **Régua**,
   **Velocidade**, **Texto**, **Tempo**, **Imagem**. Cada linha liga, desliga e
-  remove; aberta, traz **De** e **Até** (quando ela aparece) e, nas que seguem
-  um objeto, **Marcar**: com ele ligado, desenhe a caixa no palco; ande pelos
+  remove; aberta, traz **De** e **Até** (quando ela aparece, com **Começar no
+  cursor** e **Terminar no cursor**) e, nas que seguem um objeto, **Marcar**: com ele ligado, desenhe a caixa no palco; ande pelos
   quadros e desenhe de novo, ou arraste a caixa, onde o objeto mudou de lugar.
   **Enter** grava, no quadro mostrado, a posição que está na tela. Entre duas
   marcas a posição é interpolada; depois da última, fica parada. **Esc**
-  desliga.
+  desliga. A marcação nova nasce no meio do que se vê no palco.
+  - **Seguir com o programa:** **Motor** (**Automático**, **EdgeTAM**,
+    **VitTrack**, **Mancha**) e **Seguir** (**Ctrl+→**); o ícone de mão conta as
+    marcações feitas à mão (vai ao relatório).
+  - **Pessoas:** **Rastrear pessoas** roda o rastreio de pessoas do vídeo sem sair
+    da Edição (com **Cancelar**); **Da análise** lista as pessoas com o intervalo
+    em que aparecem (`#3 0:12–0:41`) e traz a escolhida para a marcação.
   - **Destaque:** **Forma** (retângulo, elipse, círculo, seta, colchetes), **Cor**,
     **Espessura**, **Contorno**, **Rótulo**, **Tamanho**, **Direção**, **Margem**.
   - **Ocultar:** **Conteúdo** (Rosto, Placa, Corpo, Tela, Documento, Outro),
@@ -982,6 +1062,13 @@ As seções do clipe selecionado, de cima para baixo.
     **Inverter**, **Motivo**. A ocultação vale no vídeo inteiro (em todo clipe que
     usa aquele vídeo, também no quadro congelado); **Só neste clipe** a limita ao
     clipe. Exportação com ocultação para em **A conferir** (8.8).
+  - **Sugestões** (ocultação assistida, no trecho): escolha **Rosto**, **Placa**
+    ou **Corpo**; o SICRO propõe uma ocultação para cada alvo achado no trecho.
+    Abra cada linha, confira a folha de contato (os recortes ao longo do
+    tempo; clicar num leva ao quadro), use **Trechos fracos** para ver onde a
+    trilha é incerta e clique **Confirmar**, ou **Descartar**. Proposta não
+    confirmada não vai para o vídeo. Precisa do modelo **Ocultação**, baixado
+    em Configurações.
   - **Lupa:** **Forma** (círculo, retângulo), **Ampliação**, **Janela**,
     **Posição** (**Fixa** ou **Acompanha**), **Ligação**, **Interpolação**, **Cor**,
     **Espessura**, **Contorno**.
@@ -1049,10 +1136,11 @@ leva ao item. O botão diz **Exportar** ou **Exportar com N avisos**.
 
 ### 8.8 Fila e saídas
 
-**Fila** mostra cada exportação com a fase (**Na fila**, **Preparando**,
+**Fila** mostra as exportações na ordem pedida, cada uma com a predefinição, a fase (**Na fila**, **Preparando**,
 **Camadas**, **Vídeo 3/7**, **Áudio**, **Juntando**, **Conferindo**,
 **Relatório**, **Pacote do júri**, **Pronto**, **Falhou**, **Cancelado**), a
-barra de progresso e o tempo restante. **Cancelar** para a exportação sem deixar
+barra de progresso e o tempo restante. Ao terminar, um aviso diz **Pronto** ou
+**A conferir**, com **Abrir pasta**. **Cancelar** para a exportação sem deixar
 arquivo pela metade; **Ver registro** abre o registro de uma que falhou. A
 exportação **confere** o arquivo final: decodifica e compara a contagem de quadros
 com a prevista.
@@ -1103,6 +1191,10 @@ edição.
 | **PgUp** / **PgDn** | Clipe anterior / próximo clipe |
 | **Alt + PgUp** / **Alt + PgDn** | Mover o clipe para antes / para depois |
 | **Ctrl + B** | Dividir no cursor |
+| **V** / **B** / **S** | Linha do tempo: Selecionar / Lâmina / Ímã |
+| **J** / **L** | Tocar para trás / para a frente (repetir acelera) |
+| **=** / **-** / **0** | Aproximar / afastar / linha do tempo inteira |
+| **M** | Marcador |
 | **Ctrl + Shift + B** | Congelar aqui |
 | **Ctrl + D** | Duplicar |
 | **Del** | Remover |
